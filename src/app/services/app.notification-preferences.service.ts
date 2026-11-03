@@ -47,13 +47,18 @@ export class AppNotificationPreferencesService {
   }
 
   private async observe(owner: FirebaseUserType | null): Promise<void> {
+    const sameOwner = owner !== null && this.owner === owner;
     const epoch = ++this.epoch;
-    this.owner = owner; this.stopListening(); this.preferences.set({}); this.message.set(''); this.saving.set(null);
+    this.owner = owner; this.stopListening(); this.message.set(''); this.saving.set(null);
+    if (!sameOwner) this.preferences.set({});
     this.status.set(owner ? 'loading' : 'signed-out');
     if (!owner) return;
-    const fail = () => {
+    // Keep the last confirmed values visible, but require a fresh successful read of every category.
+    const confirmed = new Set<NotificationCategoryId>();
+    const fail = (category?: NotificationCategoryId) => {
       if (!this.current(owner, epoch)) return;
-      this.preferences.set({}); this.status.set('error'); this.message.set('Could not load notification categories. Please try again.');
+      if (category) confirmed.delete(category); else confirmed.clear();
+      this.status.set('error'); this.message.set('Could not load notification categories. Please try again.');
     };
     try {
       const token = await owner.getIdTokenResult();
@@ -65,13 +70,14 @@ export class AppNotificationPreferencesService {
             // A cache miss is not proof that the account has no preference.
             if (!this.current(owner, epoch) || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
             const preference = readNotificationCategoryPreference(snapshot.data());
-            if (!preference) { fail(); return; }
+            if (!preference) { fail(category.id); return; }
             this.acceptPreference(category.id, preference);
-            if (NOTIFICATION_CATEGORIES.every(item => this.preferences()[item.id])) {
+            confirmed.add(category.id);
+            if (NOTIFICATION_CATEGORIES.every(item => confirmed.has(item.id))) {
               if (this.status() === 'error') this.message.set('');
               this.status.set('ready');
             }
-          }, fail));
+          }, () => fail(category.id)));
       }
     } catch { fail(); }
   }

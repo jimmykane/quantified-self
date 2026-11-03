@@ -58,8 +58,10 @@ Admission reads the category in its existing transaction and binds the server re
 The sender checks that the category remains on at that same revision both before claiming and immediately before
 sending. Switching it off cancels outstanding consent; switching it back on does not revive earlier runs, including
 imports that were still processing when the preference changed. Already accepted/in-flight pushes may still arrive.
-The frontend waits for server-confirmed preferences, synchronizes other-device changes, preserves saved values on
-write failure, and discards stale account callbacks. The import form links to category/device settings if unavailable.
+The frontend waits for server-confirmed preferences, synchronizes other-device changes, preserves the last confirmed
+values during read failures and same-account reloads, preserves saved values on write failure, and discards stale
+account callbacks. Read errors and reloads block new consent and editing until every category is confirmed again.
+The import form links to category/device settings if unavailable.
 
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
 consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on

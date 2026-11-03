@@ -96,6 +96,16 @@ describe('account notification categories', () => {
     service.reload(); await tick(); expect(listeners[0].stop).toHaveBeenCalledOnce(); emit(undefined);
     expect(service.status()).toBe('ready'); expect(service.message()).toBe('');
   });
+  it.each(['read failure', 'malformed'])('preserves a confirmed opt-out through %s and an explicit reload', async reason => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    if (reason === 'read failure') listeners[0].error(); else emit({ enabled: true });
+    expect(service.status()).toBe('error'); expect(service.canEdit()).toBe(false);
+    expect(service.categories()[0].enabled).toBe(false);
+    expect(service.isEnabled('history_import')).toBe(false);
+    service.reload(); await tick();
+    expect(service.status()).toBe('loading'); expect(service.categories()[0].enabled).toBe(false);
+    emit(preference(false, 3)); expect(service.status()).toBe('ready'); expect(service.categories()[0].enabled).toBe(false);
+  });
   it('recovers from a corrected malformed snapshot without retaining the error message', async () => {
     const service = setup(); await tick(); emit(undefined); emit({ enabled: false });
     expect(service.status()).toBe('error'); expect(service.isEnabled('history_import')).toBe(false);
