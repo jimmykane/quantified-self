@@ -533,6 +533,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const userID = this.currentUserID;
     const serviceName = this.serviceName;
     const generation = this.contextGeneration;
+    const connectionGeneration = this.userMetaForService?.connectionStateGeneration ?? null;
     const key = this.importState.key(userID, serviceName, 'activity');
     const operation = this.importState.begin(key);
     if (!operation) return;
@@ -560,8 +561,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         ? await this.push.historyNotificationTarget(userID) : undefined;
       // Device lookup can outlive this form or its owner; do not start an import in that case.
       if (!this.isCurrentView(userID, serviceName, generation)) return;
+      if (connectionGeneration !== (this.userMetaForService?.connectionStateGeneration ?? null)) {
+        this.notifyHistory.set(false);
+        throw new Error('Connection changed. Review the import and try again.');
+      }
       dispatched = true;
-      const connectionGeneration = this.userMetaForService?.connectionStateGeneration ?? null;
       const result = await this.userService.importServiceHistoryForCurrentUser(
         serviceName,
         startDate,

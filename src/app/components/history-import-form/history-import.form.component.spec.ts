@@ -2394,6 +2394,33 @@ describe('HistoryImportFormComponent', () => {
             const pending = component.onSubmit(new Event('submit')); component.ngOnDestroy(); resolve!(target); await pending;
             expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
         });
+        it.each(['replacement', undefined])('does not transfer a pending notification import to connection %s', async connectionStateGeneration => {
+            const push = await prepare();
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration: 'original' };
+            component.onHistoryNotificationChange(true);
+            let resolve: (value: typeof target) => void;
+            vi.mocked(push.historyNotificationTarget).mockReturnValue(new Promise(done => { resolve = done; }));
+            haptics.error.mockClear();
+            const pending = component.onSubmit(new Event('submit'));
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration };
+            component.ngOnChanges({}); resolve!(target); await pending;
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(component.notifyHistory()).toBe(false);
+            expect(component.isSubmitting).toBe(false);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+            expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('Connection changed'), undefined, expect.anything());
+        });
+        it('allows a same-connection metadata refresh during the notification lookup', async () => {
+            const push = await prepare();
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration: 'original' };
+            component.onHistoryNotificationChange(true);
+            let resolve: (value: typeof target) => void;
+            vi.mocked(push.historyNotificationTarget).mockReturnValue(new Promise(done => { resolve = done; }));
+            const pending = component.onSubmit(new Event('submit'));
+            component.userMetaForService = { ...component.userMetaForService }; component.ngOnChanges({});
+            resolve!(target); await pending;
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+        });
         it('hides the option for Garmin and resets consent after changing provider', async () => {
             await prepare(); component.onHistoryNotificationChange(true);
             component.serviceName = ServiceNames.GarminAPI; component.ngOnChanges({}); fixture.detectChanges();

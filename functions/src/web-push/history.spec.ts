@@ -15,7 +15,8 @@ vi.mock('./history-service', async original => ({ ...(await original<object>()),
 vi.mock('web-push', async original => ({ default: { ...(await original<{ default: typeof webpush }>()).default, sendNotification: vi.fn().mockResolvedValue({}) } }));
 function event() {
   const run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, rangePreset: '30_days',
-    runId: '00000000-0000-4000-8000-000000000003', providerUserId: 'account' }, 'connection', Date.now());
+    runId: '00000000-0000-4000-8000-000000000003', providerUserId: 'account',
+    tokenPath: 'tokens/owner/tokens/account', rootPath: 'tokens/owner', credentialGeneration: 'credential' }, 'connection', Date.now());
   Object.assign(run, { rangePreset: 'custom', processed: true,
     notification: { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002', origin: 'https://quantified-self.io' } });
   run.steps = run.steps.filter(step => step.id === 'activities');
@@ -38,7 +39,10 @@ describe('history push event adapter', () => {
     await sendHistoryImportNotification.run(input as never);
     expect(sendHistoryCompletion).not.toHaveBeenCalled(); expect(historyPushConfiguration).not.toHaveBeenCalled(); expect(secret).not.toHaveBeenCalled();
   });
-  it.each(['https://web.push.apple.com/synthetic', 'https://test.notify.windows.com/synthetic'])('uses bounded encrypted transport for %s', async endpoint => {
+  it.each([
+    { endpoint: 'https://web.push.apple.com/synthetic', extraOptions: {} },
+    { endpoint: 'https://test.notify.windows.com/synthetic', extraOptions: { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '3600' } } },
+  ])('uses bounded encrypted transport for $endpoint', async ({ endpoint, extraOptions }) => {
     const pair = webpush.generateVAPIDKeys();
     vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
     vi.mocked(historyPushConfiguration).mockResolvedValue({ enabled: true, publicKey: pair.publicKey });
@@ -48,7 +52,7 @@ describe('history push event adapter', () => {
     await deps.configuration(); await deps.send({ endpoint } as never, 'fixed-payload');
     expect(webpush.sendNotification).toHaveBeenCalledWith({ endpoint }, 'fixed-payload', {
       vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair }, TTL: 3600, timeout: 5000,
-      urgency: 'low', topic: 'qs-history-import', ...(endpoint.includes('windows.com') ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '3600' } } : {}),
+      urgency: 'low', topic: 'qs-history-import', ...extraOptions,
     });
     deps.outcome('accepted'); expect(mocks.log).toHaveBeenCalledWith('[HistoryImportPush]', { telemetryVersion: 1, outcome: 'accepted' });
   });
