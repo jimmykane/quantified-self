@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { of } from 'rxjs';
+import { BehaviorSubject, finalize, of } from 'rxjs';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { TrainingGoalsDialogComponent } from './training-goals-dialog.component';
 import { TrainingGoalDetailsComponent } from './training-goal-details.component';
@@ -18,18 +18,34 @@ const goal: TrainingGoalV1 = { schemaVersion: 1, id: 'one', revision: 1, created
 async function setup(data: Record<string, unknown> = {}) {
   const user = signal<any>({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles, startOfTheWeek: 1 } } });
   const save = vi.fn().mockResolvedValue(goal), close = vi.fn();
+  const progressResults = new BehaviorSubject({ status: 'ready', result: { progress: [] } });
+  const stopProgress = vi.fn(), watchProgress = vi.fn(() => progressResults.pipe(finalize(stopProgress)));
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   await TestBed.configureTestingModule({ imports: [TrainingGoalsDialogComponent], providers: [
     { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner', ...data } }, { provide: MatDialogRef, useValue: { close } },
     { provide: AppUserService, useValue: { user } }, { provide: AppHapticsService, useValue: haptics },
-    { provide: TrainingPlansService, useValue: { watchSchedule: () => of({ plans: [] }) } },
+    { provide: TrainingPlansService, useValue: { watchPlans: () => of([]) } },
     { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [goal] }),
-      watchProgress: () => of({ status: 'ready', result: { progress: [] } }), save, invalidateProgress: vi.fn() } },
+      watchProgress, save, invalidateProgress: vi.fn() } },
   ] }).compileComponents();
   const fixture = TestBed.createComponent(TrainingGoalsDialogComponent); fixture.detectChanges(); await fixture.whenStable();
-  return { fixture, component: fixture.componentInstance, save, close, user, haptics };
+  return { fixture, component: fixture.componentInstance, save, close, user, haptics, watchProgress, stopProgress };
 }
 describe('Calendar goal surfaces', () => {
+  it('reads progress only while current goals are visible and follows changes to the saved week start', async () => {
+    const { fixture, component, user, watchProgress, stopProgress } = await setup({ goal });
+    expect(watchProgress).not.toHaveBeenCalled();
+    component.editing.set(false); fixture.detectChanges();
+    expect(watchProgress).toHaveBeenCalledExactlyOnceWith('owner', component.timeZone, 1);
+    user.update(value => ({ ...value, displayName: 'Updated name' })); fixture.detectChanges();
+    expect(watchProgress).toHaveBeenCalledOnce();
+    user.update(value => ({ ...value, settings: { unitSettings: { startOfTheWeek: 0 } } })); fixture.detectChanges();
+    expect(watchProgress).toHaveBeenLastCalledWith('owner', component.timeZone, 0); expect(stopProgress).toHaveBeenCalledOnce();
+    component.archived.set(true); fixture.detectChanges(); expect(stopProgress).toHaveBeenCalledTimes(2);
+    expect(component.progress().result).toBeNull();
+    component.archived.set(false); fixture.detectChanges(); expect(watchProgress).toHaveBeenCalledTimes(3);
+    component.edit(goal); fixture.detectChanges(); expect(stopProgress).toHaveBeenCalledTimes(3);
+  });
   it('starts a future calendar goal today and validates before saving with silent typing', async () => {
     const { fixture, component, save, haptics } = await setup({ createDate: '2099-11-08' });
     expect(component.fields().startLocalDate).toBe(component.today); expect(component.fields().targetLocalDate).toBe('2099-11-08');

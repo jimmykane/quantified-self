@@ -9,7 +9,8 @@ import { TrainingGoalsService } from './training-goals.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { HistoryImportProgressService } from './history-import-progress.service';
-const mocks = vi.hoisted(() => ({ data: vi.fn(), transaction: vi.fn() }));
+const mocks = vi.hoisted(() => ({ data: vi.fn(), transaction: vi.fn(), authState: vi.fn() }));
+vi.mock('app/firebase/auth', async importOriginal => ({ ...await importOriginal<typeof import('app/firebase/auth')>(), authState: mocks.authState }));
 vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: (_db: unknown, ...path: string[]) => path.join('/'),
   doc: (_db: unknown, ...path: string[]) => path.join('/'), query: (value: unknown) => value, limit: (value: number) => value,
   collectionData: mocks.data, runTransaction: mocks.transaction }));
@@ -18,6 +19,7 @@ const goal: TrainingGoalV1 = { schemaVersion: 1, id: 'goal', name: 'Stay consist
   weeklyTarget: { kind: 'days', value: 3 }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 function setup() {
   const user = signal<any>({ uid: 'owner' }), auth = { currentUser: { uid: 'owner' } }, dataImportActive = signal(false);
+  const authEvents = new BehaviorSubject(auth.currentUser); mocks.authState.mockReturnValue(authEvents);
   const rows = new BehaviorSubject([{ ...goal, documentId: goal.id }]); mocks.data.mockReset().mockReturnValue(rows);
   const records = new Map<string, any>(), set = vi.fn((path: string, value: unknown) => records.set(path, value));
   mocks.transaction.mockImplementation(async (_db: unknown, fn: (tx: unknown) => unknown) => fn({
@@ -27,10 +29,24 @@ function setup() {
     { provide: AppUserService, useValue: { user } }, { provide: AppFunctionsService, useValue: { call } },
     { provide: MatDialog, useValue: { open: vi.fn() } }, { provide: HistoryImportProgressService, useValue: { dataImportActive } }] });
   const service = TestBed.inject(TrainingGoalsService); TestBed.flushEffects();
-  return { service, user, auth, rows, records, set, call, dataImportActive };
+  return { service, user, auth, authEvents, rows, records, set, call, dataImportActive };
 }
 afterEach(() => vi.useRealTimers());
 describe('TrainingGoalsService', () => {
+  it('detaches on sign-out and shares a fresh goal listener after same-account reauthentication', () => {
+    const { service, rows, user, auth, authEvents } = setup();
+    const seen: unknown[] = [];
+    const a = service.watch('owner').subscribe(value => seen.push(value)), b = service.watch('owner').subscribe();
+    expect(rows.observed).toBe(true); expect(mocks.data).toHaveBeenCalledOnce();
+    auth.currentUser = null; authEvents.next(null); user.set(null); TestBed.flushEffects();
+    expect(rows.observed).toBe(false); expect(seen.at(-1)).toEqual({ status: 'ready', goals: [] });
+    const freshRows = new BehaviorSubject([{ ...goal, revision: 2, documentId: goal.id }]); mocks.data.mockReturnValue(freshRows);
+    auth.currentUser = { uid: 'owner' }; authEvents.next(auth.currentUser); user.set({ uid: 'owner' }); TestBed.flushEffects();
+    expect(mocks.data).toHaveBeenCalledTimes(2); expect(seen.at(-1)).toMatchObject({ status: 'ready', goals: [{ revision: 2 }] });
+    const c = service.watch('owner').subscribe(); expect(mocks.data).toHaveBeenCalledTimes(2);
+    a.unsubscribe(); b.unsubscribe(); expect(freshRows.observed).toBe(true);
+    c.unsubscribe(); expect(freshRows.observed).toBe(false);
+  });
   it('shares one owner listener and reconnects after errors instead of caching failure', async () => {
     const { service, rows } = setup(); const a = service.watch('owner').subscribe(), b = service.watch('owner').subscribe();
     expect(mocks.data).toHaveBeenCalledOnce();
@@ -69,7 +85,7 @@ describe('TrainingGoalsService', () => {
     expect(call).not.toHaveBeenCalled(); sub.unsubscribe();
   });
   it('preserves cached progress through unrelated profile updates while still reacting to activities', async () => {
-    vi.useFakeTimers(); const { service, call, user, auth } = setup();
+    vi.useFakeTimers(); const { service, call, user, auth, authEvents } = setup();
     const activityRevision = signal(0);
     TestBed.runInInjectionContext(() => effect(() => {
       activityRevision(); service.invalidateProgress('owner');
@@ -81,7 +97,7 @@ describe('TrainingGoalsService', () => {
     await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledOnce();
     activityRevision.set(1); TestBed.flushEffects();
     await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledTimes(2);
-    auth.currentUser = { uid: 'owner' }; user.set({ uid: 'owner' }); TestBed.flushEffects();
+    auth.currentUser = { uid: 'owner' }; authEvents.next(auth.currentUser); user.set({ uid: 'owner' }); TestBed.flushEffects();
     await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledTimes(3);
     sub.unsubscribe();
   });

@@ -10037,6 +10037,9 @@ link. Lifecycle is active/paused/completed/archived; restore sets active. Achiev
 never moves goal dates; deletion preserves the goal and displays an unavailable link. Calendar markers use the target
 date, or only the start date for ongoing goals. Creating an event from a future calendar day starts its preparation
 today by default. Shared Material goal surfaces reuse the searchable sport picker and canonical unit formatting.
+The goal dialog uses the shared plan-only reader for optional links, without subscribing to scheduled workouts.
+Weekly progress is subscribed only in the current-goal list, stops during editing or archive browsing, and follows
+live changes to the saved calendar week start.
 
 Owner SDK CRUD writes `users/{uid}/trainingGoals/{id}` and `trainingGoalState/current` atomically, with per-goal
 revision, a separate goals revision and bounded retained count (200 including archived). Rules reject stale, foreign,
@@ -10049,6 +10052,8 @@ Weekly progress is computed by `getTrainingGoalsProgress`, authenticated and App
 (256 MiB, 30 seconds, max 100 instances). The frontend shares one bounded owner goal listener and one coalesced progress
 request across consumers, caches the current week for 60 seconds, and invalidates through existing calendar activity
 and history-import updates. Unrelated profile changes do not invalidate progress or retrigger calendar activity effects.
+Auth and owner changes cancel live goal reads, clear their displayed data and reconnect with the new session;
+multiple Calendar and dialog consumers still share one owner listener.
 Midnight advances the displayed local date without a tab-focus generation request.
 Active imports return incomplete progress without scanning activity history. Progress uses the displayed IANA timezone and saved calendar week start. A partial first week is labelled and its
 full target is retained, never silently prorated.

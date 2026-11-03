@@ -1,6 +1,7 @@
 import { Injectable, effect, inject, untracked } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
-import { Auth } from 'app/firebase/auth';
+import { Auth, authState } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, doc, limit, query, runTransaction } from 'app/firebase/firestore';
 import { Observable, Subject, auditTime, catchError, combineLatest, defer, distinctUntilChanged, filter, from, map, of,
   shareReplay, startWith, switchMap, timeout, timer } from 'rxjs';
@@ -23,7 +24,11 @@ export class TrainingGoalsService {
   private readonly functions = inject(AppFunctionsService);
   private readonly dialogs = inject(MatDialog);
   private readonly imports = inject(HistoryImportProgressService);
-  private readonly streams = new Map<string, { session: object | null; stream$: Observable<TrainingGoalsState> }>();
+  private readonly owner$ = combineLatest([authState(this.auth).pipe(startWith(this.auth.currentUser)), toObservable(this.users.user)]).pipe(
+    map(([session, user]) => session && session === this.auth.currentUser && session.uid === user?.uid ? session : null),
+    distinctUntilChanged(), catchError(() => of(null)), shareReplay({ bufferSize: 1, refCount: true }));
+  private readonly owner = toSignal(this.owner$, { initialValue: null });
+  private readonly streams = new Map<string, Observable<TrainingGoalsState>>();
   private readonly progressCache = new Map<string, { expires: number; promise: Promise<TrainingGoalsProgressResult> }>();
   private readonly invalidations = new Subject<string>();
   private opening = false;
@@ -31,7 +36,7 @@ export class TrainingGoalsService {
     let previousUid: string | undefined, previousImportActive: boolean | undefined;
     let previousSession: object | null | undefined;
     effect(() => {
-      const uid = this.users.user()?.uid, session = this.auth.currentUser;
+      const session = this.owner(), uid = session?.uid;
       const importActive = this.imports.dataImportActive();
       if (uid === previousUid && session === previousSession && importActive === previousImportActive) return;
       previousUid = uid; previousSession = session; previousImportActive = importActive;
@@ -41,21 +46,23 @@ export class TrainingGoalsService {
   }
   isOwner(uid: string): boolean { return !!uid && this.auth.currentUser?.uid === uid && this.users.user()?.uid === uid; }
   watch(uid: string | null | undefined): Observable<TrainingGoalsState> {
-    if (!uid || !this.isOwner(uid)) return of({ status: 'ready', goals: [] });
-    const session = this.auth.currentUser, cached = this.streams.get(uid);
-    if (cached?.session === session) return cached.stream$;
-    const stream$ = defer(() => {
-      if (!this.isOwner(uid) || this.auth.currentUser !== session) throw Error('The signed-in account changed.');
-      return collectionData(query(collection(this.db, 'users', uid, TRAINING_GOALS_COLLECTION), limit(TRAINING_GOALS_LIMIT + 1)),
-        { idField: 'documentId', waitForServer: true });
-    }).pipe(timeout({ first: 15000 }), filter(() => this.isOwner(uid) && this.auth.currentUser === session), map(values => {
-      if (values.length > TRAINING_GOALS_LIMIT) throw Error('The goal list is incomplete.');
-      const goals = values.map(({ documentId, ...data }) => parseTrainingGoalV1(data, documentId));
-      return { status: 'ready' as const, goals };
-    }), catchError(() => { if (this.streams.get(uid)?.session === session) this.streams.delete(uid); return of({ status: 'error' as const, goals: [] }); }), startWith({ status: 'loading' as const, goals: [] }),
+    if (!uid) return of({ status: 'ready', goals: [] });
+    const cached = this.streams.get(uid);
+    if (cached) return cached;
+    const stream$ = this.owner$.pipe(switchMap(session => {
+      if (session?.uid !== uid) return of({ status: 'ready' as const, goals: [] });
+      return defer(() => {
+        if (!this.isOwner(uid) || this.auth.currentUser !== session) throw Error('The signed-in account changed.');
+        return collectionData(query(collection(this.db, 'users', uid, TRAINING_GOALS_COLLECTION), limit(TRAINING_GOALS_LIMIT + 1)),
+          { idField: 'documentId', waitForServer: true });
+      }).pipe(timeout({ first: 15000 }), filter(() => this.isOwner(uid) && this.auth.currentUser === session), map(values => {
+        if (values.length > TRAINING_GOALS_LIMIT) throw Error('The goal list is incomplete.');
+        return { status: 'ready' as const, goals: values.map(({ documentId, ...data }) => parseTrainingGoalV1(data, documentId)) };
+      }), startWith({ status: 'loading' as const, goals: [] }));
+    }), catchError(() => { if (this.streams.get(uid) === stream$) this.streams.delete(uid); return of({ status: 'error' as const, goals: [] }); }),
     shareReplay({ bufferSize: 1, refCount: true }));
     if (this.streams.size >= 8) this.streams.clear();
-    this.streams.set(uid, { session, stream$ });
+    this.streams.set(uid, stream$);
     return stream$;
   }
   invalidateProgress(uid: string): void {

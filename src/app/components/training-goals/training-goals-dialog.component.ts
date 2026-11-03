@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { catchError, map, of } from 'rxjs';
+import { catchError, of, switchMap } from 'rxjs';
 import { ActivityTypesHelper, DistanceUnits } from '@sports-alliance/sports-lib';
 import { TRAINING_GOAL_FIELDS, parseTrainingGoalFields, type TrainingGoalFields, type TrainingGoalV1 } from '@shared/training-goals';
 import { dayWorkoutLocalDate } from '@shared/day-workout';
@@ -37,14 +37,16 @@ export class TrainingGoalsDialogComponent {
   readonly timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   readonly today = dayWorkoutLocalDate(new Date(), this.timeZone);
   readonly state = toSignal(this.service.watch(this.data.uid), { initialValue: { status: 'loading' as const, goals: [] } });
-  readonly plans = toSignal(this.plansService.watchSchedule(this.data.uid).pipe(map(schedule => schedule.plans), catchError(() => of(null))), { initialValue: null });
-  readonly progress = toSignal(this.service.watchProgress(this.data.uid, this.timeZone, this.units()?.startOfTheWeek ?? 1),
-    { initialValue: { status: 'loading' as const, result: null } });
+  readonly plans = toSignal(this.plansService.watchPlans(this.data.uid).pipe(catchError(() => of(null))), { initialValue: null });
   readonly archived = signal(false);
   readonly busy = signal(false);
   readonly error = signal('');
   readonly notice = signal('');
   readonly editing = signal(!!this.data.createDate || !!this.data.goal);
+  private readonly progressWeekStart = computed(() => this.editing() || this.archived() ? null : this.units()?.startOfTheWeek ?? 1);
+  readonly progress = toSignal(toObservable(this.progressWeekStart).pipe(switchMap(weekStartsOn => weekStartsOn === null
+    ? of({ status: 'ready' as const, result: null }) : this.service.watchProgress(this.data.uid, this.timeZone, weekStartsOn))),
+  { initialValue: { status: 'loading' as const, result: null } });
   readonly previous = signal<TrainingGoalV1 | null>(this.data.goal ?? null);
   private goalId = this.data.goal?.id ?? crypto.randomUUID();
   private initialFields(includeExisting = true): TrainingGoalFields {
