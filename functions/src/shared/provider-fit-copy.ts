@@ -10,6 +10,7 @@ import { isSameProviderRecording } from './provider-recording-identity';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { getActivitySourceWindow } from './activity-identity-matcher';
 import { savedActivityIdentity } from './activity-source-binding';
+import { assertHistoryWrite } from '../connection-history/context';
 
 const MAX_COPY_BYTES = 8 * 1024 * 1024;
 type Fields = Record<string, unknown>;
@@ -138,6 +139,7 @@ export async function skipVerifiedProviderFITCopy(queue: GarminAPIActivityQueueI
       && current.queueRevision === queue.queueRevision && current.startTimeInSeconds === queue.startTimeInSeconds
       && current.token === queue.token && current.userAccessToken === queue.userAccessToken,
     isAuthorizedInTransaction: async (_db, tx) => {
+      await assertHistoryWrite(tx);
       const [fresh, legs] = await Promise.all([tx.getAll(...refs), tx.get(activities)]);
       const unchanged = (a: admin.firestore.DocumentSnapshot, b: admin.firestore.DocumentSnapshot) => a.exists === b.exists
         && (!a.exists || !!a.updateTime?.isEqual(b.updateTime!));

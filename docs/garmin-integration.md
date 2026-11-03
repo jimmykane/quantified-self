@@ -101,7 +101,8 @@ retained GPS point omitted). Distinct, incomplete, GPS-less or ambiguous recordi
 Verification reads one generation-pinned original from the same bucket and owner/event prefix, bounded to 8 MiB;
 strict `fit-file-parser` decoding verifies both CRCs. No provider request or Storage read occurs on normal matching.
 The final queue-only completion uses the existing deletion guard and atomically rechecks queue identity, parent,
-activities, source/provider metadata and Garmin connection/root versions. Source/account changes remain retryable.
+activities, source/provider metadata and Garmin connection/root versions, including the existing history-import
+lifecycle guard when present. Source/account changes remain retryable; superseded history follows its existing skip path.
 No saved event, original, activity ID, edit, elevation correction, Training control or outbound delivery is rewritten.
 Only `processWorkoutTask` needs approved deployment; replay/failed-job removal remain separate operational actions.
 Monitoring is **covered/unchanged** by the existing committed skip and worker-attempt signals; no new resource or label.

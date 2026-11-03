@@ -4,6 +4,8 @@ import { FitBaseType as T, FitEncoder } from 'fit-file-parser';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { isRetainedHikeFITCopy, skipVerifiedProviderFITCopy } from './provider-fit-copy';
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 
 const state = vi.hoisted(() => ({
   docs: new Map<string, { data: Record<string, unknown>; version: number }>(),
@@ -171,6 +173,13 @@ describe('verified provider copy completion', () => {
   it('keeps a mismatch between the saved legs and original sessions blocked', async () => {
     state.activities[0].data.endDate = new Date(+start + 301_000);
     expect(await run()).toBeNull(); expect(state.update).not.toHaveBeenCalled();
+  });
+  it('honors the owning history import lifecycle before completing a copy', async () => {
+    const error = new Error('History connection changed');
+    const inTransaction = vi.fn().mockRejectedValue(error);
+    await expect(withHistoryExecution({ inTransaction } as unknown as HistoryExecution, run)).rejects.toBe(error);
+    expect(inTransaction).toHaveBeenCalledOnce();
+    expect(state.update).not.toHaveBeenCalled();
   });
   it('keeps unavailable source reads retryable with no private Storage error text', async () => {
     state.read.mockReturnValue({ createReadStream: () => { throw new Error('private/path/or/provider/error'); } });
