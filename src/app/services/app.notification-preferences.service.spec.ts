@@ -16,8 +16,11 @@ let owners: BehaviorSubject<typeof owner | null>;
 let listeners: { next: (snapshot: unknown) => void; error: () => void; stop: ReturnType<typeof vi.fn> }[];
 let saved: unknown;
 let tx: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
-const emit = (value: unknown, metadata = { fromCache: false, hasPendingWrites: false }, index = listeners.length - 1) =>
-  listeners[index].next({ data: () => value, metadata });
+const emit = (value: unknown, metadata = { fromCache: false, hasPendingWrites: false }, index?: number) => {
+  // Existing cases exercise History imports; independently confirm the other category.
+  if (index === undefined) listeners[listeners.length - 1].next({ data: () => undefined, metadata });
+  listeners[index ?? listeners.length - 2].next({ data: () => value, metadata });
+};
 function setup(platform = 'browser') {
   TestBed.configureTestingModule({ providers: [{ provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
     { provide: PLATFORM_ID, useValue: platform }] });
@@ -35,6 +38,17 @@ beforeEach(() => {
 });
 afterEach(() => TestBed.resetTestingModule());
 describe('account notification categories', () => {
+  it('waits for both categories and saves their independent choices to separate documents', async () => {
+    const service = setup(); await tick();
+    emit(undefined, { fromCache: false, hasPendingWrites: false }, 0);
+    expect(service.status()).toBe('loading'); expect(service.isEnabled('activity_sync')).toBe(false);
+    listeners[1].next({ data: () => preference(false, 1), metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.isEnabled('history_import')).toBe(true); expect(service.isEnabled('activity_sync')).toBe(false);
+    saved = preference(false, 1); await service.setEnabled('activity_sync', true);
+    expect(tx.set).toHaveBeenLastCalledWith({ path: 'users/owner/notificationPreferences/activity_sync' },
+      { ...preference(true, 2), updatedAt: 'server-time' });
+    expect(service.isEnabled('history_import')).toBe(true);
+  });
   it('defaults a new category on only after an authoritative read, independently of device permission', async () => {
     const service = setup(); await tick();
     expect(service.canEdit()).toBe(false); expect(service.isEnabled('history_import')).toBe(false);

@@ -1017,6 +1017,28 @@ anti-spam receipts, truthful partial results, monitoring definitions and backend
 is covered in source; live activation/readback is deferred in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 No deployment, switch activation or test send is authorized by implementation or passing offline tests.
 
+### Recent live-activity notifications
+
+The default-on New activities synced category groups genuinely new, fully persisted workouts from all four activity
+providers. Verified first canonical creation and positive webhook provenance are both required; manual/OAuth history,
+unknown legacy work, corrections, reprocessing, cross-provider duplicates and manual uploads are excluded. Workouts
+must finish within 48 hours and start after the current connection. Garmin additionally persists a monotonic requested
+history-end cutoff before requesting files because history shares its live callback. This can conservatively suppress
+genuine workouts through an end-of-day history range. Exact queue revision, account/provider/connection, event dates,
+category revision and registration generation are checked before sending. Failure never changes import success/retry.
+
+The [Web Push runbook](web-push-notifications.md#recent-live-activity-sync-notifications) owns batching, private state,
+rate caps, payload, scheduler/index, deployment order and costs. Two-minute grouping yields one summary for a burst;
+at most one batch per 15 minutes and four per rolling day across providers, with capped arrivals discarded. Production
+registrations only; beta remains self-test-only. Both operational sender switches stay off during preparation.
+
+Monitoring: **covered in source** by the existing Web Push bundle extended with admission/send failures, native runtime
+5xx, bounded due-age observation and minute heartbeat. No new telemetry scanner or provider queue/retry changes.
+Existing import monitoring remains authoritative for ingestion. Live activation/readback is **deferred** in
+[#1011](https://github.com/jimmykane/quantified-self/issues/1011), with the existing channel; source tests are not live evidence.
+Release checklist: deploy cutoff/OAuth writers, webhook admission, changed workers, sender and Rules/index; verify
+scheduler and monitoring before an approved production window. Never enable with only the frontend or sender deployed.
+
 ### Shared history progress surfaces
 
 Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.

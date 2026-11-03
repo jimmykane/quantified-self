@@ -35,6 +35,9 @@ describe('notification Settings', () => {
     const fixture = TestBed.createComponent(PushNotificationSettingsComponent); fixture.detectChanges();
     const toggle = fixture.debugElement.query(By.css('mat-slide-toggle')).componentInstance;
     expect(toggle.checked).toBe(true); expect(toggle.disabled).toBe(false);
+    expect(fixture.debugElement.queryAll(By.css('mat-slide-toggle'))).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('New activities synced');
+    expect(fixture.nativeElement.textContent).toContain('History imports are excluded');
     expect(fixture.nativeElement.textContent).toContain('New categories are on by default');
     let reject!: (error: Error) => void;
     preferences.setEnabled.mockImplementationOnce(() => new Promise((_done, fail) => { reject = fail; }));

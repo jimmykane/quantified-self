@@ -275,3 +275,4 @@ export {
 
 export { sendTestPushNotification } from './web-push';
 export { sendHistoryImportNotification } from './web-push/history';
+export { sendActivitySyncNotifications } from './web-push/activity';

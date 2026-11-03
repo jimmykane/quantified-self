@@ -338,7 +338,7 @@ describe('Firebase Hosting configuration', () => {
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
-    // Notification help covers default-on account categories, separate per-import consent and cancellation across off/on toggles (2026-11-03).
+    // Notification help covers default-on categories, recent live-sync batching and caps, history exclusion, and cancellation (2026-11-03).
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).

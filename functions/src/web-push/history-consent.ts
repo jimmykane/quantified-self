@@ -14,6 +14,9 @@ export function readHistoryNotificationConsent(value: unknown, origin: string | 
   return { ...value, origin };
 }
 export async function historyPushConfiguration(): Promise<{ enabled: boolean; publicKey: string }> {
+  return automaticPushConfiguration('web_push_history_import_enabled');
+}
+export async function automaticPushConfiguration(sender: 'web_push_history_import_enabled' | 'web_push_activity_sync_enabled'): Promise<{ enabled: boolean; publicKey: string }> {
   const template = await getRemoteConfig().getTemplate();
   const value = (name: string) => {
     const parameter = template.parameters[name];
@@ -22,7 +25,7 @@ export async function historyPushConfiguration(): Promise<{ enabled: boolean; pu
     const setting = parameter?.defaultValue;
     return setting && 'value' in setting ? setting.value : '';
   };
-  return { enabled: value('web_push_enabled') === 'true' && value('web_push_history_import_enabled') === 'true',
+  return { enabled: value('web_push_enabled') === 'true' && value(sender) === 'true',
     publicKey: value('web_push_vapid_public_key') };
 }
 export async function validateHistoryNotificationConsent(db: Firestore, tx: Transaction, uid: string, service: string,

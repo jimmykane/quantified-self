@@ -18,6 +18,7 @@ describe('function target loader', () => {
       'enforceSubscriptionLimits',
       'sendTestPushNotification',
       'sendHistoryImportNotification',
+      'sendActivitySyncNotifications',
       'checkSubscriptionNotifications',
       'cleanupStripeCustomer',
       'cleanupUserAccounts',

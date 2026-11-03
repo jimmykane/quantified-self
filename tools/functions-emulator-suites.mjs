@@ -36,6 +36,7 @@ export const EMULATOR_SUITES = {
     'src/email/monitoring.emulator.spec.ts',
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
+    'src/web-push/activity.emulator.spec.ts',
     'src/coros/history-import-lease.emulator.spec.ts',
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',

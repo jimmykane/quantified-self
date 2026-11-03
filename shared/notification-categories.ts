@@ -2,6 +2,9 @@
 export const NOTIFICATION_CATEGORIES = [{
   id: 'history_import', label: 'History imports',
   description: 'Results of history imports you explicitly ask to be notified about.',
+}, {
+  id: 'activity_sync', label: 'New activities synced',
+  description: 'Recent workouts from connected services, grouped to limit alerts. History imports are excluded.',
 }] as const;
 export type NotificationCategoryId = typeof NOTIFICATION_CATEGORIES[number]['id'];
 export interface NotificationCategoryPreference { enabled: boolean; revision: number; }

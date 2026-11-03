@@ -105,8 +105,8 @@ describe('Firestore Security Rules', () => {
         });
     });
 
-    describe('Notification category preferences', () => {
-        const path = 'users/category-owner/notificationPreferences/history_import';
+    describe.each(['history_import', 'activity_sync'])('Notification category preferences: %s', category => {
+        const path = `users/category-owner/notificationPreferences/${category}`;
         const base = { schemaVersion: 1, enabled: false, revision: 1 };
         beforeEach(async () => {
             await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/category-owner').set({}); });
@@ -141,7 +141,7 @@ describe('Firestore Security Rules', () => {
                 await assertFails(context.firestore().doc(path).set(value));
             }
             await assertFails(testEnv.authenticatedContext('category-owner', { impersonatedBy: 'admin' }).firestore().doc(path).set(value));
-            await assertFails(testEnv.authenticatedContext('missing').firestore().doc('users/missing/notificationPreferences/history_import').set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore().doc(`users/missing/notificationPreferences/${category}`).set(value));
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc(path).set(base);
                 await context.firestore().doc('userDeletionTombstones/category-owner').set({});

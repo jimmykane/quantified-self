@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. Other activity, Training, billing, marketing and reminder categories are not implemented. There is no notification inbox, subscription list, scheduler, outbox or retry queue. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Training, billing, marketing and reminder categories are not implemented. There is no notification inbox or subscription list; only live-activity alerts use a bounded private pending batch and minute scheduler. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits production only. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -40,11 +40,11 @@ For key rotation, provision the new matching pair and public parameter together 
 
 ## Notification categories
 
-Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The first
-category is `history_import` (History imports). **New categories default on**, including for existing accounts,
+Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
+categories are `history_import` (History imports) and `activity_sync` (New activities synced). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
-An enabled category alone never starts sending or checks a history-import checkbox. Self-tests bypass categories.
+An enabled category still requires an enabled production device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
 
 An owner-scoped private leaf at `users/{uid}/notificationPreferences/{category}` stores `schemaVersion: 1`,
 `enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means
@@ -54,7 +54,7 @@ deleting accounts. Changes use client transactions rather than a new callable. E
 revision; listener hydration, unchanged selections and retries after another device already saved the value do not.
 Preferences remain under the existing recursive account cleanup and are not MCP, metric or public profile data.
 
-Admission reads the category in its existing transaction and binds the server revision to private run consent.
+Admission reads the category transactionally and binds the server revision to private import consent or an activity batch.
 The sender checks that the category remains on at that same revision both before claiming and immediately before
 sending. Switching it off cancels outstanding consent; switching it back on does not revive earlier runs, including
 imports that were still processing when the preference changed. Already accepted/in-flight pushes may still arrive.
@@ -93,9 +93,96 @@ After separate approval, deploy the category Rules, existing admission callables
 npm run firebase -- deploy --only firestore:rules,functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:sendHistoryImportNotification --project quantified-self-io
 ```
 
-The category preferences require the Rules deployment above. No key rotation, ingestion-worker deployment, schedule or queue change is required. The existing shared key is bound only to the new sender in addition to the self-test sender. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+The history-only subset requires the Rules deployment above. It needs no key rotation, ingestion-worker deployment, schedule or queue change. Releasing the full PR also requires the live-activity deployment below. The existing shared key is bound to the two automatic senders and the self-test sender; admission workers never receive it. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 
 Rollback of new admissions/sends is the new switch set to false; existing imports continue normally. Already claimed/accepted sends may finish. Never clear receipts or replay completed runs. The trigger uses 256 MiB, 30 seconds, max two instances, concurrency 20 and zero minimum instances in `europe-west2`; no idle warm instance or new scheduler is provisioned. Once deployed it is invoked on history-document writes even while disabled, then filters unrelated checkpoints in memory. Consented completion handling adds bounded configuration/Firestore reads, transactional claim/bookkeeping writes and one push request at most. This has incremental invocation/read/write costs; it is not a free or guaranteed-delivery service.
+
+## Recent live-activity sync notifications
+
+`activity_sync` defaults on as an account preference, independently of `history_import`. Sending additionally requires
+both unconditional Remote Config defaults `web_push_enabled=true` and **`web_push_activity_sync_enabled=true`**,
+plus the matching public key. The new sender defaults off when its parameter is absent; prepare it as false. No new
+signing key, permission prompt, paid service or client-targeted rollout is introduced. Existing production device
+registrations are eligible. Beta registrations remain self-test-only.
+
+Eligibility is proven after successful canonical event, child, metadata and original-file persistence:
+
+- `setEvent().created` reflects the committed parent-creation transaction. Existing events, corrections, reprocessing,
+  manual QS uploads, verified cross-provider copies and outbound echoes do not enter notification admission. Failed
+  or partial writes produce no alert; a subsequent successful repair of an existing parent conservatively stays silent.
+- Only authenticated provider webhook creation stamps `activityNotificationOrigin: live`. Legacy/unknown queue work,
+  `fromHistory`, coordinator run IDs, manual/edited provider entries and suppression markers are excluded. A missing
+  history flag does not establish a live source. Normal queue revisions, leases and retries remain unchanged.
+- The parsed workout must have finished within 48 hours, not in the future, and begun after the current connection.
+  Admission uses token creation time for existing connections; new/reconnected accounts also have the server-owned
+  `activityNotificationConnectedAtMs` lifecycle marker. Missing/invalid connection identity or time fails closed.
+- Garmin history callbacks share its live endpoint. Before any history request, the existing lease transaction raises
+  `activityNotificationHistoryEndMs` to the requested range end. Admission and sending also check the existing
+  automatic-delivery cutoff and latest history projection end. Bounds never move backwards, including on partial
+  request failure. This intentionally can suppress genuine new Garmin workouts through a requested future/end-of-day
+  bound; it cannot mislabel those history callbacks as new workouts.
+- Admission and sending recheck the exact queue date/revision, provider account, connection generation, event dates
+  and existence, account deletion guard, preference revision and production registration generations. These are masked
+  metadata reads; no metrics, streams or full sports models are hydrated to prepare a notification.
+
+One private leaf, `users/{uid}/pushState/activitySync`, holds at most one pending batch, four attempt timestamps,
+256 event-ID suppression receipts and one claim ID. Receipts expire logically 48 hours after workout completion and
+are pruned on new admission. Recreating the same canonical event during this period does not notify again. At the
+receipt limit, further arrivals are silently omitted until space becomes available. This bounded state is denied to
+clients by existing Rules and removed by existing recursive account cleanup; no TTL policy is needed.
+
+The first eligible arrival fixes a two-minute batching deadline and snapshots at most ten registered production
+devices. Later arrivals do not extend that deadline or add newly enabled devices. The batch holds at most 50 unique
+workouts; excess arrivals are suppressed. The minute scheduler normally sends after roughly two to three minutes.
+One workout opens `/user/<uid>/event/<eventId>`; multiple workouts open `/activities`. The payload exposes only a generic
+message/count, no workout names or metrics, using the shared QS icon, declarative `web_push: 8030`, Angular click
+fallback, low urgency, fixed topic/tag `qs-activity-sync`, `renotify: false`, five-second transport timeout and ten-minute
+push TTL (including WNS). A browser may replace a previous visible alert with the same tag.
+
+There is at most **one batch attempt per 15 minutes and four per rolling 24 hours per account across providers**.
+These limits are separate from history-completion and self-test budgets. Cooldown/capped arrivals are skipped,
+never queued for a later digest. Turning the category off and back on changes its revision and cancels all earlier
+pending entries; a new sync can create a fresh batch. Device disable/rotation, disconnect/reconnect and deletion
+are rechecked before transport. Already accepted or in-flight pushes cannot be recalled.
+
+`sendActivitySyncNotifications` reads at most 25 due leaves per minute through the `pushState.dueAt` collection-group
+index, processes five accounts at a time and at most five devices concurrently per account. Each batch is atomically
+removed and its rate slot claimed before transport. Concurrent schedules, lost commit acknowledgements, crashes and
+ambiguous send failures cannot replay a claimed batch. Preparation failures before claim can be retried by a later
+sweep. Batches more than ten minutes overdue are discarded. A disabled sender clears due batches without sending;
+leaving it disabled beyond this expiry before re-enabling also expires any retained work after an outage. There is
+no notification dead-letter queue or manual replay feature. Only an expired matching registration is pruned.
+
+Admission failure logs a fixed error and never fails/retries an otherwise successful activity import. A crash after
+persistence but before admission may miss an alert. This is best-effort delivery, not an exactly-once guarantee.
+Quiet-hours preferences and an app-open suppression policy are not included; OS Focus settings still control display.
+
+### Activity rollout and rollback
+
+Keep `web_push_activity_sync_enabled=false` and the independent history sender switch false while preparing the
+backend. Preserve the existing foundation flag and VAPID key. After separate approval, deploy Rules/indexes and wait
+for the collection-group index to be ready, then deploy the changed callback, OAuth/history, import-worker and sender
+entrypoints. The combined backend command for this PR is:
+
+```sh
+npm run firebase -- deploy --only firestore:rules,firestore:indexes --project quantified-self-io
+npm run firebase -- deploy --only functions:sendActivitySyncNotifications,functions:sendHistoryImportNotification,functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:insertSuuntoAppActivityToQueue,functions:insertCOROSAPIWorkoutDataToQueue,functions:insertGarminAPIActivityFileToQueue,functions:wahooAPIWebhook,functions:processWorkoutTask,functions:parseSuuntoAppActivityQueue,functions:parseCOROSAPIWorkoutQueue,functions:parseGarminAPIActivityQueue,functions:parseWahooAPIWorkoutQueue,functions:requestAndSetSuuntoAPIAccessToken,functions:requestAndSetCOROSAPIAccessToken,functions:requestAndSetGarminAPIAccessToken,functions:requestAndSetWahooAPIAccessToken,functions:backfillGarminAPIActivities,functions:processConnectionHistoryTask --project quantified-self-io
+```
+
+Verify the deployed scheduler is once per minute in UTC, `europe-west2`, 256 MiB, timeout 120 seconds, concurrency one,
+maximum one instance, zero minimum instances and no Scheduler retries. Verify the existing VAPID binding is limited
+to the three senders. Apply/read back the expanded existing monitoring bundle and its initial heartbeat series, then
+release the frontend to beta for category/permission UI checks. Actual automatic delivery remains production-only.
+An explicitly authorized short production window should verify a new recorded workout, grouped arrivals, separate
+history exclusion, off/on cancellation, click routing and real OS display before broader activation. All default-on
+accounts with enabled production devices become eligible when the shared activity flag turns on; this is not a
+single-user targeted switch. [#1011](https://github.com/jimmykane/quantified-self/issues/1011) tracks activation/readback.
+
+Rollback is the activity sender flag false; imports continue normally and due batches are discarded. Claimed pushes
+may finish. Do not clear receipts, replay old imports or revert just the Garmin cutoff writers while leaving activity
+sending enabled. The scheduler has no warm instance but adds minute invocations, bounded Firestore/configuration
+reads, batch/claim writes and push requests; Cloud Scheduler and logging/monitoring also have normal usage costs.
+There is no per-notification charge added by QS or another messaging vendor, and no claim that infrastructure is free.
 
 ## Verification
 
@@ -117,12 +204,21 @@ An authorized operator applies the exact owned bundle with:
 node tools/web-push-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/CHANNEL_ID --apply --confirm-project=quantified-self-io
 ```
 
-The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. Category opt-outs and revision changes use the existing suppression/cancelled paths and do not add an alert or label. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. No notification outbox or dead-letter queue exists, so notification backlog age/dead letters are inapplicable. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
+The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. Category opt-outs and revision changes use the existing suppression/cancelled paths and do not add an alert or label. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. History completion has no notification outbox or dead-letter queue; its backlog remains the existing coordinator backlog. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 
-History sender coverage is **covered in source** by the extended bundle and offline ownership/reapplication/privacy tests. Live activation and readback are **deferred** to [#1011](https://github.com/jimmykane/quantified-self/issues/1011); passing these tests does not establish live coverage. Existing import/provider queue coverage is **unchanged** because its workers, dispatchers, leases, retries and outcomes are unchanged. Foundation physical-device verification remains tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
+The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
+(including admission failures in existing Gen 1/Gen 2 import workers), completed-sweep heartbeat, and positive oldest-due
+observations at least three minutes overdue. It alerts on three real admission/send/preparation failures or native 5xx
+in 15 minutes, two overdue observations in five minutes, or no completed sweep for 15 minutes. Disabled and idle sweeps
+emit heartbeats; failures report unknown health, never healthy zero. The post-sweep probe reads only the oldest due
+field. Verify an initial heartbeat metric series during activation: absence policies cannot detect a never-seen series.
+Expected histories, duplicates, category/lifecycle skips, rate caps and expired registrations are not service failures.
+There are five metrics, three policies and seven charts in the combined bundle; it reuses the existing verified channel.
+
+History and activity sender coverage is **covered in source** by the extended bundle and offline ownership/reapplication/privacy tests. Live activation and readback are **deferred** to [#1011](https://github.com/jimmykane/quantified-self/issues/1011); passing these tests does not establish live coverage. Existing import/provider processing coverage is **unchanged** because its schedules, leases, retries and outcomes are unchanged; new post-persistence admission failures are covered by the activity push bundle. Foundation physical-device verification remains tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
 
 ## MCP and Training impact
 
-No MCP tool, scope, response, consent or Training planning contract changes. Notifications contain no metrics or health data. Automatic Training notifications and their required MCP impact review remain outside this foundation.
+No MCP tool, scope, response, consent or Training planning contract changes. The canonical parent-creation result adds no event fields and changes no Training source reservations, calculations, completion or delivery behavior. Notifications contain no metrics or health data. Automatic Training notifications and their required MCP impact review remain outside this foundation.

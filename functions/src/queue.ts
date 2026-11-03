@@ -1,4 +1,5 @@
 import { withHistoryQueueExecution, type HistoryExecution } from './connection-history/execution';
+import { notifyNewActivityAfterPersistence } from './web-push/activity-admission';
 import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
@@ -1419,6 +1420,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
               : {}),
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.COROSAPI, corosWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           if (corosWorkoutQueueItem.planWorkoutId) {
             await retainCOROSTrainingCompletion(
               admin.firestore(),
@@ -1474,6 +1477,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
             providerEventIDField: 'serviceWorkoutID',
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           await retainSuuntoGuideCompletions(admin.firestore(), parentID, deterministicID, suuntoWorkoutQueueItem.userName,
             String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id,
             fitActivityReferencesFromEvent(event));
@@ -2231,6 +2236,7 @@ async function handleDuplicateProviderWebhookQueueItem(
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, options: WorkoutQueueInsertOptions): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   const queuePayload = Object.assign({}, queueItem, {
+    ...(options.intent === 'provider_webhook' ? { activityNotificationOrigin: 'live' as const } : {}),
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
     dispatchedToCloudTask: null,
   });

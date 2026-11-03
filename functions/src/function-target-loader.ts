@@ -42,6 +42,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   enforceSubscriptionLimits: () => module.require('./schedule/enforce-subscription-limits') as FunctionModule,
   sendTestPushNotification: () => module.require('./web-push') as FunctionModule,
   sendHistoryImportNotification: () => module.require('./web-push/history') as FunctionModule,
+  sendActivitySyncNotifications: () => module.require('./web-push/activity') as FunctionModule,
   checkSubscriptionNotifications: () => module.require('./schedule/notifications') as FunctionModule,
   cleanupStripeCustomer: () => module.require('./stripe/cleanup') as FunctionModule,
   cleanupUserAccounts: () => module.require('./users/cleanup') as FunctionModule,

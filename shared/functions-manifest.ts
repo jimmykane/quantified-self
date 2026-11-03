@@ -32,6 +32,7 @@ export const FUNCTIONS_MANIFEST = {
 
     sendTestPushNotification: { name: 'sendTestPushNotification', region: 'europe-west2' },
     sendHistoryImportNotification: { name: 'sendHistoryImportNotification', region: 'europe-west2' },
+    sendActivitySyncNotifications: { name: 'sendActivitySyncNotifications', region: 'europe-west2' },
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },

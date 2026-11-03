@@ -51,5 +51,47 @@ export function buildWebPushMonitoring(project, channel) {
     { yPos: 12, width: 12, height: 4, widget: { title: 'History-import sender native requests', xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: {
       filter: `metric.type="run.googleapis.com/request_count" ${historyRuntime}`, aggregation: { ...aggregate, groupByFields: ['metric.label.response_code_class'] } }, unitOverride: '1' } }], yAxis: { label: 'Requests', scale: 'LINEAR' } } } },
   );
+  const activityRuntime = runtime.replace('sendtestpushnotification', 'sendactivitysyncnotifications');
+  const activityName = 'qs_activity_sync_push_outcomes_v1';
+  const heartbeatName = 'qs_activity_sync_push_sweeps_v1';
+  const overdueName = 'qs_activity_sync_push_overdue_v1';
+  const activityBase = `resource.type=("cloud_run_revision" OR "cloud_function") resource.labels.project_id="${project}"`;
+  const activityFilter = `metric.type="logging.googleapis.com/user/${activityName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  const legacyActivityFilter = activityFilter.replace('resource.type="cloud_run_revision"', 'resource.type="cloud_function"');
+  const heartbeatFilter = `metric.type="logging.googleapis.com/user/${heartbeatName}" ${activityRuntime}`;
+  const overdueFilter = `metric.type="logging.googleapis.com/user/${overdueName}" ${activityRuntime}`;
+  bundle.metrics.push({ name: activityName,
+    description: `[${OWNER}] New-activity notification attempts and admission/preparation failures, including Gen 1 legacy import workers. Accepted is transport acceptance, never display.`,
+    filter: `${activityBase} jsonPayload.message="[ActivitySyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  for (const [metricName, extra, description] of [
+    [heartbeatName, '', 'Completed minute sweeps, including disabled and idle operation. Failures do not emit healthy heartbeats.'],
+    [overdueName, ' jsonPayload.oldestDueAgeSeconds>=180', 'Positive bounded oldest-due observation after the sweep, at least three minutes overdue. Future grouping waits are excluded.'],
+  ]) bundle.metrics.push({ name: metricName, description: `[${OWNER}] ${description}`,
+    filter: `${activityRuntime} jsonPayload.message="[ActivitySyncPushSweep]" jsonPayload.telemetryVersion=1 jsonPayload.oldestDueAgeSeconds>=0${extra}`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: [] } });
+  bundle.policies.push({ displayName: 'QS Web Push: Activity-sync sender health',
+    userLabels: { managed_by: OWNER, policy_id: 'activity-sender' }, enabled: true, severity: 'WARNING', combiner: 'OR',
+    notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated activity admission or sender failures', `${activityFilter} metric.labels.outcome="failed"`),
+      failureCondition('Repeated legacy activity admission failures', `${legacyActivityFilter} metric.labels.outcome="failed"`),
+      failureCondition('Repeated activity sender runtime failures', `metric.type="run.googleapis.com/request_count" ${activityRuntime} metric.labels.response_code_class="5xx"`),
+      { displayName: 'Two overdue observations in five minutes', conditionThreshold: { filter: overdueFilter,
+        aggregations: [{ ...aggregate, alignmentPeriod: '300s' }], comparison: 'COMPARISON_GT', thresholdValue: 1,
+        duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } },
+      { displayName: 'No completed sweep for fifteen minutes', conditionAbsent: { filter: heartbeatFilter,
+        aggregations: [{ ...aggregate, alignmentPeriod: '300s' }], duration: '900s', trigger: { count: 1 } } }],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Activity-sync sender health',
+      content: `Verify the minute scheduler, private dueAt collection-group index, runtime, both flags and key pairing. The same worker emits bounded backlog observations and idle/disabled heartbeats; verify an initial metric series after activation because absence cannot bootstrap a never-seen series. Native 5xx covers startup failure. Category cancellation, histories, duplicates, rate limits, account deletion, disconnects and expired registrations are expected, not failures. Batches expire ten minutes after becoming due and are claimed before transport; no resend, dead letter or backlog replay is offered. Do not clear receipts or replay jobs. [Runbook](${runbook})` } });
+  for (const [index, title, chartFilter, groups] of [
+    [0, 'Activity-sync outcomes — attempts, not display', activityFilter, ['metric.label.outcome', 'metric.label.phase']],
+    [1, 'Activity-sync overdue observations — excludes grouping wait', overdueFilter, []],
+    [2, 'Activity-sync completed sweeps — includes idle and disabled', heartbeatFilter, []],
+  ]) bundle.dashboard.mosaicLayout.tiles.push({ yPos: 16 + index * 4, width: 12, height: 4, widget: {
+    title, xyChart: { dataSets: (index === 0 ? [chartFilter, legacyActivityFilter] : [chartFilter]).map(filter => ({ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: {
+      filter, aggregation: { ...aggregate, groupByFields: groups } }, unitOverride: '1' } })), yAxis: { label: 'Count', scale: 'LINEAR' } },
+  } });
   return bundle;
 }

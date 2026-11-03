@@ -2157,6 +2157,7 @@ describe('queue', () => {
             expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'user1-work1',
                 userName: 'user1',
+                activityNotificationOrigin: 'live',
                 workoutID: 'work1',
                 firebaseUserID: 'mock-user-id',
                 dispatchedToCloudTask: null
@@ -2564,6 +2565,7 @@ describe('queue', () => {
             const queueItem: any = {
                 id: 'coros1',
                 openId: 'oid1',
+                activityNotificationOrigin: 'live',
                 workoutID: 'wid1',
                 FITFileURI: 'https://coros.test/old.fit',
                 dateCreated: 123456,
@@ -2602,6 +2604,7 @@ describe('queue', () => {
             expect(doc.create).toHaveBeenCalledWith(expect.objectContaining({
                 id: 'u1-file123',
                 activityFileID: 'file123',
+                activityNotificationOrigin: 'live',
                 firebaseUserID: 'mock-user-id',
             }));
             expect(doc.create.mock.calls[0][0].suppressAutomaticActivitySync === true).toBe(suppressAutomaticActivitySync === true);
