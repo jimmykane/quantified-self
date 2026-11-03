@@ -43,6 +43,8 @@ export const sendTestPushNotification = onCall({
       send: (subscription, payload) => webpush.sendNotification(subscription, payload, {
         vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair! },
         TTL: 60, timeout: 5000, urgency: 'normal',
+        ...(new URL(subscription.endpoint).hostname.endsWith('.notify.windows.com')
+          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '60' } } : {}),
       }),
       outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[WebPush]', { telemetryVersion: 1, outcome }),
     });

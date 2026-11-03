@@ -3,7 +3,7 @@ import { PLATFORM_ID, signal } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user } from 'app/firebase/auth';
-import { Firestore, getDocFromServer, setDoc, deleteDoc } from 'app/firebase/firestore';
+import { Firestore, getDocFromServer, setDoc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppPushService } from './app.push.service';
 import { AppRemoteConfigService } from './app.remote-config.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -14,7 +14,7 @@ import { AuthSessionCleanupService } from './auth-session-cleanup.service';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), user: vi.fn() }));
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
-  doc: vi.fn((_db, path) => ({ path })), getDocFromServer: vi.fn(), setDoc: vi.fn(), deleteDoc: vi.fn() }));
+  doc: vi.fn((_db, path) => ({ path })), getDocFromServer: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn() }));
 const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
 const localKey = 'qs.web-push.installation.v1';
@@ -60,7 +60,7 @@ beforeEach(() => {
   notifications = { permission: 'default', requestPermission: vi.fn().mockResolvedValue('granted') }; vi.stubGlobal('Notification', notifications);
   support = { checkPushSupport: vi.fn().mockReturnValue(true), createRandomUUID: vi.fn().mockReturnValue(id) };
   vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
-  vi.mocked(setDoc).mockResolvedValue(undefined); vi.mocked(deleteDoc).mockResolvedValue(undefined);
+  vi.mocked(setDoc).mockResolvedValue(undefined); vi.mocked(updateDoc).mockResolvedValue(undefined); vi.mocked(deleteDoc).mockResolvedValue(undefined);
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
@@ -71,7 +71,36 @@ describe('device notification lifecycle', () => {
   it('waits for authoritative Auth before touching a retained registration', async () => {
     const pending = new Subject<typeof owner>(); vi.mocked(user).mockReturnValue(pending as never);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
-    setup(); await tick(); expect(storage.getItem(localKey)).not.toBeNull(); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    setup(); workerReady.next(null); rotations.next({}); await tick();
+    expect(storage.getItem(localKey)).not.toBeNull(); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+  });
+  it('observes configuration loading even when the first effect runs before Auth hydration', async () => {
+    const pending = new Subject<typeof owner>(); vi.mocked(user).mockReturnValue(pending as never);
+    config.configLoaded.set(false); config.webPushEnabled.set(false); config.webPushPublicKey.set('');
+    const service = setup(); await tick(); pending.next(owner); await tick();
+    expect(service.state()).toBe('unavailable');
+    config.webPushEnabled.set(true); config.webPushPublicKey.set(key); config.configLoaded.set(true); await tick();
+    expect(service.canEnable()).toBe(true); expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('discovers and revokes a retained browser subscription on signed-out startup', async () => {
+    auth.currentUser = null; owner$.next(null); manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    expect(subscription.unsubscribe).toHaveBeenCalled(); expect(storage.getItem(localKey)).toBeNull();
+    expect(service.state()).toBe('signed-out'); expect(deleteDoc).not.toHaveBeenCalled();
+  });
+  it('retains cleanup evidence when signed-out browser revocation fails', async () => {
+    auth.currentUser = null; owner$.next(null); manager.getSubscription.mockResolvedValue(subscription);
+    subscription.unsubscribe.mockRejectedValue(new Error('browser unavailable'));
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    expect(storage.getItem(localKey)).not.toBeNull(); expect(service.state()).toBe('unavailable');
+  });
+  it('explains Home Screen installation when iOS hides the push APIs in a browser tab', async () => {
+    Object.assign(windows.navigator, { userAgent: 'iPhone' }); support.checkPushSupport.mockReturnValue(false);
+    const service = setup(); await tick(); expect(service.state()).toBe('install-required');
+    expect(manager.getSubscription).not.toHaveBeenCalled();
+    expect(workerReady.observed).toBe(false); expect(rotations.observed).toBe(false);
   });
   it.each([false, true])('uses the available push manager (conventional %s) and requests only in a click', async conventional => {
     if (conventional) delete windows.pushManager;
@@ -129,6 +158,41 @@ describe('device notification lifecycle', () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
     config.webPushPublicKey.set('B' + 'C'.repeat(86)); storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
     const service = setup(); await tick(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(deleteDoc).toHaveBeenCalled();
+  });
+  it.each(['missing', 'invalid-origin'])('does not recreate %s registration on a worker rotation', async kind => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick(); expect(service.state()).toBe('enabled');
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => kind !== 'missing',
+      data: () => kind === 'missing' ? undefined : { ...registration, origin: 'https://beta.quantified-self.io' } } as never);
+    rotations.next({}); await tick();
+    expect(setDoc).not.toHaveBeenCalled(); expect(updateDoc).not.toHaveBeenCalled(); expect(subscription.unsubscribe).toHaveBeenCalled();
+    expect(service.state()).toBe('disabled');
+  });
+  it('reconciles changed subscription encryption keys only while consent is still stored', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    const keys = { ...registration.keys, auth: 'C'.repeat(22) };
+    subscription.toJSON.mockReturnValue({ endpoint: registration.endpoint, keys });
+    rotations.next({}); await tick();
+    expect(updateDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ keys }));
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(service.state()).toBe('enabled');
+  });
+  it('does not unsubscribe a valid rotation when a newer refresh overtakes its write', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    const keys = { ...registration.keys, auth: 'C'.repeat(22) };
+    subscription.toJSON.mockReturnValue({ endpoint: registration.endpoint, keys });
+    let finish!: () => void;
+    vi.mocked(updateDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    rotations.next({}); await tick(); expect(updateDoc).toHaveBeenCalledTimes(1);
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, keys }) } as never);
+    workerReady.next(subscription); await tick(); expect(service.state()).toBe('enabled');
+    finish(); await tick();
+    expect(subscription.unsubscribe).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
   });
   it('revokes permission-denied registrations and deletes them as the owner', async () => {
     notifications.permission = 'denied'; manager.getSubscription.mockResolvedValue(subscription);

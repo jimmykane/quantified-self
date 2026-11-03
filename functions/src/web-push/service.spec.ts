@@ -101,6 +101,9 @@ describe('Push credentials and destinations', () => {
     expect(() => parseVapidKeyPair('private-canary')).toThrow('Notification signing configuration is unavailable.');
   });
   it.each(['http://web.push.apple.com/a', 'https://web.push.apple.com:443/a', 'https://web.push.apple.com.evil.example/a',
-    'https://user@web.push.apple.com/a', 'https://127.0.0.1/a', 'https://localhost/a', 'https://web.push.apple.com/a#fragment'])('rejects destination %s', url => expect(isPushEndpoint(url)).toBe(false));
-  it.each(['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com'])('accepts supported service %s', host => expect(isPushEndpoint(`https://${host}/valid-endpoint`)).toBe(true));
+    'https://user@web.push.apple.com/a', 'https://127.0.0.1/a', 'https://localhost/a', 'https://web.push.apple.com/a#fragment',
+    'https://wns2-test.notify.windows.com.evil.example/w/?token=test', 'https://evil.example/notify.windows.com/w/?token=test',
+    'https://nested.wns2-test.notify.windows.com/w/?token=test', 'https://wns2-test.notify.windows.com:443/w/?token=test',
+    'https://user@wns2-test.notify.windows.com/w/?token=test'])('rejects destination %s', url => expect(isPushEndpoint(url)).toBe(false));
+  it.each(['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com', 'wns2-test.notify.windows.com'])('accepts supported service %s', host => expect(isPushEndpoint(`https://${host}/w/?token=synthetic%2Btoken`)).toBe(true));
 });

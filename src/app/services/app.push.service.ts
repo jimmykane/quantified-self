@@ -3,7 +3,7 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal }
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
-import { Firestore, doc, getDocFromServer, setDoc, deleteDoc, serverTimestamp } from 'app/firebase/firestore';
+import { Firestore, doc, getDocFromServer, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'app/firebase/firestore';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { AppWindowService } from './app.window.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
@@ -49,10 +49,16 @@ export class AppPushService {
     user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => {
       this.authObserved = true; this.owner = owner; void this.refresh();
     });
-    effect(() => { if (this.authObserved && this.config.configLoaded()) void this.refresh(); });
+    effect(() => {
+      // Track configuration even when Auth has not emitted yet; authObserved is not a signal.
+      const loaded = this.config.configLoaded();
+      if (this.authObserved && loaded) void this.refresh();
+    });
     // Conventional workers can register after the initial bounded readiness wait.
-    this.sw.subscription.pipe(takeUntilDestroyed()).subscribe(() => void this.refresh());
-    this.sw.pushSubscriptionChanges.pipe(takeUntilDestroyed()).subscribe(() => void this.refresh(true));
+    if (this.compatibility.checkPushSupport()) {
+      this.sw.subscription.pipe(takeUntilDestroyed()).subscribe(() => void this.refresh());
+      this.sw.pushSubscriptionChanges.pipe(takeUntilDestroyed()).subscribe(() => void this.refresh());
+    }
     const refresh = () => { if (this.windows.windowRef.document.visibilityState === 'visible') void this.refresh(); };
     this.windows.windowRef.addEventListener('focus', refresh);
     this.windows.windowRef.document.addEventListener('visibilitychange', refresh);
@@ -84,21 +90,27 @@ export class AppPushService {
     ]).finally(() => clearTimeout(timer));
     return registration?.pushManager ?? null;
   }
-  private async refresh(rotated = false): Promise<void> {
-    if (!this.browser || this.operation()) return;
+  private async refresh(): Promise<void> {
+    if (!this.browser || !this.authObserved || this.operation()) return;
     const epoch = ++this.epoch;
     const owner = this.owner;
     this.registered.set(false);
-    if (!owner || this.auth.currentUser !== owner) {
-      this.state.set('signed-out');
-      if (this.readLocal()) await this.revokeBrowser();
-      return;
-    }
+    this.state.set('loading');
     try {
+      if (!owner || this.auth.currentUser !== owner) {
+        if (this.readLocal()) {
+          const manager = await this.pushManager();
+          if (this.epoch !== epoch) return;
+          if (!manager) throw new Error('Browser cleanup unavailable.');
+          this.manager = manager;
+          await this.revokeBrowser();
+        }
+        if (this.epoch === epoch) this.state.set('signed-out');
+        return;
+      }
       const token = await owner.getIdTokenResult();
       if (!this.current(owner, epoch)) return;
       if (token.claims['impersonatedBy']) { this.state.set('impersonating'); return; }
-      if (!this.compatibility.checkPushSupport()) { this.state.set('unsupported'); return; }
       const window = this.windows.windowRef;
       if ((/iPad|iPhone|iPod/.test(window.navigator.userAgent)
         || (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1))
@@ -106,6 +118,8 @@ export class AppPushService {
         && !(window.navigator as Navigator & { standalone?: boolean }).standalone) {
         this.state.set('install-required'); return;
       }
+      // iOS browser tabs can hide these APIs until the app is opened from the Home Screen.
+      if (!this.compatibility.checkPushSupport()) { this.state.set('unsupported'); return; }
       this.manager = await this.pushManager();
       if (!this.current(owner, epoch)) return;
       if (!this.manager) { this.state.set('unavailable'); return; }
@@ -143,26 +157,35 @@ export class AppPushService {
       const snapshot = await getDocFromServer(ref);
       if (!this.current(owner, epoch)) return;
       const saved = snapshot.data();
-      if (!rotated && !snapshot.exists()) { await this.revokeBrowser(); this.registered.set(false); this.state.set('disabled'); return; }
-      if (rotated || (isPushRegistration(saved, environment.useFunctionsEmulator === true) && saved.endpoint !== this.subscription.endpoint)) {
-        await this.persist(owner, local.installationId, this.subscription, epoch);
-      } else if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()
+      if (!snapshot.exists()) { await this.revokeBrowser(); this.registered.set(false); this.state.set('disabled'); return; }
+      if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()
         || saved.vapidPublicKey !== actualKey) { await this.detach(); this.state.set('disabled'); return; }
+      const current = this.subscription.toJSON();
+      if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
+        await this.persist(owner, local.installationId, this.subscription, epoch, true);
+      }
       if (this.current(owner, epoch)) this.state.set('enabled');
     } catch { if (this.epoch === epoch) this.state.set('unavailable'); }
   }
   private encodeKey(key: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(key))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
-  private async persist(owner: FirebaseUserType, id: string, subscription: PushSubscription, epoch: number): Promise<void> {
+  private async persist(owner: FirebaseUserType, id: string, subscription: PushSubscription, epoch: number, reconcile = false): Promise<void> {
     if (!this.current(owner, epoch)) throw new Error('Account changed.');
     const json = subscription.toJSON();
     const value: PushRegistration = { schemaVersion: 1, origin: this.origin(), generation: this.compatibility.createRandomUUID() ?? '',
       vapidPublicKey: this.config.webPushPublicKey(), endpoint: json.endpoint ?? '', keys: { p256dh: json.keys?.['p256dh'] ?? '', auth: json.keys?.['auth'] ?? '' } };
     if (!isPushRegistration(value, environment.useFunctionsEmulator === true)) throw new Error('Invalid subscription.');
-    await setDoc(doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${id}`), { ...value, updatedAt: serverTimestamp() });
-    if (!this.current(owner, epoch)) { await subscription.unsubscribe(); throw new Error('Account changed.'); }
-    this.storage.setItem(STORAGE_KEY, JSON.stringify({ uid: owner.uid, installationId: id }));
+    const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${id}`);
+    const record = { ...value, updatedAt: serverTimestamp() };
+    // Background rotation must not resurrect consent removed after our server read.
+    if (reconcile) await updateDoc(ref, record); else await setDoc(ref, record);
+    if (!this.current(owner, epoch)) {
+      // Another refresh can supersede this write without revoking the same account's consent.
+      if (this.owner !== owner || this.auth.currentUser !== owner) await subscription.unsubscribe();
+      throw new Error('Registration context changed.');
+    }
+    if (!reconcile) this.storage.setItem(STORAGE_KEY, JSON.stringify({ uid: owner.uid, installationId: id }));
   }
   async enable(): Promise<void> {
     if (!this.canEnable() || !this.manager || !this.owner) return;
@@ -211,9 +234,11 @@ export class AppPushService {
     } finally { this.operation.set(null); if (this.owner !== owner) void this.refresh(); }
   }
   private async revokeBrowser(): Promise<void> {
-    const subscription = this.subscription ?? await this.manager?.getSubscription();
+    const manager = this.manager ?? await this.pushManager();
+    if (!manager && this.readLocal()) throw new Error('Browser cleanup unavailable.');
+    const subscription = await manager?.getSubscription() ?? this.subscription;
     if (subscription && !await subscription.unsubscribe()) {
-      const remaining = await this.manager?.getSubscription();
+      const remaining = await manager?.getSubscription();
       if (remaining?.endpoint === subscription.endpoint) throw new Error('Unsubscribe failed.');
     }
     this.subscription = null; this.storage.removeItem(STORAGE_KEY);

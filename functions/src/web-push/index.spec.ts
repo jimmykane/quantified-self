@@ -41,4 +41,20 @@ describe('Web Push callable adapter', () => {
     expect(mocks.log).toHaveBeenCalledWith('[WebPush]', { telemetryVersion: 1, outcome: 'failed' });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
   });
+  it('keeps WNS delivery encrypted and includes its raw type and bounded expiry', async () => {
+    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
+    mocks.getTemplate.mockResolvedValue({ parameters: { web_push_enabled: { defaultValue: { value: 'true' } },
+      web_push_vapid_public_key: { defaultValue: { value: pair.publicKey } } } });
+    await sendTestPushNotification.run(request() as never);
+    const [, deps] = vi.mocked(sendPushTest).mock.calls[0]; await deps.configuration();
+    const subscription = { endpoint: 'https://wns2-test.notify.windows.com/w/?token=synthetic',
+      keys: { p256dh: webpush.generateVAPIDKeys().publicKey, auth: Buffer.alloc(16).toString('base64url') } };
+    await deps.send(subscription as never, 'fixed-payload');
+    const options = vi.mocked(webpush.sendNotification).mock.calls[0][2];
+    const details = webpush.generateRequestDetails(subscription, 'fixed-payload', options);
+    expect(details.headers).toMatchObject({ 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '60',
+      'Content-Type': 'application/octet-stream', 'Content-Encoding': 'aes128gcm', TTL: 60 });
+    expect(details.headers.Authorization).toMatch(/^vapid /);
+    expect(details.body.toString()).not.toContain('fixed-payload');
+  });
 });

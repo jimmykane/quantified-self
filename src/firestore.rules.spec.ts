@@ -54,9 +54,18 @@ describe('Firestore Security Rules', () => {
         });
         it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
             { endpoint: 'https://web.push.apple.com:443/a' }, { endpoint: 'https://web.push.apple.com.evil.example/a' },
+            { endpoint: 'https://wns2-test.notify.windows.com.evil.example/w/?token=synthetic' },
+            { endpoint: 'https://nested.wns2-test.notify.windows.com/w/?token=synthetic' },
+            { endpoint: 'https://user@wns2-test.notify.windows.com/w/?token=synthetic' },
+            { endpoint: 'https://wns2-test.notify.windows.com:443/w/?token=synthetic' },
             { keys: { p256dh: 'bad', auth: 'bad' } }, { generation: 'bad' }, { schemaVersion: 2 }, { injected: true }, { updatedAt: 0 }])('rejects invalid registration %j', async patch => {
             const { serverTimestamp } = await import('firebase/firestore');
             await assertFails(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base, updatedAt: serverTimestamp(), ...patch }));
+        });
+        it('accepts a private owner registration from the Windows browser push service', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertSucceeds(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base,
+                endpoint: 'https://wns2-test.notify.windows.com/w/?token=synthetic%2Btoken', updatedAt: serverTimestamp() }));
         });
         it('rejects other accounts, unauthenticated clients, impersonation, and deletion resurrection', async () => {
             const { serverTimestamp } = await import('firebase/firestore');
