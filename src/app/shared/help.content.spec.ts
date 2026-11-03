@@ -17,6 +17,14 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit notification opt-in, self-test limits and origin separation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
+      'Beta supports tests', 'automatic notification categories are not available yet', 'Already delivered notifications cannot be recalled']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains how to restart a rejected Suunto sign-in without claiming disconnection', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('Suunto email and password instead of Facebook');

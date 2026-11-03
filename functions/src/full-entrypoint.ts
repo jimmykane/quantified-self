@@ -272,3 +272,5 @@ export {
   processStripeBillingTask,
   deleteStripeCustomerOnDocumentDeleted,
 } from './stripe/billing/handlers';
+
+export { sendTestPushNotification } from './web-push';

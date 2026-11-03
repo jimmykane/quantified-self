@@ -16,6 +16,7 @@ describe('function target loader', () => {
       'getUpcomingRenewalAmount',
       'onSubscriptionUpdated',
       'enforceSubscriptionLimits',
+      'sendTestPushNotification',
       'checkSubscriptionNotifications',
       'cleanupStripeCustomer',
       'cleanupUserAccounts',

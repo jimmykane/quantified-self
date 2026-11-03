@@ -64,7 +64,8 @@
     "test:firebase-cli": "node --test tools/firebase-cli.test.mjs",
     "pretest:functions-emulators": "npm run firebase -- --version",
     "emulators:local": "node tools/local-functions.mjs",
-    "test:local-secrets": "node --test tools/local-functions.test.mjs tools/local-secrets.test.mjs"
+    "test:local-secrets": "node --test tools/local-functions.test.mjs tools/local-secrets.test.mjs",
+    "test:web-push-monitoring": "node --test tools/web-push-monitoring/monitoring.test.mjs"
   },
   "private": true,
   "overrides": {

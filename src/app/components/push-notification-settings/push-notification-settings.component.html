@@ -1,0 +1,18 @@
+<p class="mat-body-small">Receive notifications on this device. Your browser permission applies separately to each site and device.</p>
+<p role="status" aria-live="polite">{{ status() }}</p>
+<div class="notification-actions">
+  @if (push.state() !== 'enabled' && !push.registered()) {
+    <button mat-stroked-button type="button" [disabled]="!push.canEnable()" (click)="act('enable')">
+      <span class="notification-button-content">@if (push.operation() === 'enable') { <mat-spinner diameter="20" aria-label="Enabling notifications" /> } @else { <mat-icon aria-hidden="true">notifications</mat-icon> }<span>Enable on this device</span></span>
+    </button>
+  }
+  @if (push.registered()) {
+    <button mat-stroked-button type="button" [disabled]="!push.canDisable()" (click)="act('disable')">
+      <span class="notification-button-content">@if (push.operation() === 'disable') { <mat-spinner diameter="20" aria-label="Disabling notifications" /> } @else { <mat-icon aria-hidden="true">notifications_off</mat-icon> }<span>Disable on this device</span></span>
+    </button>
+  }
+  <button mat-stroked-button type="button" [disabled]="!push.canTest()" (click)="act('test')">
+    <span class="notification-button-content">@if (push.operation() === 'test') { <mat-spinner diameter="20" aria-label="Sending test notification" /> } @else { <mat-icon aria-hidden="true">send</mat-icon> }<span>Send test notification</span></span>
+  </button>
+</div>
+@if (push.message()) { <p role="status" aria-live="polite">{{ push.message() }}</p> }
