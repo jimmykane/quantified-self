@@ -1,3 +1,5 @@
+import type { HistoryNotificationConsent } from '../../../shared/history-import-notifications';
+import { historyPushConfiguration, validateHistoryNotificationConsent } from '../web-push/history-consent';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -30,12 +32,14 @@ const PROVIDER_ID_FIELDS: Record<ManualHistoryService, string> = {
  * Older connections can recover a missing account ID from one verified current token.
  */
 export async function startManualActivityHistory(
-  userID: string, serviceName: ManualHistoryService, startDate: Date, endDate: Date,
+  userID: string, serviceName: ManualHistoryService, startDate: Date, endDate: Date, notification?: HistoryNotificationConsent,
 ) {
   const startMs = startDate.getTime(), endMs = endDate.getTime();
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
     throw new HttpsError('invalid-argument', 'Invalid history date range.');
   }
+  const pushConfig = notification ? await historyPushConfiguration() : undefined;
+  if (notification && !pushConfig?.enabled) throw new HttpsError('failed-precondition', 'Import notifications are unavailable. Import without a notification or try again later.');
   const db = admin.firestore();
   const metaRef = db.doc(`users/${userID}/meta/${serviceName}`);
   const rootRef = db.collection(TOKEN_COLLECTIONS[serviceName]).doc(userID);
@@ -101,6 +105,10 @@ export async function startManualActivityHistory(
     catch (error) {
       if (error instanceof HistoryLifecycleChangedError) throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
       throw error;
+    }
+    if (notification) {
+      await validateHistoryNotificationConsent(db, tx, userID, serviceName, notification, pushConfig!.publicKey);
+      run.notification = notification;
     }
     const projection = historyProjection(run);
     tx.create(db.collection(CONNECTION_HISTORY_COLLECTION).doc(run.id), run);

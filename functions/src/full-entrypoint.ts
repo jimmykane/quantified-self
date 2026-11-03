@@ -274,3 +274,4 @@ export {
 } from './stripe/billing/handlers';
 
 export { sendTestPushNotification } from './web-push';
+export { sendHistoryImportNotification } from './web-push/history';

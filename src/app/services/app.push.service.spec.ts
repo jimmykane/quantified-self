@@ -28,7 +28,7 @@ let manager: { getSubscription: ReturnType<typeof vi.fn>; subscribe: ReturnType<
 let subscription: { endpoint: string; options: { applicationServerKey: ArrayBuffer }; toJSON: ReturnType<typeof vi.fn>; unsubscribe: ReturnType<typeof vi.fn> };
 let windows: Window & { pushManager?: unknown };
 let storage: Storage;
-let config: { configLoaded: ReturnType<typeof signal<boolean>>; webPushEnabled: ReturnType<typeof signal<boolean>>; webPushPublicKey: ReturnType<typeof signal<string>> };
+let config: { configLoaded: ReturnType<typeof signal<boolean>>; webPushEnabled: ReturnType<typeof signal<boolean>>; webPushHistoryEnabled: ReturnType<typeof signal<boolean>>; webPushPublicKey: ReturnType<typeof signal<string>> };
 let functions: { call: ReturnType<typeof vi.fn> };
 let rotations: Subject<unknown>;
 let workerReady: Subject<unknown>;
@@ -55,7 +55,7 @@ beforeEach(() => {
   windows = { pushManager: manager, location: { origin: registration.origin }, navigator: { userAgent: 'desktop',
     serviceWorker: { ready: Promise.resolve({ pushManager: manager }) } }, document: { visibilityState: 'visible', addEventListener: vi.fn(), removeEventListener: vi.fn() },
     addEventListener: vi.fn(), removeEventListener: vi.fn(), matchMedia: vi.fn().mockReturnValue({ matches: false }) } as unknown as typeof windows;
-  config = { configLoaded: signal(true), webPushEnabled: signal(true), webPushPublicKey: signal(key) };
+  config = { configLoaded: signal(true), webPushEnabled: signal(true), webPushHistoryEnabled: signal(true), webPushPublicKey: signal(key) };
   functions = { call: vi.fn().mockResolvedValue({ data: { status: 'accepted' } }) }; rotations = new Subject(); workerReady = new Subject();
   notifications = { permission: 'default', requestPermission: vi.fn().mockResolvedValue('granted') }; vi.stubGlobal('Notification', notifications);
   support = { checkPushSupport: vi.fn().mockReturnValue(true), createRandomUUID: vi.fn().mockReturnValue(id) };
@@ -322,5 +322,43 @@ describe('device notification lifecycle', () => {
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
     setup(); await tick(); vi.mocked(deleteDoc).mockRejectedValueOnce(new Error('offline'));
     await TestBed.inject(AuthSessionCleanupService).run(); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(storage.getItem(localKey)).toBeNull();
+  });
+});
+
+
+describe('one-import notification device consent', () => {
+  async function enabled() {
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    const service = setup(); await tick(); return service;
+  }
+  it('returns only the current installation and generation, never endpoint or keys', async () => {
+    const service = await enabled();
+    expect(service.canNotifyHistory()).toBe(true);
+    expect(await service.historyNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('keeps beta and a disabled history switch out of automatic notification consent', async () => {
+    const service = await enabled(); config.webPushHistoryEnabled.set(false);
+    expect(service.historyNotificationsAvailable()).toBe(false);
+    await expect(service.historyNotificationTarget('owner')).rejects.toThrow();
+    config.webPushHistoryEnabled.set(true);
+    Object.defineProperty(windows, 'location', { value: { origin: 'https://beta.quantified-self.io' }, configurable: true });
+    config.webPushEnabled.set(false); config.webPushEnabled.set(true);
+    expect(service.historyNotificationsAvailable()).toBe(false);
+  });
+  it('rejects account changes during the authoritative registration lookup', async () => {
+    const service = await enabled();
+    let resolve: (value: unknown) => void;
+    vi.mocked(getDocFromServer).mockReturnValueOnce(new Promise(done => { resolve = done; }) as never);
+    const pending = service.historyNotificationTarget('owner'); auth.currentUser = null;
+    resolve!({ exists: () => true, data: () => registration });
+    await expect(pending).rejects.toThrow('changed');
+  });
+  it('rejects missing, revoked and cross-account consent', async () => {
+    const service = await enabled();
+    await expect(service.historyNotificationTarget('other')).rejects.toThrow();
+    vi.mocked(getDocFromServer).mockResolvedValueOnce({ data: () => undefined } as never);
+    await expect(service.historyNotificationTarget('owner')).rejects.toThrow();
   });
 });

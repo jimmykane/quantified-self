@@ -1961,13 +1961,18 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 
 ## Device notifications
 
-Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. The initial feature provides a test notification; automatic notification categories are not available yet.
+Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. A test notification lets you check this device before choosing an import alert.
 
 - On iPhone or iPad, add Quantified Self to your Home Screen and open it there before enabling notifications.
 - Notification icons depend on your browser and device. Safari on Mac shows the Safari icon for browser notifications. To use the QS app icon, choose **File → Add to Dock** in Safari, open the saved app, and enable notifications there.
-- Permission and enablement are separate for each device and for the production and beta sites. Beta supports tests; future automatic notifications are reserved for production.
+- Permission and enablement are separate for each device and for the production and beta sites. Beta supports tests; history-import alerts are available only on production.
 - Tests show only a generic message and open Notifications settings on the same site. A sent test does not prove that your device displayed it; check notification permissions, Focus/Do Not Disturb and OS settings if it does not appear.
 - Tests are limited to one per minute and ten per day across your account. If registration expires or the notification key changes, enable notifications again.
+- When available, the **Suunto, COROS and Wahoo** activity-history form offers **Notify me when this import finishes**. It starts unchecked for each new import. Enable this device from the form if needed, then choose the checkbox before starting the import.
+- An import of 20 or 2,000 activities can produce at most one alert for the whole import, on the device that started it. There are at most two import alerts per rolling 24 hours across your account; extra alerts are skipped. This limit is separate from test notifications.
+- An alert opens that connection's history results. It says **finished with issues** or **needs attention** if the import did not fully succeed. Delivery is best-effort; check Connections for progress even if no alert arrives. Retrying the same import does not produce a second alert after a send attempt.
+- Garmin request completion does not prove activities have arrived, so Garmin has no completion-alert option. Automatic history selected while connecting, Sleep, Health and route imports are also excluded.
+- Disabling this device or signing out can cancel an unsent import alert. Re-enabling notifications or refreshing a replaced registration does not transfer an earlier import's choice to the new registration.
 - **Disable on this device** stops this browser subscription. Sign-out also attempts device cleanup; signing into another account requires a fresh opt-in. Already delivered notifications cannot be recalled. If browser permission is blocked, allow it in your browser or device settings and return to QS.
 
 ## Browser compatibility

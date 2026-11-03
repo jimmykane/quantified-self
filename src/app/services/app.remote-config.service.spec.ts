@@ -90,6 +90,11 @@ describe('AppRemoteConfigService', () => {
         vi.clearAllMocks();
     });
 
+    it('defaults the separate history-import notification switch off', () => {
+        expect(service.webPushHistoryEnabled()).toBe(false);
+        expect(getString).toHaveBeenCalledWith(mockRemoteConfig, 'web_push_history_import_enabled');
+    });
+
     it('should be created', () => {
         expect(service).toBeTruthy();
     });

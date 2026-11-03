@@ -12,6 +12,8 @@ import { AppFunctionsService } from './app.functions.service';
 import { AuthSessionCleanupService } from './auth-session-cleanup.service';
 import { isPushId, isPushOrigin, isPushRegistration, isVapidPublicKey, type PushRegistration, type PushTestRequest, type PushTestResponse } from '../../../shared/web-push';
 import { environment } from '../../environments/environment';
+import { isAutomaticPushOrigin } from '../../../shared/web-push';
+import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -36,6 +38,9 @@ export class AppPushService {
   readonly canEnable = computed(() => this.state() === 'disabled' && !this.operation());
   readonly canTest = computed(() => this.state() === 'enabled' && !this.operation());
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
+  readonly historyNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && this.config.webPushHistoryEnabled() && isAutomaticPushOrigin(this.origin()));
+  readonly canNotifyHistory = computed(() => this.historyNotificationsAvailable() && this.canTest());
   private manager: PushManager | null = null;
   private subscription: PushSubscription | null = null;
   private owner: FirebaseUserType | null = null;
@@ -198,6 +203,19 @@ export class AppPushService {
       throw new Error('Registration context changed.');
     }
     if (!reconcile) this.storage.setItem(STORAGE_KEY, JSON.stringify({ uid: owner.uid, installationId: id }));
+  }
+  async historyNotificationTarget(expectedUserID: string): Promise<HistoryNotificationTarget> {
+    const owner = this.owner, epoch = this.epoch, local = this.readLocal();
+    if (!this.canNotifyHistory() || !owner || owner.uid !== expectedUserID || local?.uid !== expectedUserID) {
+      throw new Error('Enable notifications on this device or uncheck the import notification option.');
+    }
+    const snapshot = await getDocFromServer(doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`));
+    const saved = snapshot.data();
+    if (!this.current(owner, epoch) || !this.sameInstallation(local) || !this.canNotifyHistory()
+      || !isPushRegistration(saved) || saved.origin !== this.origin() || saved.vapidPublicKey !== this.config.webPushPublicKey()) {
+      throw new Error('Notification registration changed. Please check this device and retry.');
+    }
+    return { installationId: local.installationId, generation: saved.generation };
   }
   async enable(): Promise<void> {
     if (!this.canEnable() || !this.manager || !this.owner) return;

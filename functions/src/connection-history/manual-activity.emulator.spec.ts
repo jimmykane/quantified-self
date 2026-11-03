@@ -7,6 +7,10 @@ vi.mock('firebase-admin', () => ({ firestore: () => mocks.db }));
 vi.mock('../token-refresh-coordinator', () => ({ ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD: 'activeOAuthCredentialGeneration' }));
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { startManualActivityHistory } from './manual-activity';
+import { historyProjection, type ConnectionHistoryRun } from './model';
+import { sendHistoryCompletion, type HistoryPushDependencies } from '../web-push/history-service';
+const pushMock = vi.hoisted(() => ({ template: vi.fn() }));
+vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTemplate: pushMock.template }) }));
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission transactions', () => {
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw new Error('Loopback emulator required');
@@ -101,4 +105,60 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
       expect((await meta.get()).data()).not.toHaveProperty('providerUserId');
       expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
     });
+  async function completedNotificationRun(service = ServiceNames.SuuntoApp) {
+    const meta = await seed(service);
+    const publicKey = 'B' + 'A'.repeat(86);
+    const notification = { installationId: randomUUID(), generation: randomUUID(), origin: 'https://quantified-self.io' };
+    await mocks.db.doc(`users/owner/pushSubscriptions/${notification.installationId}`).set({ schemaVersion: 1, ...notification,
+      vapidPublicKey: publicKey, endpoint: 'https://web.push.apple.com/synthetic', keys: { p256dh: publicKey, auth: 'A'.repeat(22) } });
+    pushMock.template.mockResolvedValue({ parameters: { web_push_enabled: { defaultValue: { value: 'true' } },
+      web_push_history_import_enabled: { defaultValue: { value: 'true' } }, web_push_vapid_public_key: { defaultValue: { value: publicKey } } } });
+    const result = await startManualActivityHistory('owner', service, start, end, notification);
+    expect(result).not.toHaveProperty('notification');
+    const ref = mocks.db.doc(`connectionHistoryImports/${result.runId}`);
+    const run = (await ref.get()).data() as ConnectionHistoryRun;
+    Object.assign(run, { processed: true, revision: 1, updatedAtMs: Date.now() });
+    Object.assign(run.steps[0], { status: 'processed', done: true, count: 2000, nextStartMs: run.endMs + 1 });
+    await ref.set(run); await meta.set({ connectionHistoryImport: historyProjection(run) }, { merge: true });
+    const deps: HistoryPushDependencies = { db: mocks.db, now: Date.now, configuration: async () => ({ enabled: true, publicKey }),
+      send: vi.fn(async () => ({})), outcome: vi.fn() };
+    return { run, deps };
+  }
+  it('uses real transactions to prevent two concurrent completion deliveries from sending twice', async () => {
+    const { run, deps } = await completedNotificationRun();
+    await Promise.all([sendHistoryCompletion(run.id, run, deps), sendHistoryCompletion(run.id, run, deps)]);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+    const state = (await mocks.db.doc('users/owner/pushState/historyCompletion').get()).data();
+    expect(state?.providers[run.serviceName]).toMatchObject({ runId: run.id, outcome: 'accepted' });
+    expect(state?.attempts).toHaveLength(1);
+    await sendHistoryCompletion(run.id, { ...run, revision: run.revision + 1 }, deps);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+  }, 30_000);
+  it('enforces the two-alert rolling cap across concurrent providers in Firestore', async () => {
+    const batches = [];
+    for (const service of [ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI]) batches.push(await completedNotificationRun(service));
+    await Promise.all(batches.map(({ run, deps }) => sendHistoryCompletion(run.id, run, deps)));
+    expect(batches.reduce((count, { deps }) => count + vi.mocked(deps.send).mock.calls.length, 0)).toBe(2);
+    const state = (await mocks.db.doc('users/owner/pushState/historyCompletion').get()).data();
+    expect(state?.attempts).toHaveLength(2); expect(Object.keys(state?.providers)).toHaveLength(3);
+  }, 30_000);
+  it('does not send or leave a claim after an aborted claim transaction', async () => {
+    const { run, deps } = await completedNotificationRun();
+    const original = mocks.db.runTransaction.bind(mocks.db);
+    const spy = vi.spyOn(mocks.db, 'runTransaction').mockImplementationOnce(operation => original(async tx => {
+      await operation(tx); throw new Error('Rejected notification claim');
+    }));
+    await expect(sendHistoryCompletion(run.id, run, deps)).rejects.toThrow('Rejected notification claim');
+    expect(deps.send).not.toHaveBeenCalled();
+    expect((await mocks.db.doc('users/owner/pushState/historyCompletion').get()).exists).toBe(false);
+    spy.mockRestore(); await sendHistoryCompletion(run.id, run, deps); expect(deps.send).toHaveBeenCalledTimes(1);
+  });
+  it('does not recreate private notification state during account deletion', async () => {
+    const { run, deps } = await completedNotificationRun();
+    await mocks.db.doc('userDeletionTombstones/owner').set({});
+    await sendHistoryCompletion(run.id, run, deps);
+    expect(deps.send).not.toHaveBeenCalled();
+    expect((await mocks.db.doc('users/owner/pushState/historyCompletion').get()).exists).toBe(false);
+  });
+
 });

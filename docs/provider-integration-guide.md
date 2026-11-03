@@ -1005,6 +1005,17 @@ Monitoring is **unchanged**: the reviewed #847/#829 bundles still cover the same
 backlog and committed outcomes. No provider API, worker, consent, MCP or Training contract changes. Release only the
 frontend with separate deployment approval; accepted background runs need no migration or replay.
 
+### Optional history completion notification
+
+Manual Suunto/COROS/Wahoo activity imports can attach an unchecked, per-import notification choice for the current
+production device. The existing callables atomically validate consent; an isolated terminal observer delivers a
+single best-effort result, subject to a two-attempt rolling daily cap. Garmin request completion, automatic OAuth
+history, Sleep, Health and routes remain excluded. Provider queues and ingestion/dispatch/retry behavior are unchanged.
+The authoritative [Web Push runbook](web-push-notifications.md#manual-history-import-completion) covers privacy,
+anti-spam receipts, truthful partial results, monitoring definitions and backend-first release. New sender monitoring
+is covered in source; live activation/readback is deferred in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+No deployment, switch activation or test send is authorized by implementation or passing offline tests.
+
 ### Shared history progress surfaces
 
 Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.

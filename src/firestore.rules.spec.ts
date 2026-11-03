@@ -52,6 +52,16 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').get());
             await assertSucceeds(owner.doc(path).delete());
         });
+        it('keeps history send receipts server-only for owners, other accounts and impersonation', async () => {
+            const receiptPath = 'users/push-owner/pushState/historyCompletion';
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(receiptPath).set({ attempts: [], providers: {} }); });
+            for (const context of [testEnv.authenticatedContext('push-owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }), testEnv.unauthenticatedContext()]) {
+                const ref = context.firestore().doc(receiptPath);
+                await assertFails(ref.get()); await assertFails(ref.set({ attempts: [] }));
+                await assertFails(ref.update({ providers: {} })); await assertFails(ref.delete());
+            }
+        });
         it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
             { endpoint: 'https://fcm.googleapis.com:443/fcm/send/client:token' },
             { endpoint: 'https://user:password@fcm.googleapis.com/fcm/send/client:token' },

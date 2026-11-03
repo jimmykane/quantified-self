@@ -343,7 +343,7 @@ describe('Firebase Hosting configuration', () => {
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
-    // Notification help explains Safari's browser icon and Add to Dock app branding (2026-11-03).
+    // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
   });
 

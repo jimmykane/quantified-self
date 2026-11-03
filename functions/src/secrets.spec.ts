@@ -17,6 +17,7 @@ const WAHOO = ['WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET'];
 
 const EXPECTED_BINDINGS: Record<string, string[]> = {
   sendTestPushNotification: ['WEB_PUSH_VAPID_KEYPAIR'],
+  sendHistoryImportNotification: ['WEB_PUSH_VAPID_KEYPAIR'],
   createStripePortalLink: ['STRIPE_BILLING_KEY'],
   'ext-firestore-stripe-payments-createPortalLink': ['STRIPE_BILLING_KEY'],
   processStripeBillingTask: ['STRIPE_BILLING_KEY'],

@@ -39,6 +39,19 @@ when the updated email is not part of a marketing campaign. Its existing 256 MiB
 change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
 has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
+## History-import notification isolation
+
+`sendHistoryImportNotification` loads directly from `web-push/history` and is the 193rd discovery export.
+Its Gen 2 Firestore written trigger observes `connectionHistoryImports/{runId}` with retry enabled, 256 MiB,
+30 seconds, concurrency 20, maximum two instances, zero minimum instances and `europe-west2`. Only this sender
+and the existing self-test sender bind `WEB_PUSH_VAPID_KEYPAIR`; admission callables do not bind it.
+The compiled check verifies exact descriptor equality with full discovery and these resource/trigger options.
+
+Three isolated Node 22.23.3 cold imports on 2026-11-03 measured a median 239 ms, 88.1 MiB RSS and one export
+(1,017 loaded modules). These are local import measurements, not deployed latency or delivery guarantees.
+No provider worker, task queue or schedule changes. See the [Web Push runbook](web-push-notifications.md#manual-history-import-completion)
+for durable at-most-once attempts, lifecycle fences, monitoring and separately authorized deployment/activation.
+
 ## Derived-metrics observer isolation
 
 `observeDerivedMetricsHealth` loads directly from `derived-metrics/monitoring-schedule`. This new Gen 2 read-only
