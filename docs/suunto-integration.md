@@ -228,6 +228,15 @@ Each task that enters Suunto Health queue processing emits one `[HealthSync][Suu
 
 When a successful JSON response is not the expected top-level array, `[HealthSync][Suunto] Unexpected response type.` logs a WARNING with only the fixed `feed`, JSON `responseType`, validated `providerStatusCode`, and actual decoded `responseBytes` from the existing bounded read. It does not log response fields, Health values, headers, URLs or credentials, and does not serialize the payload again. Correlate it with the existing validation error by execution ID. Validation, authorization recovery, queue retries and monitoring coverage remain unchanged; the existing Health/Sleep retry-transition metrics and alerts remain authoritative, so this diagnostic does not add another failure count or alert policy.
 
+The shared Health writer overlaps independent lifecycle-field reads inside each existing record or sync-state
+transaction. Repeated references still share one snapshot. All started reads settle before the transaction returns,
+then guard order determines the first mismatch or opaque read failure, preserving skip/retry decisions. An early
+mismatch can therefore start additional guard reads, but never permits a write. Account-deletion, credential,
+queue-revision and stale-source checks retain their boundaries. This changes neither feed selection nor the
+five-minute webhook bucket, daily reconciliation, history coverage or retry budgets. Existing Health/Sleep latency,
+retry, failure and DLQ signals cover the change without new telemetry or monitoring configuration. Local delayed-read
+benchmarks describe batch latency, not measured production CPU or euro savings.
+
 Production operations:
 
 1. Confirm the Suunto production entitlement covers all three pull resources and both webhook notification types.

@@ -501,10 +501,12 @@ async function allHealthLifecycleFieldsMatch(
             : []),
         ...(dependencies.additionalRequiredDocumentFieldValues || []),
     ];
-    for (const guard of guards) {
-        if (!(await healthLifecycleFieldsMatch(readSnapshot, guard))) {
-            return false;
-        }
+    // Overlap independent reads, but drain them before this transaction can end.
+    // Inspect in guard order to retain the first mismatch/read-error decision.
+    const checks = await Promise.allSettled(guards.map(guard => healthLifecycleFieldsMatch(readSnapshot, guard)));
+    for (const check of checks) {
+        if (check.status === 'rejected') throw check.reason;
+        if (!check.value) return false;
     }
     return true;
 }
