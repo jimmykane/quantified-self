@@ -155,6 +155,9 @@ leaving it disabled beyond this expiry before re-enabling also expires any retai
 no notification dead-letter queue or manual replay feature. Only an expired matching registration is pruned.
 Device preparation or expired-registration cleanup failures do not stop the remaining devices: every wave settles
 before the sweep reports failure. Failed device work is not replayed after the batch has been claimed.
+Multiple installation records sharing one browser push endpoint receive at most one attempt per batch, including
+after an ambiguous transport failure. Endpoint deduplication stays in memory; endpoints are never logged or copied
+into the private batch state.
 
 Admission failure logs a fixed error and never fails/retries an otherwise successful activity import. A crash after
 persistence but before admission may miss an alert. This is best-effort delivery, not an exactly-once guarantee.

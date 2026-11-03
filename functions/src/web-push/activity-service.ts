@@ -109,6 +109,7 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
   if (!claim) return;
   if (claim.outcome) { deps.outcome(claim.outcome); return; }
   // Bounded device fan-out. A newer registration never inherits a previously queued batch.
+  const attemptedEndpoints = new Set<string>();
   let failed = false;
   for (let offset = 0; offset < claim.batch.targets.length; offset += 5) {
     const results = await Promise.allSettled(claim.batch.targets.slice(offset, offset + 5).map(async target => {
@@ -127,7 +128,10 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
           || registration.generation !== target.generation || registration.vapidPublicKey !== config.publicKey) return null;
         return { registration, entries: liveEntries };
       });
-      if (!ready) { deps.outcome('cancelled'); return; }
+      if (!ready || attemptedEndpoints.has(ready.registration.endpoint)) { deps.outcome('cancelled'); return; }
+      // Multiple installation records can share a browser subscription. Reserve its endpoint before
+      // awaiting transport, including ambiguous failures, so aliases cannot duplicate this batch.
+      attemptedEndpoints.add(ready.registration.endpoint);
       let outcome: ActivityPushOutcome;
       try { await deps.send(ready.registration, JSON.stringify(activityNotificationPayload(ready.registration.origin, uid, ready.entries))); outcome = 'accepted'; }
       catch (error) { const status = (error as { statusCode?: unknown } | null)?.statusCode; outcome = status === 404 || status === 410 ? 'expired' : 'failed'; }

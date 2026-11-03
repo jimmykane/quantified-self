@@ -39,6 +39,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity notification Fir
     await Promise.all([h.send(), h.send()]); expect(h.deps.send).toHaveBeenCalledOnce();
     expect((await h.state.get()).data()).not.toHaveProperty('dueAt');
   }, 30000);
+  it('sends one attempt to aliased subscriptions across device waves and competing senders', async () => {
+    const h = await seed();
+    const registration = (await mocks.db.doc(`users/owner/pushSubscriptions/${id}`).get()).data()!;
+    const batch = mocks.db.batch();
+    for (let n = 0; n < 6; n++) batch.set(mocks.db.collection('users/owner/pushSubscriptions').doc(randomUUID()),
+      { ...registration, generation: randomUUID() });
+    await batch.commit(); await h.admit(); h.advance();
+    await Promise.all([h.send(), h.send()]); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    const state = (await h.state.get()).data();
+    expect(state?.attempts).toHaveLength(1); expect(state).not.toHaveProperty('dueAt');
+  }, 30000);
   it('does not persist an aborted admission or consume an attempt for an aborted claim', async () => {
     const h = await seed(); const original = mocks.db.runTransaction.bind(mocks.db);
     vi.spyOn(mocks.db, 'runTransaction').mockImplementationOnce(fn => original(async tx => { await fn(tx); throw new Error('Abort'); }));

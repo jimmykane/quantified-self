@@ -203,6 +203,31 @@ describe('new activity notifications', () => {
     h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledTimes(10);
     expect(vi.mocked(h.deps.send).mock.calls.some(([target]) => target.endpoint.endsWith('/later'))).toBe(false);
   });
+  it.each(['none', 'primary', 'secondary'])('attempts each browser endpoint once across registration aliases and device waves (failed=%s)', async failed => {
+    const h = harness(); const registration = h.rows.get(`users/owner/pushSubscriptions/${id}`);
+    const endpoints = ['primary', 'secondary', 'primary', 'third', 'secondary', 'primary', 'third'];
+    for (const [index, endpoint] of endpoints.entries()) {
+      const installation = index === 0 ? id : `00000000-0000-4000-8000-${String(index + 2).padStart(12, '0')}`;
+      h.rows.set(`users/owner/pushSubscriptions/${installation}`, { ...registration, generation: installation,
+        endpoint: `https://web.push.apple.com/${endpoint}` });
+    }
+    vi.mocked(h.deps.send).mockImplementation(async target => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (target.endpoint.endsWith(`/${failed}`)) throw { statusCode: 500 };
+      return {};
+    });
+    await h.admit(); h.advance(); await h.send(); await h.send();
+    expect(vi.mocked(h.deps.send).mock.calls.map(([target]) => target.endpoint).sort())
+      .toEqual(['primary', 'secondary', 'third'].map(endpoint => `https://web.push.apple.com/${endpoint}`).sort());
+    expect(h.state().attempts).toHaveLength(1);
+  });
+  it('lets a current registration send when an earlier alias was revoked before delivery', async () => {
+    const h = harness(); const alias = '00000000-0000-4000-8000-000000000003';
+    h.rows.set(`users/owner/pushSubscriptions/${alias}`, structuredClone(h.rows.get(`users/owner/pushSubscriptions/${id}`)));
+    await h.admit(); h.rows.delete(`users/owner/pushSubscriptions/${id}`);
+    h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(h.deps.outcome).toHaveBeenCalledWith('accepted');
+  });
   it.each([
     { phase: 'preparation', failedDevice: id },
     { phase: 'preparation', failedDevice: '00000000-0000-4000-8000-000000000006' },
