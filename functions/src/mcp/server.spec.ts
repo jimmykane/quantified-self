@@ -935,6 +935,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'apply_saved_workout_change',
       'apply_training_changes',
+      'apply_training_goal_change',
       'assess_planned_workout_compatibility',
       'get_planned_workout',
       'get_planned_workout_completion',
@@ -946,6 +947,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_strength_workout_details',
       'get_training_calendar_rest_days',
       'get_training_change_status',
+      'get_training_goal',
       'get_training_plan',
       'get_training_plan_phases',
       'get_training_plan_rest_days',
@@ -953,6 +955,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_workout_prescription_analysis',
       'list_activity_types',
       'list_saved_workouts',
+      'list_training_goals',
       'list_training_plans',
       'preview_create_planned_workout',
       'preview_garmin_workout_replacement',
@@ -965,12 +968,38 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_training_calendar_rest_day',
       'preview_training_changes',
       'preview_training_deletion',
+      'preview_training_goal_change',
       'preview_training_plan_phases',
       'preview_training_rest_days',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
     ]);
   }, 15_000);
+
+  it.each([
+    { label: 'no Training grant', scopes: [MCP_OAUTH_SCOPES.MetricsRead], expected: [] },
+    { label: 'write without read', scopes: [MCP_OAUTH_SCOPES.TrainingPlansWrite], expected: [] },
+    { label: 'read', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead],
+      expected: ['get_training_goal', 'list_training_goals'] },
+    { label: 'read and metrics', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.MetricsRead],
+      expected: ['get_training_goal', 'get_training_goals_progress', 'list_training_goals'] },
+    { label: 'read and write', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+      expected: ['apply_training_goal_change', 'get_training_goal', 'list_training_goals', 'preview_training_goal_change'] },
+  ])('advertises calendar goal tools for $label', async ({ scopes, expected }) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1', scopes }, 'https://quantified-self.io');
+    const client = new Client({ name: 'goal-scope-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      expect((await client.listTools()).tools.map(tool => tool.name)
+        .filter(name => name.includes('training_goal')).sort()).toEqual(expected);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 
   it('describes complete strength alias reads and preserves the existing strength-create shape', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
