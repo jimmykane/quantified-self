@@ -1226,6 +1226,9 @@ describe('help.content', () => {
   it('explains independent Training read and approval-gated change access without expanding Assistant access', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Training planning (optional):**');
+    expect(content).toContain('**Create a plan** is available on the empty Assistant screen');
+    expect(content).toContain('Larger plans may need several reviewed batches');
+    expect(content).toContain('Selecting the example does not enable permissions, send a message or send workouts to services');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');
     expect(content).toContain('resets Training permissions off');

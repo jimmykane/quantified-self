@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse, AssistantContentProposalPreview, AssistantTrainingProposalPreview } from '@shared/assistant.types';
-import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { ASSISTANT_CREATE_PLAN_PROMPT, ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -223,14 +223,16 @@ describe('AssistantPageComponent', () => {
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
   });
 
-  it('invites an empty chat to ask one grounded training-history question', () => {
+  it('introduces training-plan creation alongside connected-data questions', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Assistant');
     expect(text).toContain('Examples & data access');
-    expect(text).toContain('If you could ask your training history one question, what would it be?');
-    expect(text).toContain('Ask about the training, sleep, recovery, measurements, and activities you’ve connected.');
-    expect(text).toContain('Every answer is grounded in verified evidence; optional Training changes always require your review.');
+    expect(text).toContain('Understand your training. Create your next plan.');
+    expect(text).toContain('build a training plan around your goals');
+    expect(text).toContain('You review every change before it is saved.');
+    expect(text).toContain('To save a plan, enable Training plans and Plan and workout changes in Examples & data access.');
+    expect(component.composerPlaceholder).toContain('create a plan');
     expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
@@ -263,8 +265,8 @@ describe('AssistantPageComponent', () => {
     expect(composerFooter.children).toHaveLength(2);
     expect(composerFooter.textContent).not.toContain('AI can make mistakes');
     const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    expect(textarea.placeholder).toBe('Ask your history…');
-    expect(textarea.getAttribute('aria-label')).toBe('Ask about your data');
+    expect(textarea.placeholder).toBe('Ask about your training or create a plan…');
+    expect(textarea.getAttribute('aria-label')).toBe('Ask about your data or create a training plan');
     const autosize = fixture.debugElement.query(By.directive(CdkTextareaAutosize))
       .injector.get(CdkTextareaAutosize);
     expect(autosize.minRows).toBe(1);
@@ -277,6 +279,32 @@ describe('AssistantPageComponent', () => {
       'help_outline',
       'add_comment',
     ]);
+  });
+
+  it('fills the plan starter without sending, changing access or duplicating selection feedback', () => {
+    const button = fixture.nativeElement.querySelector('.assistant-empty-state button') as HTMLButtonElement;
+    expect(button.textContent).toContain('Create a plan');
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    if (process.env.QS_ASSISTANT_WELCOME_QA_HTML) {
+      writeFileSync(process.env.QS_ASSISTANT_WELCOME_QA_HTML, '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
+        + document.head.innerHTML + '</head><body>' + fixture.nativeElement.outerHTML + '</body></html>');
+    }
+    button.click(); fixture.detectChanges();
+    expect(component.promptControl.value).toBe(ASSISTANT_CREATE_PLAN_PROMPT);
+    expect(component.promptControl.dirty).toBe(true);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+    expect(component.trainingPlansEnabled()).toBe(false);
+    expect(component.trainingPlanChangesEnabled()).toBe(false);
+    expect(component.trainingDeliveryEnabled()).toBe(false);
+    expect(hapticsService.selection).toHaveBeenCalledExactlyOnceWith();
+    button.click();
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    component.resetting.set(true); fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    component.resetting.set(false);
+    component.trainingPlansEnabled.set(true); component.trainingPlanChangesEnabled.set(true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.assistant-plan-hint')).toBeNull();
   });
 
   it('uses the full chat region for conversation content above the docked composer', () => {

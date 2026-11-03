@@ -314,6 +314,14 @@ draft-07 references, without a second embedded 2020-12 definition set. Both sche
 create descriptors have a 16 KiB budget that retains the complete sport catalog. Runtime Zod validation, recipe
 semantics and read projections remain identical; this metadata-only correction adds no Training capability or consent.
 
+The Assistant welcome screen and **Examples & data access** advertise **Create a plan**. The shared contextual prompt
+asks for goals, sports, plan length, training days, per-session time and equipment before drafting, and requests a
+reviewed active/paused choice. Selecting it only fills the composer; the current Training permissions and explicit
+Apply flow still control reads and saves. The welcome screen points to the required access choices and the composer
+also advertises planning. MCP impact review: presentation and starter text only; existing plan/workout reads,
+proposal/confirmation schemas, scope defaults, quotas, provider consent and mutation authority are unchanged.
+No backend deployment, registered-contract update, app rescan or bundled-plugin rebuild is required.
+
 The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
 sync changes** choices. Only applicable focused/batch preview tools enter Gemini context. The model cannot apply changes; Quantified Self
 stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.

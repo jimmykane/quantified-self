@@ -147,10 +147,11 @@ h1 {
 .assistant-empty-state {
   display: grid;
   flex: 1 1 auto;
-  align-content: center;
+  align-content: safe center;
   justify-items: center;
   gap: 10px;
   min-height: 0;
+  overflow-y: auto;
   padding: 24px;
   text-align: center;
 }
@@ -174,6 +175,10 @@ h1 {
   max-width: 590px;
   color: var(--mat-sys-on-surface-variant);
   line-height: 1.55;
+}
+
+.assistant-empty-state .assistant-plan-hint {
+  font: var(--mat-sys-body-small);
 }
 
 .conversation {

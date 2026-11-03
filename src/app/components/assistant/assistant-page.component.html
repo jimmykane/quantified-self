@@ -59,9 +59,15 @@
     } @else {
       @if (isEmpty() && !sending()) {
         <section class="assistant-empty-state" aria-labelledby="assistant-empty-state-title">
-          <mat-icon aria-hidden="true">history</mat-icon>
-          <h2 id="assistant-empty-state-title">If you could ask your training history one question, what would it be?</h2>
-          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified evidence; optional Training changes always require your review.</p>
+          <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+          <h2 id="assistant-empty-state-title">Understand your training. Create your next plan.</h2>
+          <p>Explore your training, sleep and recovery, or build a training plan around your goals. You review every change before it is saved.</p>
+          <button mat-stroked-button type="button" [disabled]="resetting() || proposalActionInProgress()" (click)="startPlan()">
+            <mat-icon aria-hidden="true">event_note</mat-icon>Create a plan
+          </button>
+          @if (!trainingPlansEnabled() || !trainingPlanChangesEnabled()) {
+            <p class="assistant-plan-hint">To save a plan, enable Training plans and Plan and workout changes in Examples &amp; data access.</p>
+          }
         </section>
       }
 
@@ -314,7 +320,7 @@
         }
         <section class="composer-shell">
           <form class="composer" (submit)="handleComposerSubmit($event)">
-            <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
+            <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data or create a training plan"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting() || proposalActionInProgress()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
