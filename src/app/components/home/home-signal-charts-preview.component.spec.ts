@@ -121,6 +121,22 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(fixture.nativeElement.querySelector('.signal-preview-form-chart')?.getAttribute('role')).toBe('group');
   });
 
+  it('renders the compact hero with three real charts and keeps their existing feedback', async () => {
+    fixture.componentRef.setInput('hero', true);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+    expect(fixture.debugElement.query(By.directive(ChartsFormComponent))).toBeNull();
+    expect(fixture.debugElement.query(By.directive(ChartsPowerCurveComponent))).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.signal-preview-widget')).toHaveLength(3);
+    expect(fixture.nativeElement.textContent).toContain('no additional training load');
+    const components = [ChartsFreshnessForecastComponent, ChartsIntensityDistributionComponent, ChartsEfficiencyTrendComponent]
+      .map(component => fixture.debugElement.query(By.directive(component)).componentInstance);
+    expect(components.every(component => component.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
+    appTheme.set(AppThemes.Dark);
+    fixture.detectChanges();
+    expect(components.every(component => component.darkTheme)).toBe(true);
+  });
+
   it('disables the homepage Form animation when reduced motion is requested', async () => {
     fixture.destroy();
     Object.defineProperty(window, 'matchMedia', {

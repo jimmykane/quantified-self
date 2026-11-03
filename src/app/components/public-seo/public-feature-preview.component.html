@@ -54,11 +54,11 @@
   }
 }
 
-@if (previewKey() === 'training-signals') {
+@if (previewKey() === 'training-signals' || previewKey() === 'training-hero') {
   @defer (on viewport; when previewReady()) {
-    <app-home-signal-charts-preview></app-home-signal-charts-preview>
+    <app-home-signal-charts-preview [hero]="previewKey() === 'training-hero'"></app-home-signal-charts-preview>
   } @placeholder {
-    <div class="preview-placeholder preview-placeholder--signals" aria-hidden="true"></div>
+    <div class="preview-placeholder" [class.preview-placeholder--signals]="previewKey() === 'training-signals'" [class.preview-placeholder--hero]="previewKey() === 'training-hero'" aria-hidden="true"></div>
   }
 }
 

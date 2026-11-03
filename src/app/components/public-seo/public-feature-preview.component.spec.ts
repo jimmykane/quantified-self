@@ -102,6 +102,7 @@ describe('PublicFeaturePreviewComponent', () => {
     ['health-weight', 'health'],
     ['training-snapshot', 'training'],
     ['training-signals', 'signals'],
+    ['training-hero', 'hero'],
     ['training-readiness', 'readiness'],
     ['training-explorer', 'explorer'],
     ['training-plans', 'training-plans'],

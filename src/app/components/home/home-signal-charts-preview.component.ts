@@ -5,6 +5,7 @@ import {
   PLATFORM_ID,
   computed,
   inject,
+  input,
 } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppSignalChartsModule } from '../../modules/app-signal-charts.module';
@@ -24,6 +25,7 @@ import {
   imports: [AppSignalChartsModule],
 })
 export class HomeSignalChartsPreviewComponent {
+  readonly hero = input(false);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
   private readonly previewData = buildHomeSignalChartsPreviewData(HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS);

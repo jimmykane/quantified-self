@@ -64,17 +64,19 @@ describe('HomeComponent', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('restores the branded hero and keeps the shared Training overview in its feature section', async () => {
+  it('pairs the branded hero with a deferred chart preview and retains the detailed Training overview', async () => {
     renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('h1')?.textContent).toBe('Your Training Data, Connected. One Dashboard. Every Activity in Context.');
+    expect(hero.querySelector('h1')?.textContent).toBe('All your training data. Across your devices. Under your control.');
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
-    expect(hero.querySelector('app-public-feature-preview')).toBeNull();
+    expect(hero.querySelector('app-public-feature-preview')).toBeTruthy();
+    expect(hero.textContent).toContain('Sample data');
+    expect(hero.querySelector('.preview-placeholder--hero')).toBeTruthy();
     const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
     expect(training.textContent).toContain('Sample data');
     expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
     expect(training.querySelector('app-training-summary-cards')).toBeNull();
-    const [trainingBlock] = await fixture.getDeferBlocks();
+    const [, trainingBlock] = await fixture.getDeferBlocks();
     expect(trainingBlock).toBeTruthy();
     await trainingBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
@@ -121,7 +123,7 @@ describe('HomeComponent', () => {
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
     renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your activities, sleep and health data together. See how your training is changing and plan what comes next.');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your Garmin, Suunto, COROS and Wahoo activities together. Understand your training, explore insights with AI, and keep your original files under your control.');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
@@ -184,7 +186,7 @@ describe('HomeComponent', () => {
       'integrations-section', 'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
+      .toEqual(['training-hero', 'training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'daily-workout', 'training-plans',
         'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
         'activity-map', 'reviewer-benchmark', 'provider-flow']);

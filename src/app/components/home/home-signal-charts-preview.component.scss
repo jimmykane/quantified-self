@@ -133,3 +133,12 @@
     height: 270px;
   }
 }
+
+.signal-preview--hero { margin-top: 0; }
+.signal-preview--hero .signal-preview-grid { gap: 1.25rem; }
+.signal-preview--hero .signal-preview-widget { height: 170px; overflow: visible; }
+.signal-preview--hero .signal-preview-widget:first-child { grid-column: 1 / -1; height: 250px; padding-bottom: 1.5rem; box-sizing: border-box; }
+.hero-forecast-note { margin: .25rem 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-small); }
+@container (max-width: 400px) {
+  .signal-preview--hero .signal-preview-widget:first-child { height: 260px; padding-bottom: 2.25rem; }
+}

@@ -98,3 +98,6 @@
     min-height: 64rem;
   }
 }
+
+.preview-placeholder--hero { min-height: 26rem; }
+@media (max-width: 440px) { .preview-placeholder--hero { min-height: 37rem; } }

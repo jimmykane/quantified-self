@@ -5,10 +5,11 @@
         <mat-icon svgIcon="logo" class="brand-logo" aria-hidden="true"></mat-icon>
         <p class="brand-name">Quantified Self.io</p>
       </div>
-      <h1 id="home-title">Your Training Data, Connected. <span class="highlight-text">One Dashboard. Every Activity in Context.</span></h1>
-      <p class="hero-subtitle">Bring your activities, sleep and health data together. See how your training is changing and plan what comes next.</p>
+      <p class="eyebrow hero-eyebrow">Endurance training intelligence</p>
+      <h1 id="home-title">All your training data. <span>Across your devices. </span><span class="highlight-text">Under your control.</span></h1>
+      <p class="hero-subtitle">Bring your Garmin, Suunto, COROS and Wahoo activities together. Understand your training, explore insights with AI, and keep your original files under your control.</p>
       <div class="hero-actions" data-nosnippet>
-        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
         <a mat-stroked-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>monitoring</mat-icon></a>
       </div>
       <p class="hero-access-note">Start with manual uploads and training analysis on free Starter. Provider connections and automatic sync require Pro.</p>
@@ -18,6 +19,14 @@
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
     </div>
+    <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
+      <div class="hero-product-header">
+        <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, in context</h2></div>
+        <span class="hero-sample-label">Sample data</span>
+      </div>
+      <app-public-feature-preview [prepareAhead]="true" previewKey="training-hero"></app-public-feature-preview>
+      <p class="hero-product-caption">Explore the same charts inside Quantified Self.</p>
+    </mat-card>
     <div class="provider-compatibility">
       <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
       <div appHomeReveal class="logos-container" aria-label="Supported providers">
