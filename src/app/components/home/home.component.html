@@ -19,22 +19,34 @@
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
     </div>
-    <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
-      <div class="hero-product-header">
-        <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, in context</h2></div>
-        <span class="hero-sample-label">Sample data</span>
+    <div class="hero-visual" aria-label="Supported provider activities flow into Quantified Self">
+      <div class="hero-provider-flow">
+        <div class="logos-container hero-providers" aria-label="Supported providers">
+          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon></mat-card>
+          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon></mat-card>
+          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon></mat-card>
+          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon></mat-card>
+        </div>
+        <!-- Decorative layout connectors, not a data chart. Keep direction into QS only. -->
+        <svg class="hero-provider-wires" viewBox="0 0 40 304" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path d="M 0 32 C 24 32 16 114 40 114 M 0 112 C 24 112 16 140 40 140 M 0 192 C 24 192 16 164 40 164 M 0 272 C 24 272 16 190 40 190"></path>
+          <path class="hero-wire-arrows" d="M 35 110 L 39 114 L 35 118 M 35 136 L 39 140 L 35 144 M 35 160 L 39 164 L 35 168 M 35 186 L 39 190 L 35 194"></path>
+          <circle cx="1.5" cy="32" r="2.5"></circle><circle cx="1.5" cy="112" r="2.5"></circle>
+          <circle cx="1.5" cy="192" r="2.5"></circle><circle cx="1.5" cy="272" r="2.5"></circle>
+        </svg>
+        <mat-icon class="hero-provider-mobile-arrow" aria-hidden="true">south</mat-icon>
       </div>
-      <app-public-feature-preview [prepareAhead]="true" previewKey="training-hero"></app-public-feature-preview>
-      <p class="hero-product-caption">Explore the same charts inside Quantified Self.</p>
-    </mat-card>
+      <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
+        <div class="hero-product-header">
+          <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, in context</h2></div>
+          <span class="hero-sample-label">Sample data</span>
+        </div>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-hero"></app-public-feature-preview>
+        <p class="hero-product-caption">Explore the same charts inside Quantified Self.</p>
+      </mat-card>
+    </div>
     <div class="provider-compatibility">
       <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
-      <div appHomeReveal class="logos-container" aria-label="Supported providers">
-        <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon>
-        <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon>
-        <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon>
-        <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon>
-      </div>
       <p class="provider-compatibility__copy">Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
     </div>
   </section>

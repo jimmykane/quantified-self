@@ -115,9 +115,14 @@ describe('HomeComponent', () => {
     expect(providerIntro.querySelector('h2')?.textContent).toBe('Bring It In. Keep It Moving.');
     expect(providerIntro.querySelector('.provider-compatibility__copy')?.textContent)
       .toBe('Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.');
-    const logos = Array.from(providerIntro.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    const logos = Array.from(fixture.nativeElement.querySelectorAll('.hero-visual .logos-container [role="img"]')) as HTMLElement[];
     expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
+    expect(providerIntro.querySelector('.logos-container')).toBeNull();
+    const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
+    expect(visual.querySelector('.hero-provider-wires')?.getAttribute('aria-hidden')).toBe('true');
+    expect(visual.querySelector('app-public-feature-preview')).toBeTruthy();
+    expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
   });
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
