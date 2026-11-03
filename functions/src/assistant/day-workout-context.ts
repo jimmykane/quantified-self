@@ -11,7 +11,7 @@ import { collectDailyWorkoutContext } from './daily-workout-context';
 import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
-import { readTrainingGoalsProgress } from '../training-goals/read';
+import { readTrainingGoalSnapshot, readTrainingGoalsProgress } from '../training-goals/read';
 import { relevantTrainingGoals } from '../../../shared/training-goals';
 
 export const DAY_WORKOUT_CONTEXT_MAX_CHARACTERS = 160_000;
@@ -138,7 +138,9 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
   if (references.length !== result.references.length) missing.push('Conflicting saved target references were omitted.');
   let goals: DayWorkoutTrainingContext['goals'];
   if (controls.goalsContext !== false) {
-    const snapshot = await readTrainingGoalsProgress(uid, { localDate: controls.localDate, timeZone: controls.timeZone }, db);
+    const snapshot = controls.activityContext === false
+      ? { ...await readTrainingGoalSnapshot(uid, db), progress: [], complete: false }
+      : await readTrainingGoalsProgress(uid, { localDate: controls.localDate, timeZone: controls.timeZone }, db);
     const events = snapshot.goals.filter(goal => goal.lifecycle === 'active' && goal.kind === 'event'
       && goal.targetLocalDate === controls.localDate && goal.startLocalDate <= controls.localDate);
     const relevant = relevantTrainingGoals(snapshot.goals, controls.localDate, controls.sport);
@@ -151,7 +153,8 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
           const { goalId: _id, goalRevision: _revision, ...progress } = snapshot.progress.find(row => row.goalId === goal.id)!;
           return progress;
         })() : null })) };
-    if (!snapshot.complete) missing.push('Goal progress is incomplete; do not interpret missing history as zero or prescribe catch-up volume.');
+    if (controls.activityContext === false) missing.push('Goal progress: turned off with Recent activities.');
+    else if (!snapshot.complete) missing.push('Goal progress is incomplete; do not interpret missing history as zero or prescribe catch-up volume.');
   }
   return { ...result, references, ...(goals ? { goals } : {}), scheduleRevision: after.revision, missing: [...new Set(missing)] };
 }

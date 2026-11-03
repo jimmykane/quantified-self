@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { effect, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { BehaviorSubject, firstValueFrom, filter } from 'rxjs';
@@ -67,5 +67,22 @@ describe('TrainingGoalsService', () => {
     vi.useFakeTimers(); const { service, rows, call } = setup(); rows.next([]);
     const sub = service.watchProgress('owner', 'UTC', 1).subscribe(); await vi.advanceTimersByTimeAsync(800);
     expect(call).not.toHaveBeenCalled(); sub.unsubscribe();
+  });
+  it('preserves cached progress through unrelated profile updates while still reacting to activities', async () => {
+    vi.useFakeTimers(); const { service, call, user, auth } = setup();
+    const activityRevision = signal(0);
+    TestBed.runInInjectionContext(() => effect(() => {
+      activityRevision(); service.invalidateProgress('owner');
+    }));
+    TestBed.flushEffects();
+    const sub = service.watchProgress('owner', 'UTC', 1).subscribe();
+    await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledOnce();
+    user.set({ uid: 'owner', displayName: 'Updated name' }); TestBed.flushEffects();
+    await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledOnce();
+    activityRevision.set(1); TestBed.flushEffects();
+    await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledTimes(2);
+    auth.currentUser = { uid: 'owner' }; user.set({ uid: 'owner' }); TestBed.flushEffects();
+    await vi.advanceTimersByTimeAsync(800); expect(call).toHaveBeenCalledTimes(3);
+    sub.unsubscribe();
   });
 });

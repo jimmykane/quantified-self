@@ -10,6 +10,13 @@ const goal = (patch: Partial<TrainingGoalV1> = {}): TrainingGoalV1 => ({ schemaV
 const activity = (id: string, time: string, patch: Partial<TrainingGoalProgressActivity> = {}): TrainingGoalProgressActivity => ({
   recordingId: id, activityId: id, recordingStartMs: Date.parse(time), sport: ActivityTypes.Running, duration: 1800, distance: 5000, ...patch });
 describe('Training goals', () => {
+  it('rejects ASCII control characters while preserving multiline objectives', () => {
+    for (let code = 0; code < 32; code++) {
+      const objective = `Before${String.fromCharCode(code)}after`;
+      if ([9, 10, 13].includes(code)) expect(parseTrainingGoalV1(goal({ objective })).objective).toBe(objective);
+      else expect(() => parseTrainingGoalV1(goal({ objective }))).toThrow('Invalid goal text.');
+    }
+  });
   it('strictly round trips stored goals and rejects unexpected or inconsistent fields', () => {
     expect(parseTrainingGoalV1(goal(), 'goal')).toEqual(goal());
     for (const patch of [{ uid: 'private' }, { kind: 'event' }, { revision: 0 }, { sport: 'invented' },

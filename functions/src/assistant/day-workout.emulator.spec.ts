@@ -20,6 +20,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('keeps authored goals but omits recorded progress when Recent activities is turned off', async () => {
+    const uid = `goal-source-${randomUUID()}`, user = db.collection('users').doc(uid);
+    const now = new Date('2026-10-28T12:00Z');
+    await user.set({});
+    await user.collection('trainingGoals').doc('weekly').set({ schemaVersion: 1, id: 'weekly', name: 'Run consistently',
+      kind: 'ongoing', lifecycle: 'active', priority: 'normal', startLocalDate: '2026-10-01', targetLocalDate: null,
+      sportScope: 'sport', sport: ActivityTypes.Running, objective: '', planId: null, weeklyTarget: { kind: 'workouts', value: 3 },
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 });
+    await user.collection('events').doc('run').set({});
+    await user.collection('activities').doc('run').set({ eventID: 'run', eventStartDate: new Date('2026-10-27T08:00Z'), type: ActivityTypes.Running });
+    const enabled = await readDayWorkoutTrainingContext(uid, controls, now, db);
+    expect(enabled.goals?.items[0].weeklyProgress).toMatchObject({ value: 1, complete: true });
+    const disabled = await readDayWorkoutTrainingContext(uid, { ...controls, activityContext: false }, now, db);
+    expect(disabled.goals?.items[0]).toMatchObject({ name: 'Run consistently', weeklyTarget: { kind: 'workouts', value: 3 }, weeklyProgress: null });
+    expect(disabled.missing).toContain('Goal progress: turned off with Recent activities.');
+  });
   it('honors standalone calendar rest without a plan and restores the same charged daily result after removal', async () => {
     const uid = `calendar-rest-${randomUUID()}`, user = db.collection('users').doc(uid);
     const now = new Date('2026-10-28T08:00Z');

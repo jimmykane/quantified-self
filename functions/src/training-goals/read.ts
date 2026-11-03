@@ -73,7 +73,8 @@ export async function readTrainingGoalsProgress(uid: string, request: TrainingGo
       activities.push({ activityId: row.id, recordingId: parent.id, recordingStartMs: start, sport: row.get('type'),
         duration: metric(DataDuration.type), distance: metric(DataDistance.type) });
     }
-    return { ...snapshot, weekStartsOn, complete, progress: calculateTrainingGoalProgress({ goals: targets,
-      activities, localDate: request.localDate, timeZone: request.timeZone, weekStartsOn, complete }) };
+    const progress = calculateTrainingGoalProgress({ goals: targets,
+      activities, localDate: request.localDate, timeZone: request.timeZone, weekStartsOn, complete });
+    return { ...snapshot, weekStartsOn, complete: complete && progress.every(row => row.complete), progress };
   }, { readOnly: true });
 }

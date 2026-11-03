@@ -1,4 +1,4 @@
-import { Injectable, effect, inject } from '@angular/core';
+import { Injectable, effect, inject, untracked } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Auth } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, doc, limit, query, runTransaction } from 'app/firebase/firestore';
@@ -28,9 +28,13 @@ export class TrainingGoalsService {
   private readonly invalidations = new Subject<string>();
   private opening = false;
   constructor() {
+    let previousUid: string | undefined, previousImportActive: boolean | undefined;
+    let previousSession: object | null | undefined;
     effect(() => {
-      const uid = this.users.user()?.uid;
-      this.imports.dataImportActive();
+      const uid = this.users.user()?.uid, session = this.auth.currentUser;
+      const importActive = this.imports.dataImportActive();
+      if (uid === previousUid && session === previousSession && importActive === previousImportActive) return;
+      previousUid = uid; previousSession = session; previousImportActive = importActive;
       this.progressCache.clear();
       if (uid) this.invalidations.next(uid);
     });
@@ -55,7 +59,8 @@ export class TrainingGoalsService {
     return stream$;
   }
   invalidateProgress(uid: string): void {
-    if (!this.isOwner(uid)) return;
+    // Callers track their activity source and owner; this guard must not subscribe them to every profile update.
+    if (!untracked(() => this.isOwner(uid))) return;
     this.progressCache.clear();
     this.invalidations.next(uid);
   }

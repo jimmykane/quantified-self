@@ -40,8 +40,12 @@ function object(value: unknown, fields: readonly string[]): Record<string, unkno
   return value as Record<string, unknown>;
 }
 function text(value: unknown, max: number, required = false): string {
-  if (typeof value !== 'string' || value.length > max || (required && !value.trim())
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) throw Error('Invalid goal text.');
+  if (typeof value !== 'string' || value.length > max || (required && !value.trim())) throw Error('Invalid goal text.');
+  // Tabs and line breaks are valid in objectives; other ASCII control characters are not.
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) throw Error('Invalid goal text.');
+  }
   return value.trim();
 }
 function choice<T extends string>(value: unknown, choices: readonly T[]): T {

@@ -10048,7 +10048,8 @@ after 15 minutes and have a 30-day `expireAt` TTL plus index exemptions. No back
 Weekly progress is computed by `getTrainingGoalsProgress`, authenticated and App Check protected in europe-west2
 (256 MiB, 30 seconds, max 100 instances). The frontend shares one bounded owner goal listener and one coalesced progress
 request across consumers, caches the current week for 60 seconds, and invalidates through existing calendar activity
-and history-import updates. Midnight advances the displayed local date without a tab-focus generation request.
+and history-import updates. Unrelated profile changes do not invalidate progress or retrigger calendar activity effects.
+Midnight advances the displayed local date without a tab-focus generation request.
 Active imports return incomplete progress without scanning activity history. Progress uses the displayed IANA timezone and saved calendar week start. A partial first week is labelled and its
 full target is retained, never silently prorated.
 
@@ -10066,6 +10067,8 @@ ordered by priority then nearest target date; undated goals follow dated peers. 
 workout selection without changing saved sport/routine behavior. Recovery, explicit rest and planned/completed
 coverage take precedence; the prompt prohibits target-driven catch-up overload. Every active event on today's date
 is considered even if its sport differs, preventing an extra unrelated workout on a race day.
+Turning off Recent activities in manual generation keeps authored goals but skips goal progress reads and evidence.
+The aggregate progress completeness flag also reflects missing metrics in any individual goal result.
 
 An uncovered event date produces versioned private event advice, never a workout draft or provider action. It uses the
 same sleep/import deferrals, daily lease, admission and token telemetry as an ordinary daily suggestion. Admission
