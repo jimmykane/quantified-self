@@ -71,6 +71,7 @@ describe('HomeComponent', () => {
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
     expect(hero.querySelector('app-public-feature-preview')).toBeTruthy();
     expect(hero.textContent).toContain('Sample data');
+    expect(hero.querySelector('#hero-preview-title')?.textContent).toBe('Your training, together.');
     expect(hero.querySelector('.preview-placeholder--hero')).toBeTruthy();
     const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
     expect(training.textContent).toContain('Sample data');
@@ -126,7 +127,13 @@ describe('HomeComponent', () => {
     for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
-      expect(svg.querySelectorAll('.hero-connection-pulse')).toHaveLength(4);
+      expect(svg.querySelectorAll('.hero-connection .hero-connection-pulse')).toHaveLength(4);
+      expect(svg.querySelectorAll('.hero-aggregate')).toHaveLength(1);
+      expect(svg.querySelectorAll('.hero-aggregate .hero-connection-pulse')).toHaveLength(1);
+      const junction = svg.querySelector('.hero-aggregation-point')!;
+      const endpoint = `${junction.getAttribute('cx')} ${junction.getAttribute('cy')}`;
+      expect(Array.from(svg.querySelectorAll('.hero-connection-track')).slice(0, 4)
+        .every(path => path.getAttribute('d')?.endsWith(endpoint))).toBe(true);
     }
     expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
   });

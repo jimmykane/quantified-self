@@ -1,16 +1,37 @@
 <section class="signal-preview" [class.signal-preview--hero]="hero()" data-nosnippet aria-label="Training chart previews">
-  @if (!hero()) {
+  @if (hero()) {
+    <article class="hero-training-history" aria-label="12-week fitness, fatigue and form chart preview">
+      <div class="hero-training-heading">
+        <h3>Fitness, fatigue &amp; form</h3>
+        <span>Last 12 weeks</span>
+      </div>
+      <div class="hero-training-chart">
+        <app-form-chart [darkTheme]="darkTheme()" [data]="heroPreviewData().formTimeline" [absoluteLatestPoint]="heroPreviewData().latestFormPoint"
+          [useAnimations]="animationsEnabled" [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
+          timelineWindow="w"></app-form-chart>
+      </div>
+    </article>
+    <div class="hero-summary" role="group" aria-label="Example training volume and imported recovery">
+      @for (metric of heroSummaryMetrics; track metric.id) {
+        <mat-card appearance="outlined" [attr.data-metric-id]="metric.id">
+          <mat-card-content>
+            <span class="hero-summary-label">{{ metric.label }}</span>
+            <strong>{{ metric.valueText }}</strong>
+            <small>{{ metric.detailText }}</small>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  } @else {
   <div class="signal-preview-note">
     <small>Same chart families used in Training</small>
   </div>
 
-  }
   <div class="signal-preview-grid">
     <article class="signal-preview-widget" aria-label="Freshness forecast chart preview">
       <app-freshness-forecast-chart [darkTheme]="darkTheme()" [forecast]="freshnessForecast"
         [mobileTapFeedbackOptions]="mobileTapFeedbackOptions">
       </app-freshness-forecast-chart>
-      @if (hero()) { <p class="hero-forecast-note">A seven-day scenario with no additional training load.</p> }
     </article>
 
     <article class="signal-preview-widget" aria-label="Training intensity distribution chart preview">
@@ -25,7 +46,6 @@
       </app-efficiency-trend-chart>
     </article>
 
-    @if (!hero()) {
     <article class="signal-preview-widget" aria-label="Cycling power curve chart preview">
       <app-power-curve-chart [darkTheme]="darkTheme()" title="Cycling Power Curve" [powerCurve]="powerCurve"
         [mobileTapFeedbackOptions]="mobileTapFeedbackOptions">
@@ -46,6 +66,6 @@
           timelineWindow="w"></app-form-chart>
       </div>
     </article>
-    }
   </div>
+  }
 </section>

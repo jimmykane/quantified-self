@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
   buildHomeSignalChartsPreviewData,
+  buildHomeHeroSummaryMetrics,
 } from './home-signal-charts-preview-data.helper';
 
 describe('buildHomeSignalChartsPreviewData', () => {
@@ -40,5 +41,15 @@ describe('buildHomeSignalChartsPreviewData', () => {
     expect(bestPoints.map(point => point.duration)).toEqual(latestPoints.map(point => point.duration));
     expect(bestPoints.every((point, index) => point.power > latestPoints[index].power)).toBe(true);
     expect(bestPoints.every((point, index) => index === 0 || point.power < bestPoints[index - 1].power)).toBe(true);
+  });
+});
+
+describe('home hero summary examples', () => {
+  it('keeps training volume separate from the imported recovery estimate', () => {
+    const cards = buildHomeHeroSummaryMetrics();
+    expect(cards.map(card => [card.label, card.valueText, card.detailText])).toEqual([
+      ['Training volume', '09h 42m', 'Last 7 days'],
+      ['Recovery left', '08h 20m', 'Imported post-workout estimate'],
+    ]);
   });
 });

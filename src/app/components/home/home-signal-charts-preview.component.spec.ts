@@ -121,20 +121,35 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(fixture.nativeElement.querySelector('.signal-preview-form-chart')?.getAttribute('role')).toBe('group');
   });
 
-  it('renders the compact hero with three real charts and keeps their existing feedback', async () => {
+  it('uses the real Form chart and volume/recovery metrics in the hero', async () => {
     fixture.componentRef.setInput('hero', true);
     fixture.detectChanges();
-    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
-    expect(fixture.debugElement.query(By.directive(ChartsFormComponent))).toBeNull();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(1));
+    const form = fixture.debugElement.query(By.directive(ChartsFormComponent)).componentInstance as ChartsFormComponent;
+    expect(fixture.debugElement.query(By.directive(ChartsFreshnessForecastComponent))).toBeNull();
     expect(fixture.debugElement.query(By.directive(ChartsPowerCurveComponent))).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.signal-preview-widget')).toHaveLength(3);
-    expect(fixture.nativeElement.textContent).toContain('no additional training load');
-    const components = [ChartsFreshnessForecastComponent, ChartsIntensityDistributionComponent, ChartsEfficiencyTrendComponent]
-      .map(component => fixture.debugElement.query(By.directive(component)).componentInstance);
-    expect(components.every(component => component.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
+    expect(form.hasData()).toBe(true);
+    const current = fixture.componentInstance.heroPreviewData().formTimeline.at(-1)!;
+    const today = new Date();
+    expect(current.time).toBe(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    expect(form.headlineStats().fatigue.value).toBe(String(Math.round(current.atl)));
+    expect(current.atl).toBeGreaterThan(0);
+    expect(form.selectedGranularity()).toBe('w');
+    expect(form.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
+    const summaryCards = Array.from(fixture.nativeElement.querySelectorAll('.hero-summary mat-card')) as HTMLElement[];
+    expect(summaryCards.map(card => card.dataset.metricId)).toEqual(['volume', 'recovery']);
+    expect(summaryCards[0].textContent).toContain('09h 42m');
+    expect(summaryCards[1].textContent).toContain('08h 20m');
+    expect(fixture.nativeElement.textContent).toContain('Last 12 weeks');
+    expect(fixture.nativeElement.textContent).toContain('Imported post-workout estimate');
+    expect(fixture.nativeElement.textContent).not.toContain('no additional training load');
+    const option = loader.setOption.mock.calls[0][1];
+    expect(option.series.map((series: { name: string }) => series.name))
+      .toEqual(['Fitness (CTL)', 'Fatigue (ATL)', 'Form (TSB)']);
+    expect(option.xAxis[0].max - option.xAxis[0].min).toBe(84 * 86400000);
     appTheme.set(AppThemes.Dark);
     fixture.detectChanges();
-    expect(components.every(component => component.darkTheme)).toBe(true);
+    expect(form.darkTheme).toBe(true);
   });
 
   it('disables the homepage Form animation when reduced motion is requested', async () => {
