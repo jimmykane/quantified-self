@@ -11,6 +11,8 @@ import { collectDailyWorkoutContext } from './daily-workout-context';
 import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
+import { readTrainingGoalsProgress } from '../training-goals/read';
+import { relevantTrainingGoals } from '../../../shared/training-goals';
 
 export const DAY_WORKOUT_CONTEXT_MAX_CHARACTERS = 160_000;
 type RecordValue = Record<string, unknown>;
@@ -25,6 +27,9 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  goalsRevision?: number;
+  eventGoals?: Array<{ name: string; localDate: string }>;
+  adviceOnly?: boolean;
   plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   evidence: RecordValue;
   usedContext: string[];
@@ -33,6 +38,7 @@ export interface DayWorkoutContext {
   references: WorkoutTargetV1[];
 }
 export interface DayWorkoutTrainingContext {
+  goals?: { revision: number; items: RecordValue[]; events: Array<{ name: string; localDate: string }> };
   plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   scheduleRevision: number;
   nearby: RecordValue[];
@@ -130,7 +136,24 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
     .filter(other => other.kind === target.kind).every(other => other.mode === 'relative' && target.mode === 'relative'
       && JSON.stringify(other.reference) === JSON.stringify(target.reference)));
   if (references.length !== result.references.length) missing.push('Conflicting saved target references were omitted.');
-  return { ...result, references, scheduleRevision: after.revision, missing: [...new Set(missing)] };
+  let goals: DayWorkoutTrainingContext['goals'];
+  if (controls.goalsContext !== false) {
+    const snapshot = await readTrainingGoalsProgress(uid, { localDate: controls.localDate, timeZone: controls.timeZone }, db);
+    const events = snapshot.goals.filter(goal => goal.lifecycle === 'active' && goal.kind === 'event'
+      && goal.targetLocalDate === controls.localDate && goal.startLocalDate <= controls.localDate);
+    const relevant = relevantTrainingGoals(snapshot.goals, controls.localDate, controls.sport);
+    const selected = [...new Map([...relevant, ...events].map(goal => [goal.id, goal])).values()];
+    goals = { revision: snapshot.revision, events: events.map(goal => ({ name: goal.name, localDate: goal.targetLocalDate! })),
+      items: selected.map(goal => ({ name: goal.name, kind: goal.kind, priority: goal.priority,
+        sportScope: goal.sportScope, sport: goal.sport, startLocalDate: goal.startLocalDate, targetLocalDate: goal.targetLocalDate,
+        objective: goal.objective, weeklyTarget: goal.weeklyTarget,
+        weeklyProgress: snapshot.progress.find(row => row.goalId === goal.id) ? (() => {
+          const { goalId: _id, goalRevision: _revision, ...progress } = snapshot.progress.find(row => row.goalId === goal.id)!;
+          return progress;
+        })() : null })) };
+    if (!snapshot.complete) missing.push('Goal progress is incomplete; do not interpret missing history as zero or prescribe catch-up volume.');
+  }
+  return { ...result, references, ...(goals ? { goals } : {}), scheduleRevision: after.revision, missing: [...new Set(missing)] };
 }
 
 export async function collectDayWorkoutContext(controls: DayWorkoutControls, now: Date,
@@ -245,6 +268,8 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     if (training.plannedRestDay) usedContext.push(training.plannedRestDay.source === 'calendar' ? 'Authored calendar rest day' : 'Authored rest day in the selected plan');
     if (training.phase) usedContext.push('Selected plan and phase');
     if (training.previousStrength.length) usedContext.push('Up to five previous planned strength prescriptions');
+    if (controls.goalsContext !== false && training.goals?.items.length) usedContext.push(`Goals: ${training.goals.items.map(goal => goal.name).join(', ')}`.slice(0, 2000));
+    else if (controls.goalsContext === false) missingContext.push('Goals: turned off.');
     missingContext.push(...training.missing);
   } else missingContext.push('Training plan context and previous weights: access is off.');
   const feedbackResult = controls.feedbackContext === false ? {} : await read('query_metrics', {
@@ -277,9 +302,11 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     } else missingContext.push('Training routine could not be checked completely; no weekday habit was inferred.');
   } else missingContext.push('Training routine: turned off (requires Recent activities).');
   const evidence: RecordValue = { daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
+    ...(controls.goalsContext !== false && training?.goals ? { goals: training.goals.items } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
   if (JSON.stringify(evidence).length > DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
   return { evidence, usedContext, missingContext: [...new Set(missingContext)],
+    ...(controls.goalsContext !== false && training?.goals ? { goalsRevision: training.goals.revision, eventGoals: training.goals.events } : {}),
     ...(training?.plannedRestDay ? { plannedRestDay: training.plannedRestDay } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
 }

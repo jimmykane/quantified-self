@@ -41,6 +41,7 @@
     </nav>
   }
 
+  <app-training-goals-button [uid]="goalOwner()" />
   <div class="activity-calendar-day-layout">
     <div class="activity-calendar-month-pane">
       <div class="activity-calendar-tile-progress">
@@ -59,7 +60,7 @@
         </div>
       }
       <app-activity-calendar-grid
-        [model]="calendarModel()"
+        [model]="calendarModel()" [goalsByDate]="goalsByDate()"
         [selectedDateKey]="dayContextEnabled() ? selectedDay()?.dateKey ?? null : null"
         [compact]="true"
         [fillHeight]="fillHeight()"

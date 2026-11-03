@@ -111,6 +111,10 @@
     "environment": "angular",
     "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
   },
+  "src/app/components/training-goals/training-goals-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Material goal editor, details and event guidance with signal inputs, account-change effects, validation, haptics and actual rendered actions."
+  },
   "src/app/components/training-load/training-load-dialog.component.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection context and Material dialog providers to exercise reactive forms, component lifecycle, subscription teardown and asynchronous save/reload haptics without opening real overlays."
@@ -162,6 +166,10 @@
   "src/app/services/timeline-note-comparison.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
+  },
+  "src/app/services/training-goals.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Exercises injected Firestore transactions, user signals, shared progress observables and import invalidation effects with TestBed."
   },
   "src/app/services/training-load.service.spec.ts": {
     "environment": "angular",

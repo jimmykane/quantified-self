@@ -1,3 +1,4 @@
+import { GOAL_TOOLS } from './training-goals.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -599,6 +600,14 @@ const service = {
         readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
+    readTrainingGoals: vi.fn(async ({ tool }: { tool: string }) => tool === 'list_training_goals'
+      ? { goalsRevision: 1, goals: [goalFixture], nextCursor: null }
+      : tool === 'get_training_goal' ? { goalsRevision: 1, goal: goalFixture }
+      : { goalsRevision: 1, localDate: '2026-07-02', timeZone: 'UTC', weekStartsOn: 1, complete: true,
+        progress: [{ goalRef: 'opaque-goal', goalRevision: 1, startLocalDate: '2026-07-01', endLocalDate: '2026-07-05',
+          partialWeek: true, kind: 'workouts', value: 2, target: 3, complete: true, met: false, displayValue: '2 workouts', displayTarget: '3 workouts' }] }),
+    previewTrainingGoalChange: vi.fn().mockResolvedValue(goalPreviewFixture),
+    applyTrainingGoalChange: vi.fn().mockResolvedValue({ status: 'applied', goalsRevision: 1, goal: goalFixture }),
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1409,10 +1418,23 @@ const service = {
   return service;
 }
 
+const goalFieldsFixture = { name: 'Run consistently', kind: 'ongoing', lifecycle: 'active', priority: 'normal',
+  startLocalDate: '2026-07-01', targetLocalDate: null, sportScope: 'sport', sport: 'Running', objective: '',
+  weeklyTarget: { kind: 'workouts', value: 3 } };
+const goalFixture = { ...goalFieldsFixture, goalRef: 'opaque-goal', revision: 1, planRef: null, planName: null, linkedPlanAvailable: false };
+const goalPreviewFixture = { proposalRef: 'opaque-goal-proposal', permissionMode: 'schedule', expiresAtMs: DAY_MS + 60000,
+  scheduleRevision: 0, summary: 'Create goal', requiresConfirmation: true,
+  changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], providerPreviews: [],
+  goalReview: { before: null, after: { ...goalFieldsFixture, planName: null } } };
 const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  list_training_goals: {},
+  get_training_goal: { goalRef: 'opaque-goal' },
+  get_training_goals_progress: { localDate: '2026-07-02', timeZone: 'UTC', goalRefs: ['opaque-goal'] },
+  preview_training_goal_change: { goalRef: null, expectedRevision: 0, goal: { ...goalFieldsFixture, planRef: null } },
+  apply_training_goal_change: { proposalRef: 'opaque-goal-proposal' },
   preview_garmin_workout_replacement: { workoutRef: 'opaque-workout-reference', expectedScheduleRevision: 1, expectedWorkoutRevision: 1 },
   list_saved_workouts: {},
   get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
@@ -2150,12 +2172,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const goalTools = tools.filter(tool => (GOAL_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(goalTools), 'utf8')).toBeLessThan(40 * 1024);
     const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));

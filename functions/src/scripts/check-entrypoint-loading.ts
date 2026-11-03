@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 192;
+const EXPECTED_FULL_EXPORT_COUNT = 193;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
@@ -276,6 +276,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   minInstances?: number | null;
 }>> = {
   sendTestPushNotification: { memoryMb: 256, timeoutSeconds: 15, trigger: 'callable', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 20, maxInstances: 2, minInstances: 0 },
+  getTrainingGoalsProgress: { memoryMb: 256, timeoutSeconds: 30, trigger: 'callable', maxInstances: 100 },
   generateDayWorkout: { memoryMb: 2048, timeoutSeconds: 180, trigger: 'callable', secrets: ['GEMINI_API_KEY'], concurrency: 10, maxInstances: 10 },
   applyAssistantTrainingProposal: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['SUUNTOAPP_GUIDE_OWNER'] },
   ensureDerivedMetrics: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', maxInstances: 100 },

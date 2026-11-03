@@ -1,3 +1,4 @@
+import { TrainingGoalsService } from '../../../services/training-goals.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { signal } from '@angular/core';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -32,7 +33,9 @@ function data(dateKey: string): CalendarDayDetailsData {
   return { day: model.months[0].days.find(day => day.dateKey === dateKey)!, userId: 'owner', locale: 'en-US' };
 }
 
-const restDayProviders = () => [
+const goalsProvider = { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, invalidateProgress: vi.fn() } };
+
+const restDayProviders = () => [goalsProvider,
   { provide: TrainingPlansService, useValue: { setCalendarRestDay: vi.fn() } },
   { provide: MatSnackBar, useValue: { open: vi.fn() } },
 ];
@@ -40,7 +43,7 @@ const restDayProviders = () => [
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
-  async function restDaySetup() {
+  async function restDaySetup(testGoals?: unknown[]) {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const schedule = signal<CurrentTrainingScheduleV1>({
       state: { schemaVersion: 1, revision: 7, activePlanId: null, currentWorkoutCount: 0, updatedAtMs: 1 },
@@ -53,7 +56,8 @@ describe('CalendarDayContextComponent', () => {
       return record;
     });
     const open = vi.fn();
-    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]),
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]), testGoals ? { provide: TrainingGoalsService, useValue: { ...goalsProvider.useValue,
+        isOwner: (uid: string) => viewer()?.uid === uid, watch: () => of({ status: 'ready', goals: testGoals }) } } : goalsProvider,
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, isOwner: (uid: string) => viewer()?.uid === uid } },
       { provide: TrainingPlansService, useValue: { setCalendarRestDay: write } },
       { provide: MatSnackBar, useValue: { open } },
@@ -70,6 +74,13 @@ describe('CalendarDayContextComponent', () => {
     return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, write, open: notice };
   }
 
+  it('keeps a goal-only day visible instead of showing the empty-day message', async () => {
+    const { fixture, component } = await restDaySetup([{ id: 'event', name: 'Race day', kind: 'event', lifecycle: 'active', priority: 'high', targetLocalDate: '2026-10-25' }]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.dashboardDayIsEmpty()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Race day');
+    expect(fixture.nativeElement.textContent).not.toContain('Nothing recorded yet');
+  });
   it('marks and removes calendar rest without a plan, without changing schedule revisions or workouts', async () => {
     const { fixture, component, write, haptics, schedule } = await restDaySetup();
     const add = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;

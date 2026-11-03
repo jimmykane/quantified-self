@@ -1,3 +1,4 @@
+import { TrainingGoalDetailsComponent } from '../training-goals/training-goal-details.component';
 import { assistantReflectionReviewDetails } from '../../helpers/assistant-reflection-review.helper';
 import { CommonModule } from '@angular/common';
 import {
@@ -141,7 +142,7 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
 @Component({
   selector: 'app-assistant-page',
   standalone: true,
-  imports: [
+  imports: [TrainingGoalDetailsComponent,
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
@@ -750,7 +751,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         return;
       }
       if (result.status === 'applied') {
-        this.trainingProposalResult.set(isSavedWorkoutProposal(proposal)
+        this.trainingProposalResult.set(proposal.goalReview ? 'Goal saved.' : isSavedWorkoutProposal(proposal)
           ? (result.changes[0]?.message ?? 'Saved workout change applied.')
           : 'Training changes applied. Provider updates or checks are queued where applicable.');
       } else {

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "7919d1503ad7298d1757c19c9464f19a7eab0d801ffc6ed7e919e6a6b8c450b2",
+  "candidateSha256": "e27ea19e54235b866f6dae37131c383394cc5b028f7699e153859bcce6da6f15",
   "lifecycleAction": "developer-refresh",
-  "summary": "Sports Lib 23: 284 sports, strict enums, 16 KiB previews. Preserve replacement, analysis, reflections, phases, recipe/title/HR checks, sync, v2 endurance, EnergySense, Garmin sleep HR, strength aliases/creates and edit RPE. Add plan rest reads/full before-after preview and bounded standalone calendar rest reads; add date preview/atomic approved calendar Apply. Reads/writes need separate grants and Apply. Baseline/history unchanged. Backend release, app rescan and plugin refresh remain separate.",
+  "summary": "Sports Lib 23 and previously pending Training, strength, phase/rest, analysis, reflection, sync and endurance additions remain. Add five Calendar goal read/progress/preview/apply tools and guidance: Training read/write grants, metrics for progress, separate approval, fixed dates, independent goal revisions and no provider actions. Baseline/history unchanged. Backend release, registered-app rescan and plugin refresh remain separate.",
   "rescanRequired": true
 }

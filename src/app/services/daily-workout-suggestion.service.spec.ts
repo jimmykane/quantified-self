@@ -58,6 +58,16 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('retains versioned event guidance across recreation without another generation ', async () => {
+    const { service, call, saved, result } = setup();
+    const ready = { ...result(), result: { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-10-30',
+      observedAt: new Date().toISOString(), rationale: 'Follow your event routine.', events: [{ name: 'Race', localDate: '2026-10-30' }],
+      draft: null, previousLoads: [] as [], usedContext: ['Goals'], missingContext: [] } };
+    call.mockResolvedValue({ data: ready }); await service.request('owner', 'prepare', () => true);
+    const recreated = setup(saved);
+    expect(recreated.service.cached('owner')?.status.result).toEqual(ready.result);
+    expect(await recreated.service.request('owner', 'prepare', () => true)).toEqual(ready); expect(recreated.call).not.toHaveBeenCalled();
+  });
   it.each(['functions/unavailable', 'functions/internal', 'deadline-exceeded'])('retries a transient status read once (%s) and shares the retry', async code => {
     const { service, call, logger } = setup();
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
@@ -165,7 +175,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(service.cached('owner')).toBeNull(); call.mockResolvedValueOnce({ data: result() });
     expect((await service.request('owner', 'status', () => true)).state).toBe('ready');
     expect(call).toHaveBeenCalledTimes(2);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'status' }, expect.anything());
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'status' }, expect.anything());
   });
   it('moves the shared rest listener to the new saved-zone date without changing the user object', async () => {
     const { service, setRest } = setup(); TestBed.flushEffects();
@@ -237,11 +247,11 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(service.saving()).toBe(true); acknowledge(); await write; expect(service.saving()).toBe(false);
     expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true } } } });
     await service.request('owner', 'prepare', () => true);
-    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'prepare' }, expect.any(Object));
+    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
     await expect(service.request('owner', 'use-available-data', () => true)).rejects.toThrow('displayed day');
     await service.request('owner', 'use-available-data', () => true, preferences.controls.localDate);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
     service.event('owner', 'reviewed', 'ready'); expect(logEvent).toHaveBeenCalledWith('daily_workout_suggestion', { action: 'reviewed', state: 'ready' });
     auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' });
     expect(call.mock.calls[0][2].canExecute()).toBe(false);
@@ -298,7 +308,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const fallback = service.request('owner', 'use-available-data', () => true, '2026-10-30');
     expect(call).toHaveBeenCalledOnce(); finish({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } }); await check;
     expect((await fallback).state).toBe('ready'); expect(call).toHaveBeenCalledTimes(2);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: '2026-10-30' }, expect.anything());
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'use-available-data', localDate: '2026-10-30' }, expect.anything());
     expect(service.cached('owner')?.status).toEqual(result());
   });
   it('shares an explicit available-data generation with a later automatic preparation', async () => {

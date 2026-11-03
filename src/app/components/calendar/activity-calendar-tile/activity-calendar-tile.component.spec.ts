@@ -1,3 +1,4 @@
+import { TrainingGoalsService } from '../../../services/training-goals.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -62,6 +63,7 @@ describe('ActivityCalendarTileComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
       providers: [
+        { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, invalidateProgress: vi.fn() } },
         { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },

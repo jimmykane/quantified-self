@@ -166,6 +166,7 @@ export { generateDayWorkout } from './assistant/day-workout-callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { observeDerivedMetricsHealth } from './derived-metrics/monitoring-schedule';
 export { queryHealthRange } from './health/callable';
+export { getTrainingGoalsProgress } from './training-goals/callable';
 export { saveTimelineNoteCallable as saveTimelineNote, deleteTimelineNoteCallable as deleteTimelineNote } from './timeline-notes/callable';
 export { queryActivityHealthRange } from './health/activity-callable';
 export {

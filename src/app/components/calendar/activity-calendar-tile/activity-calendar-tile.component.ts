@@ -1,3 +1,6 @@
+import { TrainingGoalsService } from '../../../services/training-goals.service';
+import { TrainingGoalsButtonComponent } from '../../training-goals/training-goals-button.component';
+import { trainingGoalMarkers } from '@shared/training-goals';
 import type { EventRead } from '@shared/event-read';
 import {
   ChangeDetectionStrategy,
@@ -71,7 +74,7 @@ interface ActivityCalendarTilePlansState {
 @Component({
   selector: 'app-activity-calendar-tile',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarGridComponent, CalendarDayContextComponent],
+  imports: [TrainingGoalsButtonComponent, SharedModule, ActivityCalendarGridComponent, CalendarDayContextComponent],
   templateUrl: './activity-calendar-tile.component.html',
   styleUrls: ['./activity-calendar-tile.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -163,6 +166,11 @@ export class ActivityCalendarTileComponent {
       shareReplay({ bufferSize: 1, refCount: true }),
     );
   });
+  readonly goalsService = inject(TrainingGoalsService);
+  readonly goalOwner = computed(() => this.hasTrainingPlanningUIAccess() ? this.user()?.uid : null);
+  readonly goalsState = toSignal(toObservable(this.goalOwner).pipe(switchMap(uid => this.goalsService.watch(uid))),
+    { initialValue: { status: 'loading' as const, goals: [] } });
+  readonly goalsByDate = computed(() => trainingGoalMarkers(this.goalsState().goals));
   readonly eventState = toSignal(toObservable(this.eventsSource).pipe(switchMap(source => source)),
     { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
   private readonly plansSource = computed(() => {
@@ -273,6 +281,11 @@ export class ActivityCalendarTileComponent {
     if (!report) return;
     report(this, this.notesRange());
     onCleanup(() => report(this, null));
+  });
+  private readonly goalProgressInvalidation = effect(() => {
+    const events = this.eventState();
+    const uid = this.goalOwner();
+    if (uid && events.status === 'ready') this.goalsService.invalidateProgress(uid);
   });
   readonly hasError = computed(() => this.eventState().status === 'error');
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (

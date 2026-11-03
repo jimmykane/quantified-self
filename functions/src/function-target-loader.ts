@@ -259,6 +259,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   projectCOROSConnectionOnTokenWrite: () => module.require('./service-connection-account-projection') as FunctionModule,
   queryActivityHealthRange: () => module.require('./health/activity-callable') as FunctionModule,
   queryHealthRange: () => module.require('./health/callable') as FunctionModule,
+  getTrainingGoalsProgress: () => module.require('./training-goals/callable') as FunctionModule,
   receiveGarminAPIUserPermissions: () => module.require('./garmin/auth/wrapper') as FunctionModule,
   refreshCOROSAPIRefreshTokens: () => module.require('./coros/tokens') as FunctionModule,
   refreshGarminAPIRefreshTokens: () => module.require('./garmin/tokens') as FunctionModule,

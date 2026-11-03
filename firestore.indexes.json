@@ -1789,6 +1789,10 @@
     }
   ],
   "fieldOverrides": [
+    {"collectionGroup": "trainingGoalProposals", "fieldPath": "expireAt", "ttl": true, "indexes": []},
+    {"collectionGroup": "trainingGoalProposals", "fieldPath": "goal", "ttl": false, "indexes": []},
+    {"collectionGroup": "trainingGoalProposals", "fieldPath": "preview", "ttl": false, "indexes": []},
+    {"collectionGroup": "trainingGoalProposals", "fieldPath": "result", "ttl": false, "indexes": []},
     { "collectionGroup": "stripeBillingJobs", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     {"collectionGroup": "events", "fieldPath": "stats", "indexes": []},
     {"collectionGroup": "activities", "fieldPath": "stats", "indexes": []},

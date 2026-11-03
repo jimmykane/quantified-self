@@ -517,3 +517,19 @@ describe('standalone calendar rest review boundary', () => {
     }
   });
 });
+
+ describe('goal-only Assistant reviews', () => {
+  const after = { name: 'Race', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+    sportScope: 'all', sport: null, objective: 'Finish', planName: null, weeklyTarget: null };
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 0, requiresConfirmation: true,
+    summary: 'Create goal', changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], providerPreviews: [], goalReview: { before: null, after } };
+  it('requires the full review, rejects private fields and never mixes provider or recipe changes', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ goalReview: undefined }, { permissionMode: 'combined' }, { workoutReviews: [] },
+      { goalReview: { before: null, after: { ...after, planId: 'PRIVATE' } } },
+      { goalReview: { before: null, after: { ...after, targetLocalDate: '2026-02-30' } } },
+      { changes: [...preview.changes, { index: 1, kind: 'create-workout', summary: 'Not approved' }] }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});

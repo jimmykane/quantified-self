@@ -233,6 +233,7 @@ export interface AssistantContentProposalPreview {
 }
 
 export interface AssistantTrainingProposalPreview {
+  goalReview?: import('./training-goal-review').TrainingGoalReview;
   workoutReviews?: import('./assistant-workout-review').AssistantWorkoutReview[];
   phaseReview?: import('./training-plans').TrainingPlanPhaseReviewV1;
   restDayReview?: import('./training-plans').TrainingPlanRestDayReviewV1;

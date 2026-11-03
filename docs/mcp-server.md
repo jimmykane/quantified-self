@@ -3099,3 +3099,41 @@ provider-only cross-sport window authorization and write-reservation certificate
 `sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
 schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
 activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.
+
+### Calendar Training goals
+
+Five additive tools extend the existing Training surface without changing any registered tool schema:
+
+| Tool | Permission | Contract |
+| --- | --- | --- |
+| `list_training_goals` | `training-plans:read` | Current (default), archived or all goals; 25 per page, opaque revision-bound 15-minute cursor |
+| `get_training_goal` | `training-plans:read` | One complete authored goal with opaque goal/plan references and explicit unavailable plan link |
+| `get_training_goals_progress` | Training read + `metrics:read` | 1–25 selected goal references, explicit local date/IANA timezone, optional week start; identity-free weekly values and canonical display text |
+| `preview_training_goal_change` | Training read + `training-plans:write` | Full authored replacement; null reference/revision 0 creates; existing reference/current revision edits; complete before/after review |
+| `apply_training_goal_change` | Training read + Training write | Only an opaque proposal reference; native-host approved, revision/grant/expiry/owner-bound, idempotent Apply |
+
+Authored projection includes name, event/milestone/ongoing kind, active/paused/completed/archived lifecycle,
+high/normal/low priority, local start/target date, sport or family, objective, optional plan link and weekly target.
+Canonical seconds/metres and integer workout/day counts remain distinct. Goal progress excludes event/activity
+identities, exact activity timestamps, source/provider/device data, titles and streams. It counts actual recordings,
+not scheduled workouts; incomplete imports and missing values remain explicitly incomplete. Completed achievements
+are user-declared. A plan deletion retains the independent goal; a plan move never shifts the goal date.
+
+Goals have separate revisions from workout schedules. Preview stores only a private owner/connection-bound proposal;
+Apply checks the original consent generation, current goal revision, linked-plan identity and account deletion guard
+inside its transaction. Replaying Apply returns the original result. Changing goals does not authorize sending,
+editing a plan or regenerating the charged daily suggestion. No new OAuth scope is introduced. Consent descriptions,
+Settings (which share those descriptions), Help, Policies, public MCP content and bundled Training/cross-domain
+instructions include goals. Activity tools and their grants are unchanged.
+
+The built-in Assistant advertises read and focused preview tools only. Its model never gets public Apply; the app
+renders the full goal review and confirms through `applyAssistantTrainingProposal`, retaining the server-owned
+conversation generation. Goal text is untrusted context. Goal writes are distinct from changes to plans, workout
+recipes or provider delivery. An absent advertised tool is a permission/catalog availability issue, not evidence that
+no goals exist. External MCP hosts own native approval; automatic approval settings cannot be detected by the server.
+
+These tools require a backend release, developer refresh/rescan of the registered app, and refreshed client catalog.
+The digest-bound pending change includes these additions and preserves earlier unpromoted additions. The registered
+baseline and transition history are unchanged. Bundled-skill validation uses a temporary fixture profile; run
+`npm run plugin:sync` separately after release/rescan. Detailed storage, progress bounds and daily event advice live
+in `docs/training-workspace.md#calendar-training-goals`.

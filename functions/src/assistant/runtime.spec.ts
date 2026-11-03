@@ -665,6 +665,35 @@ describe('Training preview model-tool selection', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never describe a partial subtotal as the complete duration');
   });
 
+  it('routes explicit goal edits to the focused app-owned review, without workout or Apply tools', async () => {
+    for (const prompt of ['Add a goal to run three days per week.', 'Pause my marathon goal.', 'Change my goal priority to high.', 'Mark my milestone completed.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_goal_change');
+    }
+    expect(selectAssistantTrainingPreviewTool('Create a Running workout for my marathon goal.')).not.toBe('preview_training_goal_change');
+    expect(selectAssistantTrainingPreviewTool('Do not change my goal. Create a Running workout.')).not.toBe('preview_training_goal_change');
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_goal_change', title: 'Goal change', description: 'Preview goal', inputSchema: { type: 'object' as const } });
+    const after = { name: 'Marathon', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+      sportScope: 'all', sport: null, objective: 'Finish', planName: null, weeklyTarget: null };
+    const preview = { proposalRef: 'opaque-goal', expiresAtMs: Date.parse('2026-11-03T12:15Z'), permissionMode: 'schedule',
+      scheduleRevision: 0, requiresConfirmation: true, summary: 'Create goal.',
+      changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal.' }], providerPreviews: [], goalReview: { before: null, after } };
+    callTool.mockResolvedValue({ structuredContent: preview });
+    const reviews = vi.fn(); session.getTrainingWorkoutReviews = reviews;
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-11-03T12:00Z'), generateAnswer: async input => {
+        expect(input.tools.some(tool => tool.name.startsWith('apply_'))).toBe(false);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_goal_change']);
+        const { planName: _plan, ...goal } = after;
+        await input.tools.find(tool => tool.name === 'preview_training_goal_change')!.execute({ goalRef: null, expectedRevision: 0, goal: { ...goal, planRef: null } });
+        return { answer: 'Review and apply your goal in QS.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Add a marathon goal for November 8.',
+      timeZone: 'UTC', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.goalReview).toEqual(preview.goalReview); expect(reviews).not.toHaveBeenCalled();
+  });
+
   it('prepares an independent calendar rest review with no model Apply tool', async () => {
     const { session, callTool } = createSession();
     session.tools.push(...(['preview_training_calendar_rest_day', 'preview_training_rest_days'] as const)

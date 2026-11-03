@@ -155,6 +155,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect(await store.begin(uid, { requestId: latest.requestId, controls })).toEqual({ response: latest });
     await expect(store.begin(uid, { requestId: 'large-request-0', controls })).rejects.toMatchObject({ code: 'failed-precondition' });
   }, 30_000);
+  it('fences goal edits before charging and keeps charged event guidance after later edits', async () => {
+    const uid = `daily-goals-${randomUUID()}`, now = new Date('2026-11-03T09:00Z');
+    const user = db.doc(`users/${uid}`); await user.set({});
+    const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-11-03', 'Europe/Athens') };
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: saved } });
+    const state = user.collection('trainingGoalState').doc('current'); await state.set({ revision: 1 });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    const token = (await store.begin(uid, saved))!;
+    await state.update({ revision: 2 });
+    await expect(store.charge(uid, '2026-11-03', token, false, 1)).rejects.toMatchObject({ code: 'aborted' });
+    expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-03.charged')).toBe(false);
+    await store.finish(uid, '2026-11-03', token, 'failed');
+    const current = (await store.begin(uid, saved))!;
+    await store.charge(uid, '2026-11-03', current, false, 2);
+    const advice = { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-11-03', observedAt: now.toISOString(),
+      rationale: 'Follow the event plan.', events: [{ name: 'Race', localDate: '2026-11-03' }], usedContext: [], missingContext: [], draft: null, previousLoads: [] as [] };
+    await state.update({ revision: 3 });
+    await store.finish(uid, '2026-11-03', current, 'ready', saved.controls, advice);
+    expect((await store.read(uid)).status.result).toEqual(advice);
+    expect(await store.begin(uid, saved)).toBeNull();
+  }, 30000);
   it('claims one included daily result after noon across devices, preserves preferences and never touches Assistant quota', async () => {
     const uid = `daily-suggestion-${randomUUID()}`;
     let now = new Date('2026-10-30T13:00Z');

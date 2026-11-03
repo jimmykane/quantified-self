@@ -91,6 +91,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly summary = computed(() => {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
+      if (value.result.kind === 'event-advice') return `${value.result.events.map(event => event.name).join(' · ')} · Event-day guidance ready`;
       const draft = value.result.draft;
       return draft ? `${draft.title} · ${dayWorkoutReviewTiming(draft, this.users.user()?.settings?.unitSettings).summary}` : 'Rest day suggested';
     }
@@ -255,6 +256,10 @@ export class DailyWorkoutSuggestionComponent {
     } finally { if (this.current(sequence, uid)) this.loading.set(false); }
     if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.daily.event(uid, 'reviewed', 'ready');
+    if (value.result.kind === 'event-advice') {
+      await this.generation.openEventGuidance(uid, value.result, () => this.current(sequence, uid));
+      return;
+    }
     await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result, dailyDelivery: this.deliveryPreferences(),
       onAdded: kind => {
         if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;

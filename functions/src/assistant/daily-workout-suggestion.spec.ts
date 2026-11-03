@@ -61,6 +61,33 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('prepares event guidance once, without a workout or provider context, and replays it after goal edits', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 4, eventGoals: [{ name: 'Marathon', localDate: dailyControls.localDate }] });
+    deps.generate.mockResolvedValue({ kind: 'event-advice', rationale: 'Follow your practiced event routine.' } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toMatchObject({ state: 'ready', result: { version: 1, kind: 'event-advice', draft: null, previousLoads: [] } });
+    expect(deps.generate.mock.calls[0][1]).toMatchObject({ adviceOnly: true });
+    expect(deps.generate.mock.calls[0][1].evidence).not.toHaveProperty('deliveryProviders');
+    expect(deps.store.charge).toHaveBeenCalledWith('owner', dailyControls.localDate, 'lease', false, 4);
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 5, eventGoals: [] });
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(await runDailyWorkoutSuggestion({ ...input, resultVersion: undefined, action: 'status' }, identity, deps)).toEqual({ localDate: dailyControls.localDate, state: 'failed' });
+  });
+  it('does not spend an old client’s daily receipt on unsupported event guidance', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 1, eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+    expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).state).toBe('failed');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+  });
+  it.each(['planned', 'completed', 'rest-day'] as const)('preserves %s coverage ahead of event guidance', async coverage => {
+    const deps = dependencies(); deps.coverage.mockResolvedValue(coverage);
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 1, eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+    expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 }, identity, deps)).state).toBe(coverage);
+    expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+  });
   it('requires authentication, App Check, Pro and legal access before accessing private state', async () => {
     const deps = dependencies();
     await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, {}, deps)).rejects.toMatchObject({ code: 'unauthenticated' });

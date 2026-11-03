@@ -325,6 +325,19 @@ describe('AssistantPageComponent', () => {
   });
 
 
+  it('shows a complete goal review without saving or sending during hydration', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], goalReview: { before: null, after: {
+        name: '<script>Marathon</script>', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+        sportScope: 'all', sport: null, objective: 'Finish comfortably', planName: null, weeklyTarget: null } } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review calendar goal"]') as HTMLElement;
+    expect(review.textContent).toContain('Marathon'); expect(review.textContent).toContain('Finish comfortably');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal(); expect(component.trainingProposalResult()).toBe('Goal saved.');
+  });
+
   it('shows calendar rest before/after without a plan and does not apply on hydration', () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],

@@ -10026,3 +10026,62 @@ Before merging a Training change, confirm:
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.
 - [ ] Focused tests, Functions build, frontend build, sports-lib build, and `git diff --check` pass.
+
+## Calendar Training goals
+
+Goals are owner-authored intentions shared by the full Calendar, Dashboard calendar, MCP, Assistant and workout
+context. They are independent of Training plans. `shared/training-goals.ts` owns the strict version-1 fields:
+Event and Milestone have a fixed target local date; Ongoing has no target date and may have one weekly target.
+All support a start date, canonical sport/family or all sports, High/Normal/Low priority, objective and optional plan
+link. Lifecycle is active/paused/completed/archived; restore sets active. Achievements remain manual. Plan movement
+never moves goal dates; deletion preserves the goal and displays an unavailable link. Calendar markers use the target
+date, or only the start date for ongoing goals. Creating an event from a future calendar day starts its preparation
+today by default. Shared Material goal surfaces reuse the searchable sport picker and canonical unit formatting.
+
+Owner SDK CRUD writes `users/{uid}/trainingGoals/{id}` and `trainingGoalState/current` atomically, with per-goal
+revision, a separate goals revision and bounded retained count (200 including archived). Rules reject stale, foreign,
+extra-field, invalid-date and non-atomic writes. Goal edits never bump the workout schedule revision. Stable IDs and
+exact revision+content replay make uncertain browser saves retryable. Account deletion fences both SDK and backend
+access; recursive owner cleanup covers goals, state and private `trainingGoalProposals`. Proposals expire for Apply
+after 15 minutes and have a 30-day `expireAt` TTL plus index exemptions. No backfill is required.
+
+Weekly progress is computed by `getTrainingGoalsProgress`, authenticated and App Check protected in europe-west2
+(256 MiB, 30 seconds, max 100 instances). The frontend shares one bounded owner goal listener and one coalesced progress
+request across consumers, caches the current week for 60 seconds, and invalidates through existing calendar activity
+and history-import updates. Midnight advances the displayed local date without a tab-focus generation request.
+Active imports return incomplete progress without scanning activity history. Progress uses the displayed IANA timezone and saved calendar week start. A partial first week is labelled and its
+full target is retained, never silently prorated.
+
+The backend uses one bounded transaction for all goals: at most 1,501 canonical child activity summaries, with a
+two-day UTC margin and exact local-date filtering, and parent event classification in batches of 100. It selects only
+recording linkage, date, sport, Duration and Distance, plus parent merge classification. Workouts count unique parent
+recordings; days count unique local days; duration/distance sum matching child sport portions. Duplicate child IDs are
+removed. Valid manual activity records count, future scheduled workouts do not. Benchmark comparisons are excluded;
+actual multisport recordings remain eligible. Missing source/parent/metric data, an oversized scan or active import
+means incomplete progress, never a zero or met target. There are no per-goal history listeners, stream reads, writes,
+provider calls or persistent progress snapshots.
+
+Goals is a default-on workout source subordinate to Training context. Active goals matching the chosen sport are
+ordered by priority then nearest target date; undated goals follow dated peers. Goal objectives and progress guide
+workout selection without changing saved sport/routine behavior. Recovery, explicit rest and planned/completed
+coverage take precedence; the prompt prohibits target-driven catch-up overload. Every active event on today's date
+is considered even if its sport differs, preventing an extra unrelated workout on a race day.
+
+An uncovered event date produces versioned private event advice, never a workout draft or provider action. It uses the
+same sleep/import deferrals, daily lease, admission and token telemetry as an ordinary daily suggestion. Admission
+checks the collected goals revision in the charging transaction; edits before charge abort safely, while edits after
+charge preserve the exact daily result. There is still only one included result per local day, including a failed
+charged result. Clients advertise `resultVersion: 2`; older clients cannot generate or deserialize advice. The stored
+receipt format stays unchanged, and browser cache v2 separates result capabilities. No daily receipt is reset by a
+schema/capability transition, goal edit or progress update. Manual generation remains a requested workout/rest flow.
+
+MCP impact is implemented, not deferred: additive goal list/detail/progress and preview/apply tools use existing
+Training grants, with additional metrics consent for progress. The Assistant exposes read/preview only, renders the
+complete before/after fields, and uses its existing app-owned Apply endpoint. Opaque references, revisions, consent
+generation, deletion, expiry and linked-plan identity are rechecked at Apply. Goals grant neither plan edits nor
+provider delivery. See `docs/mcp-server.md` for the public contract and release lifecycle.
+
+Release requires the frontend, affected `generateDayWorkout`, `assistantChat`, `applyAssistantTrainingProposal`,
+`getAssistantConversation`, `resetAssistantConversation`, `mcpApi`, the new `getTrainingGoalsProgress`, matching Firestore Rules and proposal TTL/index exemptions. Deployments
+and registered-client rescans require their own authorization. Unit, Rules and demo-emulator tests cover the model,
+multisport/DST progress, shared UI, consent/revision/idempotency and one-result-per-day behavior.

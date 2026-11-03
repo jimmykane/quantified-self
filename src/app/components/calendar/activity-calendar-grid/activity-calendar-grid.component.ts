@@ -11,6 +11,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayTimelineNotes } from '../../../helpers/calendar-timeline-notes.helper';
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 import type { CalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
+import type { TrainingGoalMarker } from '@shared/training-goals';
 
 @Component({
   selector: 'app-activity-calendar-grid',
@@ -36,6 +37,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   @Input() plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay | null = null;
   @Input() plannedWorkoutsComplete = true;
   @Input() planPhasesByDate: CalendarPlanPhases | null = null;
+  @Input() goalsByDate: Record<string, TrainingGoalMarker> = {};
   @Output() daySelected = new EventEmitter<ActivityCalendarDayViewModel>();
   private readonly hapticsService = inject(AppHapticsService);
 
