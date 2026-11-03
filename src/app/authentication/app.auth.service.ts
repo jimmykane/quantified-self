@@ -9,6 +9,8 @@ import { Firestore, clearIndexedDbPersistence, terminate } from 'app/firebase/fi
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
+import { APP_STORAGE } from '../services/storage/app.storage.token';
+import { HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX, parseHistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
 import {
@@ -41,6 +43,7 @@ export class AppAuthService {
   ]);
 
   private readonly sessionCleanup = inject(AuthSessionCleanupService);
+  private readonly storage = inject(APP_STORAGE);
   private firestore = inject(Firestore);
   private auth = inject(Auth);
   private readonly window = inject(AppWindowService);
@@ -248,9 +251,30 @@ export class AppAuthService {
     try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY); }
     catch { /* Blocked browser storage must not prevent sign-out cleanup. */ }
     await terminate(this.firestore);
-    this.localStorageService.clearAllStorage();
+    this.clearStorageForSignOut();
     await clearIndexedDbPersistence(this.firestore);
     this.redirectToLogin();
+  }
+
+  private clearStorageForSignOut(): void {
+    // Retain only account/provider-scoped dismissal receipts, never cached import or activity data.
+    const dismissed = new Map<string, string>();
+    try {
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
+        if (!key?.startsWith(HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX)) continue;
+        const receipt = parseHistoryImportResultDismissal(this.storage.getItem(key));
+        const suffix = receipt ? `.${encodeURIComponent(receipt.serviceName)}` : '';
+        if (receipt && key.endsWith(suffix) && key.length > HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX.length + suffix.length) {
+          dismissed.set(key, JSON.stringify(receipt));
+        }
+      }
+    } catch { /* Unreadable preferences must not prevent private-data cleanup. */ }
+    this.localStorageService.clearAllStorage();
+    for (const [key, receipt] of dismissed) {
+      try { this.storage.setItem(key, receipt); }
+      catch { /* Blocked preference writes must not prevent sign-out. */ }
+    }
   }
 
   async fetchSignInMethods(email: string) {

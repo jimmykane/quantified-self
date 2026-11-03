@@ -117,6 +117,7 @@ describe('help.content', () => {
       'refresh is disabled until that check finishes', '**Hide from dashboard**', '**Show on dashboard**',
       'remembered for your account on this browser', 'Hiding the cards does not stop an import',
       '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
+      'Finished results, including failed or skipped work', 'including after signing out and back in',
       '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
       '**Waiting for history retries**', 'quiet clock icon instead of a spinner',
       "**History import** dialog in Connections directly", 'same counts, stages and explanations',

@@ -1020,12 +1020,14 @@ capability counts remain items or requests, with no percentage, ETA or complete-
 **Waiting to retry Garmin requests**. Garmin counters are **requests scheduled**, including planned Health windows,
 not records received or confirmed HTTP submissions. The shared card explicitly says Garmin sends records separately
 and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
-Requested/processed
-context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
+All finished results, including failures/skips,
+stay prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
 counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
-browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
+browser and clears it from the shared header/panel/Dashboard. Logout retains only validated dismissal receipt fields,
+so they survive signing out and back in while other browser data and Firestore persistence are cleared. Details and
+retry controls remain in Connections after notification dismissal or expiry.
 New runs, resumed work and new terminal results appear again. Active work, reconnect guidance and unavailable
-status cannot be dismissed. Undismissed issues remain until superseded. Read failures are unavailable, not zero.
+status do not expire and cannot be dismissed. Undismissed issues remain until expiry or supersession. Read failures are unavailable, not zero.
 Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
 details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
 feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
