@@ -157,6 +157,10 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
 }
 export const projectActivitySendDelivery = onDocumentWritten({ document: 'activitySyncQueue/{queueId}', region: 'europe-west2', memory: '256MiB', timeoutSeconds: 60, retry: true }, async event => {
   if (!event.data?.after.exists) return;
+  // Admission commits ownership atomically; a later linked write has its own retryable event.
+  const data = event.data.after.data();
+  if (!data?.sendBatchID || !data.sendRowID || !data.userID) return;
+  // Linked events still read current state, including when delivered out of order.
   await projectSendDelivery(event.data.after.ref);
 });
 

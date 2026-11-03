@@ -795,6 +795,15 @@ an exact, unambiguous saved athlete reference; absent references lead to effort 
 thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
 repetition endings, rests and unknown canonical duration remain unchanged.
 
+For generated rep-based strength, `dayWorkoutReviewTiming` leads both the review and the ready Today row with the
+AI planning estimate when available; otherwise it states that total session duration is unknown. The review keeps the
+canonical partial subtotal below as a **Timing breakdown**, explaining that rep-based sets and transitions add time.
+Fully timed strength and endurance still lead with their canonical prescription totals. This presentation does not
+alter the session, generate another suggestion, change the daily/Assistant allowance or persist an AI time estimate.
+MCP impact review: no wire impact. Existing prescription-analysis reads still expose exact subtotals and unknown
+repetition durations; recipes, strict proposal/confirmation contracts, scopes, consent and provider payloads are unchanged.
+This frontend-only clarification requires no backend, Rules/index deployment or plugin refresh.
+
 Model output uses a sport-specific JSON shape derived from the existing MCP Training recipe/strength schemas.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
 shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
