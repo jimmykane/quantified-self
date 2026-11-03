@@ -1959,6 +1959,16 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 - If the app says a merge may still be finishing, wait a moment and refresh the event list. The selected rows remain selected, and retrying the same selection and merge type safely reuses any existing result.
 - Benchmark comparison requires exactly two activities for the selected pair.
 
+## Device notifications
+
+Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. The initial feature provides a test notification; automatic notification categories are not available yet.
+
+- On iPhone or iPad, add Quantified Self to your Home Screen and open it there before enabling notifications.
+- Permission and enablement are separate for each device and for the production and beta sites. Beta supports tests; future automatic notifications are reserved for production.
+- Tests show only a generic message and open Notifications settings on the same site. A sent test does not prove that your device displayed it; check notification permissions, Focus/Do Not Disturb and OS settings if it does not appear.
+- Tests are limited to one per minute and ten per day across your account. If registration expires or the notification key changes, enable notifications again.
+- **Disable on this device** stops this browser subscription. Sign-out also attempts device cleanup; signing into another account requires a fresh opt-in. Already delivered notifications cannot be recalled. If browser permission is blocked, allow it in your browser or device settings and return to QS.
+
 ## Browser compatibility
 
 Some upload and compression behavior depends on modern browser features. If the app reports that your browser does not support a required feature, update your browser and try again.

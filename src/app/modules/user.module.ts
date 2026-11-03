@@ -1,3 +1,4 @@
+import { PushNotificationSettingsComponent } from '../components/push-notification-settings/push-notification-settings.component';
 import { TrainingLoadSettingsComponent } from '../components/training-load/training-load-settings.component';
 import { NgModule } from '@angular/core';
 import { MaterialModule } from './material.module';
@@ -13,6 +14,7 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
 @NgModule({
     imports: [
         CommonModule,
+        PushNotificationSettingsComponent,
         TrainingLoadSettingsComponent,
         SharedModule,
         MaterialModule,

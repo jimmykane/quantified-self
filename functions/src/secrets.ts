@@ -24,6 +24,7 @@ export const SECRET_PARAMS = {
   SUUNTOAPP_GUIDE_OWNER: defineSecret('SUUNTOAPP_GUIDE_OWNER'),
   SUUNTOAPP_NOTIFICATION_SECRET: defineSecret('SUUNTOAPP_NOTIFICATION_SECRET'),
   SUUNTOAPP_SUBSCRIPTION_KEY: defineSecret('SUUNTOAPP_SUBSCRIPTION_KEY'),
+  WEB_PUSH_VAPID_KEYPAIR: defineSecret('WEB_PUSH_VAPID_KEYPAIR'),
   WAHOOAPI_ALLOWED_FILE_HOSTS: defineSecret('WAHOOAPI_ALLOWED_FILE_HOSTS'),
   WAHOOAPI_CLIENT_ID: defineSecret('WAHOOAPI_CLIENT_ID'),
   WAHOOAPI_CLIENT_SECRET: defineSecret('WAHOOAPI_CLIENT_SECRET'),
@@ -59,6 +60,7 @@ const WAHOO: SecretParam[] = [
  * zero-binding default as well as every non-empty entry below.
  */
 export const FUNCTION_SECRET_BINDINGS = {
+  sendTestPushNotification: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
   createStripePortalLink: [SECRET_PARAMS.STRIPE_BILLING_KEY],
   'ext-firestore-stripe-payments-createPortalLink': [SECRET_PARAMS.STRIPE_BILLING_KEY],
   stripeBillingWebhook: [SECRET_PARAMS.STRIPE_BILLING_WEBHOOK_SECRET],

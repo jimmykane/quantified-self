@@ -1,3 +1,4 @@
+import { AuthSessionCleanupService } from '../services/auth-session-cleanup.service';
 import { inject, Injectable } from '@angular/core';
 import { combineLatest, firstValueFrom, Observable, of } from 'rxjs';
 import { filter, map, shareReplay, startWith, switchMap, take } from 'rxjs/operators';
@@ -39,6 +40,7 @@ export class AppAuthService {
     'auth/invalid-email',
   ]);
 
+  private readonly sessionCleanup = inject(AuthSessionCleanupService);
   private firestore = inject(Firestore);
   private auth = inject(Auth);
   private readonly window = inject(AppWindowService);
@@ -217,6 +219,7 @@ export class AppAuthService {
   }
 
   async loginWithCustomToken(token: string) {
+    await this.sessionCleanup.run();
     try {
       return await signInWithCustomToken(this.auth, token);
     } catch (e: any) {
@@ -240,6 +243,7 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
+    await this.sessionCleanup.run();
     await signOut(this.auth);
     try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY); }
     catch { /* Blocked browser storage must not prevent sign-out cleanup. */ }

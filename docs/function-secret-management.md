@@ -27,6 +27,7 @@ required; deploying this additional binding/endpoint still requires separate dep
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
+| Browser Web Push | `WEB_PUSH_VAPID_KEYPAIR` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
 | Marketing unsubscribe | `MARKETING_UNSUBSCRIBE_SIGNING_KEY` |
 
@@ -253,3 +254,7 @@ For the subscription-time gift path, use Stripe sandbox subscriptions and test c
 Do not redeploy a pre-migration revision unchanged: it does not declare Secret Manager bindings and would lose access to credentials once `.env` packaging is removed. Roll back application behavior while retaining `functions/src/secrets.ts`, the endpoint bindings, and the upload exclusions, then redeploy all Functions.
 
 To rotate a credential, add a new enabled Secret Manager version, deploy every Function listed for that name in `FUNCTION_SECRET_BINDINGS`, verify the provider path, and only then disable the previous version. Never delete the currently deployed version before replacement Functions are healthy.
+
+## Web Push self-tests
+
+`WEB_PUSH_VAPID_KEYPAIR` is a JSON object containing matching `publicKey` and `privateKey` values, shared by production and beta. Only `sendTestPushNotification` binds it. Keep the private key outside all checkouts; the value-free local template lists the name. The public key is distributed through the disabled-by-default `web_push_vapid_public_key` Remote Config parameter. Follow [Web Push activation and rotation](web-push-notifications.md#configuration-and-release). Secret provisioning, redeployment and Remote Config activation require separate authorization; tests use generated synthetic keys and do not provision a cloud secret.

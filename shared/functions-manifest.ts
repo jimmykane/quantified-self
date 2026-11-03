@@ -30,6 +30,8 @@ export const FUNCTIONS_MANIFEST = {
     previewAdminSubscriptionGift: { name: 'previewAdminSubscriptionGift', region: 'europe-west2' },
     grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
+    sendTestPushNotification: { name: 'sendTestPushNotification', region: 'europe-west2' },
+
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
     getMcpAuthorizationRequest: { name: 'getMcpAuthorizationRequest', region: 'europe-west2' },
