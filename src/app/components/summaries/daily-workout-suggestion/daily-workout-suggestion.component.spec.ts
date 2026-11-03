@@ -18,7 +18,8 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { BehaviorSubject, map, of, Subject } from 'rxjs';
-import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import { provideRouter } from '@angular/router';
 import { TrainingDeliveryService, type TrainingDeliveryView } from '../../../services/training-delivery.service';
 import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
@@ -250,6 +251,22 @@ describe('compact daily workout in Today', () => {
     expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) => button.textContent?.trim() === 'Review')).toBe(false);
     expect(fixture.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+  });
+  it.each([true, false])('shows the rep-based session estimate or unknown total, never its timed subtotal (estimate: %s)', async estimated => {
+    const { fixture, request } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: [
+      { id: 'first', ending: { kind: 'repetitions' as const, repetitions: 8 }, restAfterSeconds: 90 },
+    ] }] };
+    fixture.componentInstance.status.update(value => ({ ...value!, result: { ...value!.result!, kind: 'workout', draft: {
+      title: 'Full-body strength', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }, ActivityTypes.StrengthTraining),
+      ...(estimated ? { estimatedMinutes: { minimum: 20, maximum: 30 } } : {}),
+    } } }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain(estimated
+      ? 'Full-body strength · AI planning estimate: 20m 00s–30m 00s' : 'Full-body strength · Total session duration unknown');
+    expect(fixture.nativeElement.textContent).not.toContain('01m 30s');
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
   });
   it('shows live saved details after acceptance, using the existing prescription summary', async () => {
     const { fixture, workouts, watchCalendarSchedule, request, open, haptics } = setup();

@@ -5,12 +5,22 @@ import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-anal
 import { formatStrengthLoadKg } from '@shared/strength-workout';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
+export function dayWorkoutReviewTiming(draft: DayWorkoutDraft, units?: UserUnitSettingsInterface | null) {
+  const prescription = formatWorkoutPrescriptionSummaryV1(draft.structure, units, draft.structure.sport);
+  const duration = (minutes: number) => resolveUnitAwareDisplayFromValue(DataDuration.type, minutes * 60, units)?.text ?? '';
+  const estimate = draft.estimatedMinutes
+    ? `AI planning estimate: ${duration(draft.estimatedMinutes.minimum)}–${duration(draft.estimatedMinutes.maximum)}` : null;
+  const hasRepetitions = draft.strength?.exercises.some(exercise => exercise.sets.some(set => set.ending.kind === 'repetitions'));
+  return hasRepetitions ? {
+    summary: estimate ?? 'Total session duration unknown',
+    timingDetails: `Timing breakdown: ${prescription}. Rep-based sets and transitions add time.`,
+  } : { summary: prescription, timingDetails: estimate };
+}
+
 export function dayWorkoutReview(draft: DayWorkoutDraft, units?: UserUnitSettingsInterface | null, previousLoads: DayWorkoutLoadSource[] = []) {
   const duration = (seconds: number) => resolveUnitAwareDisplayFromValue(DataDuration.type, seconds, units)?.text ?? '';
   return {
-    summary: formatWorkoutPrescriptionSummaryV1(draft.structure, units, draft.structure.sport),
-    estimate: draft.estimatedMinutes
-      ? `AI planning estimate: ${duration(draft.estimatedMinutes.minimum * 60)}–${duration(draft.estimatedMinutes.maximum * 60)}. Repetition and transition time varies.` : null,
+    ...dayWorkoutReviewTiming(draft, units),
     exercises: draft.strength?.exercises.map(exercise => ({ id: exercise.id, name: exercise.name,
       previouslyPlannedOn: previousLoads.find(source => source.exerciseId === exercise.id)?.localDate ?? null,
       sets: exercise.sets.map((set, index) => `Set ${index + 1}: ${formatWorkoutEndingV1(set.ending, units, undefined, draft.structure.sport)}`

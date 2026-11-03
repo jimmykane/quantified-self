@@ -349,7 +349,8 @@ describe('Firebase Hosting configuration', () => {
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -474,7 +475,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -544,7 +545,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
