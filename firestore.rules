@@ -48,6 +48,33 @@ service cloud.firestore {
         ]);
       allow delete: if false;
       
+      // Private device registrations are leaves, never event/metric or MCP data.
+      match /pushSubscriptions/{installationID} {
+        function validId(value) { return value is string && value.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'); }
+        function validRegistration() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['schemaVersion', 'origin', 'vapidPublicKey', 'generation', 'endpoint', 'keys', 'updatedAt'])
+            && d.keys().hasAll(['schemaVersion', 'origin', 'vapidPublicKey', 'generation', 'endpoint', 'keys', 'updatedAt'])
+            && d.schemaVersion == 1 && validId(installationID) && validId(d.generation)
+            && d.origin in ['https://quantified-self.io', 'https://beta.quantified-self.io']
+            && d.vapidPublicKey is string && d.vapidPublicKey.matches('^B[A-Za-z0-9_-]{86}$')
+            && d.endpoint is string && d.endpoint.size() <= 4096
+            && d.endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.]notify[.]windows[.]com)/[A-Za-z0-9_./~%?=&+:-]+$')
+            && d.keys is map && d.keys.keys().hasOnly(['p256dh', 'auth']) && d.keys.keys().hasAll(['p256dh', 'auth'])
+            && d.keys.p256dh is string && d.keys.p256dh.matches('^B[A-Za-z0-9_-]{86}$')
+            && d.keys.auth is string && d.keys.auth.matches('^[A-Za-z0-9_-]{22}$')
+            && d.updatedAt == request.time;
+        }
+        allow get: if isOwner();
+        allow list: if false;
+        allow create, update: if mayWriteAccount(userID)
+          && !('impersonatedBy' in request.auth.token)
+          && exists(/databases/$(database)/documents/users/$(userID)) && validRegistration();
+        allow delete: if isOwner() && !('impersonatedBy' in request.auth.token);
+        match /{descendants=**} { allow read, write: if false; }
+      }
+      match /pushState/{document=**} { allow read, write: if false; }
+
       // Legal Agreements (Write-Once / Monotonic)
       match /legal/agreements {
         allow read: if request.auth.uid == userID;

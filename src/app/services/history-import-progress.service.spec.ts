@@ -109,13 +109,14 @@ describe('HistoryImportProgressService', () => {
     expect(service.view().items[0].kind).toBe('active');
     expect(getMeta).toHaveBeenCalledTimes(8);
   });
-  it('expires recent terminal context without polling or further metadata reads', () => {
+  it.each(['processed', 'failed', 'skipped'])('expires %s terminal context without polling or further metadata reads', terminalStatus => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionState: 'connected', connectionHistoryImport: status(false)}); TestBed.flushEffects();
+    const projection = {...status(false), steps: [{id: 'activities', resources: ['activities'], status: terminalStatus, count: 7}]};
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: projection}); TestBed.flushEffects();
     expect(service.view().items).toHaveLength(1);
     vi.advanceTimersByTime(HISTORY_IMPORT_RECENT_MS); TestBed.flushEffects();
     expect(service.view().items).toEqual([]);
-    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: 'processed', updatedAtMs: now}]);
+    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: terminalStatus === 'processed' ? 'processed' : 'attention', updatedAtMs: now}]);
     expect(getMeta).toHaveBeenCalledTimes(4);
   });
   it('keeps latest Connections status after dismissing a notification and drops it on disconnect or sign-out', () => {

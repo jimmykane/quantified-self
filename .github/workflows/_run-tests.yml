@@ -77,6 +77,9 @@ jobs:
       - name: Test connection-history coordinator monitoring configuration
         run: npm run test:connection-history-monitoring
 
+      - name: Test Web Push monitoring configuration
+        run: npm run test:web-push-monitoring
+
       - name: Test email delivery and marketing monitoring configuration
         run: npm run test:email-monitoring
 

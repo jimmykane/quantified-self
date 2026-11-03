@@ -78,6 +78,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health status in the exis
         expect((await queue().get()).get('retryCount')).toBe(PROVIDER_MAX_RETRY_COUNT - 1);
         expect((await db.doc(`failed_jobs/${uid}`).get()).exists).toBe(false);
     });
+    it.each(['original', 'replacement'])('checks independent lifecycle fields before publishing %s state', async generation => {
+        await seed();
+        const connection = db.doc(`users/${uid}/meta/connection`);
+        const secondConnection = db.doc(`users/${uid}/meta/secondConnection`);
+        await secondConnection.set({ generation });
+        const written = await updateHealthSyncState(uid, provider, { status: 'ready' }, 20_000, {
+            db,
+            requiredDocumentFieldValues: { documentRef: connection, expectedFields: { generation: 'original' } },
+            additionalRequiredDocumentFieldValues: [
+                { documentRef: connection, expectedFields: { generation: 'original' } },
+                { documentRef: secondConnection, expectedFields: { generation: 'original' } },
+                { documentRef: queue(), expectedFields: { queueRevision: 'original', processed: false } },
+            ],
+        });
+        expect(written).toBe(generation === 'original');
+        expect((await state().get()).data()).toMatchObject(generation === 'original'
+            ? { status: 'ready', retryPending: false, updatedAtMs: 20_000 }
+            : { status: 'failed', retryPending: true, updatedAtMs: 10_000 });
+        expect((await queue().get()).get('processed')).toBe(false);
+    });
     it.each(['queueRevision', 'processingOwner'])('does not publish a pending retry after %s changes', async field => {
         await seed();
         await state().set({ provider, status: 'ready', retryPending: false, updatedAtMs: 15_000 });

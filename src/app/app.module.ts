@@ -1,6 +1,6 @@
 import { connectFirestoreEmulator } from 'firebase/firestore';
 import { connectStorageEmulator } from 'firebase/storage';
-import { ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
+import { EnvironmentInjector, ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule, provideClientHydration, withNoHttpTransferCache } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
@@ -185,7 +185,9 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
         return null as unknown as ReturnType<typeof getRemoteConfig>;
       }
 
-      return getRemoteConfig();
+      const config = getRemoteConfig();
+      config.defaultConfig = { ...config.defaultConfig, web_push_enabled: false, web_push_vapid_public_key: '' };
+      return config;
     }),
     { provide: OverlayContainer, useClass: FullscreenOverlayContainer },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
@@ -210,6 +212,9 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       }
 
       // Just inject to ensure browser-only initialization
+      const injector = inject(EnvironmentInjector);
+      void import('./services/app.push.service').then(({ AppPushService }) => injector.get(AppPushService))
+        .catch(() => { /* Optional notifications must not block app startup. */ });
       inject(AppRemoteConfigService);
       inject(AppUpdateService); // Check if we can move this from constructor
       inject(FirebaseAnalyticsTrackingService);

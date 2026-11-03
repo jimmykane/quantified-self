@@ -1377,13 +1377,35 @@ base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'
 `X-Frame-Options: DENY` provides legacy clickjacking protection, `X-Content-Type-Options: nosniff` prevents MIME
 sniffing, and `Referrer-Policy: strict-origin-when-cross-origin` prevents the authorization path and request ID from
 leaking to cross-origin services while retaining the site origin needed by URL-restricted Mapbox tokens.
-A fuller source allowlist is present as `Content-Security-Policy-Report-Only`. It covers the same-origin app plus the
-specific Firebase, Google authentication/reCAPTCHA, Mapbox, analytics, and Sentry origins the SPA currently uses. It
-does not use `unsafe-eval` and declares `script-src-attr 'none'`; violations are reported rather than blocked during
-this rollout stage. The source is already compatible: the theme bootstrap is a same-origin asset and Angular template
-bindings implement UI event handlers instead of inline event attributes.
-The narrower `wasm-unsafe-eval` source is present because the app uses Mapbox Standard Style WebAssembly; it does not
-permit JavaScript string evaluation.
+Hosting does not send `Content-Security-Policy-Report-Only` while there is no reporting destination. Safari logs an
+error for a report-only policy without `report-to`, and also warns that `frame-ancestors` is ignored in report-only
+mode. The enforced policy above retains the framing restriction. These warnings do not block authentication; a login
+delay must be investigated separately from the console noise.
+
+The candidate source allowlist below is retained for a future monitored rollout; it is not an active response header.
+It covers the same-origin app plus the specific Firebase, Google authentication/reCAPTCHA, Mapbox, analytics, and Sentry
+origins currently used. Revalidate those origins against the app at rollout time.
+
+```text
+default-src 'self';
+base-uri 'self';
+connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+font-src 'self' data:;
+form-action 'self';
+frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+img-src 'self' data: blob: https:;
+manifest-src 'self';
+media-src 'self' blob:;
+object-src 'none';
+script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+script-src-attr 'none';
+style-src 'self' 'unsafe-inline';
+worker-src 'self' blob:
+```
+
+The candidate does not use `unsafe-eval` and declares `script-src-attr 'none'`. The theme bootstrap is a same-origin
+asset and Angular template bindings implement UI event handlers instead of inline event attributes. The narrower
+`wasm-unsafe-eval` source supports Mapbox Standard Style WebAssembly without permitting JavaScript string evaluation.
 
 Production and beta builds keep Angular's `optimization.styles.inlineCritical` disabled. The optimizer otherwise emits
 an inline stylesheet `onload` handler into `index.csr.html`, which is incompatible with `script-src-attr 'none'`.
@@ -1395,23 +1417,32 @@ runtime component styles and Hosting cannot mint a fresh per-response nonce. Do 
 does not provide the protection of a request-specific nonce. Revisit this only with an architecture that can supply a
 fresh nonce to both the response policy and Angular.
 
-The report-only policy currently reports to browser developer tools; there is no server-side CSP report collector.
-Before moving its source directives into the enforced policy:
+Before sending the candidate source directives as report-only or moving them into the enforced policy:
 
-1. deploy this change to beta in the normal, separately approved release workflow;
-2. start from a real `/oauth/authorize` request and exercise signed-out login, Firebase authentication, consent details,
-   approve, cancel, and the client redirect;
-3. in the same tab, exercise Firestore/callable access, App Check/reCAPTCHA, a Mapbox view, analytics, and error reporting
+1. configure a real CSP reporting destination and the matching `Reporting-Endpoints` / `report-to` headers; verify
+   browser support and receipt of reports before claiming monitoring coverage. Keep `frame-ancestors` in the enforced
+   policy only. Do not add a placeholder endpoint or silently enable source blocking to suppress Safari warnings;
+2. deploy the reporting configuration and candidate policy to beta in the normal, separately approved release workflow;
+3. start from a real `/oauth/authorize` request and exercise signed-out login, Firebase authentication, consent details,
+   approve, cancel, and the client redirect in Safari as well as the other supported browsers;
+4. in the same tab, exercise Firestore/callable access, App Check/reCAPTCHA, a Mapbox view, analytics, and error reporting
    so client-side navigation is covered;
-4. review every `Content-Security-Policy-Report-Only` browser violation and add an origin only when a repository feature
-   and observed request justify the narrowest source;
-5. repeat with no unexplained violations, then enforce the candidate policy on beta first; and
-6. repeat the flow on beta before applying the same enforced policy to production.
+5. review every `Content-Security-Policy-Report-Only` violation and add an origin only when a repository feature and
+   observed request justify the narrowest source;
+6. repeat with no unexplained violations, then enforce the candidate policy on beta first; and
+7. repeat the flow on beta before applying the same enforced policy to production.
 
 Keep the `/mcp/authorize` and `/login` header entries identical across production and beta, and keep both routes out of
-the service worker navigation fallback. When a frontend dependency introduces a new network, frame, worker, image, or
-script origin, update the report-only allowlist and its Hosting regression test in the same change. See the
-[Angular CSP guidance](https://angular.dev/best-practices/security#content-security-policy),
+the service worker navigation fallback. The Hosting regression test guards the enforced headers and the absence of an
+unconfigured report-only policy; update that guard with reporting validation when introducing a real destination.
+When a frontend dependency introduces a new network, frame, worker, image, or script origin, review the candidate
+allowlist here and any active source policy together.
+
+MCP impact: removing the unconfigured report-only header changes browser diagnostics only. The enforced CSP, OAuth
+flow, consent, scopes, tool schemas, and data projections are unchanged; no registered-contract update, app rescan,
+or plugin rebuild is required.
+
+See the [Angular CSP guidance](https://angular.dev/best-practices/security#content-security-policy),
 [Firebase Hosting header configuration](https://firebase.google.com/docs/hosting/full-config#headers), and
 [reCAPTCHA CSP allowlist](https://developers.google.com/recaptcha/docs/faq#im_using_content-security-policy_csp_on_my_website_how_can_i_configure_it_to_work_with_recaptcha).
 The analytics and map entries follow the

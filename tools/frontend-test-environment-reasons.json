@@ -59,6 +59,10 @@
     "environment": "angular",
     "reason": "Compiles the real Health overview and history renderers with TestBed to verify signal inputs, chart bindings, category navigation, focus restoration and haptic feedback."
   },
+  "src/app/components/push-notification-settings/push-notification-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles notification Settings with real Material buttons and spinner bindings to verify accessible permission states, pending actions and single-owner haptic feedback."
+  },
   "src/app/components/services/connection-history/connection-history.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
@@ -126,6 +130,10 @@
   "src/app/services/app-check-diagnostics.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
+  },
+  "src/app/services/app.push.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection, Angular effects and DestroyRef to verify owner-isolated device subscriptions, browser permissions, key rotation and Auth cleanup with mocked Firebase boundaries."
   },
   "src/app/services/benchmark-rr-analysis.service.spec.ts": {
     "environment": "angular",

@@ -20,6 +20,7 @@ import { selectCalendarVisibleScheduledWorkouts, TrainingPlansService } from '..
 import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
 import { trainingPlansWorkoutRoute } from '../../../helpers/training-plans-navigation.helper';
 import { dailyWorkoutDeliveryPreferences } from '../../../helpers/daily-workout-delivery.helper';
+import { dayWorkoutReviewTiming } from '../../../helpers/day-workout-review.helper';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
 
 @Component({ selector: 'app-daily-workout-suggestion', standalone: true,
@@ -91,7 +92,7 @@ export class DailyWorkoutSuggestionComponent {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
       const draft = value.result.draft;
-      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'Rest day suggested';
+      return draft ? `${draft.title} · ${dayWorkoutReviewTiming(draft, this.users.user()?.settings?.unitSettings).summary}` : 'Rest day suggested';
     }
     const planned = this.plannedWorkouts();
     if (planned.length) {

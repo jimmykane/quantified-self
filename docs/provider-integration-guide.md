@@ -174,6 +174,10 @@ Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health q
 
 The Suunto Health worker also emits one safe per-invocation feed summary for Activity, daily statistics, and Recovery request attempts/time and source-record write outcomes. A compact webhook notification mask is unioned when Activity and Recovery share a queue row; a notification that cannot merge before the worker claims the row gets a deterministic follow-up. The mask changes telemetry only, not which feeds are fetched. Compare those summaries with whole-worker telemetry and billed Cloud Run time before considering feed-specific pulls. See [Suunto operations](suunto-integration.md#sleep-and-health) for field meanings and the correction/reconciliation limit.
 
+Shared Health record and sync-state transactions overlap independent lifecycle-field reads, drain all results and
+retain ordered mismatch/read-error decisions. See [Health writer behavior](suunto-integration.md#sleep-and-health);
+provider coverage, transaction fences and existing monitoring remain unchanged.
+
 Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
 Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. Garmin workout, Sleep, and Health failed jobs retain original callback URLs under the existing admin-only 30-day expiry for separately authorized recovery; successful/skipped queue rows still clear them. Never log or project those credentials. Legacy DLQ callbacks with removed credentials or expired URLs require bounded Summary Resender recovery. Verify actual ingestion, not merely replay submission. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
@@ -1016,12 +1020,14 @@ capability counts remain items or requests, with no percentage, ETA or complete-
 **Waiting to retry Garmin requests**. Garmin counters are **requests scheduled**, including planned Health windows,
 not records received or confirmed HTTP submissions. The shared card explicitly says Garmin sends records separately
 and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
-Requested/processed
-context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
+All finished results, including failures/skips,
+stay prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
 counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
-browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
+browser and clears it from the shared header/panel/Dashboard. Logout retains only validated dismissal receipt fields,
+so they survive signing out and back in while other browser data and Firestore persistence are cleared. Details and
+retry controls remain in Connections after notification dismissal or expiry.
 New runs, resumed work and new terminal results appear again. Active work, reconnect guidance and unavailable
-status cannot be dismissed. Undismissed issues remain until superseded. Read failures are unavailable, not zero.
+status do not expire and cannot be dismissed. Undismissed issues remain until expiry or supersession. Read failures are unavailable, not zero.
 Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
 details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
 feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
@@ -1541,6 +1547,14 @@ Treat a shared token-refresh lease owned by another worker as expected queue con
 Keep stable identity separate from transport data. A short-lived signed file URL must not be part of a new queue or event ID. When a provider offers a detail endpoint, retain the bounded stable request fields needed to recover a missing or expired URL, validate that the returned record/component matches the queue item, and persist only the refreshed queue URL under deletion and revision guards.
 
 ### Provider retry budgets
+
+Garmin re-encoded copies of retained Suunto hikes have a conflict-only, generation-pinned FIT comparison before
+queue completion. Exact source identity and timestamped GPS evidence can recognize one/two Hiking legs returned
+as one Trekking leg without changing the saved workout or its edits. Original/source/account/queue versions are
+rechecked in the completion transaction; no network work runs inside it. The read is bounded, owner-scoped and
+limited to this verified case; normal imports and other provider/type conflict guards are unchanged. See
+[verified hike copies](garmin-integration.md#verified-re-encoded-suunto-hike-copies) for evidence limits and worker-only
+deployment scope. Existing recorded-import monitoring is **covered/unchanged**; no Help, MCP or Training behavior changes.
 
 Recorded activity/route imports and delivery, Sleep/Health ingestion, Garmin Health backfill and connection-history
 recovery use `PROVIDER_MAX_RETRY_COUNT = 20` and the matching `PROVIDER_CLOUD_TASK_RETRY_CONFIG`. The seven task
@@ -2458,6 +2472,11 @@ terminal review remain protected. See the workspace contract above. Monitoring i
 existing native queue charts, committed retry/manual-review observations and trigger error/latency diagnostics;
 the [delivery runbook](activity-delivery-monitoring.md#workspace-contention-and-initialization-retries) records the
 verification/release boundary. No new queue, lease, scheduler, metric, scope, MCP or Training change is introduced.
+
+Workspace delivery projection also skips unlinked queue events before any Firestore read, using only the event's
+ownership fields. Atomically admitted links produce their own retryable event; linked events retain fresh reads,
+deletion guards, current-state projection and cleanup retries. The same native trigger/cleanup diagnostics cover
+this read reduction, with **unchanged** monitoring. See the workspace contract for the Function-only release boundary.
 
 Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
 

@@ -80,15 +80,18 @@ Garmin Activities, Sleep and Health counters explicitly describe **requests sche
 accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
 separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
 requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
-processing finished**, never that records have finished importing. Requested/processed terminal context
+processing finished**, never that records have finished importing. All terminal context, including failed/skipped results,
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
 does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
 **Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
-current account on this browser. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
+current account on this browser, including after signing out and back in. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
 is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
-timestamp from a retry is a new result. Stale owner/result actions are rejected. Active work, reconnect guidance and
-unavailable status have no result-dismissal action. Connections retains the detailed status and retry controls.
-Until dismissed or superseded, issues remain visible. Counts are per capability's items or requests, never failure totals,
+timestamp from a retry is a new result. Logout preserves only validated account/provider-scoped receipts (provider, opaque
+run ID and result timestamp); it still clears other browser data and Firestore persistence. Blocked browser storage
+cannot guarantee persistence across reloads and must not prevent logout. Stale owner/result actions are rejected.
+Active work, reconnect guidance and unavailable status do not expire and have no result-dismissal action. Connections
+retains the detailed status and retry controls after notification expiry or dismissal.
+Until dismissed, expired or superseded, issues remain visible. Counts are per capability's items or requests, never failure totals,
 and are never summed into a percentage,
 unique-record total, ETA or proof of complete coverage. Combined Sleep/Health capabilities keep one count.
 

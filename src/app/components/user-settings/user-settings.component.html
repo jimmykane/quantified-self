@@ -38,7 +38,7 @@
         @let sectionTemplates = {
           dashboard: dashboardSettings, training: trainingLoadSettings,
           map: mapSettings, charts: chartSettings, units: unitSettings,
-          privacy: privacySettings, account: profileSettings, 'data-management': dataManagementSettings
+          notifications: notificationSettings, privacy: privacySettings, account: profileSettings, 'data-management': dataManagementSettings
         };
         <div class="settings-overview" [attr.inert]="isSaving || isDeleting ? '' : null">
           <section class="settings-theme-control" aria-labelledby="settings-theme-title" id="settings-theme">
@@ -498,6 +498,14 @@
               </mat-form-field>
             </div>
             </div>
+          </div>
+        </ng-template>
+
+        <ng-template #notificationSettings>
+          <div class="settings-panel-body">
+            @defer (when activeSection === 'notifications') {
+              <app-push-notification-settings />
+            }
           </div>
         </ng-template>
 

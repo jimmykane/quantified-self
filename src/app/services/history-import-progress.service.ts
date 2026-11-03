@@ -5,7 +5,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, authState, type FirebaseUserType } from 'app/firebase/auth';
 import { Subject, catchError, combineLatest, defer, distinctUntilChanged, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AppUserService } from './app.user.service';
-import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportItems, buildHistoryImportProgress, type HistoryImportSource,
+import { HISTORY_IMPORT_PROVIDERS, HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX, parseHistoryImportResultDismissal,
+  buildHistoryImportItems, buildHistoryImportProgress, type HistoryImportSource,
   type HistoryImportProgressItem, type HistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { APP_STORAGE } from './storage/app.storage.token';
 
@@ -132,7 +133,7 @@ export class HistoryImportProgressService {
   }
 
   private resultDismissalKey(uid: string, serviceName: string): string {
-    return `history-import.dismissed-result.v1.${encodeURIComponent(uid)}.${encodeURIComponent(serviceName)}`;
+    return `${HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX}${encodeURIComponent(uid)}.${encodeURIComponent(serviceName)}`;
   }
 
   private readDismissedResult(uid: string, serviceName: HistoryImportResultDismissal['serviceName']): HistoryImportResultDismissal | null {
@@ -140,12 +141,8 @@ export class HistoryImportProgressService {
     const override = this.dismissedResults().get(key);
     if (override) return override;
     try {
-      const saved: unknown = JSON.parse(this.storage?.getItem(key) ?? 'null');
-      if (!saved || typeof saved !== 'object') return null;
-      const result = saved as Partial<HistoryImportResultDismissal>;
-      if (result.serviceName !== serviceName || typeof result.runId !== 'string' || !result.runId
-        || result.runId.length > 256 || typeof result.updatedAtMs !== 'number' || !Number.isFinite(result.updatedAtMs)) return null;
-      return {serviceName, runId: result.runId, updatedAtMs: result.updatedAtMs};
+      const result = parseHistoryImportResultDismissal(this.storage?.getItem(key) ?? null);
+      return result?.serviceName === serviceName ? result : null;
     } catch { return null; }
   }
 }

@@ -28,6 +28,7 @@
     "semver": "^7.7.4",
     "simple-oauth2": "^5.0.0",
     "stripe": "22.4.0",
+    "web-push": "^3.6.7",
     "xmldom": "^0.6.0",
     "zod": "^4.3.6"
   },
@@ -93,6 +94,7 @@
     "@types/node-fetch": "^2.6.9",
     "@types/semver": "^7.7.1",
     "@types/simple-oauth2": "^5.0.0",
+    "@types/web-push": "^3.6.4",
     "@types/xmldom": "^0.1.31",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",

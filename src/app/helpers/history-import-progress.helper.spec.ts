@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { HISTORY_IMPORT_RECENT_MS, buildHistoryImportProgress } from './history-import-progress.helper';
+import { HISTORY_IMPORT_PROVIDERS, HISTORY_IMPORT_RECENT_MS, buildHistoryImportItems, buildHistoryImportProgress } from './history-import-progress.helper';
 const now = Date.UTC(2026, 9, 26);
 function projection(status = 'requesting', active = true) {
   return {runId: 'run', rangePreset: '30_days', active, updatedAtMs: now,
@@ -91,14 +91,14 @@ describe('history import progress presentation', () => {
     expect(result).toMatchObject({active: true, busy: true, label: 'Importing history'});
     expect(result.items.map(item => item.kind)).toEqual(['active', 'retrying']);
   });
-  it.each(['failed', 'skipped'])('keeps %s outcomes visible until superseded', status => {
-    const result = view(projection(status, false), ServiceNames.SuuntoApp, now + 10 * HISTORY_IMPORT_RECENT_MS);
+  it.each(['failed', 'skipped'])('keeps recent %s outcomes dismissible without treating them as active work', status => {
+    const result = view(projection(status, false), ServiceNames.SuuntoApp, now + HISTORY_IMPORT_RECENT_MS - 1);
     expect(result.label).toBe('History finished with issues');
     expect(result.active).toBe(false);
     expect(result.items[0].label).toBe('Finished with issues');
     expect(result.items[0].canDismiss).toBe(true);
     expect(result.items[0].kind).toBe('attention');
-    expect(result.nextExpiryAtMs).toBeNull();
+    expect(result.nextExpiryAtMs).toBe(now + HISTORY_IMPORT_RECENT_MS);
   });
   it('dismisses only the exact finished result and keeps other providers and resumed work visible', () => {
     const dismissed = [{serviceName: ServiceNames.SuuntoApp, runId: 'run', updatedAtMs: now}];
@@ -112,14 +112,17 @@ describe('history import progress presentation', () => {
       expect(buildHistoryImportProgress([{serviceName: ServiceNames.SuuntoApp, projection: next}], now, dismissed).items).toHaveLength(1);
     }
   });
-  it.each(['processed', 'requested'])('expires recent %s context at exactly 24 hours', status => {
+  it.each(['processed', 'requested', 'failed', 'skipped'])('expires recent %s context at exactly 24 hours for every provider', status => {
     const value = projection(status, false);
-    expect(view(value, ServiceNames.SuuntoApp, now + HISTORY_IMPORT_RECENT_MS - 1).items).toHaveLength(1);
-    expect(view(value, ServiceNames.SuuntoApp, now + HISTORY_IMPORT_RECENT_MS).items).toEqual([]);
+    for (const serviceName of HISTORY_IMPORT_PROVIDERS) {
+      expect(view(value, serviceName, now + HISTORY_IMPORT_RECENT_MS - 1).items).toHaveLength(1);
+      expect(view(value, serviceName, now + HISTORY_IMPORT_RECENT_MS).items).toEqual([]);
+      expect(buildHistoryImportItems([{serviceName, projection: value}])).toHaveLength(1);
+    }
   });
-  it('does not expire active work or invent a progress denominator', () => {
-    expect(view(projection(), ServiceNames.SuuntoApp, now + 10 * HISTORY_IMPORT_RECENT_MS).items).toHaveLength(1);
-    expect(view(projection()).nextExpiryAtMs).toBeNull();
+  it.each(['queued', 'requesting', 'retrying'])('does not expire %s work or invent a progress denominator', status => {
+    expect(view(projection(status), ServiceNames.SuuntoApp, now + 10 * HISTORY_IMPORT_RECENT_MS).items).toHaveLength(1);
+    expect(view(projection(status)).nextExpiryAtMs).toBeNull();
   });
   it('represents read errors as unavailable rather than zero imports', () => {
     const result = buildHistoryImportProgress([{serviceName: ServiceNames.WahooAPI, unavailable: true}], now);
@@ -169,9 +172,10 @@ describe('history import progress presentation', () => {
   it('shows reconnect guidance instead of stale in-progress stages after authorization is lost', () => {
     const result = buildHistoryImportProgress([
       {serviceName: ServiceNames.COROSAPI, projection: projection('retrying'), connectionState: 'reconnect_required'},
-    ], now);
+    ], now + 10 * HISTORY_IMPORT_RECENT_MS);
     expect(result.active).toBe(false);
     expect(result.label).toBe('History needs attention');
+    expect(result.nextExpiryAtMs).toBeNull();
     expect(result.items[0]).toMatchObject({kind: 'attention', label: 'Reconnect required', steps: []});
     expect(result.items[0].canDismiss).not.toBe(true);
     expect(result.items[0].explanation).toContain('Open Connections');

@@ -17,6 +17,14 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit notification opt-in, self-test limits and origin separation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
+      'Beta supports tests', 'automatic notification categories are not available yet', 'Already delivered notifications cannot be recalled']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains how to restart a rejected Suunto sign-in without claiming disconnection', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('Suunto email and password instead of Facebook');
@@ -109,6 +117,7 @@ describe('help.content', () => {
       'refresh is disabled until that check finishes', '**Hide from dashboard**', '**Show on dashboard**',
       'remembered for your account on this browser', 'Hiding the cards does not stop an import',
       '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
+      'Finished results, including failed or skipped work', 'including after signing out and back in',
       '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
       '**Waiting for history retries**', 'quiet clock icon instead of a spinner',
       "**History import** dialog in Connections directly", 'same counts, stages and explanations',
@@ -697,6 +706,7 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Understand workout totals', '**Workout totals** updates', 'before you save',
       'prompt instead of stale totals', 'profile is collapsed', 'repetition duration stays unknown',
+      '**AI planning estimate** first in Today and review', '**Timing breakdown** covers timed steps only',
       '**estimated duration range**', 'threshold-speed reference saved',
       'four steps with unknown duration', 'Missing information never counts as zero', 'HR, power, and cadence targets do not establish speed',
       'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])

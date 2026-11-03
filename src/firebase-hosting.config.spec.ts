@@ -203,13 +203,6 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-function getCspDirective(policy: string, directiveName: string): string | undefined {
-  return policy
-    .split(';')
-    .map(directive => directive.trim())
-    .find(directive => directive === directiveName || directive.startsWith(`${directiveName} `));
-}
-
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
@@ -349,7 +342,9 @@ describe('Firebase Hosting configuration', () => {
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
+    // Notification help explains Safari's browser icon and Add to Dock app branding (2026-11-03).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -474,7 +469,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -544,7 +539,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
@@ -618,34 +613,23 @@ describe('Firebase Hosting configuration', () => {
       expect(new Set(headers.map(header => header.key)).size).toBe(headers.length);
       expect(headersByKey).toMatchObject(mcpAuthorizeSecurityHeaders);
 
-      const reportOnlyPolicy = headersByKey['Content-Security-Policy-Report-Only'];
-      expect(reportOnlyPolicy).toBeDefined();
-      expect(getCspDirective(reportOnlyPolicy, 'default-src')).toBe("default-src 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'base-uri')).toBe("base-uri 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'frame-ancestors')).toBe("frame-ancestors 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'object-src')).toBe("object-src 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'form-action')).toBe("form-action 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'script-src-attr')).toBe("script-src-attr 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'style-src')).toBe("style-src 'self' 'unsafe-inline'");
-      expect(getCspDirective(reportOnlyPolicy, 'worker-src')).toBe("worker-src 'self' blob:");
-      expect(reportOnlyPolicy).toContain('https://*.googleapis.com');
-      expect(reportOnlyPolicy).toContain('https://*.firebaseio.com');
-      expect(reportOnlyPolicy).toContain('https://*.cloudfunctions.net');
-      expect(reportOnlyPolicy).toContain('https://*.ingest.sentry.io');
-      expect(reportOnlyPolicy).toContain('https://*.g.doubleclick.net');
-      expect(reportOnlyPolicy).toContain('https://api.mapbox.com');
-      expect(reportOnlyPolicy).toContain('https://www.googletagmanager.com');
-      expect(reportOnlyPolicy).toContain('https://www.google.com/recaptcha/');
-      expect(reportOnlyPolicy).toContain('https://recaptcha.google.com/recaptcha/');
-      expect(getCspDirective(reportOnlyPolicy, 'script-src')).toContain("'wasm-unsafe-eval'");
-      expect(reportOnlyPolicy).not.toContain("'unsafe-eval'");
-      expect(reportOnlyPolicy).not.toContain('default-src *');
-      expect(reportOnlyPolicy).not.toContain('script-src https:');
-      expect(reportOnlyPolicy).not.toContain('https://*.mapbox.com');
     }
 
     expect(targetHeaderSets[0]).toContainEqual(betaNoIndexHeader);
     expect(targetHeaderSets[1]).not.toContainEqual(betaNoIndexHeader);
+  });
+
+  it('omits report-only CSP until a real reporting destination is configured', () => {
+    // Safari logs errors for the former collector-less policy on every document load.
+    // Keep frame-ancestors in the enforced policy above, where it provides protection.
+    for (const target of firebaseConfig.hosting) {
+      for (const entry of target.headers ?? []) {
+        expect(
+          entry.headers.map(header => header.key.toLowerCase()),
+          `${target.target}: ${entry.source ?? entry.regex}`,
+        ).not.toContain('content-security-policy-report-only');
+      }
+    }
   });
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {

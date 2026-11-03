@@ -5,6 +5,7 @@ import { SERVICE_CONNECTION_STATES, type ServiceConnectionState } from '@shared/
 
 export const HISTORY_IMPORT_PROVIDERS = [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI] as const;
 export const HISTORY_IMPORT_RECENT_MS = 24 * 60 * 60 * 1000;
+export const HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX = 'history-import.dismissed-result.v1.';
 export type HistoryImportKind = 'active' | 'retrying' | 'attention' | 'requested' | 'processed' | 'unavailable';
 export interface HistoryImportSource {
   serviceName: ServiceNames; projection?: unknown; unavailable?: boolean;
@@ -44,6 +45,17 @@ const requestLabels: Record<HistoryImportKind, string> = {...labels,
 const order: Record<HistoryImportKind, number> = {active: 0, retrying: 1, attention: 2, unavailable: 3, requested: 4, processed: 5};
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
 function validTime(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0 && !Number.isNaN(new Date(value).getTime()); }
+/** Keep only the inert receipt fields when reading or preserving browser preferences. */
+export function parseHistoryImportResultDismissal(serialized: string | null): HistoryImportResultDismissal | null {
+  try {
+    const value: unknown = JSON.parse(serialized ?? 'null');
+    if (!record(value)) return null;
+    const serviceName = HISTORY_IMPORT_PROVIDERS.find(provider => provider === value.serviceName);
+    if (!serviceName || typeof value.runId !== 'string' || !value.runId || value.runId.length > 256
+      || !validTime(value.updatedAtMs)) return null;
+    return {serviceName, runId: value.runId, updatedAtMs: value.updatedAtMs};
+  } catch { return null; }
+}
 function unavailable(serviceName: ServiceNames): HistoryImportProgressItem {
   return {serviceName, name: getProviderDisplayName(serviceName), runId: null, kind: 'unavailable',
     label: labels.unavailable, rangeLabel: null, steps: []};
@@ -80,7 +92,7 @@ function item(source: HistoryImportSource): HistoryImportProgressItem | null {
       : steps.some(step => step.status === 'requested') ? 'requested' : 'processed';
   // A submitted provider request is not a live delivery tracker. Keep recent terminal
   // outcomes for context, without an indefinite activity spinner or delivery claim.
-  const expiresAtMs = kind === 'requested' || kind === 'processed' ? value.updatedAtMs + HISTORY_IMPORT_RECENT_MS : undefined;
+  const expiresAtMs = !value.active ? value.updatedAtMs + HISTORY_IMPORT_RECENT_MS : undefined;
   const range = typeof value.rangePreset === 'string' && (value.rangePreset === 'custom'
     || historyRangeOptions(serviceName).some(option => option.value === value.rangePreset))
     ? historyRangeLabel(serviceName, value.rangePreset as Parameters<typeof historyRangeLabel>[1]) : null;
