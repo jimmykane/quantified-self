@@ -48,13 +48,20 @@ describe('TrainingGoalsService', () => {
     c.unsubscribe(); expect(freshRows.observed).toBe(false);
   });
   it('shares one owner listener and reconnects after errors instead of caching failure', async () => {
-    const { service, rows } = setup(); const a = service.watch('owner').subscribe(), b = service.watch('owner').subscribe();
+    const { service, rows } = setup();
+    const seen: unknown[] = [], otherSeen: unknown[] = [];
+    const a = service.watch('owner').subscribe(value => seen.push(value));
+    const b = service.watch('owner').subscribe(value => otherSeen.push(value));
     expect(mocks.data).toHaveBeenCalledOnce();
     expect(await firstValueFrom(service.watch('other'))).toEqual({ status: 'ready', goals: [] });
-    rows.error(Error('unavailable')); a.unsubscribe(); b.unsubscribe();
+    rows.error(Error('unavailable'));
+    expect(seen.at(-1)).toEqual({ status: 'error', goals: [] });
     mocks.data.mockReturnValue(new BehaviorSubject([]));
     expect(await firstValueFrom(service.watch('owner').pipe(filter(state => state.status === 'ready')))).toEqual({ status: 'ready', goals: [] });
     expect(mocks.data).toHaveBeenCalledTimes(2);
+    expect(seen.at(-1)).toEqual({ status: 'ready', goals: [] });
+    expect(otherSeen.at(-1)).toEqual({ status: 'ready', goals: [] });
+    a.unsubscribe(); b.unsubscribe();
   });
   it('atomically saves goal and separate state, replays uncertain saves and rejects stale edits', async () => {
     const { service, records, set } = setup();
@@ -83,6 +90,16 @@ describe('TrainingGoalsService', () => {
     vi.useFakeTimers(); const { service, rows, call } = setup(); rows.next([]);
     const sub = service.watchProgress('owner', 'UTC', 1).subscribe(); await vi.advanceTimersByTimeAsync(800);
     expect(call).not.toHaveBeenCalled(); sub.unsubscribe();
+  });
+  it('waits until the local goal start date before requesting progress', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-04T21:59:59Z'));
+    const { service, rows, call } = setup();
+    rows.next([{ ...goal, startLocalDate: '2026-11-05', documentId: goal.id }]);
+    const sub = service.watchProgress('owner', 'Europe/Athens', 1).subscribe();
+    await vi.advanceTimersByTimeAsync(800); expect(call).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60000); expect(call).toHaveBeenCalledOnce();
+    expect(call.mock.calls[0][1]).toMatchObject({ localDate: '2026-11-05' });
+    sub.unsubscribe();
   });
   it('preserves cached progress through unrelated profile updates while still reacting to activities', async () => {
     vi.useFakeTimers(); const { service, call, user, auth, authEvents } = setup();

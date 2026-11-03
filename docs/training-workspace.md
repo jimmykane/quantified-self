@@ -10053,10 +10053,12 @@ Weekly progress is computed by `getTrainingGoalsProgress`, authenticated and App
 request across consumers, caches the current week for 60 seconds, and invalidates through existing calendar activity
 and history-import updates. Unrelated profile changes do not invalidate progress or retrigger calendar activity effects.
 Auth and owner changes cancel live goal reads, clear their displayed data and reconnect with the new session;
-multiple Calendar and dialog consumers still share one owner listener.
+multiple Calendar and dialog consumers still share one owner listener. Reopening Goals after a failed read retries
+that shared listener and recovers existing Calendar consumers; healthy listeners are not restarted.
 Midnight advances the displayed local date without a tab-focus generation request.
 Active imports return incomplete progress without scanning activity history. Progress uses the displayed IANA timezone and saved calendar week start. A partial first week is labelled and its
-full target is retained, never silently prorated.
+full target is retained, never silently prorated. Tracking begins on the goal's start date, including goals starting
+later in the current week. Future-only weekly goals do not trigger progress requests or activity/import reads.
 
 The backend uses one bounded transaction for all goals: at most 1,501 canonical child activity summaries, with a
 two-day UTC margin and exact local-date filtering, and parent event classification in batches of 100. It selects only

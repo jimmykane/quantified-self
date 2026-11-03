@@ -3116,7 +3116,8 @@ Authored projection includes name, event/milestone/ongoing kind, active/paused/c
 high/normal/low priority, local start/target date, sport or family, objective, optional plan link and weekly target.
 Canonical seconds/metres and integer workout/day counts remain distinct. Goal progress excludes event/activity
 identities, exact activity timestamps, source/provider/device data, titles and streams. It counts actual recordings,
-not scheduled workouts; incomplete imports and missing values remain explicitly incomplete. Completed achievements
+not scheduled workouts; incomplete imports and missing values remain explicitly incomplete. Weekly progress starts
+on the goal's start date; future goals remain readable but have no progress row before then. Completed achievements
 are user-declared. A plan deletion retains the independent goal; a plan move never shifts the goal date.
 
 Goals have separate revisions from workout schedules. Preview stores only a private owner/connection-bound proposal;

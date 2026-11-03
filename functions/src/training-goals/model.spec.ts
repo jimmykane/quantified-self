@@ -65,4 +65,13 @@ describe('Training goals', () => {
       activities: [activity('one', '2026-11-02T08:00Z')], localDate: '2026-11-03', timeZone: 'UTC', weekStartsOn: 1,
       complete: false })[0]).toMatchObject({ value: 1, met: false, complete: false });
   });
+  it('starts weekly progress on the goal start date, even when it begins in the current week', () => {
+    const input = { goals: [goal({ startLocalDate: '2026-11-05' })],
+      activities: [activity('before', '2026-11-04T08:00Z'), activity('start', '2026-11-05T08:00Z')],
+      localDate: '2026-11-03', timeZone: 'Europe/Athens', weekStartsOn: 1, complete: true };
+    expect(calculateTrainingGoalProgress(input)).toEqual([]);
+    expect(calculateTrainingGoalProgress({ ...input, localDate: '2026-11-05' })).toEqual([
+      expect.objectContaining({ value: 1, partialWeek: true, startLocalDate: '2026-11-05' }),
+    ]);
+  });
 });

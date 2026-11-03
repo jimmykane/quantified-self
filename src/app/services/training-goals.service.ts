@@ -28,7 +28,7 @@ export class TrainingGoalsService {
     map(([session, user]) => session && session === this.auth.currentUser && session.uid === user?.uid ? session : null),
     distinctUntilChanged(), catchError(() => of(null)), shareReplay({ bufferSize: 1, refCount: true }));
   private readonly owner = toSignal(this.owner$, { initialValue: null });
-  private readonly streams = new Map<string, Observable<TrainingGoalsState>>();
+  private readonly streams = new Map<string, { state$: Observable<TrainingGoalsState>; retry: () => void }>();
   private readonly progressCache = new Map<string, { expires: number; promise: Promise<TrainingGoalsProgressResult> }>();
   private readonly invalidations = new Subject<string>();
   private opening = false;
@@ -48,21 +48,29 @@ export class TrainingGoalsService {
   watch(uid: string | null | undefined): Observable<TrainingGoalsState> {
     if (!uid) return of({ status: 'ready', goals: [] });
     const cached = this.streams.get(uid);
-    if (cached) return cached;
+    if (cached) { cached.retry(); return cached.state$; }
+    const retries = new Subject<void>();
+    let failed = false;
     const stream$ = this.owner$.pipe(switchMap(session => {
+      failed = false;
       if (session?.uid !== uid) return of({ status: 'ready' as const, goals: [] });
-      return defer(() => {
+      const read$ = defer(() => {
         if (!this.isOwner(uid) || this.auth.currentUser !== session) throw Error('The signed-in account changed.');
         return collectionData(query(collection(this.db, 'users', uid, TRAINING_GOALS_COLLECTION), limit(TRAINING_GOALS_LIMIT + 1)),
           { idField: 'documentId', waitForServer: true });
       }).pipe(timeout({ first: 15000 }), filter(() => this.isOwner(uid) && this.auth.currentUser === session), map(values => {
         if (values.length > TRAINING_GOALS_LIMIT) throw Error('The goal list is incomplete.');
         return { status: 'ready' as const, goals: values.map(({ documentId, ...data }) => parseTrainingGoalV1(data, documentId)) };
+      }), catchError(() => {
+        // Keep existing Calendar subscribers alive so reopening Goals recovers every consumer.
+        failed = true;
+        return of({ status: 'error' as const, goals: [] });
       }), startWith({ status: 'loading' as const, goals: [] }));
-    }), catchError(() => { if (this.streams.get(uid) === stream$) this.streams.delete(uid); return of({ status: 'error' as const, goals: [] }); }),
+      return retries.pipe(startWith(undefined), switchMap(() => { failed = false; return read$; }));
+    }),
     shareReplay({ bufferSize: 1, refCount: true }));
     if (this.streams.size >= 8) this.streams.clear();
-    this.streams.set(uid, stream$);
+    this.streams.set(uid, { state$: stream$, retry: () => { if (failed && this.isOwner(uid)) retries.next(); } });
     return stream$;
   }
   invalidateProgress(uid: string): void {
@@ -77,7 +85,7 @@ export class TrainingGoalsService {
       auditTime(800), switchMap(([state, , localDate]) => {
         if (state.status === 'error') return of({ status: 'error' as const, result: null });
         if (state.status !== 'ready') return of({ status: 'loading' as const, result: null });
-        if (!state.goals.some(goal => goal.lifecycle === 'active' && goal.weeklyTarget)) {
+        if (!state.goals.some(goal => goal.lifecycle === 'active' && goal.weeklyTarget && goal.startLocalDate <= localDate)) {
           return of({ status: 'ready' as const, result: { goalsRevision: 0, progress: [], weekStartsOn, complete: true } });
         }
         const key = JSON.stringify([uid, localDate, timeZone, weekStartsOn, state.goals.map(goal => [goal.id, goal.revision]).sort()]);

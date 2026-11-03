@@ -39,7 +39,7 @@ export async function readTrainingGoalsProgress(uid: string, request: TrainingGo
     const settings = await tx.get(user.collection('config').doc('settings'));
     const weekStartsOn = request.weekStartsOn ?? settings.get('unitSettings.startOfTheWeek') ?? 1;
     const week = trainingGoalWeek(request.localDate, weekStartsOn);
-    const targets = snapshot.goals.filter(goal => goal.lifecycle === 'active' && goal.weeklyTarget);
+    const targets = snapshot.goals.filter(goal => goal.lifecycle === 'active' && goal.weeklyTarget && goal.startLocalDate <= request.localDate);
     if (!targets.length) return { ...snapshot, progress: [], weekStartsOn, complete: true };
     if (await readDailyWorkoutHistoryImportActive(uid, db, tx)) {
       return { ...snapshot, weekStartsOn, complete: false, progress: calculateTrainingGoalProgress({ goals: targets,

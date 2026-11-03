@@ -37,7 +37,7 @@ export function calculateTrainingGoalProgress(input: { goals: TrainingGoalV1[]; 
     const parts = Object.fromEntries(formatter.formatToParts(new Date(activity.recordingStartMs)).map(part => [part.type, part.value]));
     return { ...activity, localDate: `${parts.year}-${parts.month}-${parts.day}` };
   });
-  return input.goals.filter(goal => goal.weeklyTarget && goal.startLocalDate <= week.endLocalDate).map(goal => {
+  return input.goals.filter(goal => goal.weeklyTarget && goal.startLocalDate <= input.localDate).map(goal => {
     const startLocalDate = goal.startLocalDate > week.startLocalDate ? goal.startLocalDate : week.startLocalDate;
     const selected = activities.filter(activity => activity.localDate >= startLocalDate && activity.localDate <= week.endLocalDate
       && activity.localDate <= input.localDate && trainingGoalMatchesSport(goal, activity.sport));

@@ -64,6 +64,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar goals emulator',
     await user.collection('mcpConnections').doc('connection').update({ grantId: 'replacement' });
     await expect(applyTrainingGoalChange(input({ proposalRef: newGoal.proposalRef }), deps)).rejects.toThrow('grant');
   }, 30000);
+  it('exposes weekly progress through MCP only once the goal has started', async () => {
+    const { deps, input } = await setup();
+    const preview = await previewTrainingGoalChange(input({ goalRef: null, expectedRevision: 0,
+      goal: { ...goal, startLocalDate: '2026-11-05' } }), deps);
+    const saved = await applyTrainingGoalChange(input({ proposalRef: preview.proposalRef }), deps);
+    const progress = async (localDate: string) => GOAL_OUTPUTS.get_training_goals_progress.parse(await readTrainingGoals({
+      ...input({ localDate, timeZone: 'Europe/Athens', goalRefs: [saved.goal.goalRef] }), tool: 'get_training_goals_progress',
+    }, deps));
+    expect(await progress('2026-11-03')).toMatchObject({ complete: true, progress: [] });
+    expect((await progress('2026-11-05')).progress).toEqual([
+      expect.objectContaining({ startLocalDate: '2026-11-05', partialWeek: true, value: 0, target: 3, complete: true }),
+    ]);
+  }, 30000);
   it('requires the current Assistant proposal and conversation generation before Apply', async () => {
     const { user, deps, input } = await setup();
     const connection = 'first-party-assistant-v1:conversation';

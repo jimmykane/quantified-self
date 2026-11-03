@@ -9,7 +9,7 @@ const goal = { schemaVersion: 1, id: 'goal', name: 'Run', kind: 'ongoing', lifec
   objective: '', planId: null, weeklyTarget: { kind: 'workouts', value: 3 }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const document = (id: string, data: Record<string, unknown>, exists = true) => ({ id, exists, data: () => data,
   get: (key: string) => data[key] });
-function database(options: { parent?: Record<string, unknown>; missingParent?: boolean; noGoals?: boolean; missingDistance?: boolean } = {}) {
+function database(options: { parent?: Record<string, unknown>; missingParent?: boolean; noGoals?: boolean; missingDistance?: boolean; startLocalDate?: string } = {}) {
   const masks: unknown[][] = [];
   const reference = (path: string): object => ({ path, collection: (name: string) => reference(`${path}/${name}`),
     doc: (name: string) => reference(`${path}/${name}`), select: (...fields: unknown[]) => { masks.push(fields); return reference(path); },
@@ -18,7 +18,8 @@ function database(options: { parent?: Record<string, unknown>; missingParent?: b
     if (ref.path.endsWith('trainingGoalState/current')) return document('current', { revision: 1 });
     if (ref.path.endsWith('config/settings')) return document('settings', { 'unitSettings.startOfTheWeek': 1 });
     if (ref.path.endsWith('trainingGoals')) return { size: options.noGoals ? 0 : 1, docs: options.noGoals ? [] : [document('goal',
-      options.missingDistance ? { ...goal, weeklyTarget: { kind: 'distance', value: 10000 } } : goal)] };
+      { ...goal, startLocalDate: options.startLocalDate ?? goal.startLocalDate,
+        weeklyTarget: options.missingDistance ? { kind: 'distance', value: 10000 } : goal.weeklyTarget })] };
     if (ref.path.endsWith('activities')) return { size: 1, docs: [document('activity', { eventID: 'event',
       eventStartDate: new Date('2026-11-02T08:00Z'), type: ActivityTypes.Running,
       stats: { [DataDuration.type]: 1800, ...(!options.missingDistance ? { [DataDistance.type]: 5000 } : {}) } })] };
@@ -29,7 +30,7 @@ function database(options: { parent?: Record<string, unknown>; missingParent?: b
     runTransaction: (run: (tx: unknown) => unknown) => run({ get, getAll }) };
   return { db: db as unknown as FirebaseFirestore.Firestore, get, getAll, masks };
 }
-beforeEach(() => { mocks.guard.mockResolvedValue({ shouldSkip: false }); mocks.importing.mockResolvedValue(false); });
+beforeEach(() => { vi.clearAllMocks(); mocks.guard.mockResolvedValue({ shouldSkip: false }); mocks.importing.mockResolvedValue(false); });
 describe('batched goal progress reads', () => {
   const request = { localDate: '2026-11-03', timeZone: 'Europe/Athens' };
   it('reads only canonical summary fields and counts a recording once', async () => {
@@ -62,6 +63,14 @@ describe('batched goal progress reads', () => {
     const result = await readTrainingGoalsProgress('owner', request, database({ missingDistance: true }).db);
     expect(result.complete).toBe(false);
     expect(result.progress[0]).toMatchObject({ complete: false, met: false, kind: 'distance' });
+  });
+  it('does not read activities or import state before a weekly goal starts', async () => {
+    const test = database({ startLocalDate: '2026-11-05' });
+    const result = await readTrainingGoalsProgress('owner', request, test.db);
+    expect(result.progress).toEqual([]);
+    expect(result.goals).toHaveLength(1);
+    expect(test.get.mock.calls.some(([ref]) => ref.path.endsWith('activities'))).toBe(false);
+    expect(mocks.importing).not.toHaveBeenCalled();
   });
   it('fails closed for deleted accounts and invalid time zones', async () => {
     mocks.guard.mockResolvedValue({ shouldSkip: true });
