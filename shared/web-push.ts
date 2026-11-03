@@ -40,6 +40,7 @@ export function buildPushTestPayload(origin: string) {
   if (!isPushOrigin(origin, true)) throw new Error('Unsupported notification origin.');
   return { web_push: 8030, notification: {
     title: 'Quantified Self', body: 'Notifications are working on this device.', tag: 'qs-notification-test',
+    icon: origin + '/assets/favicons/android-chrome-192x192.png',
     navigate: origin + WEB_PUSH_SETTINGS_PATH,
     data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: WEB_PUSH_SETTINGS_PATH } } },
   } };

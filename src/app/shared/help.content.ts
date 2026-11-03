@@ -1964,6 +1964,7 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. The initial feature provides a test notification; automatic notification categories are not available yet.
 
 - On iPhone or iPad, add Quantified Self to your Home Screen and open it there before enabling notifications.
+- Notification icons depend on your browser and device. Safari on Mac shows the Safari icon for browser notifications. To use the QS app icon, choose **File → Add to Dock** in Safari, open the saved app, and enable notifications there.
 - Permission and enablement are separate for each device and for the production and beta sites. Beta supports tests; future automatic notifications are reserved for production.
 - Tests show only a generic message and open Notifications settings on the same site. A sent test does not prove that your device displayed it; check notification permissions, Focus/Do Not Disturb and OS settings if it does not appear.
 - Tests are limited to one per minute and ten per day across your account. If registration expires or the notification key changes, enable notifications again.

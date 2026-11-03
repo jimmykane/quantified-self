@@ -35,6 +35,7 @@ describe('Web Push test sender', () => {
     expect(h.deps.send).toHaveBeenCalledWith(h.registration, JSON.stringify(buildPushTestPayload(origin)));
     const payload = buildPushTestPayload(origin);
     expect(payload.web_push).toBe(8030);
+    expect(payload.notification).toHaveProperty('icon', origin + '/assets/favicons/android-chrome-192x192.png');
     expect(payload.notification.navigate).toBe(origin + '/settings?section=notifications');
     expect(payload.notification.data.onActionClick.default.url).toBe('/settings?section=notifications');
     expect(isAutomaticPushOrigin(origin)).toBe(origin === 'https://quantified-self.io');
