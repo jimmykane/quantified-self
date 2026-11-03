@@ -220,6 +220,8 @@ observer sends at most one best-effort whole-import alert (two attempts per roll
 committed child outcomes and truthful failure copy. It does not modify the coordinator, ingestion queues, progress
 projection or retry semantics. Garmin is excluded. See [notification policy, lifecycle and release](web-push-notifications.md#manual-history-import-completion)
 for exact generation binding, bounded send receipts, suppression, monitoring and separately approved activation.
+The account-wide History imports category defaults on; admission binds its current revision so disabling then
+re-enabling it cannot revive an earlier import alert. Device registration and the per-import checkbox remain separate.
 
 Garmin reuses its existing activity adapter and backfill operation, submitting one bounded 30-day window per
 coordinator step. It retains permission checks, exact token/connection fences, provider-minimum clipping and `409`

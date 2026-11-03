@@ -1008,7 +1008,8 @@ frontend with separate deployment approval; accepted background runs need no mig
 ### Optional history completion notification
 
 Manual Suunto/COROS/Wahoo activity imports can attach an unchecked, per-import notification choice for the current
-production device. The existing callables atomically validate consent; an isolated terminal observer delivers a
+production device. The account-wide History imports category defaults on; turning it off cancels unsent consent,
+and re-enabling it does not revive earlier imports. The existing callables atomically validate consent and bind the category revision; an isolated terminal observer delivers a
 single best-effort result, subject to a two-attempt rolling daily cap. Garmin request completion, automatic OAuth
 history, Sleep, Health and routes remain excluded. Provider queues and ingestion/dispatch/retry behavior are unchanged.
 The authoritative [Web Push runbook](web-push-notifications.md#manual-history-import-completion) covers privacy,

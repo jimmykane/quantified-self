@@ -14,6 +14,7 @@ import { isPushId, isPushOrigin, isPushRegistration, isVapidPublicKey, type Push
 import { environment } from '../../environments/environment';
 import { isAutomaticPushOrigin } from '../../../shared/web-push';
 import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
+import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -23,6 +24,7 @@ export class AppPushService {
   private readonly auth = inject(Auth);
   private readonly firestore = inject(Firestore);
   private readonly config = inject(AppRemoteConfigService);
+  private readonly preferences = inject(AppNotificationPreferencesService);
   private readonly functions = inject(AppFunctionsService);
   private readonly storage = inject(APP_STORAGE);
   private readonly windows = inject(AppWindowService);
@@ -40,7 +42,8 @@ export class AppPushService {
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
   readonly historyNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
     && this.config.webPushHistoryEnabled() && isAutomaticPushOrigin(this.origin()));
-  readonly canNotifyHistory = computed(() => this.historyNotificationsAvailable() && this.canTest());
+  readonly canNotifyHistory = computed(() => this.historyNotificationsAvailable() && this.canTest()
+    && this.preferences.isEnabled('history_import'));
   private manager: PushManager | null = null;
   private subscription: PushSubscription | null = null;
   private owner: FirebaseUserType | null = null;
@@ -207,7 +210,7 @@ export class AppPushService {
   async historyNotificationTarget(expectedUserID: string): Promise<HistoryNotificationTarget> {
     const owner = this.owner, epoch = this.epoch, local = this.readLocal();
     if (!this.canNotifyHistory() || !owner || owner.uid !== expectedUserID || local?.uid !== expectedUserID) {
-      throw new Error('Enable notifications on this device or uncheck the import notification option.');
+      throw new Error('Enable this device and the History imports category in Settings, or uncheck the import notification option.');
     }
     const snapshot = await getDocFromServer(doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`));
     const saved = snapshot.data();

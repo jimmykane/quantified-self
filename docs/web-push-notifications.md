@@ -38,11 +38,38 @@ A standard development Angular build has no service worker. Offline unit tests m
 
 For key rotation, provision the new matching pair and public parameter together with authorized redeployment, keeping the enabled flag off during transition. Existing registrations with a different public key must be disabled and explicitly re-enabled; no silent migration or permission prompt. Do not delete the old cloud secret/version without separate approval.
 
+## Notification categories
+
+Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The first
+category is `history_import` (History imports). **New categories default on**, including for existing accounts,
+without a migration or an initialization write. Category preferences are account-wide across devices and sites;
+origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
+An enabled category alone never starts sending or checks a history-import checkbox. Self-tests bypass categories.
+
+An owner-scoped private leaf at `users/{uid}/notificationPreferences/{category}` stores `schemaVersion: 1`,
+`enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means
+on/revision zero; read failures and malformed records do not mean a missing preference. Rules allow known-category
+owner get/create/update, prohibit impersonated writes, listing, descendants and deletion/reset, and fence missing or
+deleting accounts. Changes use client transactions rather than a new callable. Each actual toggle increments the
+revision; listener hydration, unchanged selections and retries after another device already saved the value do not.
+Preferences remain under the existing recursive account cleanup and are not MCP, metric or public profile data.
+
+Admission reads the category in its existing transaction and binds the server revision to private run consent.
+The sender checks that the category remains on at that same revision both before claiming and immediately before
+sending. Switching it off cancels outstanding consent; switching it back on does not revive earlier runs, including
+imports that were still processing when the preference changed. Already accepted/in-flight pushes may still arrive.
+The frontend waits for server-confirmed preferences, synchronizes other-device changes, preserves saved values on
+write failure, and discards stale account callbacks. The import form links to category/device settings if unavailable.
+
+To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
+consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
+default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
+
 ## Manual history import completion
 
 The first automatic notification is an explicit, one-time choice on a **manual activity-history import** for Suunto, COROS or Wahoo. The checkbox starts unchecked. If device registration is needed, a separate button invokes the existing permission flow directly from its click; successful registration does not check the import option. No permission prompt appears during page load, hydration or completion. A pending registration lookup stays bound to the starting account, view and provider connection generation; replacing or removing that connection cancels submission and clears the import choice, while an ordinary metadata refresh keeps it valid. Garmin is excluded because its completed coordinator records requested history, not correlated ingestion. OAuth recent-history imports, Sleep, Health and routes are excluded.
 
-The existing three admission callables accept optional `notification: { installationId, generation }` only with `background: true`. Auth, App Check, Pro, date/range and existing connection checks remain in force. Origin comes from the HTTP request; impersonated requests and non-production origins are rejected. The admission transaction validates the current owner's registration, exact generation, origin and public key, and stores that consent on the private run. No endpoint, key or consent is added to the public progress projection. Unchecked imports retain their existing request and admission behavior, without fetching push configuration.
+The existing three admission callables accept optional `notification: { installationId, generation }` only with `background: true`. Auth, App Check, Pro, date/range and existing connection checks remain in force. Origin comes from the HTTP request; impersonated requests and non-production origins are rejected. The admission transaction validates the current owner's registration, exact generation, origin, public key and enabled category, and stores that consent with its server category revision on the private run. No endpoint, key or consent is added to the public progress projection. Unchecked imports retain their existing request and admission behavior, without fetching push configuration.
 
 `sendHistoryImportNotification` observes `connectionHistoryImports/{runId}` writes. Only a transition from active to terminal on a consented custom activity-only run enters delivery. The existing coordinator already waits for committed child outcomes and retryable work; this change adds no child notifications and changes no provider queues, retry policy or canonical ingestion. A completed scan with failures says **finished with issues**; a terminal stop before the scan/children finished says **needs attention**. It never calls a stopped run successful. An explicit owner retry after a send attempt does not create a second alert.
 
@@ -58,19 +85,19 @@ The generic standard/declarative payload contains no activity count, title or he
 
 This feature defaults off through a **new**, unconditional top-level Remote Config switch, `web_push_history_import_enabled=false`. Both this and `web_push_enabled` must be true, with the matching `web_push_vapid_public_key`. Do not change the existing foundation flag/key merely to prepare this feature. Missing/conditional settings fail closed on the server; cached frontend configuration may lag and display an option the server now rejects. The user can uncheck it and import normally. Beta remains self-test-only; automatic consent and delivery are production-origin-only.
 
-After separate approval, deploy the existing admission callables and new isolated sender before releasing the frontend:
+After separate approval, deploy the category Rules, existing admission callables and new isolated sender before releasing the frontend:
 
 ```sh
-npm run firebase -- deploy --only functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:sendHistoryImportNotification --project quantified-self-io
+npm run firebase -- deploy --only firestore:rules,functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:sendHistoryImportNotification --project quantified-self-io
 ```
 
-No Rules deployment, key rotation, ingestion-worker deployment, schedule or queue change is required. The existing shared key is bound only to the new sender in addition to the self-test sender. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+The category preferences require the Rules deployment above. No key rotation, ingestion-worker deployment, schedule or queue change is required. The existing shared key is bound only to the new sender in addition to the self-test sender. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 
 Rollback of new admissions/sends is the new switch set to false; existing imports continue normally. Already claimed/accepted sends may finish. Never clear receipts or replay completed runs. The trigger uses 256 MiB, 30 seconds, max two instances, concurrency 20 and zero minimum instances in `europe-west2`; no idle warm instance or new scheduler is provisioned. Once deployed it is invoked on history-document writes even while disabled, then filters unrelated checkpoints in memory. Consented completion handling adds bounded configuration/Firestore reads, transactional claim/bookkeeping writes and one push request at most. This has incremental invocation/read/write costs; it is not a free or guaranteed-delivery service.
 
 ## Verification
 
-Automated coverage includes browser and SSR states, owner changes during pending registration, denied permissions, missing configuration, key rotation, both push managers, fixed payload/navigation, server admission, concurrency/rate limits, expired-generation races, private Rules and deletion guards. History coverage additionally exercises atomic consent admission, provider boundaries, actual Firestore contention, cap enforcement across providers, aborted claims, deletion/revocation, stale completions and private receipts. Run focused frontend/Functions tests, Rules tests, production build, secret and entrypoint checks, frontend policy checks and monitoring tests.
+Automated coverage includes browser and SSR states, owner changes during pending registration, denied permissions, missing configuration, key rotation, both push managers, fixed payload/navigation, server admission, concurrency/rate limits, expired-generation races, private Rules and deletion guards. History coverage additionally exercises atomic consent admission, provider boundaries, actual Firestore contention, cap enforcement across providers, aborted claims, deletion/revocation, stale completions, category defaults, off/on cancellation, private preferences and private receipts. Run focused frontend/Functions tests, Rules tests, production build, secret and entrypoint checks, frontend policy checks and monitoring tests.
 
 Before claiming device compatibility, verify physical iPhone/iPad Home Screen, Safari on macOS, Android Chrome, desktop Firefox and Edge on Windows. Test app foreground/closed, click return through login, permission revoke, disable/sign-out, beta versus production navigation, one notification per test, and declarative delivery with worker execution unavailable on an authorized test origin. Do not unregister a production worker or send tests without the applicable authorization. OS focus modes and notification settings affect delivery. Device verification is not established by unit tests or Chrome's synthetic push tool.
 
@@ -88,7 +115,7 @@ An authorized operator applies the exact owned bundle with:
 node tools/web-push-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/CHANNEL_ID --apply --confirm-project=quantified-self-io
 ```
 
-The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. No notification outbox or dead-letter queue exists, so notification backlog age/dead letters are inapplicable. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
+The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. Category opt-outs and revision changes use the existing suppression/cancelled paths and do not add an alert or label. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. No notification outbox or dead-letter queue exists, so notification backlog age/dead letters are inapplicable. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 

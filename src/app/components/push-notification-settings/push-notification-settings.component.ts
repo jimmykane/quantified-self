@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { MaterialModule } from '../../modules/material.module';
 import { AppPushService } from '../../services/app.push.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
+import type { MatSlideToggle } from '@angular/material/slide-toggle';
+import type { NotificationCategoryId } from '@shared/notification-categories';
 const STATUS = {
   loading: 'Checking notification support…', 'signed-out': 'Sign in to manage notifications.',
   unsupported: 'This browser does not support device notifications.',
@@ -18,8 +21,21 @@ const STATUS = {
 })
 export class PushNotificationSettingsComponent {
   readonly push = inject(AppPushService);
+  readonly preferences = inject(AppNotificationPreferencesService);
   private readonly haptics = inject(AppHapticsService);
   readonly status = computed(() => STATUS[this.push.state()]);
+  async setCategory(category: NotificationCategoryId, enabled: boolean, toggle?: MatSlideToggle): Promise<void> {
+    // Material toggles before emitting change; retain the saved value until the write is acknowledged.
+    if (toggle) toggle.checked = this.preferences.isEnabled(category);
+    if (!this.preferences.canEdit() || this.preferences.isEnabled(category) === enabled) return;
+    this.haptics.selection();
+    try { if (await this.preferences.setEnabled(category, enabled)) this.haptics.success(); }
+    catch { this.haptics.error(); }
+  }
+  retryCategories(): void {
+    if (this.preferences.status() !== 'error') return;
+    this.haptics.selection(); this.preferences.reload();
+  }
   async act(action: 'enable' | 'disable' | 'test'): Promise<void> {
     if (!(action === 'enable' ? this.push.canEnable() : action === 'disable' ? this.push.canDisable() : this.push.canTest())) return;
     this.haptics.selection();

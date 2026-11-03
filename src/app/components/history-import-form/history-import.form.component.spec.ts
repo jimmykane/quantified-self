@@ -2387,6 +2387,12 @@ describe('HistoryImportFormComponent', () => {
             expect(push.historyNotificationTarget).not.toHaveBeenCalled();
             expect(mockUserService.importServiceHistoryForCurrentUser.mock.calls[0]).toHaveLength(4);
         });
+        it('directs an opted-out account to its category settings without prompting permission', async () => {
+            const push = await prepare(); vi.mocked(push.canNotifyHistory).mockReturnValue(false); fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('History imports category');
+            expect(fixture.debugElement.query(By.css('.history-notification-option mat-checkbox')).componentInstance.disabled).toBe(true);
+            expect(push.enable).not.toHaveBeenCalled();
+        });
         it('does not start an import if its view closes while resolving device consent', async () => {
             const push = await prepare(); component.onHistoryNotificationChange(true);
             let resolve: (value: typeof target) => void;

@@ -124,6 +124,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
       send: vi.fn(async () => ({})), outcome: vi.fn() };
     return { run, deps };
   }
+  it('does not revive an existing import after the account category is switched off and back on', async () => {
+    const { run, deps } = await completedNotificationRun();
+    expect(run.notification?.categoryRevision).toBe(0);
+    const category = mocks.db.doc('users/owner/notificationPreferences/history_import');
+    await category.set({ schemaVersion: 1, enabled: false, revision: 1 });
+    await sendHistoryCompletion(run.id, run, deps); expect(deps.send).not.toHaveBeenCalled();
+    await category.set({ schemaVersion: 1, enabled: true, revision: 2 });
+    await sendHistoryCompletion(run.id, run, deps); expect(deps.send).not.toHaveBeenCalled();
+    expect((await mocks.db.doc('users/owner/pushState/historyCompletion').get()).exists).toBe(false);
+    const fresh = await completedNotificationRun(ServiceNames.WahooAPI);
+    expect(fresh.run.notification?.categoryRevision).toBe(2);
+    await sendHistoryCompletion(fresh.run.id, fresh.run, fresh.deps); expect(fresh.deps.send).toHaveBeenCalledOnce();
+  });
+  it('rejects opted-in admission when the category is off without preventing ordinary imports', async () => {
+    await mocks.db.doc('users/owner/notificationPreferences/history_import').set({ schemaVersion: 1, enabled: false, revision: 1 });
+    await expect(completedNotificationRun()).rejects.toThrow('History-import notifications are off');
+    expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
+    const result = await startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end);
+    expect(result.active).toBe(true);
+    expect((await mocks.db.doc(`connectionHistoryImports/${result.runId}`).get()).data()).not.toHaveProperty('notification');
+  });
   it('uses real transactions to prevent two concurrent completion deliveries from sending twice', async () => {
     const { run, deps } = await completedNotificationRun();
     await Promise.all([sendHistoryCompletion(run.id, run, deps), sendHistoryCompletion(run.id, run, deps)]);

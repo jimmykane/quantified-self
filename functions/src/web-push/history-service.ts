@@ -4,6 +4,7 @@ import type { ConnectionHistoryRun } from '../connection-history/model';
 import { isPushRegistration, isAutomaticPushOrigin, type PushRegistration } from '../../../shared/web-push';
 import { buildHistoryNotificationPayload, isHistoryNotificationTarget, supportsHistoryNotification,
   type HistoryNotificationResult } from '../../../shared/history-import-notifications';
+import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
 
 const DAY_MS = 86400000;
 export type HistoryPushOutcome = 'accepted' | 'expired' | 'failed' | 'cancelled' | 'limited';
@@ -38,17 +39,21 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
   const runRef = db.doc(`connectionHistoryImports/${runId}`);
   const stateRef = db.doc(`users/${expected.userID}/pushState/historyCompletion`);
   const consent = expected.notification!;
-  const { origin, ...target } = consent;
-  if (!isAutomaticPushOrigin(origin) || !isHistoryNotificationTarget(target)) return;
+  const { origin, categoryRevision, ...target } = consent;
+  if (!isAutomaticPushOrigin(origin) || !isHistoryNotificationTarget(target)
+    || !Number.isSafeInteger(categoryRevision) || categoryRevision < 0) return;
   const registrationRef = db.doc(`users/${expected.userID}/pushSubscriptions/${consent.installationId}`);
   const current = async (tx: Transaction) => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, expected.userID);
-    const [snapshot, registrationSnapshot, metaSnapshot] = await Promise.all([
+    const [snapshot, registrationSnapshot, metaSnapshot, preferenceSnapshot] = await Promise.all([
       tx.get(runRef), tx.get(registrationRef), tx.get(db.doc(`users/${expected.userID}/meta/${expected.serviceName}`)),
+      tx.get(db.doc(notificationPreferencePath(expected.userID, 'history_import'))),
     ]);
     const run = snapshot.data() as ConnectionHistoryRun | undefined;
     const registration = registrationSnapshot.data(); const meta = metaSnapshot.data();
+    const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
     if (guard.shouldSkip || !run || run.userID !== expected.userID || run.id !== runId
+      || !preference?.enabled || preference.revision !== categoryRevision || run.notification?.categoryRevision !== categoryRevision
       || run.revision !== expected.revision || run.dateCreated !== expected.dateCreated
       || run.serviceName !== expected.serviceName || run.connectionGeneration !== expected.connectionGeneration
       || run.notification?.generation !== consent.generation || run.notification?.installationId !== consent.installationId

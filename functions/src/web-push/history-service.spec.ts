@@ -5,6 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createHistoryRun, historyProjection, type ConnectionHistoryRun } from '../connection-history/model';
 import { sendHistoryCompletion, historyNotificationResult, type HistoryPushDependencies } from './history-service';
 import { readHistoryNotificationConsent, validateHistoryNotificationConsent, historyPushConfiguration } from './history-consent';
+import { readNotificationCategoryPreference, isNotificationCategory } from '../../../shared/notification-categories';
 import { buildHistoryNotificationPayload, isHistoryNotificationTarget } from '../../../shared/history-import-notifications';
 
 const config = vi.hoisted(() => ({ template: vi.fn() }));
@@ -17,7 +18,7 @@ function harness() {
   const run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, rangePreset: '30_days', runId,
     providerUserId: 'account', tokenPath: 'tokens/owner/tokens/account', rootPath: 'tokens/owner', credentialGeneration: 'credential' }, 'connection', now - 1000);
   Object.assign(run, { rangePreset: 'custom', processed: true, updatedAtMs: now, revision: 1,
-    notification: { installationId: id, generation, origin } });
+    notification: { installationId: id, generation, origin, categoryRevision: 0 } });
   run.steps = run.steps.filter(step => step.id === 'activities');
   Object.assign(run.steps[0], { done: true, status: 'processed', nextStartMs: run.endMs + 1, count: 2000 });
   const registration = { schemaVersion: 1, generation, origin, vapidPublicKey: publicKey,
@@ -101,6 +102,25 @@ describe('history completion notification policy', () => {
     if (reason === 'future') h.run.updatedAtMs = now + 1;
     await sendHistoryCompletion(runId, expected, h.deps); expect(h.deps.send).not.toHaveBeenCalled();
   });
+  it.each(['off', 'off then on', 'malformed', 'missing consent revision'])('suppresses category preference: %s', async reason => {
+    const h = harness();
+    if (reason === 'missing consent revision') delete (h.run.notification as Partial<typeof h.run.notification>).categoryRevision;
+    else h.rows.set('users/owner/notificationPreferences/history_import', reason === 'malformed' ? {} : {
+      schemaVersion: 1, enabled: reason !== 'off', revision: reason === 'off' ? 1 : 2,
+    });
+    await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
+  });
+  it('allows a newly consented import after the category is re-enabled', async () => {
+    const h = harness(); h.run.notification!.categoryRevision = 2;
+    h.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: true, revision: 2 });
+    await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it('rechecks category preference after the claim commits', async () => {
+    const h = harness(); h.hooks.afterCommit = count => {
+      if (count === 1) h.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: false, revision: 1 });
+    };
+    await h.send(); expect(h.deps.send).not.toHaveBeenCalled(); expect(h.deps.outcome).toHaveBeenCalledWith('cancelled');
+  });
   it('does not repeat a notification after an explicit retry changes the terminal result', async () => {
     const h = harness(); h.run.steps[0].status = 'failed'; await h.send();
     h.run.steps[0].status = 'processed'; h.run.revision++; await h.send();
@@ -155,9 +175,9 @@ describe('one-import consent boundary', () => {
     }
     expect(() => readHistoryNotificationConsent(target, 'https://beta.quantified-self.io', undefined)).toThrow();
     expect(() => readHistoryNotificationConsent(target, origin, 'admin')).toThrow();
-    await h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', h.run.serviceName, h.run.notification!, publicKey));
-    await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'other', h.run.serviceName, h.run.notification!, publicKey))).rejects.toThrow();
-    await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', ServiceNames.GarminAPI, h.run.notification!, publicKey))).rejects.toThrow();
+    await h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', h.run.serviceName, { ...target, origin }, publicKey));
+    await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'other', h.run.serviceName, { ...target, origin }, publicKey))).rejects.toThrow();
+    await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', ServiceNames.GarminAPI, { ...target, origin }, publicKey))).rejects.toThrow();
     expect(() => buildHistoryNotificationPayload('https://beta.quantified-self.io', h.run.serviceName, 'finished')).toThrow();
   });
   it('requires both unconditional switches; absent or targeted configuration stays off', async () => {
@@ -168,5 +188,19 @@ describe('one-import consent boundary', () => {
     expect((await historyPushConfiguration()).enabled).toBe(false);
     config.template.mockResolvedValue({ parameters: { ...parameters, web_push_history_import_enabled: { ...parameters.web_push_history_import_enabled, conditionalValues: { beta: { value: 'true' } } } } });
     expect((await historyPushConfiguration()).enabled).toBe(false);
+  });
+});
+
+describe('notification category defaults', () => {
+  it('defaults new categories on but rejects malformed stored preferences', () => {
+    expect(isNotificationCategory('history_import')).toBe(true);
+    expect(isNotificationCategory('unknown')).toBe(false);
+    expect(readNotificationCategoryPreference(undefined)).toEqual({ enabled: true, revision: 0 });
+    expect(readNotificationCategoryPreference({ schemaVersion: 1, enabled: false, revision: 1 })).toEqual({ enabled: false, revision: 1 });
+    for (const value of [null, {}, [], { schemaVersion: 1, enabled: 'true', revision: 1 },
+      { schemaVersion: 1, enabled: true, revision: 0 }, { schemaVersion: 1, enabled: true, revision: 1.5 },
+      { schemaVersion: 2, enabled: true, revision: 1 }, { schemaVersion: 1, enabled: true, revision: 1, other: true }]) {
+      expect(readNotificationCategoryPreference(value)).toBeNull();
+    }
   });
 });

@@ -18,7 +18,7 @@ function event() {
     runId: '00000000-0000-4000-8000-000000000003', providerUserId: 'account',
     tokenPath: 'tokens/owner/tokens/account', rootPath: 'tokens/owner', credentialGeneration: 'credential' }, 'connection', Date.now());
   Object.assign(run, { rangePreset: 'custom', processed: true,
-    notification: { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002', origin: 'https://quantified-self.io' } });
+    notification: { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002', origin: 'https://quantified-self.io', categoryRevision: 0 } });
   run.steps = run.steps.filter(step => step.id === 'activities');
   Object.assign(run.steps[0], { done: true, status: 'processed' });
   return { params: { runId: run.id }, data: { before: { data: () => ({ ...run, processed: false }) }, after: { data: () => run } } };

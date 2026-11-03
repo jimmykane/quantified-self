@@ -3,7 +3,8 @@ import { isPushId, isAutomaticPushOrigin } from './web-push';
 
 /** An explicit choice for one manual activity import on one registered device. */
 export interface HistoryNotificationTarget { installationId: string; generation: string; }
-export interface HistoryNotificationConsent extends HistoryNotificationTarget { origin: string; }
+export interface HistoryNotificationRequest extends HistoryNotificationTarget { origin: string; }
+export interface HistoryNotificationConsent extends HistoryNotificationRequest { categoryRevision: number; }
 export type HistoryNotificationResult = 'finished' | 'issues' | 'attention';
 export function supportsHistoryNotification(service: string): boolean {
   return [ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI].includes(service as ServiceNames);

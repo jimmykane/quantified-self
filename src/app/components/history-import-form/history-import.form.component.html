@@ -220,7 +220,7 @@
     } @else if (push.operation() === 'enable') {
     <p role="status">Enabling notifications…</p>
     } @else if (!push.canNotifyHistory()) {
-    <p>Set up notifications for this device in <a routerLink="/settings" [queryParams]="{section: 'notifications'}">Settings → Notifications</a>.</p>
+    <p>Check device permissions and the History imports category in <a routerLink="/settings" [queryParams]="{section: 'notifications'}">Settings → Notifications</a>.</p>
     }
     @if (notificationError()) { <p role="status">{{ notificationError() }}</p> }
   </div>

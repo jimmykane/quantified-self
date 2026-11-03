@@ -105,6 +105,51 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Notification category preferences', () => {
+        const path = 'users/category-owner/notificationPreferences/history_import';
+        const base = { schemaVersion: 1, enabled: false, revision: 1 };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/category-owner').set({}); });
+        });
+        it('allows private owner reads and atomic toggles, but no resets, list or descendants', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext('category-owner').firestore();
+            const ref = owner.doc(path);
+            await assertSucceeds(ref.get()); // Absent preference means the new category defaults on.
+            await assertSucceeds(ref.set({ ...base, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 1, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 4, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: true, revision: 3, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: false, revision: 3, updatedAt: serverTimestamp() }));
+            await assertFails(ref.delete());
+            await assertFails(owner.collection('users/category-owner/notificationPreferences').get());
+            await assertFails(owner.doc(path + '/nested/value').set({}));
+            await assertFails(owner.doc('users/category-owner/notificationPreferences/unknown').set({ ...base, updatedAt: serverTimestamp() }));
+        });
+        it.each([{ schemaVersion: 2 }, { enabled: 'false' }, { revision: 0 }, { revision: 2 }, { revision: 1.5 },
+            { revision: 9007199254740992 }, { updatedAt: 0 }, { origin: 'https://quantified-self.io' }])('rejects malformed category preferences %j', async patch => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).set({ ...base, updatedAt: serverTimestamp(), ...patch }));
+        });
+        it('blocks other accounts, impersonation, missing users and deletion resurrection', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const value = { ...base, updatedAt: serverTimestamp() };
+            for (const context of [testEnv.authenticatedContext('other'), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc(path).get());
+                await assertFails(context.firestore().doc(path).set(value));
+            }
+            await assertFails(testEnv.authenticatedContext('category-owner', { impersonatedBy: 'admin' }).firestore().doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore().doc('users/missing/notificationPreferences/history_import').set(value));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set(base);
+                await context.firestore().doc('userDeletionTombstones/category-owner').set({});
+            });
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
+        });
+    });
+
     describe('Standalone calendar rest days', () => {
         const path = 'users/rest-owner/trainingRestDays/2026-10-31';
         const value = { schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 };

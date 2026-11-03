@@ -4,6 +4,7 @@ import { BehaviorSubject, Subject } from 'rxjs';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user } from 'app/firebase/auth';
 import { Firestore, getDocFromServer, setDoc, updateDoc, deleteDoc } from 'app/firebase/firestore';
+import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { AppPushService } from './app.push.service';
 import { AppRemoteConfigService } from './app.remote-config.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -17,6 +18,7 @@ vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof 
   doc: vi.fn((_db, path) => ({ path })), getDocFromServer: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn() }));
 const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
+const categoryEnabled = signal(true);
 const localKey = 'qs.web-push.installation.v1';
 const registration = { schemaVersion: 1, origin: 'https://quantified-self.io', vapidPublicKey: key, generation: id,
   endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) } };
@@ -37,6 +39,7 @@ let support: { checkPushSupport: ReturnType<typeof vi.fn>; createRandomUUID: Ret
 function setup(platform = 'browser', conventional = false) {
   TestBed.configureTestingModule({ providers: [
     AppPushService, AuthSessionCleanupService,
+    { provide: AppNotificationPreferencesService, useValue: { isEnabled: () => categoryEnabled() } },
     { provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
     { provide: AppRemoteConfigService, useValue: config }, { provide: AppFunctionsService, useValue: functions },
     { provide: AppWindowService, useValue: { windowRef: windows } }, { provide: APP_STORAGE, useValue: storage },
@@ -46,7 +49,7 @@ function setup(platform = 'browser', conventional = false) {
   return TestBed.inject(AppPushService);
 }
 beforeEach(() => {
-  vi.clearAllMocks(); storage = window.localStorage; storage.clear();
+  vi.clearAllMocks(); categoryEnabled.set(true); storage = window.localStorage; storage.clear();
   owner = { uid: 'owner', getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }) };
   owner$ = new BehaviorSubject(owner); auth = { currentUser: owner }; vi.mocked(user).mockReturnValue(owner$ as never);
   subscription = { endpoint: registration.endpoint, options: { applicationServerKey: Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)).buffer },
@@ -346,6 +349,19 @@ describe('one-import notification device consent', () => {
     Object.defineProperty(windows, 'location', { value: { origin: 'https://beta.quantified-self.io' }, configurable: true });
     config.webPushEnabled.set(false); config.webPushEnabled.set(true);
     expect(service.historyNotificationsAvailable()).toBe(false);
+  });
+  it('keeps category opt-out separate from device permission and self-tests', async () => {
+    const service = await enabled(); categoryEnabled.set(false);
+    expect(service.canNotifyHistory()).toBe(false); expect(service.canTest()).toBe(true);
+    await expect(service.historyNotificationTarget('owner')).rejects.toThrow('History imports category');
+  });
+  it('rechecks category opt-out after the device lookup', async () => {
+    const service = await enabled();
+    let resolve!: (value: unknown) => void;
+    vi.mocked(getDocFromServer).mockReturnValueOnce(new Promise(done => { resolve = done; }) as never);
+    const pending = service.historyNotificationTarget('owner'); categoryEnabled.set(false);
+    resolve({ exists: () => true, data: () => registration });
+    await expect(pending).rejects.toThrow('changed');
   });
   it('rejects account changes during the authoritative registration lookup', async () => {
     const service = await enabled();

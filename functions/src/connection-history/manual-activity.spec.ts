@@ -228,11 +228,17 @@ describe('manual history notification admission', () => {
   it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('stores consent atomically and privately for %s', async service => {
     seed(service); notificationDevice();
     const result = await startManualActivityHistory('owner', service, start, end, notification);
-    expect(runs()[0][1].notification).toEqual(notification);
+    expect(runs()[0][1].notification).toEqual({ ...notification, categoryRevision: 0 });
     expect(result).not.toHaveProperty('notification');
     expect(JSON.stringify(runs()[0][1])).not.toContain('private-endpoint');
   });
-  it.each(['missing', 'rotated', 'beta', 'key', 'disabled', 'Garmin', 'rejected commit'])('does not admit an opted-in run for %s', async reason => {
+  it('binds consent to the current server category revision', async () => {
+    seed(ServiceNames.SuuntoApp); notificationDevice();
+    mocks.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: true, revision: 2 });
+    await startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end, notification);
+    expect(runs()[0][1].notification).toEqual({ ...notification, categoryRevision: 2 });
+  });
+  it.each(['missing', 'rotated', 'beta', 'key', 'disabled', 'Garmin', 'category off', 'malformed category', 'rejected commit'])('does not admit an opted-in run for %s', async reason => {
     const service = reason === 'Garmin' ? ServiceNames.GarminAPI : ServiceNames.SuuntoApp;
     seed(service); const registration = notificationDevice();
     if (reason === 'missing') mocks.rows.delete(`users/owner/pushSubscriptions/${notification.installationId}`);
@@ -240,6 +246,8 @@ describe('manual history notification admission', () => {
     if (reason === 'beta') registration.origin = 'https://beta.quantified-self.io';
     if (reason === 'key') registration.vapidPublicKey = 'B' + 'Z'.repeat(86);
     if (reason === 'disabled') pushMock.template.mockResolvedValue({ parameters: {} });
+    if (reason === 'category off') mocks.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: false, revision: 1 });
+    if (reason === 'malformed category') mocks.rows.set('users/owner/notificationPreferences/history_import', {});
     if (reason === 'rejected commit') mocks.rejectCommit = true;
     await expect(startManualActivityHistory('owner', service, start, end, notification)).rejects.toThrow();
     expect(runs()).toHaveLength(0);

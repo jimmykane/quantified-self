@@ -1,4 +1,4 @@
-import type { HistoryNotificationConsent } from '../../../shared/history-import-notifications';
+import type { HistoryNotificationRequest } from '../../../shared/history-import-notifications';
 import { historyPushConfiguration, validateHistoryNotificationConsent } from '../web-push/history-consent';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
@@ -32,7 +32,7 @@ const PROVIDER_ID_FIELDS: Record<ManualHistoryService, string> = {
  * Older connections can recover a missing account ID from one verified current token.
  */
 export async function startManualActivityHistory(
-  userID: string, serviceName: ManualHistoryService, startDate: Date, endDate: Date, notification?: HistoryNotificationConsent,
+  userID: string, serviceName: ManualHistoryService, startDate: Date, endDate: Date, notification?: HistoryNotificationRequest,
 ) {
   const startMs = startDate.getTime(), endMs = endDate.getTime();
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
@@ -107,8 +107,7 @@ export async function startManualActivityHistory(
       throw error;
     }
     if (notification) {
-      await validateHistoryNotificationConsent(db, tx, userID, serviceName, notification, pushConfig!.publicKey);
-      run.notification = notification;
+      run.notification = await validateHistoryNotificationConsent(db, tx, userID, serviceName, notification, pushConfig!.publicKey);
     }
     const projection = historyProjection(run);
     tx.create(db.collection(CONNECTION_HISTORY_COLLECTION).doc(run.id), run);
