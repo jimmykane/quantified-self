@@ -68,6 +68,18 @@ test('every native chart targets only the two exact queues; policies have worklo
   assert.equal(config.policies.find(p => p.userLabels.policy_id === 'heartbeat').conditions.filter(c => c.conditionAbsent).length, 4);
   assert.equal(config.policies.find(p => p.userLabels.policy_id === 'telemetry').conditions.length, 2);
 });
+test('hourly COROS admission failures include v2 resources with a cadence-appropriate alert', () => {
+  const config = bundle();
+  const metric = config.metrics.find(item => item.name === 'qs_health_sleep_dispatch_failures_v1');
+  assert.match(metric.filter, /resource.type=\("cloud_function" OR "cloud_run_revision"\)/);
+  const condition = config.policies.find(item => item.userLabels.policy_id === 'dispatch').conditions
+    .find(item => item.displayName === 'Hourly COROS poll admissions').conditionThreshold;
+  assert.match(condition.filter, /resource.type="cloud_run_revision"/);
+  assert.match(condition.filter, /metric.labels.provider="COROSAPI"/);
+  assert.equal(condition.aggregations[0].alignmentPeriod, '14400s');
+  assert.equal(condition.thresholdValue, 2);
+  assert.ok(config.dashboard.mosaicLayout.tiles.some(tile => tile.widget.title === 'Hourly COROS poll admission failures'));
+});
 test('alert scopes reject native retries, unknown metrics and metric names outside the actual type field', () => {
   for (const filter of [
     'metric.type="cloudtasks.googleapis.com/queue/task_attempt_count"',

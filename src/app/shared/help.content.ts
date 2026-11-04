@@ -1601,6 +1601,8 @@ When Garmin and Suunto are connected, the dashboard may offer a one-time action 
 
 COROS history import is limited to the last **3 months** because of API restrictions.
 
+COROS Sleep and Health are checked **hourly**. New data can take about an hour to appear after COROS makes it available, plus processing time. Routine checks cover recent dates; a daily seven-day reconciliation catches late uploads and corrections. The seven-day history-import cooldown does not pause these automatic checks.
+
 COROS tools currently include:
 
 - connecting your account,

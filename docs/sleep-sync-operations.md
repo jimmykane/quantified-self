@@ -16,8 +16,16 @@ live callback pulls use the ordinary Sleep worker, while user-requested historic
 single-concurrency Cloud Tasks worker. Garmin Health is production-wide behind an independent operational
 switch, and enabling either Health adapter does not change provider Sleep behavior.
 
-COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
-poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
+COROS runs `scheduleCOROSSleepSync` hourly and immediately dispatches one eligible poll per connected account.
+Routine requests overlap the last successfully processed date by one UTC calendar day, normally covering yesterday
+and today. The first poll and a successful-reconciliation interval of at least 24 hours request the existing rolling
+seven-day window. Outage recovery remains bounded to that horizon. The private per-user
+`system/corosDailyPolling` cursor observes exact whole-job success receipts; it does not infer completeness from a
+stored sleep record or `lastPollAtMs`. Pending retries keep their original task and backoff. Failed immediate dispatch
+is recovered by the existing 30-minute reconciler. See [COROS polling](coros-integration.md#daily-health-and-sleep-ingestion)
+for account/generation fences, idempotency, private-state cleanup and release scope.
+
+The documented COROS endpoint provides sleep start/end
 times, average sleep heart rate, resting heart rate, overnight HRV, steps, a provider-native
 calorie value, and optional detailed HRV/interval-heart-rate samples.
 The live endpoint may represent a successful range with no daily records as an exact empty
@@ -422,9 +430,17 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
 
 Update the provider flag tests and deploy or restart the Functions runtime. Restore the empty
 list to re-enable it. Queued items skipped while disabled are intentionally not retried; the
-next daily COROS poll will request the rolling recent window again.
+next eligible hourly COROS poll will request the incremental or reconciliation window again.
 
 ## Cloud Monitoring (#830)
+
+Hourly COROS polling follow-up (4 November 2026): local definitions extend the existing dispatch-failure metric to
+`cloud_run_revision` as well as `cloud_function`, add a COROS-only three-failures-in-four-hours admission/dispatch
+condition to the existing policy, and show that series in the dashboard. Pending/retrying work and expected lifecycle
+skips are not failed scheduler runs. Existing worker, committed retry/DLQ, bounded due-backlog and unknown-observation
+signals are unchanged. This update needs a separately approved owned-bundle apply and readback; the activation
+evidence below describes the prior deployed bundle, not this local update. No monitor or scheduler was activated
+during implementation, and no new monitoring scanner or queue was introduced.
 
 Status: **activated in production on 7 October 2026**, after the separately approved
 three-Function deployment and configuration apply. The existing Alerts email channel

@@ -95,6 +95,12 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+COROS Sleep/Health polling is hourly with immediate dispatch and private per-account successful-range tracking.
+Routine windows overlap the last successful date by one UTC calendar day; a daily reconciliation retains the existing
+seven-day recovery horizon. Pending retries never create parallel polls or advance coverage. See
+[COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) for the transactional account/deletion
+fences, exact committed-success receipt, unchanged MCP contract, monitoring coverage and separately approved release.
+
 Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
 
 Connection-history status distinguishes **Requested range** from the first retained Sleep/Health dates read for the

@@ -61,6 +61,8 @@ vi.mock('firebase-admin', () => {
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: vi.fn(),
 }));
+vi.mock('./coros-polling', () => ({ enqueueCOROSDailyPoll: vi.fn() }));
+vi.mock('./monitoring', () => ({ recordHealthSleepDispatch: vi.fn() }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
@@ -72,11 +74,14 @@ vi.mock('../coros/account', () => ({
 
 import { scheduleCOROSSleepSync, sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
+import { enqueueCOROSDailyPoll } from './coros-polling';
+import { recordHealthSleepDispatch } from './monitoring';
 import * as logger from 'firebase-functions/logger';
 
 describe('sleep polling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(enqueueCOROSDailyPoll).mockResolvedValue(true);
         hoisted.metaDocGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
@@ -93,9 +98,10 @@ describe('sleep polling', () => {
         hoisted.maintenanceCursorSet.mockResolvedValue(undefined);
     });
 
-    it('allocates 512 MiB to the daily COROS sleep scheduler', () => {
+    it('runs the existing COROS scheduler hourly with 512 MiB', () => {
         expect(hoisted.scheduledOptions.get(scheduleCOROSSleepSync)).toMatchObject({
             memory: '512MiB',
+            schedule: 'every 60 minutes',
         });
     });
 
@@ -271,12 +277,7 @@ describe('sleep polling', () => {
         );
 
         expect(queued).toBe(1);
-        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'coros_poll',
-            provider: SLEEP_PROVIDERS.COROSAPI,
-            userID,
-            providerUserId: 'coros-open-id-1',
-        }));
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledWith(userID, 'coros-open-id-1', nowMs);
     });
 
     it('queues only the active COROS account when a user has legacy token documents', async () => {
@@ -301,11 +302,8 @@ describe('sleep polling', () => {
         );
 
         expect(queued).toBe(1);
-        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
-        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
-            userID,
-            providerUserId: 'coros-open-active',
-        }));
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledTimes(1);
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledWith(userID, 'coros-open-active', nowMs);
     });
 
     it('uses the active COROS token document id for legacy tokens without an openId field', async () => {
@@ -325,10 +323,34 @@ describe('sleep polling', () => {
             nowMs,
         );
 
-        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
-            userID,
-            providerUserId: 'legacy-coros-open-id',
-        }));
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledWith(userID, 'legacy-coros-open-id', nowMs);
+    });
+
+    it('counts only newly admitted COROS polls', async () => {
+        installCollectionGroupTokenMock([createTokenDoc('owner', { serviceName: ServiceNames.COROSAPI, openId: 'account' })]);
+        vi.mocked(enqueueCOROSDailyPoll).mockResolvedValue(false);
+        expect(await sleepPollingTestInternals.enqueueProviderPolls(SLEEP_PROVIDERS.COROSAPI, ServiceNames.COROSAPI, 30)).toBe(0);
+    });
+
+    it('continues other accounts after an admission failure and reports whole-run failure', async () => {
+        installCollectionGroupTokenMock(['one', 'two'].map(uid => createTokenDoc(uid, {
+            serviceName: ServiceNames.COROSAPI, openId: `account-${uid}`,
+        })));
+        vi.mocked(enqueueCOROSDailyPoll).mockImplementation(async uid => {
+            if (uid === 'one') throw new Error('private provider error');
+            return true;
+        });
+        await expect((scheduleCOROSSleepSync as unknown as () => Promise<void>)()).rejects.toThrow('1 COROS hourly polls');
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledTimes(2);
+        expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'failed');
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private provider error');
+    });
+
+    it('records successful scheduler runs without treating a pending poll as failure', async () => {
+        installCollectionGroupTokenMock([createTokenDoc('owner', { serviceName: ServiceNames.COROSAPI, openId: 'account' })]);
+        vi.mocked(enqueueCOROSDailyPoll).mockResolvedValue(false);
+        await (scheduleCOROSSleepSync as unknown as () => Promise<void>)();
+        expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'completed');
     });
 
     it('bounds active COROS account lookups for production-wide polling', async () => {

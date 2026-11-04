@@ -2643,6 +2643,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep is synced automatically from your connected services');
     expect(serviceConnectionsSection?.content).toContain('automatically importing daily Health and sleep data from a rolling recent window');
+    expect(serviceConnectionsSection?.content).toContain('COROS Sleep and Health are checked **hourly**');
+    expect(serviceConnectionsSection?.content).toContain('daily seven-day reconciliation');
+    expect(serviceConnectionsSection?.content).toContain('history-import cooldown does not pause these automatic checks');
     expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
     expect(serviceConnectionsSection?.content).toContain('COROS does not send sleep stages through this connection');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');

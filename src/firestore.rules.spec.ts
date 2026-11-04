@@ -2289,6 +2289,17 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('System Status (users/{uid}/system/status)', () => {
+            it('keeps the COROS polling cursor private and server-owned', async () => {
+                const path = `users/${userId}/system/corosDailyPolling`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ bindingKey: 'private-binding', lastSuccessfulEndMs: 1 });
+                });
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.doc(path).get());
+                await assertFails(db.doc(path).set({ lastSuccessfulEndMs: 2 }));
+                await assertFails(db.doc(path).delete());
+            });
+
             it('should allow user to read their own status', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.collection('users').doc(userId).collection('system').doc('status').get());
