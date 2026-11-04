@@ -1661,7 +1661,9 @@ export function createAssistantRuntime(
           : preferredTrainingPreview === 'preview_training_calendar_rest_day'
             || preferredTrainingPreview === 'preview_training_goal_change'
             || preferredTrainingPreview === 'preview_garmin_workout_replacement'
+            || preferredTrainingPreview === 'preview_planned_workout_v4_change'
             || preferredTrainingPreview === 'preview_planned_workout_v4_changes'
+            || preferredTrainingPreview === 'preview_saved_workout_v3_change'
             || preferredTrainingPreview === 'preview_strength_workout_change'
             ? undefined // Never substitute an unsafe legacy writer or Send/Retry for missing capability.
           : preferredTrainingPreview === 'preview_training_deletion'

@@ -5289,6 +5289,8 @@ old detail reads and full replacements fail with latest-tool guidance instead of
 the distinct before/after zone numbers used, unknown watts and explicit removal; this compact set is not a substitute
 for the full recipe's per-step assignments. Assistant remains prepare-only: scheduled changes show complete app-owned
 before/after recipes, while saved-library proposals use their existing compact review and full-recipe read-back.
+When the selected current scheduled or saved-recipe preview is absent from the Assistant catalog, no alternative
+preview is exposed to the model. Legacy creation/editing tools cannot substitute for a missing complete-recipe editor.
 Private power profiles and provider credentials remain excluded. Shared instructions and bundled Training/cross-domain
 skills distinguish symbolic zones from fixed prescriptions. Backend release and registered-client refresh/rescan are
 separate approved operations; no baseline/history promotion is performed by implementation.

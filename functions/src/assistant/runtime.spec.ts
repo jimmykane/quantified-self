@@ -784,6 +784,28 @@ describe('Training preview model-tool selection', () => {
     expect(previews).toEqual(available ? ['preview_planned_workout_v4_changes'] : []);
   });
 
+  it.each([false, true].flatMap(available => [
+    { available, tool: 'preview_planned_workout_v4_change', prompt: 'Edit my Running workout to Garmin power zone 2.' },
+    { available, tool: 'preview_saved_workout_v3_change', prompt: 'Update my saved workout library recipe to Garmin power zone 2.' },
+  ] as const))('requires the complete single-recipe capability without a legacy fallback ($tool, available=$available)', async ({ available, tool, prompt }) => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v3_change',
+      'preview_saved_workout_v2_change'] as const).map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    if (available) session.tools.push({ name: tool, title: tool, description: 'Complete recipe', inputSchema: { type: 'object' } });
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name);
+        expect(input.tools.map(tool => tool.name)).not.toContain('apply_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: available ? 'Read the complete recipe before preparing a review.' : 'The complete recipe capability needs a release/catalog refresh.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt, history: [],
+      timeZone: 'Europe/Helsinki', trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(previews).toEqual(available ? [tool] : []);
+  });
+
   it.each([false, true])('never substitutes a generic editor for missing complete strength capability (available=%s)', async available => {
     const { session } = createSession();
     session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v4_change'] as const)
