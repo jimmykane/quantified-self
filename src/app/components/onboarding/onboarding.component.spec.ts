@@ -117,16 +117,238 @@ describe('OnboardingComponent', () => {
             ]
         }).compileComponents();
 
+    });
+
+    // Logic cases initialize the component without rendering its template; UI cases opt in.
+    const setupComponent = async (render = false) => {
         fixture = TestBed.createComponent(OnboardingComponent);
         component = fixture.componentInstance;
         component.user = { ...mockUser } as any;
+        if (render) fixture.detectChanges();
+        else component.ngOnInit();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect((component as any).advancing).toBe(false));
+        vi.clearAllMocks();
+    };
+
+    const clickButton = (label: string) => {
+        const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) =>
+            item.textContent?.includes(label)) as HTMLButtonElement;
+        expect(button).toBeTruthy();
+        button.click();
+        fixture.detectChanges();
+    };
+
+    it.each([0, 1, 2])('can skip intro chapter %s without accepting consent or choosing a plan', async chapter => {
+        await setupComponent(true);
+        component.chapterIndex.set(chapter);
+        fixture.detectChanges();
+        clickButton('Skip the intro');
+        expect(component.stage()).toBe('start');
+        expect(component.termsFormGroup.invalid).toBe(true);
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+    });
+
+    it('takes the full tour forward and back with focus on the new heading', async () => {
+        await setupComponent(true);
+        clickButton('Next');
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Look beyond');
+        await fixture.whenStable();
+        expect(document.activeElement).toBe(fixture.nativeElement.querySelector('h1'));
+        clickButton('Back');
+        expect(component.chapterIndex()).toBe(0);
+        clickButton('Next');
+        clickButton('Next');
+        clickButton('Find my starting point');
+        expect(component.stage()).toBe('start');
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { choice: 'connect', path: '/services' },
+        { choice: 'upload', path: '/dashboard' },
+        { choice: 'explore', path: '/dashboard' },
+    ] as const)('completes $choice through existing pricing and the $path workspace', async ({ choice, path }) => {
+        await setupComponent(true);
+        clickButton('Skip the intro');
+        expect((fixture.nativeElement.querySelector('.onboarding-actions button[mat-flat-button]') as HTMLButtonElement).disabled).toBe(true);
+        const radio = fixture.nativeElement.querySelector(`mat-radio-button[value="${choice}"] input`) as HTMLInputElement;
+        radio.click();
+        fixture.detectChanges();
+        clickButton('Continue');
+        expect(component.stage()).toBe('privacy');
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.directive(PricingComponent)).componentInstance.onboardingUser).toBe(component.user);
+        await component.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
 
-        vi.clearAllMocks();
+    it('keeps the starting point and consent choices when moving back', async () => {
+        await setupComponent(false);
+        component.skipIntro();
+        component.chooseStart('upload');
+        component.continueFromStart();
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        component.back();
+        expect(component.stage()).toBe('privacy');
+        expect(component.termsFormGroup.valid).toBe(true);
+        component.back();
+        expect(component.startChoice()).toBe('upload');
+        expect(component.stage()).toBe('start');
+    });
+
+    it('skips the starting-point question for an existing connection return', async () => {
+        await setupComponent(false);
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/services?serviceName=Suunto%20app' });
+        const localFixture = TestBed.createComponent(OnboardingComponent);
+        const local = localFixture.componentInstance;
+        local.user = { ...mockUser } as any;
+        localFixture.detectChanges();
+        await localFixture.whenStable();
+        local.skipIntro();
+        expect(local.stage()).toBe('privacy');
+        // A previous choice never replaces an explicit deep link.
+        local.chooseStart('upload');
+        expect(local.completionLabel).toBe('Connections');
+    });
+
+    it('keeps disclosure buttons associated with their hidden policy text', async () => {
+        await setupComponent(true);
+        component.stage.set('privacy');
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('.policy-read-more') as HTMLButtonElement;
+        const region = fixture.nativeElement.querySelector(`#${button.getAttribute('aria-controls')}`) as HTMLElement;
+        expect(region.hidden).toBe(true);
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(region.hidden).toBe(false);
+        const link = region.querySelector('a')!;
+        expect(link.getAttribute('href')).toBe('/policies#connected-services-data');
+        expect(link.getAttribute('target')).toBe('_blank');
+    });
+
+    it('has silent initialization and no-op selections, with one haptic for each accepted choice', async () => {
+        await setupComponent(false);
+        const haptics = TestBed.inject(AppHapticsService);
+        const initial = TestBed.createComponent(OnboardingComponent);
+        initial.componentInstance.user = { ...mockUser } as any;
+        initial.detectChanges();
+        await initial.whenStable();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.previousChapter();
+        component.continueFromStart();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.chooseStart('upload');
+        component.chooseStart('upload');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        component.skipIntro();
+        component.skipIntro();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows a recoverable save error, retains form choices and signals failure only after rejection', async () => {
+        await setupComponent(true);
+        const haptics = TestBed.inject(AppHapticsService);
+        component.stage.set('privacy');
+        setRequiredPoliciesAccepted();
+        mockUserService.createOrUpdateUser.mockRejectedValueOnce(new Error('offline'));
+        await component.onTermsSubmit();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('try again');
+        expect(component.user.acceptedPrivacyPolicy).toBe(false);
+        expect(component.termsFormGroup.valid).toBe(true);
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).toHaveBeenCalledOnce();
+        await component.onTermsSubmit();
+        expect(component.stage()).toBe('plan');
+        expect(component.errorMessage()).toBe('');
+        expect(haptics.success).toHaveBeenCalledOnce();
+    });
+
+    it('blocks duplicate consent saves and back navigation while a save is pending', async () => {
+        await setupComponent(true);
+        component.stage.set('privacy');
+        setRequiredPoliciesAccepted();
+        let resolveSave!: () => void;
+        mockUserService.createOrUpdateUser.mockReturnValue(new Promise<void>(resolve => resolveSave = resolve));
+        const saving = component.onTermsSubmit();
+        await component.onTermsSubmit();
+        component.back();
+        expect(component.stage()).toBe('privacy');
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+        expect(fixture.nativeElement.querySelector('mat-spinner')).toBeTruthy();
+        expect(component.termsFormGroup.disabled).toBe(true);
+        resolveSave();
+        await saving;
+        expect(component.termsFormGroup.enabled).toBe(true);
+        expect(component.stage()).toBe('plan');
+    });
+
+    it('keeps just-saved consent when the auth stream emits an older profile during the save', async () => {
+        await setupComponent(false);
+        const user$ = new Subject<any>();
+        mockAuthService.user$ = user$;
+        const localFixture = TestBed.createComponent(OnboardingComponent);
+        const local = localFixture.componentInstance;
+        localFixture.detectChanges();
+        user$.next({ ...mockUser });
+        await localFixture.whenStable();
+        for (const field of ['acceptPrivacyPolicy', 'acceptDataPolicy', 'acceptTos']) {
+            local.termsFormGroup.get(field)!.setValue(true);
+            local.termsFormGroup.get(field)!.markAsDirty();
+        }
+        let resolveSave!: () => void;
+        mockUserService.createOrUpdateUser.mockReturnValue(new Promise<void>(resolve => resolveSave = resolve));
+        const saving = local.onTermsSubmit();
+        user$.next({ ...mockUser });
+        resolveSave();
+        await saving;
+        expect(local.user.acceptedPrivacyPolicy).toBe(true);
+        expect((local.user as any).acceptedTos).toBe(true);
+        expect(local.user.acceptedTrackingPolicy).toBe(false);
+        expect(local.stage()).toBe('plan');
+        user$.next({ ...mockUser });
+        await localFixture.whenStable();
+        expect(local.user.acceptedPrivacyPolicy).toBe(true);
+        expect((local.user as any).acceptedTos).toBe(true);
+        expect(local.user.acceptedTrackingPolicy).toBe(false);
+    });
+
+    it('does not undo a deliberate Back to privacy on a background profile update', async () => {
+        await setupComponent(false);
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        component.back();
+        await (component as any).checkAndAdvance();
+        expect(component.stage()).toBe('privacy');
+    });
+
+    it('coalesces concurrent completion calls into one account write', async () => {
+        await setupComponent(false);
+        let resolveSave!: () => void;
+        component.canFinish = true;
+        mockUserService.updateUserProperties.mockReturnValue(new Promise<void>(resolve => resolveSave = resolve));
+        const finishing = component.finishOnboarding();
+        await component.finishOnboarding();
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
+        resolveSave();
+        await finishing;
+        expect(mockRouter.navigate).toHaveBeenCalledOnce();
     });
 
     it.each(['paid', 'free'])('uses the just-saved onboarding consent for the %s choice while the auth profile is stale', async choice => {
+        await setupComponent(false);
         const freshUser = { ...mockUser };
         const staleAuthUser = { ...mockUser };
         mockAuthService.user$ = of(staleAuthUser);
@@ -149,7 +371,8 @@ describe('OnboardingComponent', () => {
         await local.onTermsSubmit();
         localFixture.detectChanges();
         await localFixture.whenStable();
-        expect(local.stepper.selectedIndex).toBe(1);
+        localFixture.detectChanges();
+        expect(local.stage()).toBe('plan');
         expect(staleAuthUser.acceptedPrivacyPolicy).toBe(false);
         expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
@@ -171,11 +394,12 @@ describe('OnboardingComponent', () => {
     });
 
     it('resets scroll after advancing to Plan and returning to Legal consent', async () => {
+        await setupComponent(true);
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(component.stepper.selectedIndex).toBe(1);
+        expect(component.stage()).toBe('plan');
         expect(navigationEffects.scrollToTop).toHaveBeenCalledOnce();
         navigationEffects.scrollToTop.mockClear();
 
@@ -186,15 +410,16 @@ describe('OnboardingComponent', () => {
         await fixture.whenStable();
         expect(navigationEffects.scrollToTop).not.toHaveBeenCalled();
 
-        const back = fixture.debugElement.query(By.css('button[matStepperPrevious]')).nativeElement as HTMLButtonElement;
+        const back = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button: HTMLButtonElement) => button.textContent?.trim() === 'Back') as HTMLButtonElement;
         back.click();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(component.stepper.selectedIndex).toBe(0);
+        expect(component.stage()).toBe('privacy');
         expect(navigationEffects.scrollToTop).toHaveBeenCalledOnce();
     });
 
     it('resets scroll on entry and when saved consent automatically advances to Plan', async () => {
+        await setupComponent(false);
         const localFixture = TestBed.createComponent(OnboardingComponent);
         localFixture.componentInstance.user = {
             ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true,
@@ -202,15 +427,19 @@ describe('OnboardingComponent', () => {
         localFixture.detectChanges();
         await localFixture.whenStable();
 
-        await vi.waitFor(() => expect(localFixture.componentInstance.stepper.selectedIndex).toBe(1));
-        expect(navigationEffects.scrollToTop).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => expect(localFixture.componentInstance.stage()).toBe('plan'));
+        localFixture.detectChanges();
+        await localFixture.whenStable();
+        expect(navigationEffects.scrollToTop).toHaveBeenCalledOnce();
     });
 
-    it('should create', () => {
+    it('should create', async () => {
+        await setupComponent(false);
         expect(component).toBeTruthy();
     });
 
-    it('should initialize termsFormGroup with all policy controls', () => {
+    it('should initialize termsFormGroup with all policy controls', async () => {
+        await setupComponent(false);
         expect(component.termsFormGroup).toBeTruthy();
         expect(component.termsFormGroup.get('acceptPrivacyPolicy')).toBeTruthy();
         expect(component.termsFormGroup.get('acceptDataPolicy')).toBeTruthy();
@@ -219,28 +448,41 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptMarketingPolicy')).toBeTruthy();
     });
 
-    it('should disable stepper ripples on the onboarding stepper', () => {
-        expect(component.stepper.disableRipple).toBe(true);
+    it('starts with an optional intro without loading prices or saving consent', async () => {
+        await setupComponent(false);
+        expect(component.stage()).toBe('intro');
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
     });
 
-    it('should render the legal consent form inside the centered onboarding form shell', () => {
+    it('should render the legal consent form inside the centered onboarding form shell', async () => {
+        await setupComponent(true);
+        component.stage.set('privacy');
+        fixture.detectChanges();
         const onboardingForm = fixture.nativeElement.querySelector('form.onboarding-form');
         expect(onboardingForm).toBeTruthy();
     });
 
-    it('should render the shared onboarding action bar for both steps', () => {
+    it('renders only the current stage action bar', async () => {
+        await setupComponent(true);
         const actionBars = fixture.nativeElement.querySelectorAll('.onboarding-actions');
-        expect(actionBars.length).toBe(2);
+        expect(actionBars.length).toBe(1);
     });
 
-    it('should render pricing in onboarding mode for step 2', () => {
+    it('should render pricing in onboarding mode for step 2', async () => {
+        await setupComponent(true);
+        component.stage.set('plan');
+        fixture.detectChanges();
         const pricingComponent = fixture.debugElement.query(By.directive(PricingComponent))?.componentInstance as PricingComponent | undefined;
 
         expect(pricingComponent).toBeTruthy();
         expect(pricingComponent?.isOnboarding).toBe(true);
     });
 
-    it('should disable step 2 footer actions while pricing is loading', () => {
+    it('should disable plan footer actions while pricing is loading', async () => {
+        await setupComponent(true);
+        component.stage.set('plan');
+        fixture.detectChanges();
         component.onPricingLoadingChange(true);
         fixture.detectChanges();
 
@@ -252,7 +494,8 @@ describe('OnboardingComponent', () => {
         expect(continueButton?.disabled).toBe(true);
     });
 
-    it('should keep consent controls unchecked by default', () => {
+    it('should keep consent controls unchecked by default', async () => {
+        await setupComponent(false);
         expect(component.termsFormGroup.get('acceptPrivacyPolicy')?.value).toBe(false);
         expect(component.termsFormGroup.get('acceptDataPolicy')?.value).toBe(false);
         expect(component.termsFormGroup.get('acceptTos')?.value).toBe(false);
@@ -260,7 +503,8 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptMarketingPolicy')?.value).toBe(false);
     });
 
-    it('should mark acceptMarketingPolicy as optional (no validators)', () => {
+    it('should mark acceptMarketingPolicy as optional (no validators)', async () => {
+        await setupComponent(false);
         const marketingControl = component.termsFormGroup.get('acceptMarketingPolicy');
         expect(marketingControl).toBeTruthy();
 
@@ -271,7 +515,8 @@ describe('OnboardingComponent', () => {
         expect(marketingControl!.valid).toBe(true);
     });
 
-    it('should mark acceptTrackingPolicy as optional (no validators)', () => {
+    it('should mark acceptTrackingPolicy as optional (no validators)', async () => {
+        await setupComponent(false);
         const trackingControl = component.termsFormGroup.get('acceptTrackingPolicy');
         expect(trackingControl).toBeTruthy();
 
@@ -279,7 +524,8 @@ describe('OnboardingComponent', () => {
         expect(trackingControl!.valid).toBe(true);
     });
 
-    it('should require acceptPrivacyPolicy to be true', () => {
+    it('should require acceptPrivacyPolicy to be true', async () => {
+        await setupComponent(false);
         const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
         expect(privacyControl).toBeTruthy();
 
@@ -291,16 +537,11 @@ describe('OnboardingComponent', () => {
     });
 
     it('should use form value for optional policies on submit', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
 
         component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(false);
         component.termsFormGroup.get('acceptMarketingPolicy')!.setValue(true);
-
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
 
         await component.onTermsSubmit();
 
@@ -312,14 +553,10 @@ describe('OnboardingComponent', () => {
     });
 
     it('should preserve false value for acceptMarketingPolicy when unchecked', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
         component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(true);
         component.termsFormGroup.get('acceptMarketingPolicy')!.setValue(false);
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
 
         await component.onTermsSubmit();
 
@@ -327,12 +564,8 @@ describe('OnboardingComponent', () => {
     });
 
     it('should call createOrUpdateUser on valid form submission', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
 
         await component.onTermsSubmit();
 
@@ -340,6 +573,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should not submit if form is invalid', async () => {
+        await setupComponent(false);
         component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(false);
 
         await component.onTermsSubmit();
@@ -348,6 +582,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should mark all controls touched when submit is invalid', async () => {
+        await setupComponent(false);
         const markAllAsTouchedSpy = vi.spyOn(component.termsFormGroup, 'markAllAsTouched');
 
         await component.onTermsSubmit();
@@ -355,7 +590,8 @@ describe('OnboardingComponent', () => {
         expect(markAllAsTouchedSpy).toHaveBeenCalled();
     });
 
-    it('should preserve the same FormGroup instance when user input changes', () => {
+    it('should preserve the same FormGroup instance when user input changes', async () => {
+        await setupComponent(false);
         const initialFormGroup = component.termsFormGroup;
 
         component.user = { ...mockUser, acceptedPrivacyPolicy: true } as any;
@@ -371,7 +607,8 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup).toBe(initialFormGroup);
     });
 
-    it('should NOT overwrite dirty form controls with incoming user data', () => {
+    it('should NOT overwrite dirty form controls with incoming user data', async () => {
+        await setupComponent(false);
         const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
 
         privacyControl!.setValue(true);
@@ -390,7 +627,8 @@ describe('OnboardingComponent', () => {
         expect(privacyControl!.value).toBe(true);
     });
 
-    it('should patch non-dirty form controls on ngOnChanges', () => {
+    it('should patch non-dirty form controls on ngOnChanges', async () => {
+        await setupComponent(false);
         const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
         expect(privacyControl!.dirty).toBe(false);
 
@@ -407,7 +645,8 @@ describe('OnboardingComponent', () => {
         expect(privacyControl!.value).toBe(true);
     });
 
-    it('should call checkAndAdvance in ngOnChanges only after first change', () => {
+    it('should call checkAndAdvance in ngOnChanges only after first change', async () => {
+        await setupComponent(false);
         const checkAndAdvanceSpy = vi.spyOn(component as any, 'checkAndAdvance');
 
         component.ngOnChanges({
@@ -433,7 +672,8 @@ describe('OnboardingComponent', () => {
         expect(checkAndAdvanceSpy).toHaveBeenCalled();
     });
 
-    it('should populate user from auth stream when @Input user is missing', () => {
+    it('should populate user from auth stream when @Input user is missing', async () => {
+        await setupComponent(false);
         const authUser = { ...mockUser, acceptedPrivacyPolicy: true };
         mockAuthService.user$ = of(authUser);
 
@@ -446,6 +686,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should patch non-dirty controls when auth stream emits after form creation', async () => {
+        await setupComponent(false);
         const userSubject = new Subject<any>();
         mockAuthService.user$ = userSubject.asObservable();
 
@@ -461,7 +702,8 @@ describe('OnboardingComponent', () => {
         expect(localComponent.termsFormGroup.get('acceptPrivacyPolicy')?.value).toBe(true);
     });
 
-    it('should log tutorial_begin on init', () => {
+    it('should log tutorial_begin on init', async () => {
+        await setupComponent(false);
         const localFixture = TestBed.createComponent(OnboardingComponent);
         const localComponent = localFixture.componentInstance;
         localComponent.user = { ...mockUser } as any;
@@ -472,6 +714,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should finish onboarding from checkAndAdvance when terms are accepted and user can finish', async () => {
+        await setupComponent(false);
         component.user = {
             ...mockUser,
             acceptedPrivacyPolicy: true,
@@ -487,128 +730,79 @@ describe('OnboardingComponent', () => {
         expect(finishSpy).toHaveBeenCalled();
     });
 
-    it('should auto-advance to pricing step when terms are accepted but onboarding is not finishable yet', async () => {
-        vi.useFakeTimers();
-        try {
-            component.user = {
-                ...mockUser,
-                acceptedPrivacyPolicy: true,
-                acceptedDataPolicy: true,
-                acceptedTos: true
-            } as any;
-            component.stepper = { selectedIndex: 0 } as any;
-            mockUserService.hasPaidAccess.mockResolvedValue(false);
-            const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
-
-            await (component as any).checkAndAdvance();
-
-            expect(finishSpy).not.toHaveBeenCalled();
-            expect(component.stepper.selectedIndex).toBe(0);
-            vi.runAllTimers();
-            expect(component.stepper.selectedIndex).toBe(1);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('should not advance or finish when required terms are not accepted', async () => {
-        vi.useFakeTimers();
-        try {
-            component.user = {
-                ...mockUser,
-                acceptedPrivacyPolicy: true,
-                acceptedDataPolicy: false,
-                acceptedTos: true
-            } as any;
-            component.stepper = { selectedIndex: 0 } as any;
-            mockUserService.hasPaidAccess.mockResolvedValue(true);
-            const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
-
-            await (component as any).checkAndAdvance();
-            vi.runAllTimers();
-
-            expect(finishSpy).not.toHaveBeenCalled();
-            expect(component.stepper.selectedIndex).toBe(0);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    it('should no-op checkAndAdvance when user is missing', async () => {
-        await fixture.whenStable();
-        vi.clearAllMocks();
-        component.user = undefined as any;
-
+    it('resumes membership when required consent is already saved', async () => {
+        await setupComponent(false);
+        component.user = { ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as any;
+        const finish = vi.spyOn(component, 'finishOnboarding');
         await (component as any).checkAndAdvance();
+        expect(component.stage()).toBe('plan');
+        expect(finish).not.toHaveBeenCalled();
+    });
 
+    it('does not advance or finish with missing required consent even for paid accounts', async () => {
+        await setupComponent(false);
+        component.user = { ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: false, acceptedTos: true } as any;
+        mockUserService.hasPaidAccess.mockResolvedValue(true);
+        const finish = vi.spyOn(component, 'finishOnboarding');
+        await (component as any).checkAndAdvance();
+        expect(component.stage()).toBe('intro');
+        expect(finish).not.toHaveBeenCalled();
+    });
+
+    it('does not check membership before the user is available', async () => {
+        await setupComponent(false);
+        component.user = undefined as any;
+        await (component as any).checkAndAdvance();
         expect(mockUserService.isPro).not.toHaveBeenCalled();
         expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
     });
 
-    it('should call stepper.next on valid terms submit for non-subscribed users', async () => {
+    it('advances to membership after saving valid consent for non-subscribed users', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
-        mockUserService.hasPaidAccess.mockResolvedValue(false);
-
         await component.onTermsSubmit();
-
-        expect(component.stepper.next).toHaveBeenCalled();
+        expect(component.stage()).toBe('plan');
         expect(mockUserService.createOrUpdateUser).toHaveBeenCalled();
     });
 
-    it('should log onboarding_step metadata when submitting from step index > 0', async () => {
+    it('logs the saved legal consent step', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 1,
-            next: vi.fn(),
-            selected: { label: 'Plan' }
-        } as any;
 
         await component.onTermsSubmit();
 
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('onboarding_step', {
             step_index: 1,
-            step_label: 'Plan'
+            step_label: 'Legal consent'
         });
     });
 
     it('should finish onboarding on terms submit when user is already subscribed', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
         mockUserService.hasPaidAccess.mockResolvedValue(true);
         const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
 
         await component.onTermsSubmit();
 
         expect(finishSpy).toHaveBeenCalled();
-        expect(component.stepper.next).not.toHaveBeenCalled();
+        expect(component.stage()).not.toBe('plan');
     });
 
     it('should log and recover when createOrUpdateUser fails on terms submit', async () => {
+        await setupComponent(false);
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
         mockUserService.createOrUpdateUser.mockRejectedValue(new Error('save failed'));
 
         await component.onTermsSubmit();
 
         expect(mockLoggerService.error).toHaveBeenCalledWith('Error updating user terms:', expect.any(Error));
         expect(component.isLoading).toBe(false);
-        expect(component.stepper.next).not.toHaveBeenCalled();
+        expect(component.stage()).not.toBe('plan');
     });
 
     it('should apply implicit free-tier in finishOnboarding when canFinish is false and user is not paid', async () => {
+        await setupComponent(false);
         component.canFinish = false;
         mockUserService.hasPaidAccess.mockResolvedValue(false);
 
@@ -622,6 +816,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should skip implicit free-tier when canFinish is false but user has paid access', async () => {
+        await setupComponent(false);
         component.canFinish = false;
         mockUserService.hasPaidAccess.mockResolvedValue(true);
 
@@ -633,6 +828,7 @@ describe('OnboardingComponent', () => {
 
     it.each([{ path: '/tools/compare', label: 'Compare' }, { path: '/services', label: 'Connections' }])(
         'returns to $label after required consent and free account setup complete', async ({ path, label }) => {
+        await setupComponent(false);
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: path });
             const returnFixture = TestBed.createComponent(OnboardingComponent);
             const returningComponent = returnFixture.componentInstance;
@@ -651,6 +847,7 @@ describe('OnboardingComponent', () => {
             expect(mockUserService.setFreeTier).toHaveBeenCalledWith(returningComponent.user);
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(returningComponent.user, { onboardingCompleted: true });
             expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+            returnFixture.detectChanges();
             expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(`Continue to ${label}`);
             expect(returningComponent.isLoading).toBe(false);
         },
@@ -658,6 +855,7 @@ describe('OnboardingComponent', () => {
 
     it.each(['/tools/compare', '/services'])(
         'returns an already completed account to %s without rewriting its profile', async (path) => {
+        await setupComponent(false);
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: path });
             const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
             returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
@@ -679,6 +877,7 @@ describe('OnboardingComponent', () => {
         { serviceName: 'Suunto app', onboardingCompleted: false },
         { serviceName: 'Suunto app', onboardingCompleted: true },
     ])('keeps $serviceName setup after required onboarding (previously complete: $onboardingCompleted)', async ({ serviceName, onboardingCompleted }) => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: `/services?serviceName=${encodeURIComponent(serviceName)}` });
         const returnFixture = TestBed.createComponent(OnboardingComponent);
         const returningComponent = returnFixture.componentInstance;
@@ -701,6 +900,7 @@ describe('OnboardingComponent', () => {
     });
 
     it.each([false, true])('returns to the same MCP request after setup (previously complete: %s)', async (onboardingCompleted) => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });
         const returnFixture = TestBed.createComponent(OnboardingComponent);
         const returningComponent = returnFixture.componentInstance;
@@ -721,6 +921,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('returns to Subscriptions after its existing account-setup handoff', async () => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions' });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
         returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
@@ -732,6 +933,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('preserves the chosen membership price after account setup without starting checkout', async () => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_yearly&ignored=value' });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
         returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
@@ -748,6 +950,7 @@ describe('OnboardingComponent', () => {
         { returnUrl: '/subscriptions', path: '/subscriptions', label: 'Subscriptions', queryParams: null },
         { returnUrl: '//example.com/subscriptions?priceId=price_pro_yearly', path: '/dashboard', label: 'Dashboard', queryParams: null },
     ])('uses the latest safe membership return URL when onboarding is reused: $returnUrl', async ({ returnUrl, path, label, queryParams }) => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_monthly' });
         routeStub.queryParamMap = new BehaviorSubject(routeSnapshot.queryParamMap);
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
@@ -768,6 +971,7 @@ describe('OnboardingComponent', () => {
     });
 
     it.each(['', 'request/other', 'request?scope=all', 'a'.repeat(257)])('rejects an invalid MCP return request ID: %s', async (request_id) => {
+        await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
         returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
@@ -777,6 +981,7 @@ describe('OnboardingComponent', () => {
 
     it.each(['https://example.com', '//example.com', '/login', '/onboarding', '/tools/compare?other=1', '/services?connect=1', '/services/garmin', '/mcp/authorize?request_id=request-1'])(
         'ignores unsupported onboarding return destinations: %s', async (returnUrl) => {
+        await setupComponent(false);
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
             const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
             returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
@@ -788,6 +993,7 @@ describe('OnboardingComponent', () => {
     );
 
     it('should skip hasPaidAccess and free-tier logic when canFinish is already true', async () => {
+        await setupComponent(false);
         await fixture.whenStable();
         vi.clearAllMocks();
         component.canFinish = true;
@@ -800,6 +1006,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should handle finishOnboarding errors and avoid dashboard navigation', async () => {
+        await setupComponent(false);
         component.canFinish = true;
         mockUserService.updateUserProperties.mockRejectedValue(new Error('update failed'));
 
@@ -811,6 +1018,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should leave onboarding without reads, writes or completion analytics when the account is already complete', async () => {
+        await setupComponent(false);
         await fixture.whenStable();
         vi.clearAllMocks();
         component.user = { ...component.user, onboardingCompleted: true } as any;
@@ -826,6 +1034,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should stop finishOnboarding when setFreeTier fails before updating onboarding flag', async () => {
+        await setupComponent(false);
         component.canFinish = false;
         mockUserService.hasPaidAccess.mockResolvedValue(false);
         mockUserService.setFreeTier.mockRejectedValue(new Error('free-tier failed'));
@@ -838,13 +1047,15 @@ describe('OnboardingComponent', () => {
     });
 
     it('should sign out and navigate to login on logout', async () => {
+        await setupComponent(false);
         await component.logout();
 
         expect(mockAuthService.signOut).toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
     });
 
-    it('should set canFinish and trigger finishOnboarding on plan selected', () => {
+    it('should set canFinish and trigger finishOnboarding on plan selected', async () => {
+        await setupComponent(false);
         const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
 
         component.onPlanSelected();
@@ -853,7 +1064,8 @@ describe('OnboardingComponent', () => {
         expect(finishSpy).toHaveBeenCalled();
     });
 
-    it('should not trigger finishOnboarding again when planSelected arrives during loading', () => {
+    it('should not trigger finishOnboarding again when planSelected arrives during loading', async () => {
+        await setupComponent(false);
         component.isLoading = true;
         const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
 
@@ -864,6 +1076,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should set isPro in checkProStatus', async () => {
+        await setupComponent(false);
         mockUserService.isPro.mockResolvedValue(true);
 
         await component.checkProStatus();
@@ -871,13 +1084,15 @@ describe('OnboardingComponent', () => {
         expect(component.isPro).toBe(true);
     });
 
-    it('should return empty string for empty form control name mapping', () => {
+    it('should return empty string for empty form control name mapping', async () => {
+        await setupComponent(false);
         const mapped = (component as any).mapFormControlNameToUserProperty('');
 
         expect(mapped).toBe('');
     });
 
     it('should handle required policies without formControlName in checkAndAdvance', async () => {
+        await setupComponent(false);
         component.user = { ...mockUser } as any;
         component.policies = [{
             id: 'custom-required',
@@ -894,6 +1109,7 @@ describe('OnboardingComponent', () => {
     });
 
     it('should ignore policies without formControlName during submit mapping', async () => {
+        await setupComponent(false);
         component.policies = [
             ...component.policies,
             {
@@ -905,24 +1121,21 @@ describe('OnboardingComponent', () => {
             } as any
         ];
         setRequiredPoliciesAccepted();
-        component.stepper = {
-            selectedIndex: 0,
-            next: vi.fn(),
-            selected: { label: 'Legal consent' }
-        } as any;
 
         await component.onTermsSubmit();
 
         expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(component.user);
     });
 
-    it('should return false from getPolicyValue for unknown control mappings', () => {
+    it('should return false from getPolicyValue for unknown control mappings', async () => {
+        await setupComponent(false);
         const result = (component as any).getPolicyValue({ formControlName: 'acceptUnknown' }, component.user);
 
         expect(result).toBe(false);
     });
 
-    it('should toggle policy details panel on read more', () => {
+    it('should toggle policy details panel on read more', async () => {
+        await setupComponent(false);
         component.togglePolicyDetails('privacy');
         expect(component.expandedPolicyId).toBe('privacy');
 
@@ -930,7 +1143,8 @@ describe('OnboardingComponent', () => {
         expect(component.expandedPolicyId).toBeNull();
     });
 
-    it('should auto-close expanded details when policy is checked', () => {
+    it('should auto-close expanded details when policy is checked', async () => {
+        await setupComponent(false);
         component.expandedPolicyId = 'privacy';
 
         component.onPolicyCheckboxChange('privacy', true);
@@ -938,7 +1152,8 @@ describe('OnboardingComponent', () => {
         expect(component.expandedPolicyId).toBeNull();
     });
 
-    it('should keep expanded details when policy is unchecked', () => {
+    it('should keep expanded details when policy is unchecked', async () => {
+        await setupComponent(false);
         component.expandedPolicyId = 'privacy';
 
         component.onPolicyCheckboxChange('privacy', false);
@@ -946,7 +1161,8 @@ describe('OnboardingComponent', () => {
         expect(component.expandedPolicyId).toBe('privacy');
     });
 
-    it('should keep expanded details when a different policy is checked', () => {
+    it('should keep expanded details when a different policy is checked', async () => {
+        await setupComponent(false);
         component.expandedPolicyId = 'privacy';
 
         component.onPolicyCheckboxChange('data', true);

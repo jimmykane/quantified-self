@@ -361,6 +361,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
     // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
+    // Field guide help covers the skippable intro, separate consent and existing plan/provider/upload handoffs.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
   });
 

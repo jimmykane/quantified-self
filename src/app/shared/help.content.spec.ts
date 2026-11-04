@@ -73,6 +73,15 @@ describe('help.content', () => {
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 
+  it('explains the skippable Field guide and existing setup handoffs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('**Skip the intro**');
+    expect(content).toContain('not required account setup');
+    expect(content).toContain('optional and start unchecked');
+    expect(content).toContain('do not start a payment, upload, or provider connection');
+    expect(content).toContain('provider connections require Pro');
+    expect(content).toContain('file choice opens **Dashboard**');
+  });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['**Retry category settings**', '**Reload app**', 'Your saved category choices are retained',
