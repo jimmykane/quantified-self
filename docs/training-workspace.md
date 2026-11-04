@@ -10088,6 +10088,9 @@ period-totals strip; enabling totals preserves the single owner-only Goals actio
 and full-day toolbar wrap at narrow widths. Goals follows the adjacent Timeline notes icon-only action on phones, retaining a 44px touch
 target and accessible name. These presentation rules reuse the shared Material surfaces and do not change MCP reads,
 mutations, permissions or daily generation.
+Combined calendar regressions cover live goal edits and activity totals, Month/30-day navigation, independent read
+failures and activity retry, and late emissions after switching the viewed account. Adjacent grid dates retain goal
+markers for context while remaining outside recorded period totals; goal targets never contribute recorded volume.
 
 Owner SDK CRUD writes `users/{uid}/trainingGoals/{id}` and `trainingGoalState/current` atomically, with per-goal
 revision, a separate goals revision and bounded retained count (200 including archived). Rules reject stale, foreign,
