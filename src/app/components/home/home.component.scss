@@ -38,6 +38,29 @@
 .landing-page p { color: var(--mat-sys-on-surface-variant); line-height: 1.65; }
 .home-navigation { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem; padding-block: 0.5rem 1rem; }
 .home-navigation a { font-family: 'QS Home Navigation', sans-serif; }
+.home-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-block: 1rem 1.75rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  app-compact-row { padding-inline: 1.75rem; }
+  app-compact-row:first-child { padding-inline-start: 0; }
+  app-compact-row:last-child { padding-inline-end: 0; }
+  app-compact-row + app-compact-row { border-inline-start: 1px solid var(--mat-sys-outline-variant); }
+
+  @media (max-width: 799.98px) {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 0 1rem;
+
+    app-compact-row { padding: 0.75rem 0; }
+    app-compact-row + app-compact-row {
+      border-inline-start: 0;
+      border-top: 1px solid var(--mat-sys-outline-variant);
+    }
+  }
+}
 .hero-section { padding-block: clamp(1.5rem, 3vw, 2rem); text-align: center; }
 .hero-content { max-width: 64rem; margin-inline: auto; }
 .brand-badge { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }

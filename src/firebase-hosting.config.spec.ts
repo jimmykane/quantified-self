@@ -478,6 +478,7 @@ describe('Firebase Hosting configuration', () => {
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    // The same-day homepage update adds the Connect / Understand / Improve overview below the hero.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
