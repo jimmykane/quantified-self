@@ -208,6 +208,23 @@
     <p>Only eligible FIT-backed workouts are included. Workouts from third-party fitness apps are excluded.</p>
     }
   </div>
+  @if (historyNotificationSupported && (push.historyNotificationsAvailable() || notifyHistory())) {
+  <div class="history-notification-option">
+    <mat-checkbox [checked]="notifyHistory()" [disabled]="(!push.canNotifyHistory() && !notifyHistory()) || formGroup.disabled"
+      (change)="onHistoryNotificationChange($event.checked)">
+      Notify me when this import finishes
+    </mat-checkbox>
+    <p>At most one alert for this import, on this device. Up to two import alerts in 24 hours.</p>
+    @if (push.canEnable()) {
+    <button mat-button type="button" [disabled]="formGroup.disabled" (click)="enableHistoryNotifications()">Enable notifications on this device</button>
+    } @else if (push.operation() === 'enable') {
+    <p role="status">Enabling notifications…</p>
+    } @else if (!push.canNotifyHistory()) {
+    <p>Check device permissions and the History imports category in <a routerLink="/settings" [queryParams]="{section: 'notifications'}">Settings → Notifications</a>.</p>
+    }
+    @if (notificationError()) { <p role="status">{{ notificationError() }}</p> }
+  </div>
+  }
   <div class="confirmation-section">
     <mat-checkbox formControlName="accepted" class="qs-checkbox-primary" (change)="onHistoryConfirmationChange()">
       <span class="checkbox-label">

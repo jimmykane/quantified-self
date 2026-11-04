@@ -8,6 +8,8 @@ import type { GarminSupportedSummaryType } from '../garmin/health-summary-types'
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
+  /** Server-owned positive webhook provenance; absent on history and legacy work. */
+  activityNotificationOrigin?: 'live';
   connectionHistoryRunId?: string;
   /** History imports do not opt in to automatic recorded-activity delivery. */
   fromHistory?: boolean;

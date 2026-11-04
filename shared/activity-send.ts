@@ -1,4 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { DeliveryNotificationTarget } from './activity-delivery-notifications';
 
 export const ACTIVITY_SEND_PROVIDERS = {
   suunto: ServiceNames.SuuntoApp,
@@ -37,6 +38,7 @@ export interface ActivitySendBatch {
   expiresAt?: number;
   stopped?: boolean;
   savedSelectionReady?: boolean;
+  notificationRequested?: boolean;
 }
 export type ActivitySendCommand = {
   version: 1;
@@ -44,7 +46,7 @@ export type ActivitySendCommand = {
 } & (
   | { action: 'create'; provider: ActivitySendProvider; source: 'files' | 'saved' }
   | { action: 'prepare'; eventIds?: string[]; startDate?: string; endDate?: string; sources?: string[]; cursor?: string }
-  | { action: 'confirm'; revision: number }
+  | { action: 'confirm'; revision: number; notification?: DeliveryNotificationTarget }
   | { action: 'stop' }
   | { action: 'remove' | 'check' | 'retry'; rowId: string }
 );

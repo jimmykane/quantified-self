@@ -31,7 +31,7 @@ const hoisted = vi.hoisted(() => {
     }));
     const addSleepSyncQueueItem = vi.fn(async () => undefined);
     const getTokenData = vi.fn(async () => ({ access_token: 'redacted' }));
-    const addToQueueForSuunto = vi.fn(async () => true);
+    const addToQueueForSuunto = vi.fn(async (_input: unknown) => true);
     const getWorkoutQueueItems = vi.fn(async () => []);
     const enqueueRouteSyncQueueItem = vi.fn(async () => ({ queued: true }));
     const listSuuntoRoutes = vi.fn(async () => ({ routes: [] }));
@@ -1012,6 +1012,9 @@ describe('recover-suunto-outage source backfill flow', () => {
             dedupeKey: expect.stringContaining('suunto-outage-sleep:u1:suuntoUser:'),
         }));
         expect(hoisted.addToQueueForSuunto).toHaveBeenCalledTimes(2);
+        for (const [input] of hoisted.addToQueueForSuunto.mock.calls) {
+            expect(input).not.toHaveProperty('activityNotificationOrigin');
+        }
         expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
             userName: 'suuntoUser',
             workoutID: 'workout-1',

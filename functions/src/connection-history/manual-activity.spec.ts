@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
+const pushMock = vi.hoisted(() => ({ template: vi.fn() }));
+vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTemplate: pushMock.template }) }));
 const mocks = vi.hoisted(() => ({ rows: new Map<string, Record<string, any>>(), rejectCommit: false, retryTransaction: false,
   onRetry: undefined as (() => void) | undefined }));
 vi.mock('../token-refresh-coordinator', () => ({ ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD: 'activeOAuthCredentialGeneration' }));
@@ -210,4 +212,45 @@ it.each([undefined, 0, 500, 100000])('keeps Garmin admission on its fixed 30-day
   meta.didLastHistoryImport = now - 30 * 86400000;
   await expect(startManualActivityHistory('owner', ServiceNames.GarminAPI, start, end)).resolves.toMatchObject({ active: true });
   expect(runs()).toHaveLength(1);
+});
+
+
+describe('manual history notification admission', () => {
+  const publicKey = 'B' + 'A'.repeat(86);
+  const notification = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002', origin: 'https://quantified-self.io' };
+  function notificationDevice() {
+    pushMock.template.mockResolvedValue({ parameters: { web_push_enabled: { defaultValue: { value: 'true' } },
+      web_push_history_import_enabled: { defaultValue: { value: 'true' } }, web_push_vapid_public_key: { defaultValue: { value: publicKey } } } });
+    const registration = { schemaVersion: 1, ...notification, vapidPublicKey: publicKey, endpoint: 'https://web.push.apple.com/private-endpoint',
+      keys: { p256dh: publicKey, auth: 'A'.repeat(22) } };
+    mocks.rows.set(`users/owner/pushSubscriptions/${notification.installationId}`, registration); return registration;
+  }
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('stores consent atomically and privately for %s', async service => {
+    seed(service); notificationDevice();
+    const result = await startManualActivityHistory('owner', service, start, end, notification);
+    expect(runs()[0][1].notification).toEqual({ ...notification, categoryRevision: 0 });
+    expect(result).not.toHaveProperty('notification');
+    expect(JSON.stringify(runs()[0][1])).not.toContain('private-endpoint');
+  });
+  it('binds consent to the current server category revision', async () => {
+    seed(ServiceNames.SuuntoApp); notificationDevice();
+    mocks.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: true, revision: 2 });
+    await startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end, notification);
+    expect(runs()[0][1].notification).toEqual({ ...notification, categoryRevision: 2 });
+  });
+  it.each(['missing', 'rotated', 'beta', 'key', 'disabled', 'Garmin', 'category off', 'malformed category', 'rejected commit'])('does not admit an opted-in run for %s', async reason => {
+    const service = reason === 'Garmin' ? ServiceNames.GarminAPI : ServiceNames.SuuntoApp;
+    seed(service); const registration = notificationDevice();
+    if (reason === 'missing') mocks.rows.delete(`users/owner/pushSubscriptions/${notification.installationId}`);
+    if (reason === 'rotated') registration.generation = notification.installationId;
+    if (reason === 'beta') registration.origin = 'https://beta.quantified-self.io';
+    if (reason === 'key') registration.vapidPublicKey = 'B' + 'Z'.repeat(86);
+    if (reason === 'disabled') pushMock.template.mockResolvedValue({ parameters: {} });
+    if (reason === 'category off') mocks.rows.set('users/owner/notificationPreferences/history_import', { schemaVersion: 1, enabled: false, revision: 1 });
+    if (reason === 'malformed category') mocks.rows.set('users/owner/notificationPreferences/history_import', {});
+    if (reason === 'rejected commit') mocks.rejectCommit = true;
+    await expect(startManualActivityHistory('owner', service, start, end, notification)).rejects.toThrow();
+    expect(runs()).toHaveLength(0);
+    expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryReservation');
+  });
 });

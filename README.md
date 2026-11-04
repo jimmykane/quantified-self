@@ -264,7 +264,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
-- [Standard and Declarative Web Push, device lifecycle and activation](docs/web-push-notifications.md)
+- [Standard and Declarative Web Push, activity sync/delivery alerts, history-import results and activation](docs/web-push-notifications.md)
 
 - [Analytics collection, attribution boundaries, and rollout checks](docs/analytics-attribution.md)
 - [Firestore stats index allowlist, query audit and two-phase rollout](docs/firestore-stats-indexes.md)

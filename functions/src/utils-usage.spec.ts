@@ -342,6 +342,14 @@ describe('utils higher-level helpers', () => {
     });
 
     describe('setEventDocumentIfUserActive', () => {
+        it.each([true, false])('reports canonical creation only when the existing parent is absent (%s)', async exists => {
+            hoisted.transactionGet.mockResolvedValueOnce({ exists, data: () => exists ? { name: 'Saved' } : undefined });
+            const created = await setEventDocumentIfUserActive('user-1', 'event',
+                hoisted.firestore().doc('users/user-1/events/event-1') as any, { name: 'Imported' },
+                undefined, incoming => incoming);
+            expect(created).toBe(!exists);
+            expect(hoisted.transactionSet).toHaveBeenCalledOnce();
+        });
         it('passes merge options through deletion-guarded document writes', async () => {
             const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
             const payload = { comparison: { status: 'ready' } };
@@ -514,7 +522,7 @@ describe('utils higher-level helpers', () => {
             expect(hoisted.bucketSave).not.toHaveBeenCalled();
         });
 
-        it('writes activities and metadata through deletion-guarded transactions even when bulkWriter is provided', async () => {
+        it.each([undefined, false, true])('writes activities and metadata through guarded transactions with canonical creation status (existing=%s)', async exists => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             const bulkWriter = { set: vi.fn() };
             let assignedEventID: string | null = null;
@@ -540,6 +548,14 @@ describe('utils higher-level helpers', () => {
                 startDate: new Date(),
             };
 
+            if (exists !== undefined) {
+                hoisted.transactionGet.mockResolvedValue({ exists, data: () => exists ? { name: 'Saved' } : undefined });
+                writeAllEventDataMock.mockImplementationOnce(async () => {
+                    const [adapter] = eventWriterConstructorMock.mock.calls.at(-1)!;
+                    await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { name: 'Imported' });
+                    return mockSavedOriginalFiles;
+                });
+            }
             const result = await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
 
             expect(writeAllEventDataMock).toHaveBeenCalled();
@@ -556,6 +572,7 @@ describe('utils higher-level helpers', () => {
             expect(result).toEqual({
                 eventID: 'event-1',
                 savedOriginalFiles: mockSavedOriginalFiles,
+                created: exists === false, // No parent write or an existing parent cannot announce a new workout.
             });
         });
 

@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { notifyNewActivityAfterPersistence } from '../web-push/activity-admission';
 import { FieldValue } from 'firebase-admin/firestore';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin, resolveFirebaseUserIDForGarminUserID } from '../queue';
@@ -502,6 +503,8 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
     const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    if (!bulkWriter) await notifyNewActivityAfterPersistence(firebaseUserID, ServiceNames.GarminAPI, queueItem,
+      setEventResult, event.startDate, event.endDate, tokenQuerySnapshots.docs[0].data().dateCreated);
     if (parsedFromFIT) {
       await retainGarminFITWorkoutReferences(
         admin.firestore(),

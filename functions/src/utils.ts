@@ -133,6 +133,8 @@ export function isCorsAllowed(req: Request) {
 export interface SetEventResult {
   eventID: string;
   savedOriginalFiles: OriginalFileMetaData[];
+  /** True only for the transaction that created the canonical parent, after all writes succeed. */
+  created?: boolean;
 }
 
 export class EventWriteSkippedForDeletedUserError extends Error {
@@ -224,9 +226,9 @@ export async function setEventDocumentIfUserActive(
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
   assertAdditionalAuthorization?: SetEventWriteOptions['assertWriteAuthorizationInTransaction'],
-): Promise<void> {
+): Promise<boolean> {
   const db = admin.firestore();
-  await db.runTransaction(async (transaction) => {
+  return db.runTransaction(async (transaction) => {
     await assertHistoryWrite(transaction);
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
     if (assertAdditionalAuthorization) {
@@ -239,8 +241,10 @@ export async function setEventDocumentIfUserActive(
       && docRef.path.split('/').length === 4;
     const needsExistingTags = isEventDocument && storedEventTagNames(incomingData).length > 0;
     let existingData: admin.firestore.DocumentData | null = null;
+    let created = false;
     if (transformExistingData || needsExistingTags) {
       const existingSnapshot = await transaction.get(docRef);
+      created = isEventDocument && !existingSnapshot.exists;
       existingData = existingSnapshot.exists ? existingSnapshot.data() || null : null;
       if (transformExistingData) resolvedData = transformExistingData(incomingData, existingData);
     }
@@ -252,10 +256,11 @@ export async function setEventDocumentIfUserActive(
 
     if (options) {
       transaction.set(docRef, resolvedData, options);
-      return;
+      return created;
     }
 
     transaction.set(docRef, resolvedData);
+    return created;
   });
 }
 
@@ -328,6 +333,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
     await sourceWrite.assertCurrent(db, transaction);
   };
+  let created = false;
   const adapter: FirestoreAdapter = {
     prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: any) => {
@@ -355,7 +361,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       }
       const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
       const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
-      await setEventDocumentIfUserActive(
+      const wasCreated = await setEventDocumentIfUserActive(
         userID,
         `event_writer:${path.join('/')}`,
         docRef,
@@ -364,6 +370,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
         assertSourceWrite,
       );
+      if (isEventDocument) created = wasCreated === true;
     },
     createBlob: (data: Uint8Array) => {
       return Buffer.from(data);
@@ -468,6 +475,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     return {
       eventID: <string>event.getID(),
       savedOriginalFiles,
+      created,
     };
   } catch (error) {
     await cleanupStagedOriginalFiles();

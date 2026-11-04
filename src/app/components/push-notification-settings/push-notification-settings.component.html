@@ -16,3 +16,23 @@
   </button>
 </div>
 @if (push.message()) { <p role="status" aria-live="polite">{{ push.message() }}</p> }
+<section class="notification-categories" aria-labelledby="notification-categories-title">
+  <h3 id="notification-categories-title">Notification categories</h3>
+  <p class="mat-body-small">These preferences apply across your account. New categories are on by default; each device still needs notification permission.</p>
+  @for (category of preferences.categories(); track category.id) {
+    <div>
+      <mat-slide-toggle [checked]="category.enabled" [disabled]="!preferences.canEdit()"
+        [aria-describedby]="'notification-category-' + category.id" (change)="setCategory(category.id, $event.checked, $event.source)">
+        {{ category.label }}
+      </mat-slide-toggle>
+      <p class="mat-body-small" [id]="'notification-category-' + category.id">{{ category.description }}</p>
+    </div>
+  }
+  <p class="mat-body-small">Turning a category off cancels its pending alerts. Turning it back on applies to new activity syncs, send results or import requests.</p>
+  @if (preferences.saving()) { <p role="status" aria-live="polite">Saving category preference…</p> }
+  @if (preferences.status() === 'loading') { <p role="status">Loading categories…</p> }
+  @if (preferences.status() === 'signed-out') { <p>Sign in to manage notification categories.</p> }
+  @if (preferences.status() === 'impersonating') { <p>Categories cannot be changed while viewing another account.</p> }
+  @if (preferences.message()) { <p role="status" aria-live="polite">{{ preferences.message() }}</p> }
+  @if (preferences.status() === 'error') { <button mat-button type="button" (click)="retryCategories()">Retry category settings</button> }
+</section>

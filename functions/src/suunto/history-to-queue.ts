@@ -1,5 +1,7 @@
 'use strict';
 
+import { readHistoryNotificationConsent } from '../web-push/history-consent';
+
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { hasProAccess, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
@@ -15,6 +17,7 @@ interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
   background?: boolean;
+  notification?: unknown;
 }
 
 interface HistoryToQueueResponse {
@@ -49,7 +52,7 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const { startDate: startDateStr, endDate: endDateStr, background } = (request.data ?? {}) as HistoryToQueueRequest;
+  const { startDate: startDateStr, endDate: endDateStr, background, notification: notificationValue } = (request.data ?? {}) as HistoryToQueueRequest;
   if (background !== undefined && typeof background !== 'boolean') throw new HttpsError('invalid-argument', 'background must be a boolean.');
   const startDate = new Date(startDateStr);
   const endDate = new Date(endDateStr);
@@ -62,9 +65,11 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('invalid-argument', 'Start date is after the end date');
   }
 
+  const notification = readHistoryNotificationConsent(notificationValue, request.rawRequest?.get?.('origin'), request.auth.token?.impersonatedBy);
+  if (notification && background !== true) throw new HttpsError('invalid-argument', 'Notifications require a background import.');
   if (background === true) {
     const { startManualActivityHistory } = await import('../connection-history/manual-activity');
-    const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate, endDate);
+    const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate, endDate, ...(notification ? [notification] as const : [] as const));
     return { result: 'History import accepted', historyImport };
   }
 
