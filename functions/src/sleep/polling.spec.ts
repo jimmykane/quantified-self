@@ -353,6 +353,33 @@ describe('sleep polling', () => {
         expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'completed');
     });
 
+    it('continues healthy accounts and reports backend account lookup failures', async () => {
+        const tokens = ['one', 'two'].map(uid => createTokenDoc(uid, {
+            serviceName: ServiceNames.COROSAPI, openId: `account-${uid}`,
+        }));
+        installCollectionGroupTokenMock(tokens);
+        hoisted.getActiveCOROSTokenSnapshot.mockImplementation(async (uid: string) => {
+            if (uid === 'one') throw new Error('PRIVATE_LOOKUP_FAILURE');
+            return tokens[1];
+        });
+        await expect((scheduleCOROSSleepSync as unknown as () => Promise<void>)()).rejects.toThrow('1 COROS hourly polls');
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledExactlyOnceWith('two', 'account-two', expect.any(Number));
+        expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'failed');
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('PRIVATE_LOOKUP_FAILURE');
+    });
+
+    it.each([
+        { code: 'unauthenticated' }, { code: 'functions/unauthenticated' },
+        { name: 'TokenUseSkippedForPendingDisconnectError' },
+    ])('treats expected inactive accounts as healthy scheduler observations (%j)', async properties => {
+        installCollectionGroupTokenMock([createTokenDoc('one', { serviceName: ServiceNames.COROSAPI })]);
+        hoisted.getActiveCOROSTokenSnapshot.mockRejectedValue(Object.assign(new Error('PRIVATE_LIFECYCLE_SKIP'), properties));
+        await (scheduleCOROSSleepSync as unknown as () => Promise<void>)();
+        expect(enqueueCOROSDailyPoll).not.toHaveBeenCalled();
+        expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'completed');
+        expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it('bounds active COROS account lookups for production-wide polling', async () => {
         const concurrency = sleepPollingTestInternals.COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY;
         const candidateUserIDs = Array.from({ length: concurrency + 5 }, (_, index) => `coros-user-${index}`);

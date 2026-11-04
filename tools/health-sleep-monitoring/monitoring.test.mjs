@@ -38,7 +38,7 @@ function assertPolicyMetricScope(config) {
 }
 
 test('fixed dimensions separate durable outcomes, invocation summaries, retries and paced backfill', () => {
-  const config = bundle(); assert.equal(config.metrics.length, 11); assert.equal(config.policies.length, 6);
+  const config = bundle(); assert.equal(config.metrics.length, 12); assert.equal(config.policies.length, 6);
   for (const metric of config.metrics) {
     assert.ok(metric.description.startsWith(`[${OWNER}]`)); assert.match(metric.filter, /telemetryVersion=1/);
     assert.match(metric.filter, /workload=/); assert.match(metric.filter, /resource.type=/);
@@ -65,7 +65,7 @@ test('every native chart targets only the two exact queues; policies have worklo
   const backlog = config.policies.find(p => p.userLabels.policy_id === 'backlog').conditions;
   assert.equal(backlog[0].conditionThreshold.aggregations[0].alignmentPeriod, '5400s');
   assert.equal(backlog[1].conditionThreshold.aggregations[0].alignmentPeriod, '14400s');
-  assert.equal(config.policies.find(p => p.userLabels.policy_id === 'heartbeat').conditions.filter(c => c.conditionAbsent).length, 4);
+  assert.equal(config.policies.find(p => p.userLabels.policy_id === 'heartbeat').conditions.filter(c => c.conditionAbsent).length, 5);
   assert.equal(config.policies.find(p => p.userLabels.policy_id === 'telemetry').conditions.length, 2);
 });
 test('hourly COROS admission failures include v2 resources with a cadence-appropriate alert', () => {
@@ -79,6 +79,21 @@ test('hourly COROS admission failures include v2 resources with a cadence-approp
   assert.equal(condition.aggregations[0].alignmentPeriod, '14400s');
   assert.equal(condition.thresholdValue, 2);
   assert.ok(config.dashboard.mosaicLayout.tiles.some(tile => tile.widget.title === 'Hourly COROS poll admission failures'));
+});
+test('hourly COROS discovery has an independent heartbeat even when no accounts need polling', () => {
+  const config = bundle();
+  const metric = config.metrics.find(item => item.name === 'qs_health_sleep_coros_poll_runs_v1');
+  assert.match(metric.filter, /resource.type="cloud_run_revision"/);
+  assert.match(metric.filter, /resource.labels.service_name="schedulecorossleepsync"/);
+  assert.match(metric.filter, /jsonPayload.provider="COROSAPI"/);
+  assert.match(metric.filter, /jsonPayload.event="dispatch_run"/);
+  assert.match(metric.filter, /jsonPayload.outcome=\("completed" OR "failed"\)/);
+  const condition = config.policies.find(item => item.userLabels.policy_id === 'heartbeat').conditions
+    .find(item => item.displayName === 'Hourly COROS scheduler heartbeat absent').conditionAbsent;
+  assert.match(condition.filter, /qs_health_sleep_coros_poll_runs_v1/);
+  assert.equal(condition.duration, '10800s');
+  assert.equal(condition.aggregations[0].alignmentPeriod, '3600s');
+  assert.ok(config.dashboard.mosaicLayout.tiles.some(tile => tile.widget.title === 'Hourly COROS scheduler heartbeats'));
 });
 test('alert scopes reject native retries, unknown metrics and metric names outside the actual type field', () => {
   for (const filter of [
@@ -141,7 +156,7 @@ function transport(existing = false, collision = false) {
 test('create/reapply preserves import/Training resources, condition IDs and etags without deletion', async () => {
   for (const existing of [false, true]) {
     const source = transport(existing); const result = await applyHealthSleepMonitoring(bundle(), source.request);
-    assert.equal(result.metrics, 11); assert.equal(result.policies, 6);
+    assert.equal(result.metrics, 12); assert.equal(result.policies, 6);
     assert.equal(source.calls.filter(c => c.method === 'POST').length, existing ? 0 : 7);
     assert.ok(source.calls.every(c => c.method !== 'DELETE'));
     assert.ok(source.calls.filter(c => c.method !== 'GET').every(c => !c.url.includes('other-')));

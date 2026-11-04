@@ -45,6 +45,7 @@ const SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT = 'suuntoHealthPolling';
 const SUUNTO_HEALTH_POLL_CURSOR_SCOPE = 'global-v1';
 interface ProviderTokenSnapshotPage {
     snapshots: PollingTokenSnapshot[];
+    failedLookups?: number;
     commitCursor?: () => Promise<void>;
 }
 
@@ -74,7 +75,9 @@ function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.
 
 type PollingTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
-async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly string[]): Promise<PollingTokenSnapshot[]> {
+async function resolveActiveCOROSTokenSnapshots(
+    candidateUserIDs: readonly string[], onLookupFailure?: () => void,
+): Promise<PollingTokenSnapshot[]> {
     const activeTokens: Array<PollingTokenSnapshot | null> = [];
     for (let index = 0; index < candidateUserIDs.length; index += COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY) {
         const userIDChunk = candidateUserIDs.slice(index, index + COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY);
@@ -82,7 +85,14 @@ async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly strin
             try {
                 return await getActiveCOROSTokenSnapshot(userID);
             } catch (error) {
-                logger.warn(`[SleepSync][${SLEEP_PROVIDERS.COROSAPI}] Could not resolve the active COROS account for user ${userID}; skipping polling.`, error);
+                const code = (error as { code?: unknown })?.code;
+                if (code !== 'unauthenticated' && code !== 'functions/unauthenticated'
+                    && !(error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError')) {
+                    onLookupFailure?.();
+                    logger.warn('[SleepSync][COROS] Could not resolve an active account for polling.', {
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    });
+                }
                 return null;
             }
         })));
@@ -253,7 +263,9 @@ async function getProviderTokenSnapshots(
                 .filter((userID): userID is string => !!userID)));
         }
 
-        return { snapshots: await resolveActiveCOROSTokenSnapshots(candidateUserIDs) };
+        let failedLookups = 0;
+        const snapshots = await resolveActiveCOROSTokenSnapshots(candidateUserIDs, () => { failedLookups++; });
+        return { snapshots, failedLookups };
     }
 
     if (allowedUserIDs.length > 0) {
@@ -367,7 +379,7 @@ async function enqueueProviderPolls(
     const deletionGuardCache = new Map<string, Promise<boolean>>();
     const unavailableForSyncCache = new Map<string, Promise<boolean>>();
     let queued = 0;
-    let failed = 0;
+    let failed = tokenPage.failedLookups ?? 0;
     for (const tokenSnapshot of tokenPage.snapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot);

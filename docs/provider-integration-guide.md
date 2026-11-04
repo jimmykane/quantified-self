@@ -96,8 +96,11 @@ The current providers are intentionally not identical:
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
 COROS Sleep/Health polling is hourly with immediate dispatch and private per-account successful-range tracking.
-Routine windows overlap the last successful date by one UTC calendar day; a daily reconciliation retains the existing
-seven-day recovery horizon. Pending retries never create parallel polls or advance coverage. See
+Routine windows overlap the last successful observation date by one UTC calendar day and include the next UTC date
+only when needed to cover users as far ahead as UTC+14; the coverage watermark remains the observation time, not that future date. A daily
+reconciliation retains the seven-day past horizon. Pending retries never create parallel polls or advance coverage.
+Routine jobs carry admission-time credential/connection fences through worker execution, and monitoring independently
+checks hourly scheduler liveness as well as queue health. See
 [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) for the transactional account/deletion
 fences, exact committed-success receipt, unchanged MCP contract, monitoring coverage and separately approved release.
 

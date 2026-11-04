@@ -223,6 +223,9 @@ interface AddSleepSyncQueueItemInput {
     garminHealthBackfillWindowsTotal?: number;
     rangeStartMs?: number;
     rangeEndMs?: number;
+    corosTokenCredentialGeneration?: string | null;
+    corosRootOAuthCredentialGeneration?: string | null;
+    corosConnectionStateGeneration?: string | null;
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
     suuntoHealthWebhookFeedMask?: 1 | 2;
     dispatchAfterMs?: number;
@@ -296,7 +299,16 @@ function isValidSleepProvider(value: unknown): value is SleepProvider {
     return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
 }
 
+function malformedCOROSPollFence(input: Pick<SleepSyncQueueItemInterface, 'provider' | 'type'
+    | 'corosTokenCredentialGeneration' | 'corosRootOAuthCredentialGeneration' | 'corosConnectionStateGeneration'>): boolean {
+    const values = [input.corosTokenCredentialGeneration, input.corosRootOAuthCredentialGeneration,
+        input.corosConnectionStateGeneration];
+    return values.some(value => value !== undefined) && (input.provider !== SLEEP_PROVIDERS.COROSAPI
+        || input.type !== 'coros_poll' || values.some(value => value === undefined || !isValidOptionalLifecycleGeneration(value)));
+}
+
 export function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
+    if (malformedCOROSPollFence(queueItem)) return 'invalid COROS poll lifecycle fence';
     if (!SLEEP_SYNC_QUEUE_ITEM_TYPES.has(queueItem.type)) {
         return `invalid type ${queueItem.type || 'missing'}`;
     }
@@ -550,6 +562,9 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         garminHealthBackfillWindowsTotal: input.garminHealthBackfillWindowsTotal,
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
+        corosTokenCredentialGeneration: input.corosTokenCredentialGeneration,
+        corosRootOAuthCredentialGeneration: input.corosRootOAuthCredentialGeneration,
+        corosConnectionStateGeneration: input.corosConnectionStateGeneration,
         healthTrigger: input.healthTrigger,
         suuntoHealthWebhookFeedMask: input.suuntoHealthWebhookFeedMask,
         dispatchAfterMs: input.dispatchAfterMs,
@@ -600,6 +615,9 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         garminHealthBackfillWindowsTotal: payload.garminHealthBackfillWindowsTotal,
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
+        corosTokenCredentialGeneration: payload.corosTokenCredentialGeneration,
+        corosRootOAuthCredentialGeneration: payload.corosRootOAuthCredentialGeneration,
+        corosConnectionStateGeneration: payload.corosConnectionStateGeneration,
         healthTrigger: payload.healthTrigger,
         dispatchAfterMs: payload.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: payload.suuntoHealthTokenCredentialGeneration,
@@ -1019,6 +1037,7 @@ async function resolveLateSuuntoHealthWebhookRef(
 }
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
+    if (malformedCOROSPollFence(input)) throw new Error('Invalid COROS poll lifecycle fence.');
     const garminHealthInput = input.provider === SLEEP_PROVIDERS.GarminAPI
         && (isGarminHealthSummaryType(input.garminSummaryType)
             || input.type === 'garmin_health_backfill');
@@ -2598,6 +2617,16 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                 tokenSnapshot.ref,
                 corosCredentialFromSnapshot(tokenSnapshot),
             );
+            if (queueItem.corosTokenCredentialGeneration !== undefined && (
+                queueItem.corosTokenCredentialGeneration !== (corosLifecycleGuards.requiredExistingTokenCredential.credentialGeneration ?? null)
+                || queueItem.corosRootOAuthCredentialGeneration !== (corosLifecycleGuards.additionalRequiredDocumentFieldValues[0]
+                    .expectedFields[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] ?? null)
+                || queueItem.corosConnectionStateGeneration !== (corosLifecycleGuards.requiredDocumentFieldValues
+                    .expectedFields.connectionStateGeneration ?? null))) {
+                return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
+                    skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD', sessionsWritten: 0, healthRecordsWritten: 0,
+                });
+            }
         }
         if (isGarminHealthQueueItem(queueItem)) {
             garminHealthLifecycleGuards = await captureActiveGarminHealthWriteLifecycleGuards(

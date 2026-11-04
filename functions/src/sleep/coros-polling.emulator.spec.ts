@@ -5,8 +5,21 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { generateIDFromParts } from '../shared/id-generator';
 
 vi.unmock('firebase-admin');
-vi.mock('./queue', () => ({ addSleepSyncQueueItem: vi.fn() }));
-import { addSleepSyncQueueItem } from './queue';
+vi.mock('./queue', async importOriginal => {
+    const actual = await importOriginal<typeof import('./queue')>();
+    return { ...actual, addSleepSyncQueueItem: vi.fn(actual.addSleepSyncQueueItem) };
+});
+vi.mock('../utils', async importOriginal => {
+    const actual = await importOriginal<typeof import('../utils')>();
+    return { ...actual, enqueueSleepSyncTask: vi.fn().mockResolvedValue(true) };
+});
+vi.mock('../request-helper', () => ({
+    get: vi.fn().mockRejectedValue(new Error('Provider I/O is forbidden in emulator tests')),
+    post: vi.fn().mockRejectedValue(new Error('Provider I/O is forbidden in emulator tests')),
+}));
+import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
+import * as providerTransport from '../request-helper';
+import { enqueueSleepSyncTask } from '../utils';
 import { COROS_POLL_STATE_DOCUMENT, enqueueCOROSDailyPoll } from './coros-polling';
 
 const hour = 3_600_000;
@@ -32,18 +45,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
     beforeEach(async () => {
         uid = `coros-poll-${randomUUID()}`;
         vi.clearAllMocks();
+        vi.mocked(enqueueSleepSyncTask).mockResolvedValue(true);
         await db.doc(`users/${uid}`).set({});
         await root().set({ activeOAuthCredentialGeneration: 'credential' });
-        await token().set({ openId: account, tokenCredentialGeneration: 'credential' });
+        await token().set({ openId: account, tokenCredentialGeneration: 'credential', accessToken: 'synthetic-access',
+            serviceName: ServiceNames.COROSAPI });
         await meta().set({ providerUserId: account, connectionState: 'connected', connectionStateGeneration: 'connection' });
-        // Provider and Cloud Tasks I/O are replaced; admission planning uses real transactions.
+        const actual = await vi.importActual<typeof import('./queue')>('./queue');
+        // Only Cloud Tasks transport is mocked; exercise the real guarded queue admission.
         vi.mocked(addSleepSyncQueueItem).mockImplementation(async input => {
             const id = await generateIDFromParts([input.provider, input.type, input.providerUserId, input.dedupeKey!]);
             queueIds.add(id);
-            const ref = db.doc(`sleepSyncQueue/${id}`);
-            await ref.set({ type: input.type, provider: input.provider, userID: input.userID,
-                providerUserId: input.providerUserId, rangeStartMs: input.rangeStartMs, rangeEndMs: input.rangeEndMs,
-                processed: false, retryCount: 0 });
+            const ref = await actual.addSleepSyncQueueItem(input);
+            queueIds.add(ref.id);
             return ref;
         });
     });
@@ -66,9 +80,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
     it('admits one immediate seven-day poll without claiming successful coverage', async () => {
         expect(await enqueueCOROSDailyPoll(uid, account, now)).toBe(true);
         expect((await state().get()).data()).toMatchObject({ lastSuccessfulEndMs: null, lastReconciledEndMs: null,
-            pending: { startMs: now - 7 * day, endMs: now, reconciliation: true } });
+            pending: { startMs: now - 7 * day, endMs: now + 14 * hour, pollAtMs: now, reconciliation: true } });
         const input = vi.mocked(addSleepSyncQueueItem).mock.calls[0][0];
         expect(input.dispatchImmediately).toBe(true);
+        const queue = await (await pendingRef()).get();
+        expect(queue.get('queueRevision')).toMatch(/^[a-f0-9-]{36}$/);
+        expect(queue.get('corosTokenCredentialGeneration')).toBe('credential');
+        expect(queue.get('corosConnectionStateGeneration')).toBe('connection');
+        expect(queue.get('dispatchedToCloudTask')).toBeGreaterThan(0);
+        expect(enqueueSleepSyncTask).toHaveBeenCalledWith(queue.id, queue.get('dateCreated'), undefined, {
+            queueRevision: queue.get('queueRevision'), queueDateCreated: queue.get('dateCreated'),
+        });
         expect(input.requiredDocumentFieldValues?.map(guard => guard.documentRef.path)).toEqual([
             root().path, token().path, meta().path, state().path,
         ]);
@@ -85,7 +107,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
         await finish();
         await enqueueCOROSDailyPoll(uid, account, now + hour);
         expect((await state().get()).data()).toMatchObject({ lastSuccessfulEndMs: now, lastReconciledEndMs: now,
-            pending: { startMs: Date.UTC(2026, 10, 3), endMs: now + hour, reconciliation: false } });
+            pending: { startMs: Date.UTC(2026, 10, 3), endMs: now + 15 * hour, pollAtMs: now + hour, reconciliation: false } });
+    });
+    it('retains successful receipts from the original UTC-only cursor format', async () => {
+        await enqueueCOROSDailyPoll(uid, account, now);
+        await state().update({ 'pending.pollAtMs': admin.firestore.FieldValue.delete(), 'pending.endMs': now });
+        await (await pendingRef()).update({ rangeEndMs: now });
+        await finish();
+        await enqueueCOROSDailyPoll(uid, account, now + hour);
+        expect((await state().get()).get('lastSuccessfulEndMs')).toBe(now);
+        expect((await state().get()).get('pending.endMs')).toBe(now + 15 * hour);
     });
     it('keeps pending retries, partial writes and leases on their existing task', async () => {
         await enqueueCOROSDailyPoll(uid, account, now);
@@ -135,12 +166,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
         expect((await state().get()).get('pending')).toEqual(first);
     });
     it('leaves a durable undispatched row for reconciliation after dispatch fails', async () => {
-        const enqueue = vi.mocked(addSleepSyncQueueItem).getMockImplementation()!;
-        vi.mocked(addSleepSyncQueueItem).mockImplementationOnce(async input => {
-            await enqueue(input);
-            throw new Error('dispatch unavailable');
-        });
+        vi.mocked(enqueueSleepSyncTask).mockRejectedValueOnce(new Error('dispatch unavailable'));
         await expect(enqueueCOROSDailyPoll(uid, account, now)).rejects.toThrow('dispatch unavailable');
+        expect((await (await pendingRef()).get()).get('dispatchedToCloudTask')).toBeNull();
         expect(await enqueueCOROSDailyPoll(uid, account, now + hour)).toBe(false);
         expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
     });
@@ -168,6 +196,30 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
         await token().set({});
         await meta().set({ providerUserId: account });
         expect(await enqueueCOROSDailyPoll(uid, account, now)).toBe(true);
+    });
+    it.each(['connection', 'credential'])('retires queued work before provider I/O after %s changes', async kind => {
+        await enqueueCOROSDailyPoll(uid, account, now);
+        const ref = await pendingRef();
+        if (kind === 'connection') await meta().update({ connectionStateGeneration: 'replacement' });
+        else {
+            await root().update({ activeOAuthCredentialGeneration: 'replacement' });
+            await token().update({ tokenCredentialGeneration: 'replacement' });
+        }
+        const snapshot = await ref.get();
+        await processSleepSyncQueueItem({ ...snapshot.data(), id: ref.id, ref } as Parameters<typeof processSleepSyncQueueItem>[0]);
+        expect((await ref.get()).data()).toMatchObject({ processed: true, resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed' });
+        expect(providerTransport.get).not.toHaveBeenCalled();
+        expect(providerTransport.post).not.toHaveBeenCalled();
+    });
+    it('rejects a reconnect between reservation and the real queue admission transaction', async () => {
+        const enqueue = vi.mocked(addSleepSyncQueueItem).getMockImplementation()!;
+        vi.mocked(addSleepSyncQueueItem).mockImplementationOnce(async input => {
+            await meta().update({ connectionStateGeneration: 'replacement' });
+            return enqueue(input);
+        });
+        await expect(enqueueCOROSDailyPoll(uid, account, now)).rejects.toMatchObject({ name: 'ProviderQueueUserNotConnectedError' });
+        expect((await (await pendingRef()).get()).exists).toBe(false);
     });
     it.each(['disconnect', 'root disconnect', 'reconnect required', 'missing root', 'missing token', 'credential mismatch', 'account changed', 'missing user', 'deletion'])(
         'does not reserve or enqueue after %s', async reason => {

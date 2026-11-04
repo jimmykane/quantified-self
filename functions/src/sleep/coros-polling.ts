@@ -17,6 +17,7 @@ export const COROS_POLL_STATE_DOCUMENT = 'system/corosDailyPolling';
 interface PollWindow {
     startMs: number;
     endMs: number;
+    pollAtMs: number;
     reconciliation: boolean;
 }
 interface PendingPoll extends PollWindow {
@@ -35,24 +36,30 @@ function validTime(value: unknown, nowMs: number): value is number {
     return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= nowMs;
 }
 
-/** COROS queries inclusive UTC calendar dates; an ordinary poll covers yesterday and today. */
+/** Include every current provider-local date, through UTC+14, without assuming a user timezone. */
 export function getCOROSPollWindow(nowMs: number, lastSuccessfulEndMs?: unknown, lastReconciledEndMs?: unknown): PollWindow {
-    const endMs = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
-    const earliestMs = endMs - SLEEP_SYNC_RECENT_WINDOW_DAYS * DAY_MS;
-    const reconciliation = !validTime(lastSuccessfulEndMs, endMs)
-        || !validTime(lastReconciledEndMs, endMs) || endMs - lastReconciledEndMs >= DAY_MS;
-    const overlapStartMs = validTime(lastSuccessfulEndMs, endMs)
+    const pollAtMs = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
+    const earliestMs = pollAtMs - SLEEP_SYNC_RECENT_WINDOW_DAYS * DAY_MS;
+    const reconciliation = !validTime(lastSuccessfulEndMs, pollAtMs)
+        || !validTime(lastReconciledEndMs, pollAtMs) || pollAtMs - lastReconciledEndMs >= DAY_MS;
+    const overlapStartMs = validTime(lastSuccessfulEndMs, pollAtMs)
         ? Math.floor(lastSuccessfulEndMs / DAY_MS) * DAY_MS - DAY_MS
         : earliestMs;
-    return { startMs: reconciliation ? earliestMs : Math.max(earliestMs, overlapStartMs), endMs, reconciliation };
+    return { startMs: reconciliation ? earliestMs : Math.max(earliestMs, overlapStartMs),
+        endMs: pollAtMs + 14 * HOUR_MS, pollAtMs, reconciliation };
 }
 
-function pendingPoll(value: unknown): PendingPoll | null {
+function pendingPoll(value: unknown, lastScheduledSlotMs: unknown): PendingPoll | null {
     if (!value || typeof value !== 'object') return null;
     const data = value as PendingPoll;
+    // Retain receipts/admission retries from the original UTC-only scheduler.
+    const pollAtMs = data.pollAtMs ?? lastScheduledSlotMs;
     return /^[a-f0-9]{64}$/.test(data.queueId) && typeof data.dedupeKey === 'string'
         && Number.isSafeInteger(data.startMs) && Number.isSafeInteger(data.endMs)
-        && data.startMs > 0 && data.startMs < data.endMs && typeof data.reconciliation === 'boolean' ? data : null;
+        && typeof pollAtMs === 'number' && Number.isSafeInteger(pollAtMs)
+        && data.startMs > 0 && data.startMs < pollAtMs && data.endMs >= pollAtMs
+        && data.endMs <= pollAtMs + DAY_MS && typeof data.reconciliation === 'boolean'
+        ? { ...data, pollAtMs } : null;
 }
 
 /**
@@ -77,13 +84,16 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
             || !doesOAuthCredentialGenerationAuthorizeToken(root.data(), token.get('tokenCredentialGeneration'))) return null;
         const bindingKey = await generateIDFromParts([userID, providerUserId,
             String(meta.get('connectionStateGeneration') ?? ''), String(token.get('tokenCredentialGeneration') ?? '')]);
+        const fences = { corosTokenCredentialGeneration: token.get('tokenCredentialGeneration') ?? null,
+            corosRootOAuthCredentialGeneration: root.get(ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD) ?? null,
+            corosConnectionStateGeneration: meta.get('connectionStateGeneration') ?? null };
         const saved = stateSnapshot.data() as PollState | undefined;
         const state = saved?.bindingKey === bindingKey ? saved : undefined;
         const slotMs = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
         if (typeof state?.lastScheduledSlotMs === 'number' && state.lastScheduledSlotMs > slotMs) return null;
         let lastSuccessfulEndMs = validTime(state?.lastSuccessfulEndMs, slotMs) ? state.lastSuccessfulEndMs : null;
         let lastReconciledEndMs = validTime(state?.lastReconciledEndMs, slotMs) ? state.lastReconciledEndMs : null;
-        const pending = pendingPoll(state?.pending);
+        const pending = pendingPoll(state?.pending, state?.lastScheduledSlotMs);
         if (pending) {
             const queue = await tx.get(db.collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).doc(pending.queueId));
             if (queue.exists && queue.get('processed') !== true) return null; // Includes retries and active leases.
@@ -91,14 +101,14 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
                 && queue.get('userID') === userID && queue.get('providerUserId') === providerUserId
                 && queue.get('provider') === SLEEP_PROVIDERS.COROSAPI && queue.get('type') === 'coros_poll'
                 && queue.get('rangeStartMs') === pending.startMs && queue.get('rangeEndMs') === pending.endMs
-                && validTime(pending.endMs, slotMs)) {
-                lastSuccessfulEndMs = Math.max(lastSuccessfulEndMs ?? 0, pending.endMs);
-                if (pending.reconciliation) lastReconciledEndMs = Math.max(lastReconciledEndMs ?? 0, pending.endMs);
+                && validTime(pending.pollAtMs, slotMs)) {
+                lastSuccessfulEndMs = Math.max(lastSuccessfulEndMs ?? 0, pending.pollAtMs);
+                if (pending.reconciliation) lastReconciledEndMs = Math.max(lastReconciledEndMs ?? 0, pending.pollAtMs);
             }
             if (state?.lastScheduledSlotMs === slotMs) {
                 // Recover admission that failed before creating its durable queue row.
                 if (!queue.exists && !(await tx.get(db.collection('failed_jobs').doc(pending.queueId))).exists)
-                    return { pending, bindingKey, guards: lifecycleGuards() };
+                    return { pending, bindingKey, guards: lifecycleGuards(), fences };
                 return null;
             }
         }
@@ -108,7 +118,7 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
         const nextPending: PendingPoll = { ...window, queueId, dedupeKey };
         tx.set(pollingRef, { bindingKey, lastSuccessfulEndMs, lastReconciledEndMs,
             lastScheduledSlotMs: slotMs, pending: nextPending });
-        return { pending: nextPending, bindingKey, guards: lifecycleGuards() };
+        return { pending: nextPending, bindingKey, guards: lifecycleGuards(), fences };
 
         function lifecycleGuards() {
             return [
@@ -127,9 +137,10 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
     await addSleepSyncQueueItem({
         type: 'coros_poll', provider: SLEEP_PROVIDERS.COROSAPI, userID, providerUserId,
         rangeStartMs: reserved.pending.startMs, rangeEndMs: reserved.pending.endMs,
+        ...reserved.fences,
         dedupeKey: reserved.pending.dedupeKey, dispatchImmediately: true,
         requiredDocumentFieldValues: [...reserved.guards, { documentRef: pollingRef,
-            expectedFields: { bindingKey: reserved.bindingKey, lastScheduledSlotMs: reserved.pending.endMs } }],
+            expectedFields: { bindingKey: reserved.bindingKey, lastScheduledSlotMs: reserved.pending.pollAtMs } }],
     });
     return true;
 }
