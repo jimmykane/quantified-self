@@ -80,6 +80,58 @@ describe('ActivityCalendarTileComponent', () => {
     }).compileComponents();
   });
 
+  it('opts into period totals without replacing the selected-day panel or adding reads, and follows the existing view control', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 30, 12));
+    watchEvents.mockReturnValue(of([
+      createEvent(new Date(2026, 8, 30), 'context'),
+      createEvent(new Date(2026, 9, 1), 'first'),
+      createEvent(new Date(2026, 9, 31), 'last'),
+    ]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-period-totals-strip')).toBeNull();
+    expect(fixture.componentInstance.periodTotals()).toEqual([]);
+    const selectedDayPanel = fixture.nativeElement.querySelector('app-calendar-day-context');
+    const readCount = watchEvents.mock.calls.length;
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges();
+    const values = () => Array.from(fixture.nativeElement.querySelectorAll('.calendar-period-totals-strip dd'))
+      .map((element: Element) => element.textContent?.trim());
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBe(selectedDayPanel);
+    expect(watchEvents).toHaveBeenCalledTimes(readCount);
+    fixture.componentInstance.selectView('30d');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    fixture.componentInstance.navigateMonth(-1);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    expect(fixture.componentInstance.calendarModel().periodLabel).not.toContain('30 Oct');
+    vi.useRealTimers();
+  });
+
+  it('does not present unloaded or failed period totals as zero', async () => {
+    const events = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(events.asObservable());
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const strip = fixture.nativeElement.querySelector('.calendar-period-totals-strip') as HTMLElement;
+    expect(strip.getAttribute('aria-busy')).toBe('true');
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    events.next([]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals()[0].value).toBe('0');
+    expect(strip.getAttribute('aria-busy')).toBe('false');
+    events.error(new Error('offline'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Calendar unavailable');
+  });
+
   it('switches the visible Month / 30 days buttons once and disables them during a preference save', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);

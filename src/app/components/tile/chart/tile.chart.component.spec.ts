@@ -116,6 +116,7 @@ class MockActivityCalendarTileComponent {
   @Input() user: unknown;
   @Input() timelineNotes: unknown;
   @Input() dayContextEnabled = false;
+  @Input() showPeriodTotals = false;
   @Input() privateHealthEnabled = false;
   @Input() viewSaving = false;
   @Input() view: 'month' | '30d' = 'month';
@@ -1114,6 +1115,19 @@ describe('TileChartComponent', () => {
       .componentInstance as MockActivityCalendarTileComponent;
     calendar.selectedDateKeyChange.emit('2026-09-09');
     expect(selectedDates).toEqual(['2026-09-09']);
+  });
+
+  it('shows calendar period totals in the dashboard while leaving chart previews unchanged', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    fixture.detectChanges();
+    const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent))
+      .componentInstance as MockActivityCalendarTileComponent;
+    expect(calendar.showPeriodTotals).toBe(true);
+    expect(calendar.dayContextEnabled).toBe(true);
+    fixture.componentRef.setInput('previewMode', true);
+    fixture.detectChanges();
+    expect(calendar.showPeriodTotals).toBe(false);
+    expect(calendar.dayContextEnabled).toBe(false);
   });
 
   it('keeps the owner calendar header free of a duplicate full-page action', () => {
