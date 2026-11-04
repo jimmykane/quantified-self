@@ -99,5 +99,11 @@
   }
 }
 
-.preview-placeholder--hero { min-height: 26rem; }
-@media (max-width: 440px) { .preview-placeholder--hero { min-height: 37rem; } }
+// Reserve the same area before and after hydration, using the card's width rather
+// than the viewport: the desktop split layout can also produce a narrow card.
+:host(.preview--hero) { container-type: inline-size; }
+.preview-content--hero { display: flow-root; min-height: 33rem; }
+.preview-placeholder--hero { min-height: inherit; }
+@container (max-width: 400px) {
+  .preview-content--hero { min-height: 36rem; }
+}

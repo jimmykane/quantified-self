@@ -14,6 +14,7 @@ import { DashboardHealthService } from '../../services/dashboard-health.service'
 import { HealthOverviewPreviewComponent } from './health-overview-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
+import { HomeSignalChartsPreviewComponent } from '../home/home-signal-charts-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 
@@ -131,6 +132,31 @@ describe('PublicFeaturePreviewComponent', () => {
     const blocks = await fixture.getDeferBlocks();
     await blocks[0].render(DeferBlockState.Complete);
     expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
+  });
+
+  it('hydrates the hero chart inside its persistent layout reservation', async () => {
+    TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });
+    TestBed.overrideProvider(EChartsLoaderService, { useValue: {
+      init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn() }),
+      setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+      subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
+    } });
+    const element = renderPlaceholder('training-hero');
+    const reservation = element.querySelector('.preview-content--hero') as HTMLElement;
+    expect(reservation).toBeTruthy();
+    expect(element.classList.contains('preview--hero')).toBe(true);
+    expect(reservation.querySelector('.preview-placeholder--hero')).toBeTruthy();
+    const [block] = await fixture.getDeferBlocks();
+    await block.render(DeferBlockState.Complete);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const preview = fixture.debugElement.query(By.directive(HomeSignalChartsPreviewComponent));
+    expect(preview.componentInstance.hero()).toBe(true);
+    expect(preview.nativeElement.closest('.preview-content--hero')).toBe(reservation);
+    expect(element.querySelector('.preview-content--hero')).toBe(reservation);
+    expect(reservation.querySelector('.preview-placeholder--hero')).toBeNull();
+    expect(reservation.querySelectorAll('app-form-chart')).toHaveLength(1);
+    expect(reservation.querySelectorAll('.hero-summary mat-card')).toHaveLength(2);
   });
   it('hydrates the current Health overview as a static example inside the snippet exclusion', async () => {
     const watch = vi.fn(), selection = vi.fn();

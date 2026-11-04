@@ -138,7 +138,7 @@
 
 // Local hero concept: the shipped chart components remain responsible for their data and visuals.
 .landing-page { max-width: 1440px; }
-.landing-page > :not(.hero-section) { max-width: 1104px; margin-inline: auto; }
+.landing-page > :not(.hero-section) { width: min(100%, 1104px); margin-inline: auto; }
 .hero-section { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); align-items: center; gap: 2rem 1.5rem; padding-block: 3rem 1.5rem; text-align: left; }
 .hero-content { width: 100%; margin: 0; }
 .brand-badge, .hero-actions, .trust-indicators { justify-content: flex-start; }

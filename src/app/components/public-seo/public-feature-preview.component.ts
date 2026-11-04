@@ -42,7 +42,10 @@ import { DailyWorkoutPreviewComponent } from './daily-workout-preview.component'
   templateUrl: './public-feature-preview.component.html',
   styleUrls: ['./public-feature-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.preview-prepares-ahead]': 'prepareAhead()' },
+  host: {
+    '[class.preview-prepares-ahead]': 'prepareAhead()',
+    '[class.preview--hero]': 'previewKey() === "training-hero"',
+  },
 })
 export class PublicFeaturePreviewComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
