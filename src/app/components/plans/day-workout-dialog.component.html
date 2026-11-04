@@ -36,7 +36,7 @@
   @if (data.replacement) {
     <p class="hint">Replaces “{{ data.replacement.title }}” only after approval. Uses your Assistant allowance.</p>
     @if (replacementCompleted() === undefined) { <p class="hint" role="status">Checking the current workout…</p> }
-    @else if (!replacementCurrent() && schedule()) { <p role="alert">The original workout changed, was completed, or could not be checked. Close this review and reopen it from Today.</p> }
+    @else if (!replacementCurrent() && schedule() && !saveUncertain()) { <p role="alert">The original workout changed, was completed, or could not be checked. Close this review and reopen it from Today.</p> }
   } @else if (data.regenerateSuggestion && !result()) {
     <p class="hint">A successful generation replaces today’s suggestion. Review before adding it to Calendar.</p>
   }

@@ -135,6 +135,8 @@ describe('DayWorkoutDialogComponent', () => {
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
   it('reviews a replacement, saves the same workout with revision guards and preserves provider preferences', async () => {
+    const completion = new BehaviorSubject<TrainingWorkoutCompletionV1[]>([]);
+    vi.mocked(TestBed.inject(TrainingPlansService).watchWorkoutCompletionsForWorkouts).mockReturnValue(completion);
     const data = TestBed.inject(MAT_DIALOG_DATA);
     const original = { schemaVersion: 1 as const, id: 'existing-workout', planId: null, localDate: '2026-10-28',
       title: 'Original strength', structure: response('original').draft!.structure, lifecycle: 'planned' as const,
@@ -155,7 +157,16 @@ describe('DayWorkoutDialogComponent', () => {
       plans: [], workouts: [{ ...original, title: 'Replacement strength', revision: 4 }], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
     await component.add(); expect(component.saveUncertain()).toBe(true);
     expect(component.primaryLabel()).toBe('Retry replacement');
-    await component.add(); fixture.detectChanges();
+    // Completion may arrive after the server committed but before its response is recovered.
+    completion.next([{ schemaVersion: 1, workoutId: original.id, planId: null, provider: 'garmin', matchMethod: 'provider_marker',
+      eventId: 'event', activityId: null, sourceSessionIndex: null, activityStartAtMs: null, scheduledLocalDate: original.localDate,
+      workoutRevisionAtLink: 4, timing: 'on_date', linkedAtMs: 1, updatedAtMs: 1 }]);
+    fixture.detectChanges();
+    expect(component.replacementCurrent()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Close this review and reopen it');
+    const retry = [...fixture.nativeElement.querySelectorAll('button')].find(button => button.textContent.includes('Retry replacement'));
+    expect(retry?.disabled).toBe(false);
+    await component.primaryAction(); fixture.detectChanges();
     expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
     expect(mutate.mock.calls[0][0]).toMatchObject({ requireUncompletedWorkout: true, expectedRevisions: expect.arrayContaining([
       { scope: 'state', id: 'current', revision: 7 }, { scope: 'workout', id: original.id, revision: 3 }]),

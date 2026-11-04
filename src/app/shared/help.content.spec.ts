@@ -933,6 +933,7 @@ describe('help.content', () => {
     expect(content).toContain('a failure keeps the previous one');
     expect(content).toContain('**Replace workout**');
     expect(content).toContain('Completed workouts cannot be replaced');
+    expect(content).toContain('**Retry replacement** checks the same update');
     expect(content).toContain('Existing workout sync settings still apply');
     expect(content).toContain('blocks automatic generation');
     expect(content).toContain('does not reset the daily allowance');

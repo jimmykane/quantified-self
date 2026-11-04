@@ -207,8 +207,10 @@ export class DailyWorkoutSuggestionService {
   async regenerate(uid: string, expectedRequestId: string, request: GenerateDayWorkoutRequest,
     current: () => boolean): Promise<DailyWorkoutSuggestionStatus> {
     const entry = this.entry(uid), key = this.key(uid), epoch = entry.epoch;
+    // Status reads can discover coverage or another device's result without changing the listener epoch.
     const active = () => this.cache === entry && entry.epoch === epoch && this.key(uid) === key && entry.authUser === this.auth.currentUser
-      && this.eligible(uid) && current();
+      && this.eligible(uid) && current() && (!entry.status || entry.status.state === 'ready'
+        && [expectedRequestId, request.requestId].includes(entry.status.result?.requestId ?? ''));
     if (!active()) throw Error('Daily suggestion access changed.');
     const { data } = await this.functions.call<RegenerateDailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout',
       { mode: 'daily-suggestion', action: 'regenerate', expectedRequestId, request }, { canExecute: active });

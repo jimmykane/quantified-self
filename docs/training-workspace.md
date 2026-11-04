@@ -5875,7 +5875,9 @@ and current saved preferences before replacing the result. Same-request retries 
 concurrent/stale replacements, dismissals, account deletion and date/zone changes cannot overwrite newer intent.
 Failures preserve the previous daily result. The charged daily receipt is never reset. Refreshed result IDs survive the
 existing validated session cache. Late regeneration responses cannot overwrite a newer cache epoch after schedule/rest
-changes or dismissal. Regeneration adds no focus listener, polling or background generation.
+changes or dismissal. Fresh status reads also take precedence when they discover coverage, dismissal or a different
+regeneration result without a listener revision; reads of the previous result or this same request remain compatible.
+Regeneration adds no focus listener, polling or background generation.
 
 Saved-workout regeneration includes an optional strict `replaceWorkout` identity/revision in the private manual request,
 bound into its fingerprint. The bounded Training context reader verifies owner, date, plan, sport, planned lifecycle,
@@ -5887,7 +5889,8 @@ provider consent. The replacement review reuses the exact-workout completion rea
 its first read is pending, unavailable or completed. This listener exists only while the review is open. The first-party
 save envelope sets `requireUncompletedWorkout: true` on the existing `mutateTrainingSchedule` callable; its transaction
 checks planned lifecycle and completion absence before writing. It checks successful receipts first, so lost-save retries
-recover the same result even when completion arrives afterwards. Ordinary editing and MCP updates remain unchanged.
+recover the same result even when completion arrives afterwards. During an uncertain save the review keeps Retry
+replacement available and suppresses conflicting close/reopen guidance. Ordinary editing and MCP updates remain unchanged.
 The dialog keeps the newer save acknowledgement visible until the independent workout listener catches up by revision.
 Rest advice leaves the saved workout intact. Multiple planned
 workouts offer Open instead of guessing a replacement target. Regular replacement updates may reconcile existing provider
