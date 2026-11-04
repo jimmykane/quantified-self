@@ -2,7 +2,7 @@ import { Injectable, Signal, signal, TransferState, inject } from '@angular/core
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { Observable, of } from 'rxjs';
+import { Observable, defer, of } from 'rxjs';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from './models/app-theme-preference.type';
 import { AppUserInterface } from './models/app-user.interface';
@@ -19,6 +19,11 @@ import {
 } from './services/public-pricing-snapshot';
 import { transformProductsForPricing } from './services/pricing-product-catalog';
 import { PublicPricingCatalogService } from './services/public-pricing-catalog.service';
+import {
+  parsePublicReleasesSnapshot,
+  PUBLIC_RELEASES_SNAPSHOT_FILE_PATH,
+  PUBLIC_RELEASES_TRANSFER_STATE_KEY,
+} from './services/public-releases-snapshot';
 
 @Injectable()
 class ServerAuthService {
@@ -112,8 +117,11 @@ class ServerThemeService {
 
 @Injectable()
 class ServerWhatsNewService {
-  readonly changelogs$ = of<ChangelogPost[]>([]);
-  readonly changelogs = signal<ChangelogPost[]>([]).asReadonly();
+  private readonly transferState = inject(TransferState);
+  private readonly posts = signal<ChangelogPost[]>([]);
+  private loaded = false;
+  readonly changelogs$ = defer(() => of(this.posts()));
+  readonly changelogs = this.posts.asReadonly();
   readonly unreadCount = signal(0).asReadonly();
 
   isUnread(): boolean {
@@ -125,11 +133,24 @@ class ServerWhatsNewService {
   }
 
   ensureChangelogsLoaded(): void {
-    return undefined;
+    if (this.loaded) return;
+    try {
+      const snapshot = parsePublicReleasesSnapshot(JSON.parse(
+        readFileSync(resolve(process.cwd(), PUBLIC_RELEASES_SNAPSHOT_FILE_PATH), 'utf8'),
+      ));
+      this.posts.set(snapshot.posts);
+      this.transferState.set(PUBLIC_RELEASES_TRANSFER_STATE_KEY, snapshot.posts);
+      this.loaded = true;
+    } catch {
+      if (process.env['QS_REQUIRE_PUBLIC_RELEASES_SNAPSHOT'] === 'true') {
+        throw new Error('Could not load the required public release notes snapshot for prerendering.');
+      }
+    }
   }
 
   getChangelogsOnceLoaded(): Observable<ChangelogPost[]> {
-    return of([]);
+    this.ensureChangelogsLoaded();
+    return of(this.posts());
   }
 
   setAdminMode(): void {

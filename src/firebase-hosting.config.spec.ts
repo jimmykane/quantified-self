@@ -482,7 +482,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
@@ -568,7 +569,6 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Allow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');
@@ -581,6 +581,11 @@ describe('Firebase Hosting configuration', () => {
         headerValue.key === betaNoIndexHeader.key && headerValue.value === betaNoIndexHeader.value
       ))
     )) ?? [];
+
+    for (const routePath of PRERENDERED_PUBLIC_ROUTES) {
+      const routeSource = routePathToHostingSource(routePath);
+      expect(noIndexHeaders.some(header => headerSourceMatchesPath(header.source, routeSource)), routePath).toBe(false);
+    }
 
     for (const routePath of CLIENT_RENDERED_APP_ROUTES) {
       const routeSource = routePathToHostingSource(routePath);

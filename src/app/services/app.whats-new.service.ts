@@ -1,13 +1,14 @@
-import { Injectable, Injector, computed, inject, signal } from '@angular/core';
+import { Injectable, Injector, TransferState, computed, inject, signal } from '@angular/core';
 import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { filter, map, shareReplay, switchMap, take } from 'rxjs/operators';
+import { filter, map, shareReplay, startWith, switchMap, take } from 'rxjs/operators';
 import { Observable, of } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
 import { AppDateValue } from '../models/app-date-value.type';
+import { PUBLIC_RELEASES_TRANSFER_STATE_KEY } from './public-releases-snapshot';
 
 export type ChangelogPostDate = AppDateValue;
 
@@ -73,6 +74,12 @@ export class AppWhatsNewService {
     private logger = inject(LoggerService);
     private localStorage = inject(AppWhatsNewLocalStorageService);
     private injector = inject(Injector);
+    private readonly transferState = inject(TransferState, { optional: true });
+    private readonly transferredPosts = this.transferState?.get(PUBLIC_RELEASES_TRANSFER_STATE_KEY, null) ?? null;
+    private readonly initialLoadState: ChangelogLoadState = {
+        loaded: this.transferredPosts !== null,
+        changelogs: this.transferredPosts ?? [],
+    };
 
     private readonly changelogsCollection = collection(this.firestore, 'changelogs');
     private readonly user = toSignal(this.authService.user$, { initialValue: null });
@@ -107,16 +114,21 @@ export class AppWhatsNewService {
                     changelogs: changelogs as ChangelogPost[],
                 })),
             )
-            : of<ChangelogLoadState>({ loaded: false, changelogs: [] })
+            : of(this.initialLoadState)
         ),
+        startWith(this.initialLoadState),
         shareReplay({ bufferSize: 1, refCount: true })
     );
 
     public readonly changelogs$ = this.changelogLoadState$.pipe(
         map(state => state.changelogs),
     );
-    public readonly changelogs = toSignal(this.changelogs$, { initialValue: [] });
+    public readonly changelogs = toSignal(this.changelogs$, { initialValue: this.initialLoadState.changelogs });
     private _localStorageTrigger = signal(0);
+
+    constructor() {
+        this.transferState?.remove(PUBLIC_RELEASES_TRANSFER_STATE_KEY);
+    }
 
     public ensureChangelogsLoaded(): void {
         this._changelogsRequested.set(true);

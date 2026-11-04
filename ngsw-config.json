@@ -49,7 +49,6 @@
     "/subscriptions",
     "/payment/success",
     "/payment/cancel",
-    "/releases",
     "/tools/compare/saved",
     "/services",
     "/send-activities",

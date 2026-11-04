@@ -119,6 +119,10 @@
     "environment": "angular",
     "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
   },
+  "src/app/helpers/markdown.pipe.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection of the Markdown pipe, DomSanitizer and PendingTasks to verify lazy parsing holds SSR stability through success and failure."
+  },
   "src/app/resolvers/public-pricing-json-ld.resolver.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection to verify the route resolver produces structured pricing data from the injected public catalog service."

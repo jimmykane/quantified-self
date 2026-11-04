@@ -1,4 +1,10 @@
 /** Exact build-output expectations, checked against route content by the Node helper tests. */
+export const RELEASES_PRERENDER_METADATA = {
+  title: 'Release Notes',
+  description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
+  h1: 'Release Notes',
+};
+
 export const TRAINING_PLANS_PRERENDER_METADATA = {
   title: 'Training Plans for Running, Cycling & More',
   description: 'Build or generate structured workouts, create free training plans, and explore opt-in daily AI suggestions with Pro. Review workouts or rest before adding.',

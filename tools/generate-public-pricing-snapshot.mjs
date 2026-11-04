@@ -1,21 +1,20 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createPublicSnapshotFetch, FIRESTORE_DOCUMENTS_URL } from './public-snapshot-firestore.mjs';
 
-const PROJECT_ID = 'quantified-self-io';
 const SNAPSHOT_VERSION = 1;
 const DEFAULT_OUTPUT_PATH = 'tmp/public-pricing-snapshot.json';
-const FIRESTORE_DOCUMENTS_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const PRODUCTS_URL = `${FIRESTORE_DOCUMENTS_URL}/products`;
 const RECURRING_INTERVALS = new Set(['day', 'week', 'month', 'year']);
 const PRICE_TYPES = new Set(['one_time', 'recurring']);
 
 /**
- * Fetches only the public pricing fields needed to prerender /pricing. The
- * Firestore rules deliberately allow signed-out reads for this catalog, so no
- * credential or service account is needed at build time.
+ * Fetches the public pricing allowlist using ADC. Browser App Check attestation
+ * is deliberately separate from this trusted, IAM-authorized build read.
  */
-export async function fetchPublicPricingProducts(fetchImpl = fetch) {
+export async function fetchPublicPricingProducts(fetchImpl) {
+  fetchImpl ??= await createPublicSnapshotFetch();
   const productDocuments = await listFirestoreDocuments(PRODUCTS_URL, fetchImpl);
   const products = await Promise.all(productDocuments.map(async document => {
     const product = sanitizeProduct(document);
@@ -285,7 +284,7 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export async function main({ fetchImpl = fetch, outputPath = DEFAULT_OUTPUT_PATH } = {}) {
+export async function main({ fetchImpl, outputPath = DEFAULT_OUTPUT_PATH } = {}) {
   const products = await fetchPublicPricingProducts(fetchImpl);
   const snapshot = buildPublicPricingSnapshot(products);
   const absoluteOutputPath = resolve(process.cwd(), outputPath);

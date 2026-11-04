@@ -602,7 +602,13 @@ const topLevelRoutes: Routes = [
       preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
-      robots: 'noindex, nofollow',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Release Notes',
+        description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
+        url: 'https://quantified-self.io/releases',
+      },
     }
   },
   {

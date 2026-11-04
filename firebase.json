@@ -95,19 +95,11 @@
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
-          "source": "/pricing",
-          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
-        },
-        {
           "source": "/subscriptions",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
           "source": "/payment/**",
-          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
-        },
-        {
-          "source": "/releases",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
@@ -337,10 +329,6 @@
         },
         {
           "source": "/payment/cancel",
-          "destination": "/index.csr.html"
-        },
-        {
-          "source": "/releases",
           "destination": "/index.csr.html"
         },
         {
@@ -681,10 +669,6 @@
         },
         {
           "source": "/payment/cancel",
-          "destination": "/index.csr.html"
-        },
-        {
-          "source": "/releases",
           "destination": "/index.csr.html"
         },
         {

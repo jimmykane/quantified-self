@@ -55,6 +55,7 @@ describe('serverRoutes', () => {
     expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual([
       'pricing',
       'help',
+      'releases',
       'policies',
       'privacy',
       'terms',
@@ -119,7 +120,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('policies')).toBe(true);
     expect(prerenderedPaths.has('privacy')).toBe(true);
     expect(prerenderedPaths.has('terms')).toBe(true);
-    expect(prerenderedPaths.has('releases')).toBe(false);
+    expect(prerenderedPaths.has('releases')).toBe(true);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
     expect(prerenderedPaths.has('tools')).toBe(true);
     expect(prerenderedPaths.has('tools/compare')).toBe(true);
@@ -181,7 +182,7 @@ describe('serverRoutes', () => {
     expect(clientRoutes.some(route => route.path === 'plans')).toBe(false);
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')).toBeUndefined();
-    expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'releases')).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mytracks')?.status).toBeUndefined();

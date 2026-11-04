@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
+import { marked } from 'marked';
+import { RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -22,6 +23,7 @@ const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/help\/help-page\.component\.ts$/,
   /^src\/app\/components\/policies\/policies\.component\.ts$/,
   /^src\/app\/components\/public-pricing\/public-pricing\.component\.ts$/,
+  /^src\/app\/components\/whats-new\/whats-new-page\.component\.ts$/,
   /^src\/app\/components\/integrations\/integrations-hub-page\.component\.ts$/,
   /^src\/app\/components\/integrations\/provider-integration-page\.component\.ts$/,
   /^src\/app\/components\/features\/workout-data-comparison-page\.component\.ts$/,
@@ -164,7 +166,11 @@ assertNoStartupSource(
 );
 assertNoStartupSource(
   "interaction-only What's New UI",
-  /\/components\/whats-new\/whats-new-(?:dialog|feed|item)\.component\.ts$/,
+  /\/components\/whats-new\/whats-new-dialog\.component\.ts$/,
+);
+assertNoHomeStartupSource(
+  'release-note feed UI',
+  /\/components\/whats-new\/whats-new-(?:page|feed|item)\.component\.ts$/,
 );
 assertNoStartupSource(
   'capability-failure browser upgrade UI',
@@ -391,6 +397,8 @@ function assertPrerenderedDocuments() {
     if (route === '/tools/compare') {
       assertToolsCompareDocument(documentRef);
     }
+    if (route === '/releases') assertReleasesDocument(documentRef);
+    if (route === '/pricing') assertPricingDocument(documentRef);
 
     dom.window.close();
   }
@@ -398,6 +406,57 @@ function assertPrerenderedDocuments() {
   console.log(
     `Verified ${documentPaths.length} prerendered pages: title, description, H1, valid JSON-LD, and public footer.`,
   );
+}
+
+function assertPublicSnapshotMetadata(documentRef, route, metadata) {
+  for (const [label, actual, expected] of [
+    ['title', documentRef.title, `${metadata.title} - Quantified Self`],
+    ['description', documentRef.querySelector('meta[name="description"]')?.getAttribute('content'), metadata.description],
+    ['H1', documentRef.querySelector('h1')?.textContent?.trim(), metadata.h1],
+    ['canonical', documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href'), `https://quantified-self.io${route}`],
+  ]) {
+    if (actual !== expected) throw new Error(`Prerendered ${route} has unexpected ${label}.`);
+  }
+  if (documentRef.querySelector('meta[name="robots"]')?.getAttribute('content')?.includes('noindex')) {
+    throw new Error(`Prerendered ${route} must be indexable.`);
+  }
+}
+
+function assertReleasesDocument(documentRef) {
+  assertPublicSnapshotMetadata(documentRef, '/releases', RELEASES_PRERENDER_METADATA);
+  const snapshot = JSON.parse(fs.readFileSync('tmp/public-releases-snapshot.json', 'utf8'));
+  const panels = [...documentRef.querySelectorAll('app-whats-new-page .changelog-panel')];
+  if (panels.length !== snapshot.posts.length) throw new Error('Prerendered release notes do not match the public snapshot.');
+  snapshot.posts.forEach((post, index) => {
+    const panel = panels[index];
+    const expectedBody = new JSDOM(marked.parse(post.description, { async: false }));
+    const actualBody = panel.querySelector('.description')?.innerHTML.trim();
+    const title = panel.querySelector('.post-title')?.textContent?.trim();
+    if (title !== post.title.trim() || actualBody !== expectedBody.window.document.body.innerHTML.trim()) {
+      throw new Error(`Prerendered release note ${index + 1} is missing its published title or body.`);
+    }
+    expectedBody.window.close();
+    if (panel.querySelector('.unpublished-tag')) throw new Error('Prerendered release notes contain an unpublished post.');
+  });
+  const state = JSON.parse(documentRef.querySelector('script[id$="-state"]')?.textContent ?? '{}');
+  if (JSON.stringify(state['quantified-self.public-releases.v1']) !== JSON.stringify(snapshot.posts)) {
+    throw new Error('Prerendered release notes are missing their public hydration state.');
+  }
+}
+
+function assertPricingDocument(documentRef) {
+  assertPublicSnapshotMetadata(documentRef, '/pricing', {
+    title: 'Membership', h1: 'Choose your plan',
+    description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
+  });
+  for (const role of ['basic', 'pro']) {
+    const plan = documentRef.querySelector(`[data-plan="${role}"]`);
+    if (!plan?.querySelector('.price-amount')?.textContent?.trim()
+      || !plan.querySelector('[data-price-id]')) throw new Error(`Prerendered pricing is missing the paid ${role} plan.`);
+  }
+  if (documentRef.querySelector('.catalog-status')) throw new Error('Prerendered pricing contains an unavailable catalog.');
+  const state = JSON.parse(documentRef.querySelector('script[id$="-state"]')?.textContent ?? '{}');
+  if (!state['quantified-self.public-pricing-catalog.v1']?.length) throw new Error('Prerendered pricing is missing its public hydration state.');
 }
 
 function assertToolsCompareDocument(documentRef) {

@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from '../../../tools/public-prerender-metadata.mjs';
+import { RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from '../../../tools/public-prerender-metadata.mjs';
 import { TRAINING_PLANS_SEO_CONTENT } from '../components/public-seo/training-plans-page.content';
 
 describe('public prerender metadata', () => {
+  it('keeps the release notes build verifier aligned with its route and page heading', () => {
+    const source = readFileSync(new URL('../app.routing.module.ts', import.meta.url), 'utf8');
+    const route = source.split("path: 'releases',")[1]?.split("path: 'payment/cancel',")[0];
+    const page = readFileSync(new URL('../components/whats-new/whats-new-page.component.ts', import.meta.url), 'utf8');
+    expect(route).toContain(`title: '${RELEASES_PRERENDER_METADATA.title}'`);
+    expect(route).toContain(`description: '${RELEASES_PRERENDER_METADATA.description}'`);
+    expect(page.match(/<h1[^>]*>([^<]*)<\/h1>/)?.[1]).toBe(RELEASES_PRERENDER_METADATA.h1);
+  });
+
   it('keeps the comparison build verifier aligned with route metadata and guest copy', () => {
     const routeSource = readFileSync(new URL('../app.routing.module.ts', import.meta.url), 'utf8');
     const compareRoute = routeSource.split("path: 'tools/compare',")[1]?.split("path: 'tools/compare/saved',")[0];

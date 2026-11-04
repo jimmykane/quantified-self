@@ -178,6 +178,18 @@ describe('AppRoutingModule routes', () => {
     expect(pricingRoute?.resolve).toEqual({ jsonLd: lazyPublicPricingJsonLdResolver });
   });
 
+  it('makes published release notes public and indexable with collection metadata', () => {
+    const releaseRoute = routes.find(route => route.path === 'releases');
+    expect(releaseRoute?.canMatch).toBeUndefined();
+    expect(releaseRoute?.canActivate).toBeUndefined();
+    expect(releaseRoute?.data?.['robots']).toBeUndefined();
+    expect(releaseRoute?.data?.['title']).toBe('Release Notes');
+    expect(releaseRoute?.data?.['jsonLd']).toMatchObject({
+      '@type': 'CollectionPage', url: 'https://quantified-self.io/releases',
+      description: releaseRoute?.data?.['description'],
+    });
+  });
+
   it('should allow any authenticated onboarded user to access mytracks', () => {
     const myTracksRoute = routes.find(route => route.path === 'mytracks');
 

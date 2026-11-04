@@ -1984,6 +1984,10 @@ Open **Settings → Notifications** to enable notifications on this device or se
 - Disabling this device or signing out can cancel an unsent import alert. Re-enabling notifications or refreshing a replaced registration does not transfer an earlier import's choice to the new registration.
 - **Disable on this device** stops this browser subscription. Sign-out also attempts device cleanup; signing into another account requires a fresh opt-in. Already delivered notifications cannot be recalled. If browser permission is blocked, allow it in your browser or device settings and return to QS.
 
+## Release notes
+
+Read [Release Notes](/releases) without signing in to see published features, improvements and fixes. The page opens with published updates and checks for newer notes while you browse.
+
 ## Browser compatibility
 
 Some upload and compression behavior depends on modern browser features. If the app reports that your browser does not support a required feature, update your browser and try again.
