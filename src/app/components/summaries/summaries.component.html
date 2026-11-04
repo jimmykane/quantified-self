@@ -69,6 +69,7 @@
   </div>
   }
   @if (showTodaySummary) {
+  <div [class.dashboard-today-card]="!isOwnerDashboard || todayDetailsExpanded()">
   <section id="dashboard-today-details" class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
     [hidden]="isOwnerDashboard && !todayDetailsExpanded()"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
@@ -190,6 +191,7 @@
     <app-daily-workout-suggestion [ownerUid]="user!.uid" [localDate]="todayRestDate" [dataReady]="!dashboardTodayReadiness.loading"
       [sleepRevision]="dailyWorkoutSuggestionSleepRevision" [sleepKey]="dailyWorkoutSuggestionSleepKey"></app-daily-workout-suggestion>
   }
+  </div>
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }

@@ -1752,6 +1752,25 @@ describe('SummariesComponent', () => {
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
+  it('puts the assistant suggestion inside the Today card and keeps it visible when metric details are collapsed', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+    mockUserService.user.set(component.user);
+    component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const details = host.querySelector<HTMLElement>('#dashboard-today-details')!;
+    const suggestion = host.querySelector<HTMLElement>('app-daily-workout-suggestion')!;
+    expect(suggestion).not.toBeNull();
+    expect(suggestion.parentElement).toBe(details.parentElement);
+    expect(suggestion.parentElement?.classList.contains('dashboard-today-card')).toBe(true);
+    expect(details.contains(suggestion)).toBe(false);
+    component.todayDetailsExpanded.set(false); fixture.detectChanges();
+    expect(details.hidden).toBe(true);
+    expect(suggestion.closest('[hidden]')).toBeNull();
+    expect(TestBed.inject(ActivityCalendarService).watchSummaryEvents).not.toHaveBeenCalled();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
   it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts', () => {
     const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
     const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
@@ -3980,7 +3999,7 @@ describe('SummariesComponent', () => {
     const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(summaryHeading?.nextElementSibling).toBe(today);
+    expect(summaryHeading?.nextElementSibling).toBe(today?.parentElement);
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 
