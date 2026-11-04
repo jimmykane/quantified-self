@@ -29,41 +29,41 @@
             </div>
           }
         </div>
-        <svg class="hero-provider-wires hero-provider-wires--desktop" viewBox="0 0 136 336" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          @for (provider of heroProviders; track provider.icon) {
-            <g class="hero-connection" [attr.data-provider]="provider.icon">
-              <path class="hero-connection-track" [attr.d]="provider.path"></path>
-              <path class="hero-connection-halo" [attr.d]="provider.path" pathLength="100"></path>
-              <path class="hero-connection-pulse" [attr.d]="provider.path" pathLength="100"></path>
-              <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
+        <div class="hero-connection-field" aria-hidden="true">
+          <svg class="hero-provider-wires hero-provider-wires--desktop" viewBox="0 0 136 336" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            @for (provider of heroProviders; track provider.icon) {
+              <g class="hero-connection" [attr.data-provider]="provider.icon">
+                <path class="hero-connection-track" [attr.d]="provider.path"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.path" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.path" pathLength="100"></path>
+                <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
+              </g>
+            }
+            <g class="hero-aggregate">
+              <path class="hero-connection-track" d="M 84 168 H 134"></path>
+              <path class="hero-connection-halo" d="M 84 168 H 134" pathLength="100"></path>
+              <path class="hero-connection-pulse" d="M 84 168 H 134" pathLength="100"></path>
+              <circle class="hero-connection-arrival" cx="134" cy="168" r="3"></circle>
             </g>
-          }
-          <g class="hero-aggregate">
-            <path class="hero-connection-track" d="M 84 168 H 134"></path>
-            <path class="hero-connection-halo" d="M 84 168 H 134" pathLength="100"></path>
-            <path class="hero-connection-pulse" d="M 84 168 H 134" pathLength="100"></path>
-            <circle class="hero-aggregation-ripple" cx="84" cy="168" r="5"></circle>
-            <circle class="hero-aggregation-point" cx="84" cy="168" r="5"></circle>
-            <circle class="hero-connection-arrival" cx="134" cy="168" r="3"></circle>
-          </g>
-        </svg>
-        <svg class="hero-provider-wires hero-provider-wires--mobile" viewBox="0 0 400 104" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          @for (provider of heroProviders; track provider.icon) {
-            <g class="hero-connection" [attr.data-provider]="provider.icon">
-              <path class="hero-connection-track" [attr.d]="provider.mobilePath"></path>
-              <path class="hero-connection-halo" [attr.d]="provider.mobilePath" pathLength="100"></path>
-              <path class="hero-connection-pulse" [attr.d]="provider.mobilePath" pathLength="100"></path>
+          </svg>
+          <svg class="hero-provider-wires hero-provider-wires--mobile" viewBox="0 0 400 104" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            @for (provider of heroProviders; track provider.icon) {
+              <g class="hero-connection" [attr.data-provider]="provider.icon">
+                <path class="hero-connection-track" [attr.d]="provider.mobilePath"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.mobilePath" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.mobilePath" pathLength="100"></path>
+              </g>
+            }
+            <g class="hero-aggregate">
+              <path class="hero-connection-track" d="M 200 64 V 102"></path>
+              <path class="hero-connection-halo" d="M 200 64 V 102" pathLength="100"></path>
+              <path class="hero-connection-pulse" d="M 200 64 V 102" pathLength="100"></path>
+              <circle class="hero-connection-arrival" cx="200" cy="102" r="3"></circle>
             </g>
-          }
-          <g class="hero-aggregate">
-            <path class="hero-connection-track" d="M 200 64 V 102"></path>
-            <path class="hero-connection-halo" d="M 200 64 V 102" pathLength="100"></path>
-            <path class="hero-connection-pulse" d="M 200 64 V 102" pathLength="100"></path>
-            <circle class="hero-aggregation-ripple" cx="200" cy="64" r="5"></circle>
-            <circle class="hero-aggregation-point" cx="200" cy="64" r="5"></circle>
-            <circle class="hero-connection-arrival" cx="200" cy="102" r="3"></circle>
-          </g>
-        </svg>
+          </svg>
+          <!-- Keep the junction circular while the decorative paths stretch to fit. -->
+          <span class="hero-aggregation-point"></span>
+        </div>
       </div>
       <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
         <div class="hero-product-header">

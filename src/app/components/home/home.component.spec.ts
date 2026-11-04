@@ -129,8 +129,9 @@ describe('HomeComponent', () => {
       expect(svg.querySelectorAll('.hero-connection .hero-connection-pulse')).toHaveLength(4);
       expect(svg.querySelectorAll('.hero-aggregate')).toHaveLength(1);
       expect(svg.querySelectorAll('.hero-aggregate .hero-connection-pulse')).toHaveLength(1);
-      const junction = svg.querySelector('.hero-aggregation-point')!;
-      const endpoint = `${junction.getAttribute('cx')} ${junction.getAttribute('cy')}`;
+      const trunk = svg.querySelector('.hero-aggregate .hero-connection-track')!;
+      const endpoint = trunk.getAttribute('d')?.match(/^M (\d+ \d+)/)?.[1];
+      expect(endpoint).toBeTruthy();
       expect(Array.from(svg.querySelectorAll('.hero-connection-track')).slice(0, 4)
         .every(path => path.getAttribute('d')?.endsWith(endpoint))).toBe(true);
     }
