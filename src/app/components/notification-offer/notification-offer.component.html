@@ -1,0 +1,45 @@
+@if (visible()) {
+  @if (placement() === 'dashboard') {
+    <app-dashboard-action-prompt [prompt]="prompt()" (primary)="enable()"
+      (secondary)="dismiss(false)" (menuAction)="dismiss(true)" />
+  } @else {
+    <section class="device-notification-offer" aria-labelledby="device-notification-offer-title">
+      <div class="device-notification-heading">
+        <mat-icon aria-hidden="true">notifications</mat-icon>
+        <h3 id="device-notification-offer-title">Notifications on this device</h3>
+      </div>
+      <p role="status" aria-live="polite">{{ status() }}</p>
+      @if (push.state() === 'disabled') {
+        <p class="notification-description">Get grouped activity sync alerts and delivery updates. You choose the categories in Settings.</p>
+      }
+      <div class="notification-offer-actions">
+        @if (push.state() === 'disabled' || push.operation() === 'enable') {
+          <button mat-stroked-button type="button" [disabled]="busy() || !push.canEnable()" (click)="enable()">
+            <span class="notification-button-content">
+              @if (push.operation() === 'enable') { <mat-spinner diameter="20" aria-label="Enabling notifications" /> }
+              @else { <mat-icon aria-hidden="true">notifications</mat-icon> }
+              <span>Enable on this device</span>
+            </span>
+          </button>
+        }
+        @if (push.state() === 'denied' || push.state() === 'install-required') {
+          <button mat-button type="button" [disabled]="busy()" [attr.aria-expanded]="instructionsOpen()"
+            aria-controls="notification-permission-instructions" (click)="toggleInstructions()">
+            {{ instructionsOpen() ? 'Hide instructions' : 'Show instructions' }}
+          </button>
+        }
+        <a mat-button routerLink="/settings" [queryParams]="{section: 'notifications'}" (click)="manage()">{{ push.state() === 'enabled' ? 'Manage notifications' : 'Notification settings' }}</a>
+      </div>
+      @if (instructionsOpen() && (push.state() === 'denied' || push.state() === 'install-required')) {
+        <p id="notification-permission-instructions" class="notification-description">
+          @if (push.state() === 'install-required') {
+            On iPhone or iPad, use Share → Add to Home Screen. Open QS from that icon, then enable notifications there.
+          } @else {
+            Open this site’s permissions in your browser settings and allow Notifications. Check your device’s notification settings too, then return to QS.
+          }
+        </p>
+      }
+      @if (error()) { <p role="alert">{{ error() }}</p> }
+    </section>
+  }
+}

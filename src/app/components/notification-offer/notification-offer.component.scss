@@ -1,0 +1,10 @@
+:host { display: block; min-width: 0; }
+.device-notification-offer { padding-bottom: 20px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.device-notification-heading { display: flex; align-items: center; gap: 12px; }
+.device-notification-heading h3 { margin: 0; font: var(--mat-sys-title-medium); }
+.device-notification-heading mat-icon { flex: 0 0 24px; color: var(--mat-sys-primary); }
+.device-notification-offer p { margin: 12px 0; overflow-wrap: anywhere; }
+.notification-description { color: var(--mat-sys-on-surface-variant); }
+.notification-offer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.notification-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.notification-button-content mat-icon, .notification-button-content mat-spinner { width: 20px; height: 20px; flex: 0 0 20px; }

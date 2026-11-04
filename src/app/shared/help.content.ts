@@ -1983,6 +1983,10 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 
 Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. A test notification lets you check this device before choosing an import alert.
 
+You can also open the header’s **Updates & notifications** tray to enable this device, check its status, or open notification settings. If your browser blocks notifications, select **Show instructions**. Release notes remain available in the same tray.
+
+On your own Dashboard, a connected service can make a **Know when your activities arrive** invitation available once other setup prompts are cleared. **Not now** snoozes it for 30 days; dismissing the reminder stops further invitations. **Don’t ask again**, enabling notifications, or explicitly disabling a device stops proactive invitations across your account, including beta and production. The tray and Settings remain available. Existing granted-but-unregistered devices are not prompted automatically because they may have been deliberately disabled. Turning on a device never overrides a category you turned off.
+
 - On iPhone or iPad, add Quantified Self to your Home Screen and open it there before enabling notifications.
 - Notification icons depend on your browser and device. Safari on Mac shows the Safari icon for browser notifications. To use the QS app icon, choose **File → Add to Dock** in Safari, open the saved app, and enable notifications there.
 - Permission and enablement are separate for each device and for the production and beta sites. Both production and beta receive notifications. Clicks open the site where that device was enabled. If you enable both sites in the same browser, you may receive a notification from each; category preferences and alert limits remain shared.

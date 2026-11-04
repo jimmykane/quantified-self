@@ -2371,12 +2371,28 @@ describe('AppUserService', () => {
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
         });
 
+        it.each(['profile', 'properties'])('does not replay a stale notification invitation in a %s save', async mode => {
+            const invitation = { version: 1, choice: 'snoozed', until: 100 };
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', notificationInvitation: invitation } } } as AppUserInterface;
+            if (mode === 'profile') await service.updateUser(owner);
+            else await service.updateUserProperties(owner, { settings: owner.settings });
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), { appSettings: { theme: 'dark' } }, { merge: true });
+            expect(owner.settings.appSettings.notificationInvitation).toEqual(invitation);
+        });
+
+        it.each([{}, { notificationInvitation: { version: 1, choice: 'snoozed', until: 100 } }])(
+            'does not erase the invitation through an empty general settings map', async appSettings => {
+                await service.updateUserProperties({ uid: 'u1' } as AppUserInterface, { settings: { appSettings } });
+                expect(setDoc).not.toHaveBeenCalled();
+            });
+
         it.each(['profile', 'properties'])('preserves newer chart acknowledgements in a stale %s save', async mode => {
             const set = vi.fn();
             vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
                 get: async () => ({ data: () => ({ appSettings: { dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 } } }) }), set,
             } as never));
-            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 } } } } as AppUserInterface;
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 },
+                notificationInvitation: { version: 1, choice: 'snoozed', until: 100 } } } } as AppUserInterface;
             if (mode === 'profile') await service.updateUser(owner);
             else await service.updateUserProperties(owner, { settings: owner.settings });
             expect(set).toHaveBeenCalledWith(expect.anything(), { appSettings: {

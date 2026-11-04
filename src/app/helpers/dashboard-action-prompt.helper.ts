@@ -37,6 +37,8 @@ export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteI
 ];
 
 export type DashboardActionPromptActionId =
+  | 'enableNotifications'
+  | 'snoozeNotifications'
   | 'applyUnitSetup'
   | 'openUnitSettings'
   | 'upgradeToPro'
@@ -57,6 +59,7 @@ export type DashboardActionPromptActionId =
   | 'dismissRouteDeliveryAutoSync';
 
 export type DashboardActionPromptMenuActionId =
+  | 'dismissNotifications'
   | 'openUnitSettings'
   | 'connectServiceProvider';
 

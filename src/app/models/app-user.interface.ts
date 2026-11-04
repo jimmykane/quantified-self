@@ -128,6 +128,7 @@ export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDa
     & Record<string, AppDashboardAutoTileState | undefined>;
 
 export type AppDashboardActionPromptId =
+    | 'enableNotifications'
     | 'unitSetup'
     | 'firstActivityUpload'
     | 'connectActivityService'
@@ -240,6 +241,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
     dashboardActionPrompts?: AppDashboardActionPrompts;
+    notificationInvitation?: import('../helpers/notification-invitation.helper').NotificationInvitation;
     trainingWorkspace?: TrainingWorkspacePreferences;
     dailyWorkoutSuggestion?: import('@shared/daily-workout-suggestion').DailyWorkoutSuggestionPreferences;
     dailyWorkoutDelivery?: import('../helpers/daily-workout-delivery.helper').DailyWorkoutDeliveryPreferences;

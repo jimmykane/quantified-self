@@ -131,7 +131,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private initialResolvedUserIDForReconcile: string | null = null;
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
-  private hasActivityServiceConnection: boolean | null = null;
+  public hasActivityServiceConnection: boolean | null = null;
   private activityServiceConnectionState: ActivityServiceConnectionState | null = null;
   private uploadedActivityCount: number | null = null;
   private hasAnyActivity: boolean | null = null;

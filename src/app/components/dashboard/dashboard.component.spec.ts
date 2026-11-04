@@ -203,6 +203,32 @@ describe('DashboardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-history-import-cards')).toBeNull();
     });
 
+    it('offers notifications on an established owner dashboard after other prompts are cleared', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        fixture.detectChanges();
+        component.hasActivityServiceConnection = true;
+        component.showNoActivityDashboardState = false;
+        component.dashboardActionPrompts = [];
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-notification-offer')?.getAttribute('placement')).toBe('dashboard');
+
+        component.hasActivityServiceConnection = null;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-notification-offer')).toBeNull();
+        component.hasActivityServiceConnection = true;
+        component.showNoActivityDashboardState = true;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-notification-offer')).toBeNull();
+        component.showNoActivityDashboardState = false;
+        component.dashboardActionPrompts = [{ id: 'setupUnits' } as any];
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-notification-offer')).toBeNull();
+        component.dashboardActionPrompts = [];
+        component.targetUser = new User('another-owner') as AppUserInterface;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-notification-offer')).toBeNull();
+    });
+
     it('should place event search filters inside the event table toolbar slot', () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
 

@@ -24,7 +24,7 @@ const tick = async () => { for (let n = 0; n < 20; n++) await Promise.resolve();
 let owner: { uid: string; getIdTokenResult: ReturnType<typeof vi.fn> };
 let owner$: BehaviorSubject<typeof owner | null>;
 let auth: { currentUser: typeof owner | null };
-let tx: { get: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+let tx: { get: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 const push = { state: signal('disabled'), operation: signal(null), isCurrentDevice: vi.fn(), refreshRegistration: vi.fn() };
 function setup(platform = 'browser') {
   TestBed.configureTestingModule({ providers: [AppNotificationDevicesService,
@@ -38,7 +38,7 @@ beforeEach(() => {
   owner = { uid: 'owner', getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }) };
   auth = { currentUser: owner }; owner$ = new BehaviorSubject(owner); vi.mocked(user).mockReturnValue(owner$ as never);
   vi.mocked(getDocsFromServer).mockReset().mockResolvedValue(snapshot());
-  tx = { get: vi.fn().mockResolvedValue({ exists: () => true, data: () => data }), delete: vi.fn() };
+  tx = { set: vi.fn(), get: vi.fn().mockResolvedValue({ exists: () => true, data: () => data }), delete: vi.fn() };
   vi.mocked(runTransaction).mockImplementation(async (_db, update) => update(tx as never));
 });
 afterEach(() => TestBed.resetTestingModule());
@@ -109,6 +109,8 @@ describe('notification device management', () => {
   it('does not change local browser permission when disabling another device', async () => {
     const service = setup(); await tick(); await service.disable(service.devices()[0]);
     expect(push.refreshRegistration).not.toHaveBeenCalled();
+    expect(tx.set).toHaveBeenCalledWith({ path: 'users/owner/config/settings' },
+      { appSettings: { notificationInvitation: { version: 1, choice: 'disabled' } } }, { merge: true });
   });
   it('preserves replacement registrations and keeps failed removals visible', async () => {
     const service = setup(); await tick(); tx.get.mockResolvedValue({ exists: () => true, data: () => ({ ...data, generation: betaId }) });
@@ -120,6 +122,12 @@ describe('notification device management', () => {
     const service = setup(); await tick(); tx.get.mockResolvedValue({ exists: () => false });
     expect(await service.disable(service.devices()[0])).toBe(false); expect(tx.delete).not.toHaveBeenCalled();
     expect(service.devices()).toEqual([]); expect(service.message()).toContain('already disabled');
+  });
+  it('does not recreate invitation settings after account deletion', async () => {
+    const service = setup(); await tick();
+    tx.get.mockResolvedValueOnce({ exists: () => true, data: () => data }).mockResolvedValueOnce({ exists: () => false });
+    await expect(service.disable(service.devices()[0])).rejects.toThrow('Could not disable');
+    expect(tx.set).not.toHaveBeenCalled(); expect(tx.delete).not.toHaveBeenCalled();
   });
   it('does not show old account results after a switch during a list read', async () => {
     let resolve!: (value: never) => void;

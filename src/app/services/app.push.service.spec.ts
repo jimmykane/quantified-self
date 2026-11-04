@@ -6,6 +6,7 @@ import { Auth, user } from 'app/firebase/auth';
 import { Firestore, getDocFromServer, setDoc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { AppPushService } from './app.push.service';
+import { AppNotificationInvitationService } from './app.notification-invitation.service';
 import { AppRemoteConfigService } from './app.remote-config.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppWindowService } from './app.window.service';
@@ -20,6 +21,7 @@ const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
 const categoryEnabled = signal(true);
 const localKey = 'qs.web-push.installation.v1';
+const invitation = { recordDeviceChoice: vi.fn() };
 const registration = { schemaVersion: 1, origin: 'https://quantified-self.io', vapidPublicKey: key, generation: id,
   endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) },
   device: { browser: 'Browser', platform: 'Unknown device' } };
@@ -40,6 +42,7 @@ let support: { checkPushSupport: ReturnType<typeof vi.fn>; createRandomUUID: Ret
 function setup(platform = 'browser', conventional = false) {
   TestBed.configureTestingModule({ providers: [
     AppPushService, AuthSessionCleanupService,
+    { provide: AppNotificationInvitationService, useValue: invitation },
     { provide: AppNotificationPreferencesService, useValue: { isEnabled: () => categoryEnabled() } },
     { provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
     { provide: AppRemoteConfigService, useValue: config }, { provide: AppFunctionsService, useValue: functions },
@@ -68,6 +71,22 @@ beforeEach(() => {
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
+  it('invites only unasked devices and records explicit decisions without inviting after expiry', async () => {
+    const service = setup(); await tick(); expect(service.canInvite()).toBe(true);
+    notifications.permission = 'granted'; await service.refreshRegistration();
+    expect(service.canEnable()).toBe(true); expect(service.canInvite()).toBe(false);
+    manager.getSubscription.mockResolvedValue(subscription);
+    await service.enable(); await tick();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'enabled');
+    await service.disable(); await tick();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
+  });
+  it('remembers a dismissed browser permission prompt without silently asking again', async () => {
+    const service = setup(); await tick(); notifications.requestPermission.mockResolvedValue('default');
+    await expect(service.enable()).rejects.toThrow();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
+    await service.refreshRegistration(); expect(notifications.requestPermission).toHaveBeenCalledOnce();
+  });
   it('does not touch browser APIs or request permission during SSR', async () => {
     const service = setup('server'); await tick(); expect(service.state()).toBe('unsupported');
     expect(user).not.toHaveBeenCalled(); expect(manager.getSubscription).not.toHaveBeenCalled(); expect(notifications.requestPermission).not.toHaveBeenCalled();

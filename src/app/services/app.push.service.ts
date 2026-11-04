@@ -18,6 +18,7 @@ import type { HistoryNotificationTarget } from '../../../shared/history-import-n
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { pushDeviceInfo } from '../helpers/push-device.helper';
 import { isPushDeviceInfo } from '@shared/web-push';
+import { AppNotificationInvitationService } from './app.notification-invitation.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -28,6 +29,7 @@ export class AppPushService {
   private readonly firestore = inject(Firestore);
   private readonly config = inject(AppRemoteConfigService);
   private readonly preferences = inject(AppNotificationPreferencesService);
+  private readonly invitation = inject(AppNotificationInvitationService);
   private readonly functions = inject(AppFunctionsService);
   private readonly storage = inject(APP_STORAGE);
   private readonly windows = inject(AppWindowService);
@@ -40,6 +42,9 @@ export class AppPushService {
   readonly operation = signal<'enable' | 'disable' | 'test' | null>(null);
   readonly message = signal('');
   readonly registered = signal(false);
+  private readonly permissionUnasked = signal(false);
+  /** Granted-but-unregistered legacy devices may have been explicitly disabled. Offer only in the tray. */
+  readonly canInvite = computed(() => this.canEnable() && this.permissionUnasked());
   readonly canEnable = computed(() => this.state() === 'disabled' && !this.operation());
   readonly canTest = computed(() => this.state() === 'enabled' && !this.operation());
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
@@ -120,6 +125,7 @@ export class AppPushService {
     const epoch = ++this.epoch;
     const owner = this.owner;
     this.registered.set(false);
+    this.permissionUnasked.set(false);
     this.state.set('loading');
     try {
       if (!owner || this.auth.currentUser !== owner) {
@@ -158,6 +164,7 @@ export class AppPushService {
         subscription = null;
       }
       this.registered.set(!!subscription);
+      this.permissionUnasked.set(Notification.permission === 'default' && !local && !subscription);
       if (Notification.permission === 'denied') {
         const cleanupEpoch = local?.uid === owner.uid ? await this.detach() : epoch;
         if (this.current(owner, cleanupEpoch)) this.state.set('denied');
@@ -251,7 +258,10 @@ export class AppPushService {
     const permission = Notification.requestPermission();
     this.operation.set('enable'); this.message.set('');
     try {
-      if (await permission !== 'granted') throw new Error('Permission was not granted.');
+      if (await permission !== 'granted') {
+        if (this.current(owner, epoch)) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
+        throw new Error('Permission was not granted.');
+      }
       if (!this.current(owner, epoch)) throw new Error('Account changed.');
       const id = this.compatibility.createRandomUUID(); if (!id) throw new Error('Device storage unavailable.');
       const key = this.config.webPushPublicKey();
@@ -260,6 +270,7 @@ export class AppPushService {
       this.subscription = subscription;
       try { await this.persist(owner, id, subscription, epoch); } catch (error) { await subscription.unsubscribe(); throw error; }
       this.registered.set(true); this.state.set('enabled'); this.message.set('Notifications enabled on this device.');
+      this.invitation.recordDeviceChoice(owner.uid, 'enabled');
     } catch { this.message.set('Notifications could not be enabled. Check permission and try again.'); throw new Error('Notification enable failed.'); }
     finally { this.operation.set(null); void this.refresh(); }
   }
@@ -267,6 +278,7 @@ export class AppPushService {
     if (!this.canDisable()) return;
     const owner = this.owner;
     this.operation.set('disable'); this.message.set('');
+    if (owner) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
     try {
       const epoch = await this.detach();
       if (this.current(owner, epoch)) this.message.set('Notifications disabled on this device.');
