@@ -95,7 +95,7 @@
           <p class="manage-actions-help">Manage billing securely to update your payment method, invoices, and subscription status.</p>
           <p class="manage-switch-hint">Switch between Basic and Pro, and change monthly or yearly billing from the billing portal.</p>
           @if (currentRole === 'basic') {
-          <button mat-flat-button class="qs-mat-primary" (click)="changePlanAndBilling()" [disabled]="isLoading">
+          <button mat-flat-button class="qs-mat-primary" (click)="changePlanAndBilling()" [disabled]="isLoading || onboardingBusy">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
@@ -103,7 +103,7 @@
             }
           </button>
           } @else {
-          <button mat-flat-button class="qs-mat-primary" (click)="manageSubscription()" [disabled]="isLoading">
+          <button mat-flat-button class="qs-mat-primary" (click)="manageSubscription()" [disabled]="isLoading || onboardingBusy">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
@@ -217,7 +217,7 @@
           <!-- Paid user looking at free -->
           <button mat-stroked-button disabled>Included</button>
           } @else if (shouldShowOnboardingFreeContinue(product) && isFirst) {
-          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier(price.id)" [disabled]="isLoading"
+          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier(price.id)" [disabled]="isLoading || onboardingBusy"
             aria-label="Continue for Free" [attr.aria-busy]="isPriceLoading">
             <span class="plan-action-content">
               @if (isPriceLoading) {
@@ -229,7 +229,7 @@
           </button>
           } @else if (!shouldShowOnboardingFreeContinue(product)) {
           <!-- New User (Role is null) choosing Free -->
-          <button mat-stroked-button type="button" (click)="selectFreeTier(price.id)" [disabled]="isLoading"
+          <button mat-stroked-button type="button" (click)="selectFreeTier(price.id)" [disabled]="isLoading || onboardingBusy"
             aria-label="Start Free" [attr.aria-busy]="isPriceLoading">
             <span class="plan-action-content">
               @if (isPriceLoading) {
@@ -243,7 +243,7 @@
           } @else {
           <!-- Subscribe for new users or free users upgrading to paid plans -->
           @let subscribeButtonLabel = getSubscribeButtonLabel(price);
-          <button mat-flat-button type="button" class="subscribe-btn qs-mat-primary" (click)="subscribe(price)" [disabled]="isLoading"
+          <button mat-flat-button type="button" class="subscribe-btn qs-mat-primary" (click)="subscribe(price)" [disabled]="isLoading || onboardingBusy"
             [attr.aria-label]="product.name + ': ' + subscribeButtonLabel" [attr.aria-busy]="isPriceLoading">
             <span class="plan-action-content">
               @if (isPriceLoading) {
