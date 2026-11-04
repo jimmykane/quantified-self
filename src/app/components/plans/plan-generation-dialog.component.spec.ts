@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatCheckbox } from '@angular/material/checkbox';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { provideRouter } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
@@ -22,15 +23,17 @@ const goal: TrainingGoalV1 = { id: 'race', name: 'Spring race', schemaVersion: 1
 async function setup(goals: TrainingGoalV1[] = [], remaining = 88, notes = true) {
   const auth = { currentUser: { uid: 'owner' } }, changes = new BehaviorSubject(auth.currentUser); sdk.authState.mockReturnValue(changes);
   const state = new BehaviorSubject<TrainingGoalsState>({ status: 'ready', goals });
+  const watch = vi.fn(() => state);
   const close = vi.fn(), open = vi.fn().mockResolvedValue(undefined), haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   await TestBed.configureTestingModule({ imports: [PlanGenerationDialogComponent, MatIconTestingModule], providers: [provideRouter([]),
+    { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: Auth, useValue: auth }, { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner' } }, { provide: MatDialogRef, useValue: { close } },
     { provide: AppUserService, useValue: { user: signal({ uid: 'owner', settings: { appSettings: { dailyWorkoutSuggestion: { controls: { timelineContext: notes } } } } }) } },
-    { provide: TrainingGoalsService, useValue: { watch: () => state, open } }, { provide: AppHapticsService, useValue: haptics },
+    { provide: TrainingGoalsService, useValue: { watch, open } }, { provide: AppHapticsService, useValue: haptics },
     { provide: AssistantQuotaService, useValue: { loadQuotaStatus: vi.fn().mockResolvedValue({ remainingCount: remaining, limit: 100, isEligible: true }) } },
   ] }).compileComponents();
   const fixture = TestBed.createComponent(PlanGenerationDialogComponent); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-  return { fixture, component: fixture.componentInstance, close, open, state, haptics, auth, changes };
+  return { fixture, component: fixture.componentInstance, close, open, watch, state, haptics, auth, changes };
 }
 describe('PlanGenerationDialogComponent', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-04T12:00:00Z')); });
@@ -69,6 +72,36 @@ describe('PlanGenerationDialogComponent', () => {
     expect(close.mock.lastCall[0]).toEqual({ timelineNotesEnabled: false, prompt: expect.stringContaining('Training days: Mon.') });
     expect(close.mock.lastCall[0].prompt).toContain('Session limit: 45 minutes.');
     expect(close.mock.lastCall[0].prompt).toContain('Do not use Timeline notes.');
+  });
+  it('keeps manual duration selected while its numeric input is cleared and retyped', async () => {
+    const { fixture, component, close } = await setup();
+    const checkbox = fixture.debugElement.queryAll(By.directive(MatCheckbox))[1].componentInstance as MatCheckbox;
+    checkbox.change.emit({ source: checkbox, checked: false }); fixture.detectChanges(); await fixture.whenStable();
+    const input = fixture.nativeElement.querySelector('input[type="number"]') as HTMLInputElement;
+    input.value = ''; input.dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type="number"]')).not.toBeNull();
+    expect(checkbox.checked).toBe(false); expect(component.canContinue()).toBe(false);
+    input.value = '45'; input.dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable();
+    component.continue(); expect(close.mock.lastCall[0].prompt).toContain('Session limit: 45 minutes.');
+  });
+  it('retries goals in place without losing setup choices or reselecting a cleared goal', async () => {
+    const { fixture, component, state, watch, haptics } = await setup([goal]);
+    component.selectGoals([]); component.changeMinutes(45); component.update('weeks', 6);
+    component.update('instructions', 'Dumbbells only'); haptics.selection.mockClear();
+    state.next({ status: 'error', goals: [] }); fixture.detectChanges();
+    const retry = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.trim() === 'Retry goals') as HTMLButtonElement;
+    retry.click(); expect(watch).toHaveBeenCalledTimes(2); expect(haptics.selection).toHaveBeenCalledOnce();
+    state.next({ status: 'ready', goals: [goal] }); fixture.detectChanges();
+    expect(component.goalIds()).toEqual([]);
+    expect(component.options()).toMatchObject({ weeks: 6, minutes: 45, instructions: 'Dumbbells only' });
+    component.retryGoals(); expect(watch).toHaveBeenCalledTimes(2);
+  });
+  it('remembers custom weekdays when comparing them with the recorded routine', async () => {
+    const { component, haptics } = await setup();
+    component.useRoutine(false); component.toggleDay(1, true); component.toggleDay(4, true);
+    component.useRoutine(true); expect(component.options().days).toBeNull();
+    component.useRoutine(false); expect(component.options().days).toEqual([1, 4]);
+    haptics.selection.mockClear(); component.useRoutine(false); expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('blocks depleted allowance and closes without a draft on account changes', async () => {
     const { component, close, auth, changes } = await setup([], 0);

@@ -10035,7 +10035,10 @@ four weeks (1–8 supported), automatic sport selection and inference from the l
 and usual session duration. These are requests for evidence-based defaults, not a new frontend activity scan. Manual
 days/time and equipment/constraints override inference. Active goals are optional and multiple selection is supported;
 the highest-priority active, unexpired goal starts selected. A new goal is saved through the existing explicit editor,
-then selected in setup. Changing the goal list never reselects goals the user intentionally cleared.
+then selected in setup. Changing the goal list never reselects goals the user intentionally cleared. **Retry goals**
+reconnects the shared read without closing setup or losing choices. Switching between routine and manual days retains
+manual selections. Clearing a manual time field keeps it visible and invalid, never silently switching to automatic.
+At phone widths the footer keeps the shorter **Open Assistant** action; date and length only stack at 360px and below.
 
 `shared/training-plan-generation.ts` validates options and builds a bounded editable Assistant request. Selected goal
 names, dates and instructions are never silently truncated: requests over the existing 1,000-character limit must be
@@ -10055,8 +10058,11 @@ authoritative. This adds no callable or scheduled/background work.
 MCP impact review: this entry point introduces no data fields, tools, mutation kinds or wire contracts. Existing
 Training goal/plan reads and reviewed Training proposals cover the complete flow; the same PR includes explicit goal
 read/write coverage. Actual generated requests have backend routing regression coverage, including no-goal and multiple-
-goal cases. MCP consent and provider actions are unchanged. No additional backend deployment is needed for this entry
-point beyond the Calendar goals backend already required by this feature branch.
+goal cases, authored goal titles and rest/phase/library instructions. A request whose primary action creates a plan
+keeps the general plan proposal tool; phase-only requests retain their focused schema. This is Assistant routing only,
+not a new mutation or broader consent. MCP consent and provider actions are unchanged. Deploy the updated
+`assistantChat` alongside the Calendar goals backend already required by this feature branch; the entry point
+adds no callable of its own.
 
 ## Calendar Training goals
 

@@ -11,6 +11,20 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
   });
+  it.each([
+    { goalNames: [], instructions: 'Add a rest day on Sunday.' },
+    { goalNames: [], instructions: 'Create a Base phase followed by a taper phase.' },
+    { goalNames: ['Complete my race goal'], instructions: '' },
+    { goalNames: ['Build a Base phase'], instructions: '' },
+    { goalNames: [], instructions: 'Use workouts from my library.' },
+  ])('keeps new-plan setup on the plan tool with $goalNames / $instructions', options => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null,
+      days: null, minutes: null, timelineNotesEnabled: true, ...options }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+  });
+  it.each(['Create a plan phase', "Create a plan's phases"] )('retains focused phase creation for %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('offers complete strength editing for %s without changing provider or lifecycle routes', sport => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');
@@ -161,7 +175,7 @@ describe('Training phase preview routing', () => {
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
   });
-  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan'])('routes an explicit rest-day edit: %s', prompt => {
+  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan', 'Add a plan rest day', "Add a plan’s rest day"])('routes an explicit rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_rest_days');
   });
   it.each(['Add a rest day on Sunday', 'Change my rest days', 'Make Sunday a rest day',

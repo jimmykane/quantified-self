@@ -552,6 +552,13 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     /\b(?:don't|do not|never|without|not)\b(?:(?!\bbut\b)[^,.!?;\n]){0,80}\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/gu,
     '',
   );
+  // A new plan can include rest days, phases, saved recipes and goal names. Those
+  // details must not replace the plan proposal with a tool for one existing item.
+  // Anchor to the requested object; a goal/title merely mentioning a new plan
+  // is not plan-creation intent. "Create a plan phase" remains a phase edit.
+  if (/^(?:please\s+)?(?:create|add|build|make)\s+(?:(?:a|an|new|my|the)\s+){0,3}(?:training\s+)?plan\b(?!(?:['’]s?)?\s+(?:phases?|rest\s+days?)\b)/u.test(question.trimStart())) {
+    return 'preview_training_changes';
+  }
   const goalEdit = [...question.matchAll(/\b(?:create|add|set|edit|update|change|rename|move|pause|resume|complete|mark|archive|restore|remove)\s+([^.!?;\n]{0,100}?)\b(?:goals?|milestones?)\b/gu)]
     .some(([, target]) => !/\b(?:workouts?|sessions?|steps?|intervals?|targets?|plans?|notes?)\b/u.test(target));
   if (goalEdit) return 'preview_training_goal_change';

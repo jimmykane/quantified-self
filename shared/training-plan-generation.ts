@@ -31,7 +31,7 @@ export function buildPlanAssistantRequest(options: PlanGenerationOptions, today:
   }
   const end = dayWorkoutDateOffset(start, options.weeks * 7 - 1);
   const prompt = [
-    `Create a new training plan for ${start} through ${end}. Sport: ${options.sport ?? 'suggest from my goals and recorded routine'}.`,
+    `Create a new training plan for ${start} through ${end}. Sport: ${options.sport ?? (options.goalNames.length ? 'suggest from my selected goals and recorded routine' : 'suggest from my recorded routine')}.`,
     options.days === null ? 'Suggest training days from my last 28 days of recorded routine.'
       : `Training days: ${PLAN_WEEKDAYS.filter(day => options.days!.includes(day.value)).map(day => day.label).join(', ')}.`,
     options.minutes === null ? 'Use my usual session duration; ask if history is insufficient.' : `Session limit: ${options.minutes} minutes.`,

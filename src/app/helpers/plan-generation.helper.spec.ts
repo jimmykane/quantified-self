@@ -20,7 +20,9 @@ describe('plan generation request', () => {
     const request = buildPlanAssistantRequest({ ...options, days: [6, 1], minutes: 45, goalNames: [], timelineNotesEnabled: false }, '2026-11-04');
     expect(request).toMatchObject({ timelineNotesEnabled: false });
     expect(request.prompt).toContain('Mon, Sat'); expect(request.prompt).toContain('45 minutes');
-    expect(request.prompt).toContain('Goal focus: none'); expect(request.prompt).toContain('Do not use Timeline notes');
+    expect(request.prompt).toContain('Goal focus: none');
+    expect(request.prompt).toContain('Sport: suggest from my recorded routine');
+    expect(request.prompt).not.toContain('my selected goals'); expect(request.prompt).toContain('Do not use Timeline notes');
   });
   it('rejects invalid choices and overly long requests without silently dropping selected goals', () => {
     for (const patch of [{ startLocalDate: '2026-11-01' }, { startLocalDate: '2026-02-30' }, { weeks: 9 },

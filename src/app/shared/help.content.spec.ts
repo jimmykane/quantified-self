@@ -19,7 +19,7 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 describe('help.content', () => {
   it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**',
+    for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 

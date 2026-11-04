@@ -1,3 +1,4 @@
+import { Subject, startWith, switchMap } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -38,13 +39,16 @@ export class PlanGenerationDialogComponent {
   private readonly preferences = this.users.user()?.settings?.appSettings?.dailyWorkoutSuggestion;
   readonly options = signal<Omit<PlanGenerationOptions, 'goalNames'>>({ startLocalDate: nextPlanMonday(this.today), weeks: 4,
     sport: null, days: null, minutes: null, timelineNotesEnabled: this.preferences?.controls?.timelineContext ?? true, instructions: '' });
-  readonly customMinutes = signal(this.preferences?.controls?.minutes ?? 30);
+  readonly customMinutes = signal<number | null>(this.preferences?.controls?.minutes ?? 30);
+  private readonly goalReload = new Subject<void>();
+  private customDays: number[] = [];
   readonly goalState = signal<TrainingGoalsState>({ status: 'loading', goals: [] });
   readonly goalIds = signal<string[]>([]);
   readonly goalOptions = computed(() => this.goalState().goals.filter(goal => goal.lifecycle === 'active'
     && (!goal.targetLocalDate || goal.targetLocalDate >= this.today)).sort((a, b) =>
     TRAINING_GOAL_PRIORITIES.indexOf(a.priority) - TRAINING_GOAL_PRIORITIES.indexOf(b.priority) || a.name.localeCompare(b.name)));
   readonly sportOptions = DAY_WORKOUT_SPORTS.map(value => ({ value, label: value, activityType: value }));
+  readonly automaticSportLabel = computed(() => this.goalIds().length ? 'Suggest from goals & routine' : 'Suggest from recorded routine');
   readonly selectedSports = computed(() => this.options().sport ? [this.options().sport!] : []);
   readonly weekdays = PLAN_WEEKDAYS;
   readonly more = signal(false);
@@ -55,7 +59,7 @@ export class PlanGenerationDialogComponent {
     : 'Allowance checked in Assistant');
   readonly validation = computed(() => {
     if (this.goalIds().length && (this.goalState().status !== 'ready' || this.goalIds().some(id => !this.goalOptions().some(goal => goal.id === id)))) {
-      return { request: null, error: 'Selected goals are unavailable. Clear the selection or reopen to retry.' };
+      return { request: null, error: 'Selected goals are unavailable. Clear the selection or retry loading goals.' };
     }
     try { return { request: buildPlanAssistantRequest({ ...this.options(),
       goalNames: this.goalIds().map(id => this.goalOptions().find(goal => goal.id === id)!.name) }, this.today), error: null }; }
@@ -70,7 +74,8 @@ export class PlanGenerationDialogComponent {
     authState(this.auth).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(session => { if (session !== this.session) this.ref.close(); });
     inject(Router).events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(event => { if (event instanceof NavigationStart) this.ref.close(); });
     let initialized = false;
-    this.goals.watch(this.data.uid).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(state => {
+    this.goalReload.pipe(startWith(undefined), switchMap(() => this.goals.watch(this.data.uid)),
+      takeUntilDestroyed(this.destroyRef)).subscribe(state => {
       if (!this.isCurrent()) return;
       this.goalState.set(state);
       if (!initialized && state.status === 'ready') {
@@ -88,6 +93,22 @@ export class PlanGenerationDialogComponent {
     if (this.options()[key] === value) return;
     this.options.update(options => ({ ...options, [key]: value }));
     if (feedback) this.haptics.selection();
+  }
+  retryGoals(): void {
+    if (!this.isCurrent() || this.goalState().status !== 'error') return;
+    this.haptics.selection();
+    this.goalReload.next();
+  }
+  useRoutine(enabled: boolean): void {
+    if ((this.options().days === null) === enabled) return;
+    if (enabled) this.customDays = [...this.options().days!];
+    this.update('days', enabled ? null : [...this.customDays], true);
+  }
+  changeMinutes(minutes: number | null): void {
+    this.customMinutes.set(minutes);
+    // Null belongs to automatic duration. An empty manual field stays invalid
+    // and visible until the user supplies a value or explicitly chooses Auto.
+    this.update('minutes', minutes ?? 0);
   }
   selectGoals(ids: string[]): void {
     if (ids.length === this.goalIds().length && ids.every(id => this.goalIds().includes(id))) return;
