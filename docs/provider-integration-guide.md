@@ -100,7 +100,9 @@ Routine windows overlap the last successful observation date by one UTC calendar
 only when needed to cover users as far ahead as UTC+14; the coverage watermark remains the observation time, not that future date. A daily
 reconciliation retains the seven-day past horizon. Pending retries never create parallel polls or advance coverage.
 Routine jobs carry admission-time credential/connection fences through worker execution, and monitoring independently
-checks hourly scheduler liveness as well as queue health. See
+checks hourly scheduler liveness as well as queue health. Duplicate admissions preserve live state and dead-letter
+receipts inside the queue transaction. COROS relies on atomic lifecycle checks rather than redundant best-effort
+prechecks, keeping backend failures visible while treating account deletion as an expected skip. See
 [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) for the transactional account/deletion
 fences, exact committed-success receipt, unchanged MCP contract, monitoring coverage and separately approved release.
 

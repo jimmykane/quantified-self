@@ -579,6 +579,20 @@ describe('sleep queue', () => {
         expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
+    it('preserves a deterministic dead letter when its live queue row is missing', async () => {
+        hoisted.docGet.mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ originalCollection: 'sleepSyncQueue' }) });
+        await addSleepSyncQueueItem({
+            type: 'coros_poll', provider: 'COROSAPI', userID: 'test-user-uid',
+            providerUserId: 'account', rangeStartMs: 1000, rangeEndMs: 2000,
+            dedupeKey: 'fixed-id', preserveExisting: true,
+        });
+        expect(hoisted.docGet).toHaveBeenCalledTimes(2);
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
     it.each([
         { corosTokenCredentialGeneration: 'credential' },
         { corosTokenCredentialGeneration: '', corosRootOAuthCredentialGeneration: null, corosConnectionStateGeneration: null },

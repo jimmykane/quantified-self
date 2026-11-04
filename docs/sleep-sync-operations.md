@@ -23,7 +23,10 @@ time plus 14 hours, covering users ahead of UTC. Normal requests cover yesterday
 poll and a successful-reconciliation interval of at least 24 hours request the existing rolling
 seven-day past window plus the same local-date allowance. Outage recovery remains bounded to that horizon. The private per-user
 `system/corosDailyPolling` cursor observes exact whole-job success receipts; it does not infer completeness from a
-stored sleep record or `lastPollAtMs`. Pending retries keep their original task and backoff. Failed immediate dispatch
+stored sleep record or `lastPollAtMs`. Pending retries keep their original task and backoff. Admission preserves
+live rows and dead-letter receipts transactionally, including a competing transition after the duplicate preflight.
+COROS deletion/connection checks use the reservation transaction; failed reads propagate rather than becoming a
+healthy skipped poll. A deleted legacy owner that cannot be pinned remains an expected lifecycle skip. Failed immediate dispatch
 is recovered by the existing 30-minute reconciler. See [COROS polling](coros-integration.md#daily-health-and-sleep-ingestion)
 for account/generation fences, idempotency, private-state cleanup and release scope.
 
@@ -443,7 +446,10 @@ tracks the hourly scheduler independently of the queue scanner and adds a three-
 existing heartbeat policy. Pending/retrying work and expected lifecycle skips are healthy scheduler runs; unexpected
 account lookup failures fail the run while other accounts continue. The bounded probe uses the canonical COROS
 metadata document and excludes superseded routine-job credential/connection fences. Existing committed retry/DLQ
-and unknown-observation signals remain applicable. This update needs a separately approved owned-bundle apply and readback; the activation
+and unknown-observation signals remain applicable. The admission-race and lifecycle-read corrections preserve
+existing monitoring coverage: retries/dead letters are not reset or recreated, unexpected reads fail the run, and
+account deletion stays excluded from failure alerts. No metric, label, threshold or scheduler changes accompany
+these corrections. This update needs a separately approved owned-bundle apply and readback; the activation
 evidence below describes the prior deployed bundle, not this local update. No monitor or scheduler was activated
 during implementation, and no new monitoring scanner or queue was introduced.
 

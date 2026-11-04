@@ -86,7 +86,9 @@ async function resolveActiveCOROSTokenSnapshots(
                 return await getActiveCOROSTokenSnapshot(userID);
             } catch (error) {
                 const code = (error as { code?: unknown })?.code;
-                if (code !== 'unauthenticated' && code !== 'functions/unauthenticated'
+                // Active-account lookup uses failed-precondition when a legacy
+                // account cannot be pinned because its owner is being deleted.
+                if (!['unauthenticated', 'functions/unauthenticated', 'failed-precondition', 'functions/failed-precondition'].includes(String(code))
                     && !(error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError')) {
                     onLookupFailure?.();
                     logger.warn('[SleepSync][COROS] Could not resolve an active account for polling.', {
@@ -386,6 +388,21 @@ async function enqueueProviderPolls(
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
             continue;
         }
+        if (provider === SLEEP_PROVIDERS.COROSAPI) {
+            // Admission atomically checks deletion and connection state; a
+            // best-effort precheck would duplicate reads and hide read failures.
+            try {
+                if (await enqueueCOROSDailyPoll(userID, providerUserId, nowMs)) queued += 1;
+            } catch (error) {
+                if (!isProviderQueueSkippedWithoutRetryError(error)) {
+                    failed += 1;
+                    logger.warn('[SleepSync][COROS] Could not admit or dispatch an hourly poll.', {
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    });
+                }
+            }
+            continue;
+        }
         let pendingDeletionSkip = deletionGuardCache.get(userID);
         if (!pendingDeletionSkip) {
             pendingDeletionSkip = getUserDeletionSkipStateBestEffort(provider, userID);
@@ -402,19 +419,6 @@ async function enqueueProviderPolls(
         }
         if (await pendingUnavailableForSync) {
             logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is unavailable for sync`);
-            continue;
-        }
-        if (provider === SLEEP_PROVIDERS.COROSAPI) {
-            try {
-                if (await enqueueCOROSDailyPoll(userID, providerUserId, nowMs)) queued += 1;
-            } catch (error) {
-                if (!isProviderQueueSkippedWithoutRetryError(error)) {
-                    failed += 1;
-                    logger.warn('[SleepSync][COROS] Could not admit or dispatch an hourly poll.', {
-                        errorName: error instanceof Error ? error.name : 'UnknownError',
-                    });
-                }
-            }
             continue;
         }
         for (const window of windows) {

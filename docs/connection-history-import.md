@@ -300,7 +300,8 @@ New connection-history Sleep/Health children use the canonical queue's immediate
 rather than waiting for each half-hour scan. The coordinator still admits only one bounded unit per invocation and
 waits at least a minute before advancing a batch with children; no worker concurrency or provider retry setting changes.
 Deterministic run/window identities and `preserveExisting` keep completed, dispatched, leased and retrying children
-unchanged. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
+unchanged. The same queue transaction checks a missing child's retained dead-letter receipt, preventing a delayed
+admission from recreating a permanently failed child after its queue-to-DLQ transition. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
 retries do not reset the child's revision or accelerate its backoff. Already-waiting children can wait for that recovery
 once; subsequent newly admitted batches use immediate dispatch. Manual bulk backfills retain their existing dispatch
 behavior, and Garmin's separate single-task Health request pacing is unchanged.

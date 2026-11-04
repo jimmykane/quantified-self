@@ -243,4 +243,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS polling coverage re
         const inputs = vi.mocked(addSleepSyncQueueItem).mock.calls.map(([input]) => input);
         expect(new Set(inputs.map(input => input.dedupeKey)).size).toBe(1);
     }, 30_000);
+    it.each(['dispatched', 'retrying', 'completed', 'dead-lettered'])('preserves a %s poll that wins admission after a stale duplicate preflight', async status => {
+        const actual = await vi.importActual<typeof import('./queue')>('./queue');
+        const enqueue = vi.mocked(addSleepSyncQueueItem).getMockImplementation()!;
+        let winner: admin.firestore.DocumentSnapshot | undefined;
+        vi.mocked(addSleepSyncQueueItem).mockImplementationOnce(async input => {
+            const runTransaction = db.runTransaction.bind(db);
+            // The duplicate has already observed a missing queue row. Let the
+            // first admission win before the duplicate's write transaction.
+            const transactionSpy = vi.spyOn(db, 'runTransaction').mockImplementationOnce(async (...args) => {
+                const ref = await actual.addSleepSyncQueueItem(input);
+                if (status === 'retrying') await ref.update({ retryCount: 4, dispatchedToCloudTask: null });
+                if (status === 'completed') await ref.update({ processed: true, resultStatus: 'success' });
+                if (status === 'dead-lettered') {
+                    await db.doc(`failed_jobs/${ref.id}`).set({ originalCollection: 'sleepSyncQueue' });
+                    await db.recursiveDelete(ref);
+                }
+                winner = await ref.get();
+                return runTransaction(...args);
+            });
+            try { return await enqueue(input); }
+            finally { transactionSpy.mockRestore(); }
+        });
+        await enqueueCOROSDailyPoll(uid, account, now);
+        const current = await (await pendingRef()).get();
+        expect(winner).toBeDefined();
+        expect(current.data()).toEqual(winner!.data());
+        if (winner!.exists) expect(current.updateTime!.isEqual(winner!.updateTime!)).toBe(true);
+        else expect((await db.doc(`failed_jobs/${current.id}`).get()).get('originalCollection')).toBe('sleepSyncQueue');
+        expect(enqueueSleepSyncTask).toHaveBeenCalledTimes(1);
+    });
 });

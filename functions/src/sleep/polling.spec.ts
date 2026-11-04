@@ -332,6 +332,18 @@ describe('sleep polling', () => {
         expect(await sleepPollingTestInternals.enqueueProviderPolls(SLEEP_PROVIDERS.COROSAPI, ServiceNames.COROSAPI, 30)).toBe(0);
     });
 
+    it('uses transactional COROS lifecycle checks without redundant best-effort reads hiding failures', async () => {
+        installCollectionGroupTokenMock([createTokenDoc('owner', { serviceName: ServiceNames.COROSAPI, openId: 'account' })]);
+        hoisted.mockGetUserDeletionGuardState.mockRejectedValue(new Error('PRIVATE_READ_FAILURE'));
+        vi.mocked(enqueueCOROSDailyPoll).mockRejectedValue(new Error('PRIVATE_TRANSACTION_FAILURE'));
+        await expect((scheduleCOROSSleepSync as unknown as () => Promise<void>)()).rejects.toThrow('1 COROS hourly polls');
+        expect(enqueueCOROSDailyPoll).toHaveBeenCalledExactlyOnceWith('owner', 'account', expect.any(Number));
+        expect(hoisted.mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+        expect(hoisted.metaDocGet).not.toHaveBeenCalled();
+        expect(recordHealthSleepDispatch).toHaveBeenCalledWith({ provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' }, 'failed');
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toMatch(/PRIVATE_READ_FAILURE|PRIVATE_TRANSACTION_FAILURE/);
+    });
+
     it('continues other accounts after an admission failure and reports whole-run failure', async () => {
         installCollectionGroupTokenMock(['one', 'two'].map(uid => createTokenDoc(uid, {
             serviceName: ServiceNames.COROSAPI, openId: `account-${uid}`,
@@ -370,6 +382,7 @@ describe('sleep polling', () => {
 
     it.each([
         { code: 'unauthenticated' }, { code: 'functions/unauthenticated' },
+        { code: 'failed-precondition' }, { code: 'functions/failed-precondition' },
         { name: 'TokenUseSkippedForPendingDisconnectError' },
     ])('treats expected inactive accounts as healthy scheduler observations (%j)', async properties => {
         installCollectionGroupTokenMock([createTokenDoc('one', { serviceName: ServiceNames.COROSAPI })]);

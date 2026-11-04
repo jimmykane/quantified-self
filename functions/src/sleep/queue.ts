@@ -233,7 +233,7 @@ interface AddSleepSyncQueueItemInput {
     lateArrivalKey?: string;
     dedupeKey?: string;
     dispatchImmediately?: boolean;
-    /** Admin catch-up only: never reset an existing deterministic queue ID or cursor. */
+    /** Preserve deterministic live/dead-lettered work, including its retry state and cursor. */
     preserveExisting?: boolean;
     suuntoHealthTokenCredentialGeneration?: string | null;
     suuntoHealthRootOAuthCredentialGeneration?: string | null;
@@ -910,10 +910,13 @@ async function writeSleepQueueItemIfUserActive(
         const current = snapshot.exists
             ? snapshot.data() as Partial<SleepSyncQueueItemInterface>
             : null;
-        if (input.preserveExisting && current) {
+        // Read a missing row's terminal receipt in this transaction too. A
+        // concurrent DLQ move must not turn a duplicate into fresh work.
+        if (input.preserveExisting && (current
+            || (await transaction.get(db.collection('failed_jobs').doc(queueId))).exists)) {
             return {
-                queueRevision: current.queueRevision || '',
-                dateCreated: Number(current.dateCreated),
+                queueRevision: current?.queueRevision || '',
+                dateCreated: Number(current?.dateCreated ?? 0),
                 shouldDispatchImmediately: false,
             };
         }

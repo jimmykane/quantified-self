@@ -138,7 +138,7 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
         type: 'coros_poll', provider: SLEEP_PROVIDERS.COROSAPI, userID, providerUserId,
         rangeStartMs: reserved.pending.startMs, rangeEndMs: reserved.pending.endMs,
         ...reserved.fences,
-        dedupeKey: reserved.pending.dedupeKey, dispatchImmediately: true,
+        dedupeKey: reserved.pending.dedupeKey, dispatchImmediately: true, preserveExisting: true,
         requiredDocumentFieldValues: [...reserved.guards, { documentRef: pollingRef,
             expectedFields: { bindingKey: reserved.bindingKey, lastScheduledSlotMs: reserved.pending.pollAtMs } }],
     });
