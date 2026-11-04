@@ -4,12 +4,25 @@ import { from, isObservable, Observable, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import type { RouteResolverData } from './route.resolver';
 
+type PublicPricingJsonLd = Record<string, unknown>;
+
 export const lazyRouteResolver: ResolveFn<RouteResolverData> = (route, state) => {
   const environmentInjector = inject(EnvironmentInjector);
 
   return from(import('./route.resolver')).pipe(
     switchMap(({ routeResolver }) => toObservable(
       runInInjectionContext(environmentInjector, () => routeResolver(route, state)),
+    )),
+  );
+};
+
+/** Loads the public pricing catalog resolver only for /pricing navigation. */
+export const lazyPublicPricingJsonLdResolver: ResolveFn<PublicPricingJsonLd> = (route, state) => {
+  const environmentInjector = inject(EnvironmentInjector);
+
+  return from(import('./public-pricing-json-ld.resolver')).pipe(
+    switchMap(({ publicPricingJsonLdResolver }) => toObservable(
+      runInInjectionContext(environmentInjector, () => publicPricingJsonLdResolver(route, state)),
     )),
   );
 };

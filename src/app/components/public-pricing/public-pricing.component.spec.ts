@@ -5,8 +5,9 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
+import type { StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
+import { PublicPricingCatalogService } from '../../services/public-pricing-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { PublicPricingComponent, buildPublicPricingCatalog } from './public-pricing.component';
@@ -85,7 +86,7 @@ describe('PublicPricingComponent', () => {
         await TestBed.configureTestingModule({
             imports: [PublicPricingComponent],
             providers: [
-                { provide: AppPaymentService, useValue: paymentService },
+                { provide: PublicPricingCatalogService, useValue: paymentService },
                 provideRouter([]),
                 { provide: AppHapticsService, useValue: haptics },
                 {
@@ -367,7 +368,7 @@ describe('Public pricing navigation feedback', () => {
                 ...['login', 'help', ...PUBLIC_PRICING_SHARED_FEATURES.map(feature => feature.path.slice(1))]
                     .map(path => ({ path, component: PricingDestinationStub, canActivate: [() => navigationAllowed] })),
             ]),
-            { provide: AppPaymentService, useValue: { getProducts: vi.fn().mockReturnValue(of(PAID_PRODUCTS)) } },
+            { provide: PublicPricingCatalogService, useValue: { getProducts: vi.fn().mockReturnValue(of(PAID_PRODUCTS)) } },
             { provide: AppHapticsService, useValue: haptics },
             { provide: LoggerService, useValue: { error: vi.fn() } },
         ] }).compileComponents();

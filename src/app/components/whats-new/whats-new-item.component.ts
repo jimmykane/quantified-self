@@ -1,13 +1,15 @@
 import { Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChangelogPost, coerceChangelogPostDate } from '../../services/app.whats-new.service';
-import { MaterialModule } from '../../modules/material.module';
+import { MatCardModule } from '@angular/material/card';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MarkdownPipe } from '../../helpers/markdown.pipe';
 
 @Component({
     selector: 'app-whats-new-item',
     standalone: true,
-    imports: [CommonModule, MaterialModule, MarkdownPipe],
+    imports: [CommonModule, MatCardModule, MatExpansionModule, MatTooltipModule, MarkdownPipe],
     templateUrl: './whats-new-item.component.html',
     styleUrls: ['./whats-new-item.component.scss']
 })
