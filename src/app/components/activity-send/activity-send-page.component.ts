@@ -251,7 +251,7 @@ export class ActivitySendPageComponent {
     if (this.busy() || !this.users.user()?.uid) return;
     this.activeOwner = this.users.user()!.uid; this.activeProvider = this.provider(); this.activeSource = this.source(); this.activeBatch = this.sends.batch()?.id || null;
     this.busy.set(true); this.error.set(null); this.haptics.selection();
-    try { await action(); if (this.isActive()) this.haptics.success(); }
+    try { const accepted = await action(); if (accepted !== false && this.isActive()) this.haptics.success(); }
     catch (error) { if (this.isActive()) { this.error.set(error instanceof Error ? error.message : 'Could not complete this action.'); this.haptics.error(); } }
     finally { this.busy.set(false); }
   }

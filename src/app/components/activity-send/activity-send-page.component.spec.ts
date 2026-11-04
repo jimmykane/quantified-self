@@ -23,7 +23,7 @@ describe('activity sending workspace', () => {
   let haptics: Record<string, any>;
   beforeEach(() => {
     push = { deliveryNotificationsAvailable: signal(false), canNotifyDelivery: signal(false), state: signal('disabled'), operation: signal(null), canEnable: signal(true), enable: vi.fn(), deliveryNotificationTarget: vi.fn() };
-    preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), setEnabled: vi.fn() };
+    preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), saving: signal(null), setEnabled: vi.fn() };
     sends = { batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
@@ -52,6 +52,7 @@ describe('activity sending workspace', () => {
     await fixture.componentInstance.enableNotifications(); fixture.detectChanges();
     expect(push.enable).toHaveBeenCalledOnce(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
     expect(fixture.nativeElement.querySelector('mat-checkbox input').checked).toBe(false);
+    expect(fixture.nativeElement.querySelector('.delivery-notification-choice').textContent).not.toContain('Enable notifications');
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
   });
   it('sends consent only after an explicit checkbox choice and a fresh owner-bound device lookup', async () => {
@@ -63,6 +64,22 @@ describe('activity sending workspace', () => {
     await fixture.componentInstance.confirm();
     expect(push.deliveryNotificationTarget).toHaveBeenCalledWith('owner');
     expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'confirm', batchId: 'batch-1', revision: 2, notification: target }, 'owner');
+  });
+  it('shows device setup progress beside Send without a selection-checking banner', async () => {
+    push.deliveryNotificationsAvailable.set(true);
+    let finish!: () => void;
+    push.enable.mockImplementation(() => {
+      push.operation.set('enable'); push.canEnable.set(false);
+      return new Promise<void>(resolve => { finish = resolve; });
+    });
+    const fixture = render(); sends.batch.set(batchValue); fixture.detectChanges();
+    const pending = fixture.componentInstance.enableNotifications(); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('mat-spinner')?.closest('button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true); expect(button.textContent).toContain('Enable notifications on this device');
+    expect(fixture.nativeElement.textContent).not.toContain('Checking your selection');
+    expect(haptics.success).not.toHaveBeenCalled();
+    finish(); await pending;
+    expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
   });
   it.each(['denied', 'install-required', 'unsupported', 'unavailable'])('explains %s without preventing an ordinary send', async state => {
     push.deliveryNotificationsAvailable.set(true); push.state.set(state); push.canEnable.set(false);
@@ -100,6 +117,36 @@ describe('activity sending workspace', () => {
     await fixture.componentInstance.enableDeliveryCategory();
     expect(preferences.setEnabled).toHaveBeenCalledWith('activity_delivery', true); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
     expect(push.enable).not.toHaveBeenCalled();
+  });
+  it('keeps the category action visible and disabled with a spinner while its save is pending', async () => {
+    push.deliveryNotificationsAvailable.set(true); push.state.set('enabled'); preferences.isEnabled.mockReturnValue(false);
+    let finish!: (saved: boolean) => void;
+    preferences.setEnabled.mockImplementation(() => {
+      preferences.saving.set('activity_delivery'); preferences.canEdit.set(false);
+      return new Promise<boolean>(resolve => { finish = resolve; });
+    });
+    const fixture = render(); sends.batch.set(batchValue); fixture.detectChanges();
+    const pending = fixture.componentInstance.enableDeliveryCategory(); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('mat-spinner')?.closest('button') as HTMLButtonElement;
+    expect(button).toBeDefined(); expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Turn on Activity delivery');
+    expect(fixture.nativeElement.textContent).not.toContain('Checking your selection');
+    expect(haptics.success).not.toHaveBeenCalled();
+    finish(true); await pending;
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+  });
+  it('does not report success when the category service declines a stale action', async () => {
+    preferences.isEnabled.mockReturnValue(false); preferences.setEnabled.mockResolvedValue(false);
+    const fixture = render(); await fixture.componentInstance.enableDeliveryCategory();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+  });
+  it('reports a failed category save and keeps notification consent unchecked', async () => {
+    preferences.isEnabled.mockReturnValue(false); preferences.setEnabled.mockRejectedValue(new Error('Could not save the notification preference.'));
+    const fixture = render(); await fixture.componentInstance.enableDeliveryCategory();
+    expect(fixture.componentInstance.error()).toContain('Could not save');
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
   });
   it('requires explicit confirmation of the reviewed revision', async () => {
     const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
