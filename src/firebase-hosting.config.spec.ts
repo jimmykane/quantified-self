@@ -518,7 +518,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    // Same-day Help also covers quota-funded regeneration and reviewed replacement of an existing workout.
+    // Same-day Help covers quota-funded regeneration, reviewed replacement and its completion guard.
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
     // Billing help covers maintenance, checkout switching and expiry recovery (2026-10-26).

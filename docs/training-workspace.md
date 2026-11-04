@@ -5874,7 +5874,8 @@ request receipt, bounded lease and Assistant billing-period quota. The private d
 and current saved preferences before replacing the result. Same-request retries reuse the completed manual response;
 concurrent/stale replacements, dismissals, account deletion and date/zone changes cannot overwrite newer intent.
 Failures preserve the previous daily result. The charged daily receipt is never reset. Refreshed result IDs survive the
-existing validated session cache, and regeneration adds no focus listener, polling or background generation.
+existing validated session cache. Late regeneration responses cannot overwrite a newer cache epoch after schedule/rest
+changes or dismissal. Regeneration adds no focus listener, polling or background generation.
 
 Saved-workout regeneration includes an optional strict `replaceWorkout` identity/revision in the private manual request,
 bound into its fingerprint. The bounded Training context reader verifies owner, date, plan, sport, planned lifecycle,
@@ -5882,7 +5883,13 @@ revision and absence of a completion record before model admission. The identity
 to propose an alternative to that one session while still considering other training. Options lock sport/date/plan and
 Training context. Approval reuses `update-workout` with both schedule and workout revisions, retaining workout ID,
 history, strength companion semantics and existing sync settings. It never deletes/recreates the workout or adds new
-provider consent. Lost-save retries keep the same mutation. Rest advice leaves the saved workout intact. Multiple planned
+provider consent. The replacement review reuses the exact-workout completion reader and blocks generation/approval while
+its first read is pending, unavailable or completed. This listener exists only while the review is open. The first-party
+save envelope sets `requireUncompletedWorkout: true` on the existing `mutateTrainingSchedule` callable; its transaction
+checks planned lifecycle and completion absence before writing. It checks successful receipts first, so lost-save retries
+recover the same result even when completion arrives afterwards. Ordinary editing and MCP updates remain unchanged.
+The dialog keeps the newer save acknowledgement visible until the independent workout listener catches up by revision.
+Rest advice leaves the saved workout intact. Multiple planned
 workouts offer Open instead of guessing a replacement target. Regular replacement updates may reconcile existing provider
 sync; the review discloses this and saved-state Review sync remains available.
 
@@ -5890,8 +5897,10 @@ Regenerated daily suggestions retain saved provider-format context and the exist
 Skip sending today remains ephemeral. Saved-workout replacement omits that create-only envelope. No new delivery path,
 queue or provider contract is introduced. MCP impact: no exposed recipe, tool, scope or proposal change; replacements use
 existing revision-bound workout updates and read projections. Emulator coverage reads updated strength/endurance recipes
-through the strict MCP read schemas, verifies same-ID save/replay and rejects stale updates. This change requires only
-the existing `generateDayWorkout` function to be deployed with the frontend; no Rules, indexes or plugin refresh.
+through the strict MCP read schemas, verifies same-ID save/replay, rejects stale/completed replacements without writing,
+and preserves ordinary edits after completion. The optional first-party completion guard does not change any MCP proposal,
+confirmation, recipe or read projection. This change requires the existing `generateDayWorkout` and
+`mutateTrainingSchedule` functions to be deployed with the frontend; no Rules, indexes or plugin refresh.
 
 
 Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded

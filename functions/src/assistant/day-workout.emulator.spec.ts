@@ -39,8 +39,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
         ...(strength ? { strength: { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], ending: { kind: 'repetitions' as const, repetitions: 10 } }] }] } }
           : { structure: { ...structure, nodes: [{ kind: 'step' as const, id: 'easy', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 1800 }, targets: [] }] } }) } };
       if (request.operation.strength) request.operation.structure = projectStrengthWorkoutToV1({ ...request.operation.strength, workoutId: workout.workoutId, revision: 2 });
-      const replaced = await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 1 });
-      expect(await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 2 })).toEqual(replaced);
+      const replaced = await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 1, requireUncompletedWorkout: true });
+      expect(await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 2, requireUncompletedWorkout: true })).toEqual(replaced);
       expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
       await expect(mutateTrainingScheduleForUser(uid, { ...request, mutationId: randomUUID() }, { db, nowMs: nowMs + 3 })).rejects.toThrow();
       const workoutRef = JSON.stringify({ kind: 'workout', id: workout.workoutId, createdAtMs: nowMs });
@@ -50,6 +50,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       expect(detail.workout.title).toBe('Replacement'); expect(detail.workout.structure).toEqual(replaced.workouts[0].structure);
       if (strength) expect(TRAINING_READ_OUTPUTS.get_strength_workout_details.parse(await run('get_strength_workout_details')).details.exercises[0].sets[0].ending)
         .toEqual({ kind: 'repetitions', repetitions: 10 });
+      // Completion does not advance the authored schedule/workout revision. Guard approval in the same transaction.
+      await user.collection('trainingWorkoutCompletions').doc(workout.workoutId).set({ workoutId: workout.workoutId });
+      const next = { ...request, mutationId: randomUUID(), expectedRevisions: [
+        { scope: 'state' as const, id: 'current', revision: 2 }, { scope: 'workout' as const, id: workout.workoutId, revision: 2 }],
+        operation: { ...request.operation, title: 'Must not replace completed workout' } };
+      const stateRef = user.collection('trainingPlanState').doc('current');
+      const beforeState = (await stateRef.get()).data(), beforeWorkout = (await user.collection('scheduledWorkouts').doc(workout.workoutId).get()).data();
+      await expect(mutateTrainingScheduleForUser(uid, next, { db, nowMs: nowMs + 4, requireUncompletedWorkout: true }))
+        .rejects.toMatchObject({ code: 'failed-precondition' });
+      expect((await stateRef.get()).data()).toEqual(beforeState);
+      expect((await user.collection('scheduledWorkouts').doc(workout.workoutId).get()).data()).toEqual(beforeWorkout);
+      expect((await stateRef.collection('mutationReceipts').doc(next.mutationId).get()).exists).toBe(false);
+      // A lost successful response can still be recovered after completion; it never applies another replacement.
+      expect(await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 5, requireUncompletedWorkout: true })).toEqual(replaced);
+      // Ordinary editor/MCP updates retain their established ability to correct a completed workout.
+      const edited = await mutateTrainingScheduleForUser(uid, { ...next, operation: { ...next.operation, title: 'Ordinary correction' } }, { db, nowMs: nowMs + 6 });
+      expect(edited.workouts[0].title).toBe('Ordinary correction');
     } finally { await db.recursiveDelete(user); }
   }, 30_000);
   it('uses the real manual receipt to charge explicit daily regeneration once across a lost-response retry', async () => {

@@ -35,7 +35,8 @@
   @if (result()?.requestId === 'daily-suggestion:' + controls().localDate) { <p class="hint">Included daily suggestion · Assistant allowance unchanged. Additional generation uses your Assistant allowance.</p> }
   @if (data.replacement) {
     <p class="hint">Replaces “{{ data.replacement.title }}” only after approval. Uses your Assistant allowance.</p>
-    @if (!replacementCurrent() && schedule()) { <p role="alert">The original workout changed or is no longer available. Close this review and reopen it from Today.</p> }
+    @if (replacementCompleted() === undefined) { <p class="hint" role="status">Checking the current workout…</p> }
+    @else if (!replacementCurrent() && schedule()) { <p role="alert">The original workout changed, was completed, or could not be checked. Close this review and reopen it from Today.</p> }
   } @else if (data.regenerateSuggestion && !result()) {
     <p class="hint">A successful generation replaces today’s suggestion. Review before adding it to Calendar.</p>
   }
@@ -126,13 +127,13 @@
     <div class="review-actions">
       @if (result()?.draft && !data.replacement) { <button mat-button appHapticTap [disabled]="!!busy() || staleReview() || saveUncertain()" (click)="edit()">Edit workout</button> }
       @if (result()?.kind === 'rest') {
-        @if (!declaredRestDay()) { <button mat-button [disabled]="!!busy() || !valid()" (click)="easy()">Try easy session</button> }
-      } @else if (!declaredRestDay() || result()?.draft) { <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button> }
+        @if (!declaredRestDay()) { <button mat-button [disabled]="!!busy() || !valid() || !replacementCurrent()" (click)="easy()">Try easy session</button> }
+      } @else if (!declaredRestDay() || result()?.draft) { <button mat-button [disabled]="!!busy() || !valid() || !replacementCurrent() || saveUncertain()" (click)="generate()">Generate again</button> }
     </div>
   }
   @if (staleReview() && !saveUncertain() && result()?.kind !== 'rest') {
     <p role="alert">Schedule changed. Review the day and destination before saving.</p>
-    <button mat-button [disabled]="!!busy() || !valid()" (click)="refreshReview()">Use updated schedule</button>
+    <button mat-button [disabled]="!!busy() || !valid() || !replacementCurrent()" (click)="refreshReview()">Use updated schedule</button>
   }
   }
 </mat-dialog-content>

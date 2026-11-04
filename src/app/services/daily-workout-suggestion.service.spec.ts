@@ -83,6 +83,21 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
       { requestId: 'new-generation', controls: previous.controls! }, () => true)).rejects.toThrow();
     expect(call).toHaveBeenCalledOnce();
   });
+  it.each(['coverage', 'dismissal'] as const)('does not let a late regeneration overwrite newer %s cache state', async change => {
+    const { service, call, result, revisions } = setup();
+    const previous = result(); service.remember('owner', previous);
+    let resolve!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true);
+    const rejected = expect(pending).rejects.toThrow('access changed');
+    if (change === 'coverage') revisions.next({ uid: 'owner', revision: 2 });
+    const latest: DailyWorkoutSuggestionStatus = { localDate: previous.localDate, state: change === 'coverage' ? 'planned' : 'dismissed' };
+    service.remember('owner', latest);
+    resolve({ data: { ...previous, result: { ...previous.result!, requestId: 'new-generation' } } });
+    await rejected; expect(service.cached('owner')?.status).toEqual(latest);
+    expect(call).toHaveBeenCalledOnce();
+  });
   it('retains versioned event guidance across recreation without another generation ', async () => {
     const { service, call, saved, result } = setup();
     const ready = { ...result(), result: { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-10-30',

@@ -10,6 +10,7 @@ import { MAT_ICON_DEFAULT_OPTIONS, MatIconRegistry } from '@angular/material/ico
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import type { MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1 } from '@shared/training-plans';
 import { Auth } from 'app/firebase/auth';
 import type { GenerateDayWorkoutResponse } from '@shared/day-workout';
@@ -118,7 +119,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
-      { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate, mutateWithDelivery,
+      { provide: TrainingPlansService, useValue: { watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])), watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate, mutateWithDelivery,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { preview: vi.fn(), mutate: vi.fn(), watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
         watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
@@ -156,12 +157,23 @@ describe('DayWorkoutDialogComponent', () => {
     expect(component.primaryLabel()).toBe('Retry replacement');
     await component.add(); fixture.detectChanges();
     expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
-    expect(mutate.mock.calls[0][0]).toMatchObject({ expectedRevisions: expect.arrayContaining([
+    expect(mutate.mock.calls[0][0]).toMatchObject({ requireUncompletedWorkout: true, expectedRevisions: expect.arrayContaining([
       { scope: 'state', id: 'current', revision: 7 }, { scope: 'workout', id: original.id, revision: 3 }]),
       operation: { kind: 'update-workout', workoutId: original.id, planId: null, localDate: original.localDate } });
     expect(mutateWithDelivery).not.toHaveBeenCalled();
     expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
     expect(component.savedWorkoutId()).toBe(original.id);
+    expect(component.savedWorkout()?.title).toBe('Replacement strength');
+    expect(component.savedDetails().title).toBe('Replacement strength');
+    // The state listener may advance before the workout listener supplies the replacement.
+    schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8, currentWorkoutCount: 1 } });
+    expect(component.savedWorkout()?.revision).toBe(4);
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 4, title: 'Replacement strength' }] });
+    expect(component.savedWorkout()?.title).toBe('Replacement strength');
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 5, title: 'Later edit' }] });
+    expect(component.savedWorkout()?.title).toBe('Later edit');
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 6, lifecycle: 'deleted' }] });
+    expect(component.savedWorkout()).toBeNull(); expect(component.savedSyncAvailable()).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('Workout replaced');
     exportDailySuggestionDialogQa(fixture.nativeElement, 'regenerated-saved');
   });
@@ -179,6 +191,32 @@ describe('DayWorkoutDialogComponent', () => {
     schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 4 }] });
     expect(component.replacementCurrent()).toBe(false); expect(component.approvalValid()).toBe(false);
     generate.mockClear(); await component.generate(); expect(generate).not.toHaveBeenCalled();
+  });
+  it.each(['completed', 'unavailable'] as const)('stops replacement approval when completion becomes %s during review', async status => {
+    const completion = new Subject<TrainingWorkoutCompletionV1[]>();
+    vi.mocked(TestBed.inject(TrainingPlansService).watchWorkoutCompletionsForWorkouts).mockReturnValue(completion);
+    const original = { schemaVersion: 1 as const, id: 'existing', planId: null, localDate: '2026-10-28', title: 'Original',
+      structure: response('original').draft!.structure, lifecycle: 'planned' as const, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { replacement: { id: original.id, revision: 1, title: original.title },
+      initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining) });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Checking the current workout');
+    expect(fixture.nativeElement.textContent).not.toContain('was completed, or could not be checked');
+    expect(component.replacementCurrent()).toBe(false); await component.generate(); expect(generate).not.toHaveBeenCalled();
+    completion.next([]); await component.generate(); expect(component.approvalValid()).toBe(true);
+    if (status === 'unavailable') completion.error(new Error('Unavailable'));
+    else completion.next([{ schemaVersion: 1, workoutId: original.id, planId: null, provider: 'garmin', matchMethod: 'provider_marker',
+      eventId: 'event', activityId: null, sourceSessionIndex: null, activityStartAtMs: null, scheduledLocalDate: original.localDate,
+      workoutRevisionAtLink: original.revision, timing: 'on_date', linkedAtMs: 1, updatedAtMs: 1 }]);
+    fixture.detectChanges();
+    expect(component.approvalValid()).toBe(false); expect(component.replacementCurrent()).toBe(false);
+    await component.add(); expect(mutate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('was completed, or could not be checked');
+    const regenerate = [...fixture.nativeElement.querySelectorAll('button')].find(button => button.textContent.includes('Generate again'));
+    expect(regenerate?.disabled).toBe(true);
+    fixture.destroy(); expect(completion.observed).toBe(false);
   });
   it('uses persistent daily regeneration without claiming an included allowance', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA);

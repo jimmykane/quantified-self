@@ -17,7 +17,7 @@ import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, d
   type DayWorkoutControls, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '@shared/strength-workout';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
-import { isTrainingLocalDateWithinPlan, isTrainingPlanRestDay, normalizeTrainingLocalDate, type MutateTrainingScheduleRequestV1, type ScheduledWorkoutV1 } from '@shared/training-plans';
+import { isTrainingLocalDateWithinPlan, isTrainingPlanRestDay, normalizeTrainingLocalDate, type ScheduledWorkoutV1 } from '@shared/training-plans';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -34,7 +34,7 @@ import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { dailyWorkoutDeliveryPreferences, DAILY_WORKOUT_DELIVERY_SERVICES, type DailyWorkoutDeliveryPreferences } from '../../helpers/daily-workout-delivery.helper';
-import type { CreatedWorkoutDeliveryOutcomeV1, TrainingScheduleSaveResponseV1 } from '@shared/training-workout-delivery-save';
+import type { CreatedWorkoutDeliveryOutcomeV1, TrainingScheduleSaveResponseV1, TrainingScheduleSaveRequestV1 } from '@shared/training-workout-delivery-save';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
@@ -89,8 +89,12 @@ export class DayWorkoutDialogComponent {
   readonly deliveryOutcomeText = signal<string | null>(null);
   private readonly savedAcknowledgement = signal<ScheduledWorkoutV1 | null>(null);
   private savedAcknowledgementRevision: number | null = null;
-  readonly savedWorkout = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.savedWorkoutId() && workout.lifecycle !== 'deleted')
-    ?? this.savedAcknowledgement());
+  readonly savedWorkout = computed(() => {
+    const live = this.schedule()?.workouts.find(workout => workout.id === this.savedWorkoutId());
+    const saved = this.savedAcknowledgement();
+    if (saved && (!live || live.revision < saved.revision)) return saved;
+    return live?.lifecycle === 'deleted' ? null : live ?? null;
+  });
   readonly savedSyncAvailable = computed(() => {
     const schedule = this.schedule(), workout = this.savedWorkout();
     return !!this.savedWorkoutId() && !!workout && workout.lifecycle !== 'deleted' && !!schedule
@@ -175,10 +179,13 @@ export class DayWorkoutDialogComponent {
       && (this.data.mode === 'preferences' || !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable)
       && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
+  readonly replacementCompleted = toSignal(this.data.replacement
+    ? this.plansService.watchWorkoutCompletionsForWorkouts(this.data.ownerUid, [this.data.replacement.id]).pipe(
+      map(completions => completions.length > 0), catchError(() => of(null))) : of(false));
   readonly replacementCurrent = computed(() => {
     if (!this.data.replacement) return true;
     const target = this.schedule()?.workouts.find(workout => workout.id === this.data.replacement!.id);
-    return target?.revision === this.data.replacement.revision && target.lifecycle === 'planned'
+    return this.replacementCompleted() === false && target?.revision === this.data.replacement.revision && target.lifecycle === 'planned'
       && target.planId === this.controls().destinationPlanId && target.localDate === this.controls().localDate
       && target.structure.sport === this.controls().sport;
   });
@@ -254,7 +261,7 @@ export class DayWorkoutDialogComponent {
     return this.generate(!!this.error());
   }
   private request: GenerateDayWorkoutRequest | null = null;
-  private command: MutateTrainingScheduleRequestV1 | null = null;
+  private command: TrainingScheduleSaveRequestV1 | null = null;
   private reviewedSchedule: CurrentTrainingScheduleV1 | null = null;
   private syncSubscription?: Subscription;
   private syncKey: string | null | undefined;
@@ -306,9 +313,10 @@ export class DayWorkoutDialogComponent {
     const id = this.savedWorkoutId(), revision = this.savedAcknowledgementRevision;
     if (!id || !schedule || schedule.restoreUnavailable || schedule.workoutsComplete === false) return;
     // State and workouts are independent listeners: a newer state alone cannot prove a missing workout.
-    if (schedule.workouts.some(workout => workout.id === id)
-      || (revision !== null && schedule.state.revision >= revision
-        && schedule.state.currentWorkoutCount === schedule.workouts.length)) this.savedAcknowledgement.set(null);
+    const live = schedule.workouts.find(workout => workout.id === id), saved = this.savedAcknowledgement();
+    if (live ? !saved || live.revision >= saved.revision
+      : revision !== null && schedule.state.revision >= revision
+        && schedule.state.currentWorkoutCount === schedule.workouts.length) this.savedAcknowledgement.set(null);
   }
   selectSport(values: readonly string[]): void {
     const sport = values.length === 1 ? DAY_WORKOUT_SPORTS.find(sport => sport === values[0]) : undefined;
@@ -414,12 +422,13 @@ export class DayWorkoutDialogComponent {
     if (this.savedWorkoutId() || !this.schedule() || this.busy() || this.saveUncertain()) return;
     this.reviewedSchedule = this.schedule(); this.command = null; this.staleReview.set(false); this.error.set(null); this.haptics.selection();
   }
-  private saveCommand(): MutateTrainingScheduleRequestV1 {
+  private saveCommand(): TrainingScheduleSaveRequestV1 {
     if (this.command) return this.command;
     const schedule = this.reviewedSchedule; const draft = this.result()?.draft;
     if (!schedule || !draft) throw new Error('Review a complete workout first.');
     const plan = schedule.plans.find(item => item.id === this.controls().destinationPlanId);
     this.command = { mutationId: this.plansService.createMutationId('ai-workout-save'),
+      ...(this.data.replacement ? { requireUncompletedWorkout: true } : {}),
       expectedRevisions: [{ scope: 'state', id: 'current', revision: schedule.state.revision },
         ...(plan ? [{ scope: 'plan' as const, id: plan.id, revision: plan.revision }] : []),
         ...(this.data.replacement ? [{ scope: 'workout' as const, id: this.data.replacement.id, revision: this.data.replacement.revision }] : [])],

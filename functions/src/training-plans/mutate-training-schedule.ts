@@ -41,7 +41,7 @@ export const mutateTrainingSchedule = onCall({
     enforceAppCheck(request);
 
     try {
-        const { request: parsed, deliveryAfterCreate } = parseTrainingScheduleSaveRequestV1(request.data);
+        const { request: parsed, deliveryAfterCreate, requireUncompletedWorkout } = parseTrainingScheduleSaveRequestV1(request.data);
         if (parsed.operation.kind === 'bulk-create-workouts') {
             throw new HttpsError('invalid-argument', 'Use the workout library placement action.');
         }
@@ -50,7 +50,7 @@ export const mutateTrainingSchedule = onCall({
             const { productionDeliveryRuntime } = await import('./delivery/runtime');
             return await createWorkoutWithDeliveryForUser(request.auth.uid, parsed, deliveryAfterCreate, productionDeliveryRuntime());
         }
-        return await mutateTrainingScheduleForUser(request.auth.uid, parsed);
+        return await mutateTrainingScheduleForUser(request.auth.uid, parsed, ...(requireUncompletedWorkout ? [{ requireUncompletedWorkout }] : []));
     } catch (error) {
         if (error instanceof TrainingPlanContractError || error instanceof TrainingDeliveryContractError || error instanceof WorkoutStructureValidationError) {
             throw new HttpsError('invalid-argument', error.message);
