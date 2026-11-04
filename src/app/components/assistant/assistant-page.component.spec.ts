@@ -1,3 +1,4 @@
+import { PlanGenerationService } from '../../services/plan-generation.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -152,6 +153,7 @@ describe('AssistantPageComponent', () => {
       status: 'applied', kind: 'update_event_tags', message: 'Event tags updated.',
     });
     assistantService.getErrorMessage.mockClear();
+    assistantService.getConversationUpdateErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
     hapticsService.selection.mockReset();
     hapticsService.success.mockReset();
@@ -166,6 +168,7 @@ describe('AssistantPageComponent', () => {
         MatIconTestingModule,
       ],
       providers: [
+        { provide: PlanGenerationService, useValue: { take: vi.fn().mockReturnValue(null) } },
         { provide: AssistantService, useValue: assistantService },
         { provide: AssistantQuotaService, useValue: quotaService },
         { provide: AppHapticsService, useValue: hapticsService },
@@ -185,6 +188,50 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+  });
+
+  it('offers the plan request without replacing or sending until explicitly started', async () => {
+    const request = { prompt: 'Create a new training plan for my saved goal.', timelineNotesEnabled: true };
+    vi.mocked(TestBed.inject(PlanGenerationService).take).mockReturnValueOnce(request);
+    await component.retryConversationLoad(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Your plan request is ready');
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('');
+    await component.startPlanChat(); fixture.detectChanges();
+    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', true, null, true, true, false, false, false, false, false);
+    expect(component.promptControl.value).toBe(request.prompt);
+    expect(component.planRequest()).toBeNull();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('retains a plan request and existing composer after a failed conversation replacement', async () => {
+    const request = { prompt: 'Create a new training plan', timelineNotesEnabled: false };
+    vi.mocked(TestBed.inject(PlanGenerationService).take).mockReturnValueOnce(request);
+    await component.retryConversationLoad();
+    component.promptControl.setValue('Keep my existing draft');
+    assistantService.resetConversation.mockRejectedValueOnce(new Error('Offline'));
+    await component.startPlanChat();
+    expect(component.planRequest()).toEqual(request);
+    expect(component.promptControl.value).toBe('Keep my existing draft');
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
+  it('does not replace an in-flight chat or populate a plan request after reauthentication', async () => {
+    const request = { prompt: 'Create a new training plan', timelineNotesEnabled: false };
+    vi.mocked(TestBed.inject(PlanGenerationService).take).mockReturnValueOnce(request);
+    await component.retryConversationLoad();
+    component.sending.set(true); await component.startPlanChat(); expect(assistantService.resetConversation).not.toHaveBeenCalled();
+    component.sending.set(false);
+    let finish!: (value: typeof chatResponse.conversation) => void;
+    assistantService.resetConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = component.startPlanChat();
+    auth.currentUser = { uid: 'assistant-user' }; finish(chatResponse.conversation); await pending;
+    expect(component.promptControl.value).toBe('');
+    expect(component.conversation()).toBeNull();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    component.dismissPlanRequest(); expect(component.planRequest()).toBeNull();
   });
 
   it('formats assistant replies safely while retaining user messages and stored text', () => {
@@ -324,6 +371,19 @@ describe('AssistantPageComponent', () => {
     expect(component.trainingProposalResult()).toContain('Nothing was changed');
   });
 
+
+  it('shows a complete goal review without saving or sending during hydration', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], goalReview: { before: null, after: {
+        name: '<script>Marathon</script>', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+        sportScope: 'all', sport: null, objective: 'Finish comfortably', planName: null, weeklyTarget: null } } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review calendar goal"]') as HTMLElement;
+    expect(review.textContent).toContain('Marathon'); expect(review.textContent).toContain('Finish comfortably');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal(); expect(component.trainingProposalResult()).toBe('Goal saved.');
+  });
 
   it('shows calendar rest before/after without a plan and does not apply on hydration', () => {
     component.conversation.set(chatResponse.conversation);

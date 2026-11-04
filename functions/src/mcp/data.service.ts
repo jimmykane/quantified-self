@@ -6584,6 +6584,20 @@ export function createMcpDataService(
       }
     },
 
+    async readTrainingGoals(input: import('./training-plans-write.service').TrainingWriteInput & {
+      tool: typeof import('./training-goals.schemas').GOAL_READ_TOOLS[number];
+    }) {
+      const { readTrainingGoals } = await import('./training-goals.service');
+      return readTrainingGoals(input);
+    },
+    async previewTrainingGoalChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingGoalChange } = await import('./training-goals.service');
+      return previewTrainingGoalChange(input);
+    },
+    async applyTrainingGoalChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applyTrainingGoalChange } = await import('./training-goals.service');
+      return applyTrainingGoalChange(input);
+    },
     async previewTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewTrainingChanges } = await import('./training-plans-write.service');
       return previewTrainingChanges(input);

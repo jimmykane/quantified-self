@@ -36,6 +36,15 @@ describe('bounded Calendar Training reads', () => {
     service = TestBed.inject(TrainingPlansService);
     vi.mocked(docData).mockReturnValue(of(undefined));
   });
+  it('reads plan selector metadata without scanning workouts or loading schedule state', async () => {
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-05',
+      endLocalDate: '2026-10-11', revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(collectionData).mockReturnValue(of([{ ...plan, id: 'z' }, { ...plan, id: 'a' }]));
+    expect((await firstValueFrom(service.watchPlans('owner'))).map(item => item.id)).toEqual(['a', 'z']);
+    expect(collectionData).toHaveBeenCalledExactlyOnceWith({ path: 'users/owner/trainingPlans' }, { idField: 'id' });
+    expect(docData).not.toHaveBeenCalled(); expect(getDoc).not.toHaveBeenCalled();
+    expect(await firstValueFrom(service.watchPlans(null))).toEqual([]); expect(collectionData).toHaveBeenCalledOnce();
+  });
   it('shares an active-plan-only rest context without scanning workouts or plan collections', async () => {
     serverState = { ...currentState, activePlanId: 'active-plan' };
     const plan = { schemaVersion: 1, id: 'active-plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-05',

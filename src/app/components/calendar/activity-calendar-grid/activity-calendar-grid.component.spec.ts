@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { By } from '@angular/platform-browser';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
@@ -10,6 +10,34 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it.each([false, true])('explains flags in the shared legend only when a goal is visible (compact: %s)', async compact => {
+    const fixture = await renderGrid('month', compact, []);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.componentRef.setInput('goalsByDate', { '2026-09-01': { label: 'Next month', count: 1, ariaLabel: '1 goal: Next month' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')).toBeNull();
+    fixture.componentRef.setInput('goalsByDate', { '2026-08-03': { label: 'Race', count: 1, ariaLabel: '1 goal: Race' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')?.textContent).toContain('Goal');
+    fixture.componentRef.setInput('goalsByDate', {}); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')).toBeNull();
+  });
+  it.each([false, true])('shows shared goal markers alongside activities with accessible full text (compact: %s)', async compact => {
+    const fixture = await renderGrid('month', compact, [createEvent('run', new Date(2026, 7, 3, 8), ActivityTypes.Running, 1800)]);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('goalsByDate', { '2026-08-03': { label: 'My first marathon', count: 2, ariaLabel: '2 goals: My first marathon, Weekly consistency' } });
+    fixture.detectChanges();
+    const day = fixture.nativeElement.querySelector('[aria-label*="2 goals:"]') as HTMLElement;
+    expect(day.querySelector('.activity-calendar-goal')?.textContent).toContain('+1');
+    expect(day.querySelector('.activity-calendar-marker')).toBeTruthy();
+    if (process.env.TRAINING_GOALS_QA_DIR) {
+      const css = readdirSync('dist/browser').find(file => /^styles.*\.css$/.test(file))!;
+      const styles = [...document.querySelectorAll('style')].map(style => style.textContent).join('\n');
+      writeFileSync(resolve(process.env.TRAINING_GOALS_QA_DIR, `goals-calendar-${compact ? 'dashboard' : 'route'}.html`),
+        `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${process.cwd()}/dist/browser/${css}"><style>${styles}</style></head><body class="app-hydrated"><main style="padding:8px;max-width:1000px;margin:auto"><h2>Calendar</h2>${fixture.nativeElement.outerHTML}</main></body></html>`);
+    }
+  });
   it('distinguishes today from selection in every shared month surface', async () => {
     const fixture = await renderGrid('month', false, []);
     fixture.componentRef.setInput('calmMonth', true);

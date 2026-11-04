@@ -1,0 +1,7 @@
+@use '../calendar/calendar-day-presentation' as day;
+:host { display: block; min-width: 0; }
+.goal-row { @include day.entry-row; padding: 8px 0; }
+.goal-row > mat-icon { @include day.entry-icon; color: var(--mat-sys-primary); }
+.goal-title { @include day.entry-title; margin: 0 0 4px; &:hover { text-decoration: none; } }
+.goal-meta { @include day.supporting-text; margin: 0; overflow-wrap: anywhere; }
+.goal-error { @include day.supporting-text; color: var(--mat-sys-error); }

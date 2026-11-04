@@ -248,7 +248,8 @@ export class AppAuthService {
   async signOut(): Promise<void> {
     await this.sessionCleanup.run();
     await signOut(this.auth);
-    try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY); }
+    try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY);
+      this.window.windowRef.sessionStorage.removeItem('qs.daily-workout-suggestion.v1'); }
     catch { /* Blocked browser storage must not prevent sign-out cleanup. */ }
     await terminate(this.firestore);
     this.clearStorageForSignOut();

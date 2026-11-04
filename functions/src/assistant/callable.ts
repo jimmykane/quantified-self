@@ -1,3 +1,4 @@
+import { applyTrainingGoalChange, isTrainingGoalProposal } from '../mcp/training-goals.service';
 import { randomUUID } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
@@ -912,6 +913,12 @@ export async function runApplyAssistantTrainingProposal(
       ],
       arguments: { proposalRef, permissionMode },
     };
+    if (isTrainingGoalProposal(writeInput, proposalRef)) {
+      if (permissionMode !== 'schedule') throw new HttpsError('invalid-argument', 'Goal changes require Training change permission.');
+      await applyTrainingGoalChange({ ...writeInput, arguments: { proposalRef } });
+      return retainResult({ status: 'applied', scheduleRevision: current.pendingTrainingProposal.scheduleRevision,
+        changes: [{ index: 0, kind: 'set-training-goal', status: 'applied', message: 'Calendar goal saved.' }], providers: [] });
+    }
     if (isWorkoutLibraryProposalRef(writeInput, proposalRef)) {
       if (permissionMode !== 'schedule') {
         throw new HttpsError('invalid-argument', 'Saved-workout changes require plan write permission.');

@@ -20,6 +20,7 @@
         <mat-button-toggle value="30d">30 days</mat-button-toggle>
       </mat-button-toggle-group>
       @if (viewSaving()) { <mat-spinner diameter="16" aria-label="Saving calendar view"></mat-spinner> }
+      <app-training-goals-button [uid]="goalOwner()" />
     </div>
   }
 
@@ -40,6 +41,8 @@
       </button>
     </nav>
   }
+
+  @if (!dayContextEnabled()) { <app-training-goals-button [uid]="goalOwner()" /> }
 
   @if (showPeriodTotals()) {
     <dl class="calendar-period-totals-strip" [attr.aria-label]="calendarModel().periodLabel + ' activity totals'" [attr.aria-busy]="isLoading()">
@@ -70,7 +73,7 @@
         </div>
       }
       <app-activity-calendar-grid
-        [model]="calendarModel()"
+        [model]="calendarModel()" [goalsByDate]="goalsByDate()"
         [selectedDateKey]="dayContextEnabled() ? selectedDay()?.dateKey ?? null : null"
         [compact]="true"
         [fillHeight]="fillHeight()"

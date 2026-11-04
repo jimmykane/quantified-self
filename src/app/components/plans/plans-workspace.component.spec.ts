@@ -1,3 +1,4 @@
+import { PlanGenerationService } from '../../services/plan-generation.service';
 import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
@@ -12,6 +13,7 @@ import { MatMenuTrigger } from '@angular/material/menu';
 import { MatDialog } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSidenavContainer } from '@angular/material/sidenav';
 import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS, MatFormField } from '@angular/material/form-field';
@@ -130,9 +132,11 @@ describe('PlansWorkspaceComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
+        { provide: PlanGenerationService, useValue: { open: vi.fn().mockResolvedValue(undefined) } },
         { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true,
           canGenerate: vi.fn(() => true), open: vi.fn().mockResolvedValue(undefined) } },
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+        { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
         { provide: AppUserSettingsQueryService, useValue: { updateTrainingWorkspacePreferences: savePreferences } },
@@ -172,6 +176,19 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('offers plan generation in Plans and keeps the handoff bound to its current view', async () => {
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const generator = TestBed.inject(PlanGenerationService);
+    expect(fixture.nativeElement.textContent).toContain('Generate plan');
+    await component.generatePlan();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, expect.any(Function));
+    const current = vi.mocked(generator.open).mock.calls[0][1]; expect(current()).toBe(true);
+    component.selectView('standalone'); fixture.detectChanges();
+    expect(current()).toBe(false);
+    await component.generatePlan(); expect(generator.open).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.textContent).not.toContain('Generate plan');
+  });
 
   it('opens AI generation from New Workout and replaces the reviewed draft without same-route navigation or a save', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
@@ -2705,7 +2722,10 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
     expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.plans-empty-state')).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('.plans-empty-state button')?.textContent).toContain('Create your first plan');
+    const actions = [...fixture.nativeElement.querySelectorAll('.plans-empty-state button')] as HTMLButtonElement[];
+    expect(actions.map(button => button.textContent?.trim())).toEqual(['auto_awesomeGenerate plan', 'Create your first plan']);
+    actions[0].click(); await fixture.whenStable();
+    expect(TestBed.inject(PlanGenerationService).open).toHaveBeenCalledWith(user.uid, expect.any(Function));
   });
 
   it('restores Standalone on a fresh general Plans visit without saving or haptics', async () => {
@@ -4333,8 +4353,11 @@ describe('PlansWorkspaceComponent', () => {
 
   function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string, selector = '.workout-library'): void {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
+    const shell = TestBed.createComponent(MatSidenavContainer);
+    shell.detectChanges(); // Include Material's real scroll-container styles in the exported head.
     const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
     const css = [
+      ['app-shell[data-qa-shell]', 'src/app/app-shell.component.scss'],
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-plan-schedule-calendar', 'src/app/components/plans/plan-schedule-calendar.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
@@ -4342,6 +4365,7 @@ describe('PlansWorkspaceComponent', () => {
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
       ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+      .replace(/:host-context\(([^)]+)\)/g, '$1 &')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
     const source = fixture.nativeElement.querySelector(selector) as HTMLElement;
     const rendered = source.cloneNode(true) as HTMLElement;
@@ -4353,11 +4377,14 @@ describe('PlansWorkspaceComponent', () => {
     const html =
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
-      + '<style>' + css + '</style></head><body class="app-hydrated"><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
-      + rendered.outerHTML + '</main></app-plans-workspace></body></html>';
+      // Include the real shell surface: bare body uses a different background in dark mode.
+      + '<style>' + css + '</style></head><body class="app-hydrated"><app-shell data-qa-shell><mat-sidenav-container class="mat-drawer-container">'
+      + '<mat-sidenav-content class="mat-drawer-content"><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
+      + rendered.outerHTML + '</main></app-plans-workspace></mat-sidenav-content></mat-sidenav-container></app-shell></body></html>';
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`), html);
     writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}-dark.html`),
       html.replace('<body class="app-hydrated">', '<body class="app-hydrated dark-theme">'));
+    shell.destroy();
   }
 
   async function renderPlans(mockNotices = false) {

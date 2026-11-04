@@ -142,6 +142,7 @@
     "src/app/helpers/number-format.helper.spec.ts",
     "src/app/helpers/pace-axis.helper.spec.ts",
     "src/app/helpers/personal-metric-range.helper.spec.ts",
+    "src/app/helpers/plan-generation.helper.spec.ts",
     "src/app/helpers/plan-schedule-calendar.helper.spec.ts",
     "src/app/helpers/planned-workout-analysis-display.shared.spec.ts",
     "src/app/helpers/planned-workout-analysis.shared.spec.ts",

@@ -1,0 +1,8 @@
+:host { display: inline-flex; align-items: center; }
+
+// Match the adjacent Timeline notes action at phone widths, retaining its touch target and accessible name.
+@media (max-width: 720px) {
+  .goals-button { width: 44px; height: 44px; min-width: 44px; padding-inline: 0; }
+  .goals-button span { display: none; }
+  .goals-button mat-icon { margin-inline: 0; }
+}

@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angu
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
-import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { isDailyWorkoutEventAdvice, parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -154,12 +154,13 @@ export class DailyWorkoutSuggestionService {
       const result = status.result;
       if (!status.controls || !result || result.requestId !== `daily-suggestion:${status.localDate}`
         || !Number.isFinite(Date.parse(result.observedAt)) || typeof result.rationale !== 'string'
-        || ![result.usedContext, result.missingContext].every(items => Array.isArray(items) && items.every(item => typeof item === 'string'))
-        || !Array.isArray(result.previousLoads) || !result.previousLoads.every(source => source
-          && typeof source.exerciseId === 'string' && typeof source.localDate === 'string')) return false;
+        || ![result.usedContext, result.missingContext].every(items => Array.isArray(items) && items.every(item => typeof item === 'string'))) return false;
       const controls = parseGenerateDayWorkoutRequest({ requestId: result.requestId, controls: status.controls }).controls;
       if (controls.localDate !== status.localDate || controls.timeZone !== this.preferences().controls.timeZone
         || controls.destinationPlanId !== null || !controls.trainingContext || controls.activityContext === false) return false;
+      if (result.kind === 'event-advice') return isDailyWorkoutEventAdvice(result) && result.events.every(event => event.localDate === status.localDate);
+      if (!Array.isArray(result.previousLoads) || !result.previousLoads.every(source => source
+        && typeof source.exerciseId === 'string' && typeof source.localDate === 'string')) return false;
       if (result.kind === 'rest') return result.draft === null;
       if (result.kind !== 'workout' || !result.draft || typeof result.draft.title !== 'string') return false;
       const structure = parseWorkoutStructureV1(result.draft.structure);
@@ -232,7 +233,7 @@ export class DailyWorkoutSuggestionService {
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser
       && this.eligible(uid) && this.key(uid) === entry.key;
     const request: DailyWorkoutSuggestionRequest = action === 'dismiss' || action === 'use-available-data'
-      ? { mode: 'daily-suggestion', action, localDate: expectedDate! } : { mode: 'daily-suggestion', action };
+      ? { mode: 'daily-suggestion', action, localDate: expectedDate!, resultVersion: 2 } : { mode: 'daily-suggestion', action, resultVersion: 2 };
     // The shared operation belongs to this authenticated day, not the component that first requested it.
     const canExecute = () => active() && (!expectedDate || current());
     const invoke = () => this.functions.call<DailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout', request,

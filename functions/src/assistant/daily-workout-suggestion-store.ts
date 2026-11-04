@@ -3,7 +3,9 @@ import { randomUUID, createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { dayWorkoutDateOffset, type DayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
+import { dayWorkoutDateOffset, type DayWorkoutControls } from '../../../shared/day-workout';
+import type { DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
+import { TRAINING_GOAL_STATE_PATH } from '../../../shared/training-goals';
 import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { dailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferences } from '../../../shared/daily-workout-delivery';
@@ -98,8 +100,12 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
     assertActive: (uid: string, date: string, token: string) => transact(uid, (preferences, state, now) => {
       active(preferences, state, date, token, now); return { value: undefined };
     }),
-    charge: (uid: string, date: string, token: string, useAvailableData = false) => transact(uid, async (preferences, state, now, _delivery, tx) => {
+    charge: (uid: string, date: string, token: string, useAvailableData = false, expectedGoalsRevision?: number) => transact(uid, async (preferences, state, now, _delivery, tx) => {
       const entry = active(preferences, state, date, token, now);
+      if (expectedGoalsRevision !== undefined) {
+        const goals = await tx.get(db().doc(`users/${uid}/${TRAINING_GOAL_STATE_PATH}`));
+        if (Number(goals.get('revision') ?? 0) !== expectedGoalsRevision) throw new HttpsError('aborted', 'Goals changed before generation. Check today again.');
+      }
       if (!useAvailableData && await readDailyWorkoutHistoryImportActive(uid, db(), tx)) {
         entry.state = 'waiting-import';
         return { value: false, write: true };
@@ -107,7 +113,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       entry.charged = true; return { value: true, write: true };
     }),
     finish: (uid: string, date: string, token: string, outcome: DailyWorkoutSuggestionStatus['state'],
-      controls?: DayWorkoutControls, result?: GenerateDayWorkoutResponse) => transact(uid, (preferences, state, now) => {
+      controls?: DayWorkoutControls, result?: DailyWorkoutSuggestionResult) => transact(uid, (preferences, state, now) => {
       const current = state.messages[date];
       // A source-choice change can cancel uncharged work without spending the daily allowance.
       if (outcome === 'failed' && current?.token === token && current.charged === false) {

@@ -1,3 +1,4 @@
+import { TrainingGoalsService } from '../../../services/training-goals.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { writeFileSync } from 'node:fs';
 import { Component, Input, signal } from '@angular/core';
@@ -118,6 +119,7 @@ describe('CalendarPageComponent', () => {
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
       providers: [
+        { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, invalidateProgress: vi.fn() } },
         { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: activatedRoute },

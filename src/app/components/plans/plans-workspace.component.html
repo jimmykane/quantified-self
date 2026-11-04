@@ -48,6 +48,9 @@
       <mat-icon aria-hidden="true">playlist_add</mat-icon>
       <span>New plan</span>
     </button>
+    <button mat-button type="button" appHapticTap (click)="generatePlan()" [disabled]="busyAction() !== null || generationOpen()">
+      <mat-icon aria-hidden="true">auto_awesome</mat-icon><span>{{ generationOpen() ? 'Opening…' : 'Generate plan' }}</span>
+    </button>
     }
   </nav>
   }
@@ -327,8 +330,13 @@
           <section class="plans-empty-state">
             <mat-icon aria-hidden="true">event_note</mat-icon>
             <h2 id="plan-scope-title">No plans yet</h2>
-            <p>Create a plan, or switch to Standalone to add workouts without one.</p>
-            <button appHapticTap mat-flat-button type="button" (click)="beginPlanCreation()" [disabled]="busyAction() !== null">Create your first plan</button>
+            <p>Generate a plan with Assistant, create one yourself, or switch to Standalone for individual workouts.</p>
+            <div class="plans-header-actions">
+              <button appHapticTap mat-flat-button type="button" (click)="generatePlan()" [disabled]="busyAction() !== null || generationOpen()">
+                <mat-icon aria-hidden="true">auto_awesome</mat-icon>{{ generationOpen() ? 'Opening…' : 'Generate plan' }}
+              </button>
+              <button appHapticTap mat-button type="button" (click)="beginPlanCreation()" [disabled]="busyAction() !== null">Create your first plan</button>
+            </div>
           </section>
         }
       </section>
