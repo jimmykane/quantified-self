@@ -34,25 +34,25 @@
             @for (provider of heroProviders; track provider.icon) {
               <g class="hero-connection" [attr.data-provider]="provider.icon">
                 <path class="hero-connection-track" [attr.d]="provider.path"></path>
-                <path class="hero-connection-halo" [attr.d]="provider.flowPath"></path>
-                <path class="hero-connection-pulse" [attr.d]="provider.flowPath"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.flowPath" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.flowPath" pathLength="100"></path>
                 <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
               </g>
             }
             <g class="hero-aggregate">
-              <path class="hero-connection-track" d="M 84 168 H 134"></path>
+              <path class="hero-connection-track" d="M 84 168 H 136"></path>
             </g>
           </svg>
           <svg class="hero-provider-wires hero-provider-wires--mobile" viewBox="0 0 400 104" preserveAspectRatio="none" aria-hidden="true" focusable="false">
             @for (provider of heroProviders; track provider.icon) {
               <g class="hero-connection" [attr.data-provider]="provider.icon">
                 <path class="hero-connection-track" [attr.d]="provider.mobilePath"></path>
-                <path class="hero-connection-halo" [attr.d]="provider.mobileFlowPath"></path>
-                <path class="hero-connection-pulse" [attr.d]="provider.mobileFlowPath"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.mobileFlowPath" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.mobileFlowPath" pathLength="100"></path>
               </g>
             }
             <g class="hero-aggregate">
-              <path class="hero-connection-track" d="M 200 64 V 102"></path>
+              <path class="hero-connection-track" d="M 200 64 V 104"></path>
             </g>
           </svg>
           <!-- Keep the junction circular while the decorative paths stretch to fit. -->
@@ -60,6 +60,7 @@
         </div>
       </div>
       <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
+        <span class="hero-border-glow" aria-hidden="true"></span>
         <div class="hero-product-header">
           <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, together.</h2></div>
           <div class="hero-preview-controls">

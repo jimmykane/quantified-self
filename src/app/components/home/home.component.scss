@@ -178,27 +178,42 @@
 // The provider paths are a decorative illustration, not a second chart implementation.
 .hero-visual { --hero-flow-color: var(--mat-sys-primary); position: relative; isolation: isolate; display: grid; grid-template-columns: 228px minmax(0, 1fr); align-items: center; min-width: 0; padding-block: 2.5rem; }
 .hero-product { position: relative; --qs-glass-panel-radius: 16px; }
+.hero-border-glow {
+  --hero-edge-origin: 0 50%;
+  --hero-edge-start: 100% 18%;
+  --hero-edge-end: 100% 100%;
+  position: absolute;
+  inset: -1px;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at var(--hero-edge-origin), var(--hero-flow-color), transparent 72%) left center / var(--hero-edge-start) no-repeat;
+  // Only the card outline receives the light; its content remains untouched.
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
 .hero-provider-flow { position: relative; z-index: 1; display: grid; grid-template-columns: 92px 136px; align-items: center; min-width: 0; }
 .hero-providers.logos-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
 .hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; }
 .hero-provider .partner-logo { width: 72px; height: 25px; }
 .hero-connection-field { position: relative; min-width: 0; }
 .hero-provider-wires { display: block; width: 136px; height: 336px; color: var(--hero-flow-color); overflow: visible; pointer-events: none; }
+.hero-provider-wires--desktop { clip-path: inset(-8px 0 -8px -8px); }
 .hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .hero-connection-track { opacity: .35; }
 :host-context(.dark-theme) .hero-visual { --hero-flow-color: var(--qs-theme-accent); }
-.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 10 600; }
+.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 114; }
 .hero-provider-wires .hero-connection-halo { stroke-width: 9; stroke: color-mix(in srgb, var(--hero-flow-color) 18%, transparent); }
 .hero-aggregation-point {
   position: absolute;
   left: calc(100% * 84 / 136);
   top: 50%;
-  width: 14px;
-  height: 14px;
-  box-sizing: border-box;
-  border: 1px solid var(--hero-flow-color);
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: transparent;
+  background: radial-gradient(circle, var(--hero-flow-color) 0 2.5px, color-mix(in srgb, var(--hero-flow-color) 26%, transparent) 3px 5px, transparent 6px);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--hero-flow-color) 14%, transparent);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -208,23 +223,27 @@
 .hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
 .hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
 @keyframes heroConnectionFlow {
-  from { stroke-dashoffset: 12; opacity: 1; }
-  to { stroke-dashoffset: -324; opacity: 1; }
+  0% { stroke-dashoffset: 8; opacity: 0; }
+  6% { opacity: 1; }
+  78% { stroke-dashoffset: -100; opacity: 1; }
+  79%, 100% { stroke-dashoffset: -100; opacity: 0; }
+}
+@keyframes heroBorderArrival {
+  0% { opacity: 0; background-size: var(--hero-edge-start); }
+  12% { opacity: .8; }
+  85%, 100% { opacity: 0; background-size: var(--hero-edge-end); }
 }
 @media (prefers-reduced-motion: no-preference) {
-  // Fixed dash travel keeps speed unchanged through the circle and along the trunk.
-  // Phase offsets account for the longer outer branches, spacing junction arrivals.
-  .hero-connection { --hero-flow-delay: -2.452s; }
-  .hero-connection:nth-child(2) { --hero-flow-delay: -.276s; }
-  .hero-connection:nth-child(3) { --hero-flow-delay: -3.876s; }
-  .hero-connection:nth-child(4) { --hero-flow-delay: -3.652s; }
-  .hero-provider-wires--mobile .hero-connection { --hero-flow-delay: -2.567s; }
-  .hero-provider-wires--mobile .hero-connection:nth-child(2) { --hero-flow-delay: -.108s; }
-  .hero-provider-wires--mobile .hero-connection:nth-child(3) { --hero-flow-delay: -3.708s; }
-  .hero-provider-wires--mobile .hero-connection:nth-child(4) { --hero-flow-delay: -3.767s; }
+  // Normalize whole paths so arrivals stay synchronized at every viewport size.
+  .hero-connection { --hero-flow-delay: 0s; }
+  .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
+  .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
+  .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
   .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
+  // The leading edge reaches the border at 3.536s, repeating every 1.2s.
+  .hero-border-glow { animation: heroBorderArrival 1.2s linear -.064s infinite; }
   .hero-motion-toggle { display: inline-flex; }
-  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo { animation-play-state: paused; }
+  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
 }
 @media (min-width: 1200px) and (max-width: 1320px) {
   .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
@@ -245,8 +264,9 @@
   .hero-provider { height: 44px; width: 100%; }
   .hero-provider .partner-logo { width: 64px; height: 22px; max-width: 84%; }
   .hero-provider-wires--desktop { display: none; }
-  .hero-provider-wires--mobile { display: block; width: 100%; height: 88px; }
+  .hero-provider-wires--mobile { display: block; width: 100%; height: 88px; clip-path: inset(-8px -8px 0 -8px); }
   .hero-aggregation-point { left: 50%; top: calc(100% * 64 / 104); }
+  .hero-border-glow { --hero-edge-origin: 50% 0; --hero-edge-start: 18% 100%; --hero-edge-end: 100% 100%; background-position: center top; }
   .hero-product { padding: 1rem; }
   .hero-product-header { gap: .25rem; }
   .hero-actions { flex-direction: column; align-items: stretch; }

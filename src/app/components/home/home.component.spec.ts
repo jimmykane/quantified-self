@@ -123,6 +123,7 @@ describe('HomeComponent', () => {
     const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
     expect(visual.querySelector('.hero-provider-wires')?.getAttribute('aria-hidden')).toBe('true');
     expect(visual.querySelector('app-public-feature-preview')).toBeTruthy();
+    expect(visual.querySelector('.hero-product .hero-border-glow')?.getAttribute('aria-hidden')).toBe('true');
     for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
@@ -138,8 +139,8 @@ describe('HomeComponent', () => {
         const branch = connection.querySelector('.hero-connection-track')!.getAttribute('d');
         const pulse = connection.querySelector('.hero-connection-pulse')!;
         expect(pulse.getAttribute('d')?.startsWith(`${branch} `)).toBe(true);
-        expect(pulse.getAttribute('d')).toMatch(svg.classList.contains('hero-provider-wires--mobile') ? /V 120$/ : /H 154$/);
-        expect(pulse.hasAttribute('pathLength')).toBe(false);
+        expect(pulse.getAttribute('d')).toMatch(svg.classList.contains('hero-provider-wires--mobile') ? /V 104$/ : /H 136$/);
+        expect(pulse.getAttribute('pathLength')).toBe('100');
       }
     }
     expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');

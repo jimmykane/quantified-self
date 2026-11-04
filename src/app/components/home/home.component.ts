@@ -79,9 +79,9 @@ export class HomeComponent implements OnInit {
       path: 'M 2 300 C 44 300 40 168 84 168', mobilePath: 'M 350 0 C 350 38 200 24 200 64' },
   ].map(provider => ({
     ...provider,
-    // Each pulse follows one continuous curve through the junction and into the panel.
-    flowPath: `${provider.path} H 154`,
-    mobileFlowPath: `${provider.mobilePath} V 120`,
+    // One continuous curve through the junction, ending exactly at the card border.
+    flowPath: `${provider.path} H 136`,
+    mobileFlowPath: `${provider.mobilePath} V 104`,
   }));
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
