@@ -83,7 +83,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const cacheRevision = signal(0), cached = vi.fn(() => cachedStatus ? { status: cachedStatus, sleepKey: 'night-a' } : null);
   const observeSleep = vi.fn(), remember = vi.fn();
   const event = vi.fn(), save = vi.fn(async (_uid, value) => { preferences.set(value); });
-  const open = vi.fn().mockResolvedValue(undefined);
+  const open = vi.fn().mockResolvedValue(undefined), openEventGuidance = vi.fn().mockResolvedValue(undefined);
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
   const workouts = new BehaviorSubject<ScheduledWorkoutV1[]>([]);
   const watchCalendarSchedule = vi.fn(() => workouts.pipe(map(items => savedSchedule(items))));
@@ -94,7 +94,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     provideRouter([]), delivery, { provide: AppEventService, useValue: {} },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
-    { provide: DayWorkoutService, useValue: { open } }, { provide: AppHapticsService, useValue: haptics },
+    { provide: DayWorkoutService, useValue: { open, openEventGuidance } }, { provide: AppHapticsService, useValue: haptics },
     { provide: AppUserService, useValue: { user, user$: of(user()) } },
     { provide: TrainingPlansService, useValue: { watchCalendarSchedule } },
   ] });
@@ -106,7 +106,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
   return { fixture, preferences, owner, pro, saving, importActive, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
-    delivery: delivery.useValue, deliveryOpen, cached, cacheRevision };
+    delivery: delivery.useValue, deliveryOpen, cached, cacheRevision, openEventGuidance };
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
@@ -449,6 +449,18 @@ describe('compact daily workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     saving.set(false); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(1600);
     expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+  });
+  it('opens guidance after a fresh coverage check without offering to add or send a workout', async () => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready', controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'),
+      result: { version: 1, kind: 'event-advice', requestId: 'daily-suggestion:2026-10-30', observedAt: '2026-10-30T07:00Z',
+        rationale: 'Follow your event routine.', events: [{ name: 'Race day', localDate: '2026-10-30' }], draft: null, previousLoads: [], usedContext: [], missingContext: [] } };
+    const { fixture, request, open, openEventGuidance } = setup(true, ready);
+    await vi.advanceTimersByTimeAsync(0); fixture.detectChanges(); request.mockResolvedValue(ready);
+    expect(fixture.nativeElement.textContent).toContain('View guidance');
+    expect(fixture.nativeElement.textContent).not.toContain('Add & send');
+    await fixture.componentInstance.review();
+    expect(request).toHaveBeenLastCalledWith('owner', 'status', expect.any(Function), undefined, true);
+    expect(openEventGuidance).toHaveBeenCalledWith('owner', ready.result, expect.any(Function)); expect(open).not.toHaveBeenCalled();
   });
   it('waits for Today data, prepares once, and opens the existing review without saving', async () => {
     const { fixture, request, event, open, haptics } = setup();

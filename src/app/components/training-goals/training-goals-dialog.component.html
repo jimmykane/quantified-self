@@ -1,0 +1,65 @@
+<h2 mat-dialog-title>{{ editing() ? previous() ? 'Edit goal' : 'Add goal' : 'Goals' }}</h2>
+<mat-dialog-content>
+  @if (error()) { <p class="goal-error" role="alert">{{ error() }}</p> }
+  @if (notice() && !editing()) { <p class="goal-meta" role="status">{{ notice() }}</p> }
+  @if (editing()) {
+    <div class="goal-fields">
+      <mat-form-field class="wide" appearance="outline"><mat-label>Name</mat-label><input matInput maxlength="120" required
+        [disabled]="busy()" [ngModel]="fields().name" (ngModelChange)="set('name', $event, false)"></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Goal type</mat-label><mat-select [disabled]="busy()" [value]="fields().kind" (selectionChange)="set('kind', $event.value)">
+        <mat-option value="event">Event / race</mat-option><mat-option value="milestone">Dated milestone</mat-option><mat-option value="ongoing">Ongoing goal</mat-option>
+      </mat-select></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Priority</mat-label><mat-select [disabled]="busy()" [value]="fields().priority" (selectionChange)="set('priority', $event.value)">
+        <mat-option value="high">High</mat-option><mat-option value="normal">Normal</mat-option><mat-option value="low">Low</mat-option>
+      </mat-select></mat-form-field>
+      <app-activity-filter-picker class="wide" label="Sport or family" allLabel="All sports" searchLabel="Search sports and families"
+        [multiple]="false" [options]="sportOptions" [selectedValues]="selectedSports()" [disabled]="busy()" (selectionChange)="selectSport($event)" />
+      <mat-form-field appearance="outline"><mat-label>Start date</mat-label><input matInput type="date" required [disabled]="busy()"
+        [ngModel]="fields().startLocalDate" (ngModelChange)="set('startLocalDate', $event, false)"></mat-form-field>
+      @if (fields().kind !== 'ongoing') {
+        <mat-form-field appearance="outline"><mat-label>Target date</mat-label><input matInput type="date" required [disabled]="busy()"
+          [min]="fields().startLocalDate" [ngModel]="fields().targetLocalDate" (ngModelChange)="set('targetLocalDate', $event, false)"></mat-form-field>
+      }
+      @if (fields().kind === 'ongoing') {
+        <mat-form-field appearance="outline"><mat-label>Track progress</mat-label><mat-select [disabled]="busy()" [value]="targetKind()"
+          (selectionChange)="targetKind.set($event.value); haptics.selection()">
+          <mat-option value="manual">Manual achievement</mat-option><mat-option value="workouts">Workouts per week</mat-option>
+          <mat-option value="days">Training days per week</mat-option><mat-option value="duration">Duration per week</mat-option><mat-option value="distance">Distance per week</mat-option>
+        </mat-select></mat-form-field>
+        @if (targetKind() !== 'manual') {
+          <mat-form-field appearance="outline"><mat-label>{{ targetLabel() }}</mat-label><input matInput type="number" [min]="targetStep()" [max]="targetMax()" [step]="targetStep()" required
+            [disabled]="busy()" [ngModel]="targetValue()" (ngModelChange)="targetValue.set($event)"><mat-hint>{{ targetKind() === 'days' || targetKind() === 'workouts' ? 'Whole numbers from 1 to ' + targetMax() : 'Enter a positive weekly target' }}</mat-hint></mat-form-field>
+        }
+        <p class="goal-meta wide">Workouts count separate recordings. Training days count distinct days, even when you record more than one workout. Weekly progress uses your calendar week start and {{ timeZone }}.</p>
+      }
+      <mat-form-field class="wide" appearance="outline"><mat-label>Objective or notes</mat-label><textarea matInput rows="3" maxlength="2000"
+        [disabled]="busy()" [ngModel]="fields().objective" (ngModelChange)="set('objective', $event, false)"></textarea>
+        <mat-hint>For example: finish my first marathon, or squat 100 kg. Performance achievements are marked manually.</mat-hint></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Linked plan (optional)</mat-label><mat-select [disabled]="busy()" [value]="fields().planId" (selectionChange)="set('planId', $event.value)">
+        <mat-option [value]="null">Independent goal</mat-option>
+        @if (selectedPlanMissing()) { <mat-option [value]="fields().planId">Unavailable plan · keep link</mat-option> }
+        @for (plan of plans() ?? []; track plan.id) { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
+      </mat-select></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Status</mat-label><mat-select [disabled]="busy()" [value]="fields().lifecycle" (selectionChange)="set('lifecycle', $event.value)">
+        <mat-option value="active">Active</mat-option><mat-option value="paused">Paused</mat-option><mat-option value="completed">Completed</mat-option><mat-option value="archived">Archived</mat-option>
+      </mat-select></mat-form-field>
+      <p class="goal-meta wide">Goals guide suitable workouts while respecting your recovery, sport preferences, planned sessions and rest days. Events receive guidance on uncovered event days.</p>
+    </div>
+  } @else {
+    <div class="goal-actions"><button mat-button appHapticTap type="button" (click)="edit()"><mat-icon>add</mat-icon>Add goal</button>
+      <button mat-button appHapticTap type="button" (click)="archived.set(!archived())">{{ archived() ? 'Show current' : 'Show archived' }}</button></div>
+    @if (state().status === 'loading') { <mat-spinner diameter="24" aria-label="Loading goals" /> }
+    @if (state().status === 'error') { <p class="goal-error" role="alert">Goals are unavailable. Close and reopen to retry.</p> }
+    @if (progress().status === 'error') { <p class="goal-error" role="status">Weekly progress is unavailable.
+      <button mat-button appHapticTap type="button" (click)="service.invalidateProgress(data.uid)">Retry</button></p> }
+    @if (progress().status === 'loading') { <p class="goal-meta" role="status">Loading weekly progress…</p> }
+    @for (row of rows(); track row.goal.id) {
+      <div class="goal-row"><app-training-goal-details [goal]="row.details" [units]="units()" [progress]="row.progress" />
+        <button mat-icon-button appHapticTap type="button" [attr.aria-label]="'Edit ' + row.goal.name" (click)="edit(row.goal)"><mat-icon>edit</mat-icon></button></div>
+    } @empty { @if (state().status === 'ready') { <p>No {{ archived() ? 'archived' : 'current' }} goals. Add an event, milestone or ongoing goal.</p> } }
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button appHapticTap type="button" mat-dialog-close [disabled]="busy()">{{ editing() ? 'Cancel' : 'Close' }}</button>
+  @if (editing()) { <button mat-flat-button appHapticTap type="button" [disabled]="busy() || !parsed()" (click)="save()">{{ busy() ? 'Saving…' : 'Save goal' }}</button> }
+</mat-dialog-actions>

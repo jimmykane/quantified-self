@@ -1,7 +1,8 @@
 import { Component, inject, input, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppWhatsNewService, ChangelogPost } from '../../services/app.whats-new.service';
-import { MaterialModule } from '../../modules/material.module';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatIconModule } from '@angular/material/icon';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewItemComponent } from './whats-new-item.component';
@@ -9,7 +10,7 @@ import { WhatsNewItemComponent } from './whats-new-item.component';
 @Component({
     selector: 'app-whats-new-feed',
     standalone: true,
-    imports: [CommonModule, MaterialModule, WhatsNewItemComponent],
+    imports: [CommonModule, MatExpansionModule, MatIconModule, WhatsNewItemComponent],
     templateUrl: './whats-new-feed.component.html',
     styleUrls: ['./whats-new-feed.component.scss']
 })

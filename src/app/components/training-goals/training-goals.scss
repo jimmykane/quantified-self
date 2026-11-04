@@ -1,0 +1,14 @@
+:host { display: block; min-width: 0; }
+.goal-title { font: var(--mat-sys-title-small); margin: 0 0 4px; overflow-wrap: anywhere; }
+.goal-meta { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin: 4px 0; overflow-wrap: anywhere; }
+.goal-progress { font: var(--mat-sys-body-medium); color: var(--mat-sys-primary); margin: 6px 0; overflow-wrap: anywhere; }
+.goal-objective { font: var(--mat-sys-body-small); white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; }
+.goal-row { display: flex; align-items: start; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.goal-row app-training-goal-details { flex: 1; min-width: 0; }
+.goal-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-top: 8px; }
+.goal-fields > * { min-width: 0; }
+.goal-fields .wide { grid-column: 1 / -1; }
+.goal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.goal-error { color: var(--mat-sys-error); font: var(--mat-sys-body-small); }
+mat-dialog-content { overflow: auto; }
+@media (max-width: 420px) { .goal-fields { grid-template-columns: minmax(0, 1fr); } }

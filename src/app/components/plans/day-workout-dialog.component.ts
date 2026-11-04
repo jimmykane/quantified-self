@@ -204,7 +204,7 @@ export class DayWorkoutDialogComponent {
     const requiredForDailySuggestion = this.data.mode === 'preferences' && ['trainingContext', 'activityContext'].includes(choice.key);
     const disabled = requiredForDailySuggestion || choice.key === 'routineContext' && this.controls().activityContext === false
       || choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
-      || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
+      || ['usePreviousWeights', 'goalsContext'].includes(choice.key) && !this.controls().trainingContext;
     return { ...choice, disabled, checked: (!disabled || requiredForDailySuggestion) && this.controls()[choice.key] !== false };
   }));
   readonly contextSelection = computed(() => {

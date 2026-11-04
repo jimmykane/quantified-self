@@ -7,7 +7,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/policies</loc>
-    <lastmod>2026-10-31</lastmod>
+    <lastmod>2026-11-03</lastmod>
     <priority>0.5</priority>
   </url>
   <url>
@@ -19,6 +19,16 @@
     <loc>https://quantified-self.io/terms</loc>
     <lastmod>2026-10-07</lastmod>
     <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/pricing</loc>
+    <lastmod>2026-11-04</lastmod>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/releases</loc>
+    <lastmod>2026-11-04</lastmod>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/help</loc>
@@ -107,7 +117,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/mcp-server</loc>
-    <lastmod>2026-11-02</lastmod>
+    <lastmod>2026-11-03</lastmod>
     <priority>0.8</priority>
   </url>
   <url>

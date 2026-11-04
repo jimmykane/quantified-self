@@ -1,6 +1,8 @@
-import { Injectable, Signal, signal } from '@angular/core';
+import { Injectable, Signal, signal, TransferState, inject } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { Observable, of } from 'rxjs';
+import { Observable, defer, of } from 'rxjs';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from './models/app-theme-preference.type';
 import { AppUserInterface } from './models/app-user.interface';
@@ -10,6 +12,18 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppUserService, type AppUserProfileReadState } from './services/app.user.service';
 import { AppWhatsNewService, type ChangelogPost } from './services/app.whats-new.service';
 import { AppPaymentService, type StripeProduct, type StripeSubscription } from './services/app.payment.service';
+import {
+  parsePublicPricingSnapshot,
+  PUBLIC_PRICING_SNAPSHOT_FILE_PATH,
+  PUBLIC_PRICING_TRANSFER_STATE_KEY,
+} from './services/public-pricing-snapshot';
+import { transformProductsForPricing } from './services/pricing-product-catalog';
+import { PublicPricingCatalogService } from './services/public-pricing-catalog.service';
+import {
+  parsePublicReleasesSnapshot,
+  PUBLIC_RELEASES_SNAPSHOT_FILE_PATH,
+  PUBLIC_RELEASES_TRANSFER_STATE_KEY,
+} from './services/public-releases-snapshot';
 
 @Injectable()
 class ServerAuthService {
@@ -103,8 +117,11 @@ class ServerThemeService {
 
 @Injectable()
 class ServerWhatsNewService {
-  readonly changelogs$ = of<ChangelogPost[]>([]);
-  readonly changelogs = signal<ChangelogPost[]>([]).asReadonly();
+  private readonly transferState = inject(TransferState);
+  private readonly posts = signal<ChangelogPost[]>([]);
+  private loaded = false;
+  readonly changelogs$ = defer(() => of(this.posts()));
+  readonly changelogs = this.posts.asReadonly();
   readonly unreadCount = signal(0).asReadonly();
 
   isUnread(): boolean {
@@ -116,11 +133,24 @@ class ServerWhatsNewService {
   }
 
   ensureChangelogsLoaded(): void {
-    return undefined;
+    if (this.loaded) return;
+    try {
+      const snapshot = parsePublicReleasesSnapshot(JSON.parse(
+        readFileSync(resolve(process.cwd(), PUBLIC_RELEASES_SNAPSHOT_FILE_PATH), 'utf8'),
+      ));
+      this.posts.set(snapshot.posts);
+      this.transferState.set(PUBLIC_RELEASES_TRANSFER_STATE_KEY, snapshot.posts);
+      this.loaded = true;
+    } catch {
+      if (process.env['QS_REQUIRE_PUBLIC_RELEASES_SNAPSHOT'] === 'true') {
+        throw new Error('Could not load the required public release notes snapshot for prerendering.');
+      }
+    }
   }
 
   getChangelogsOnceLoaded(): Observable<ChangelogPost[]> {
-    return of([]);
+    this.ensureChangelogsLoaded();
+    return of(this.posts());
   }
 
   setAdminMode(): void {
@@ -148,6 +178,31 @@ class ServerPaymentService {
 
   async getUpcomingRenewalAmount(): Promise<{ status: 'unavailable' }> {
     return { status: 'unavailable' };
+  }
+}
+
+@Injectable()
+class ServerPublicPricingCatalogService {
+  private readonly transferState = inject(TransferState);
+  private readonly products = transformProductsForPricing(loadPublicPricingProducts());
+
+  getProducts(): Observable<StripeProduct[]> {
+    this.transferState.set(PUBLIC_PRICING_TRANSFER_STATE_KEY, this.products);
+    return of(this.products);
+  }
+}
+
+function loadPublicPricingProducts(): StripeProduct[] {
+  try {
+    const snapshotPath = resolve(process.cwd(), PUBLIC_PRICING_SNAPSHOT_FILE_PATH);
+    const snapshot = parsePublicPricingSnapshot(JSON.parse(readFileSync(snapshotPath, 'utf8')));
+    return snapshot.products;
+  } catch (error) {
+    if (process.env['QS_REQUIRE_PUBLIC_PRICING_SNAPSHOT'] === 'true') {
+      throw new Error('Could not load the required public pricing snapshot for prerendering.', { cause: error });
+    }
+
+    return [];
   }
 }
 
@@ -194,4 +249,5 @@ export const SERVER_APP_PROVIDERS = [
   { provide: AppThemeService, useClass: ServerThemeService },
   { provide: AppWhatsNewService, useClass: ServerWhatsNewService },
   { provide: AppPaymentService, useClass: ServerPaymentService },
+  { provide: PublicPricingCatalogService, useClass: ServerPublicPricingCatalogService },
 ];

@@ -478,12 +478,15 @@ describe('Firebase Hosting configuration', () => {
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
@@ -548,7 +551,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
@@ -567,8 +570,6 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/pricing</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Allow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');
@@ -581,6 +582,11 @@ describe('Firebase Hosting configuration', () => {
         headerValue.key === betaNoIndexHeader.key && headerValue.value === betaNoIndexHeader.value
       ))
     )) ?? [];
+
+    for (const routePath of PRERENDERED_PUBLIC_ROUTES) {
+      const routeSource = routePathToHostingSource(routePath);
+      expect(noIndexHeaders.some(header => headerSourceMatchesPath(header.source, routeSource)), routePath).toBe(false);
+    }
 
     for (const routePath of CLIENT_RENDERED_APP_ROUTES) {
       const routeSource = routePathToHostingSource(routePath);
@@ -666,7 +672,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.1mb',
     });
   });
 

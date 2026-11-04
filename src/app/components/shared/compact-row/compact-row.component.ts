@@ -28,6 +28,6 @@ export class CompactRowComponent {
   readonly showDivider = input(true);
   readonly fillHeight = input(false);
   readonly mobileActionFullWidth = input(false);
-  readonly layout = input<'columns' | 'stacked'>('columns');
+  readonly layout = input<'columns' | 'stacked' | 'journey'>('columns');
   readonly density = input<'comfortable' | 'compact'>('comfortable');
 }

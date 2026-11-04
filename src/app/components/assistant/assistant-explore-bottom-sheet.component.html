@@ -111,7 +111,7 @@
       <div class="assistant-training-options">
         <app-compact-row title="Training plans" titleId="assistant-training-plans-title"
           icon="event_note" density="compact">
-          <p id="assistant-training-plans-summary" class="assistant-training-summary">Read plan and workout names, dates, instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
+          <p id="assistant-training-plans-summary" class="assistant-training-summary">Read calendar goals, priorities and objectives, plus plan and workout names, dates, instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
           <mat-slide-toggle compactRowAction [checked]="data.trainingPlansEnabled === true"
             aria-label="Training plans access — changing this starts a new chat"
             aria-describedby="assistant-training-plans-summary"
@@ -124,7 +124,7 @@
 
         <app-compact-row title="Plan and workout changes" titleId="assistant-training-plan-changes-title"
           icon="edit_calendar" iconTone="secondary" density="compact">
-          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare create, edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
+          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare goal create, edit, pause, complete, archive or restore changes, and plan/workout create, edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
           <mat-slide-toggle compactRowAction [checked]="data.trainingPlanChangesEnabled === true"
             aria-label="Training plan changes — changing this starts a new chat"
             aria-describedby="assistant-training-plan-changes-summary"

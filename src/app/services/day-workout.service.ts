@@ -12,6 +12,7 @@ import type { MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
 import { AppFunctionsService } from './app.functions.service';
 import { trainingPlansCreateRoute } from '../helpers/training-plans-navigation.helper';
 import { AppUserService } from './app.user.service';
+import type { DailyWorkoutEventAdviceV1 } from '@shared/daily-workout-suggestion';
 
 export interface DayWorkoutEditorDraft {
   ownerUid: string;
@@ -35,6 +36,16 @@ export class DayWorkoutService {
     });
   }
   isOwner(uid: string): boolean { return this.auth.currentUser?.uid === uid && this.users.user()?.uid === uid; }
+  async openEventGuidance(uid: string, advice: DailyWorkoutEventAdviceV1, current: () => boolean): Promise<void> {
+    if (!this.isOwner(uid) || !current() || this.opening) return;
+    this.opening = true;
+    try {
+      const { EventDayGuidanceDialogComponent } = await import('../components/plans/event-day-guidance-dialog.component');
+      if (!this.isOwner(uid) || !current()) return;
+      await firstValueFrom(this.dialog.open(EventDayGuidanceDialogComponent, { data: { uid, advice }, width: '640px',
+        maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)' }).afterClosed());
+    } finally { this.opening = false; }
+  }
   canGenerate(date: string, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): boolean {
     try {
       const today = dayWorkoutLocalDate(new Date(), timeZone);

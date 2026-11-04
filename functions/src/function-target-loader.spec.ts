@@ -189,6 +189,7 @@ describe('function target loader', () => {
       'projectCOROSConnectionOnTokenWrite',
       'queryActivityHealthRange',
       'queryHealthRange',
+      'getTrainingGoalsProgress',
       'receiveGarminAPIUserPermissions',
       'refreshCOROSAPIRefreshTokens',
       'refreshGarminAPIRefreshTokens',

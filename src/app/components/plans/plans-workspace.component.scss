@@ -115,6 +115,8 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.plans-view-navigation { flex-wrap: wrap; }
+
 .plans-view-navigation,
 .workout-nodes-heading,
 .workout-list-heading {
@@ -340,6 +342,11 @@
   padding: 32px;
 }
 
+.plans-empty-state .plans-header-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .plans-empty-state h2,
 .plans-empty-state p {
   margin: 0;
@@ -532,7 +539,9 @@
   z-index: 2;
   gap: 8px;
   padding: 12px 0 max(12px, env(safe-area-inset-bottom));
-  background: var(--mat-sys-surface);
+  // Match the app shell; back its translucent light surface so scrolled fields cannot bleed through.
+  background: linear-gradient(var(--mat-sys-surface), var(--mat-sys-surface)),
+    var(--mat-sys-surface-container-lowest);
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 

@@ -1,9 +1,30 @@
+import { buildPlanAssistantRequest } from '../../../shared/training-plan-generation';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE, TRAINING_STRENGTH_READ_GUIDANCE, TRAINING_STRENGTH_WRITE_GUIDANCE } from '../shared/training-authoring-guidance';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it.each([[], ['Spring marathon'], ['Strength consistency', 'Autumn race']].map(goalNames => ({ goalNames })))('routes the Plans setup request to plan review with goal focus $goalNames', ({ goalNames }) => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null, days: null,
+      minutes: null, goalNames, timelineNotesEnabled: true, instructions: '' }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+  });
+  it.each([
+    { goalNames: [], instructions: 'Add a rest day on Sunday.' },
+    { goalNames: [], instructions: 'Create a Base phase followed by a taper phase.' },
+    { goalNames: ['Complete my race goal'], instructions: '' },
+    { goalNames: ['Build a Base phase'], instructions: '' },
+    { goalNames: [], instructions: 'Use workouts from my library.' },
+  ])('keeps new-plan setup on the plan tool with $goalNames / $instructions', options => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null,
+      days: null, minutes: null, timelineNotesEnabled: true, ...options }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+  });
+  it.each(['Create a plan phase', "Create a plan's phases"] )('retains focused phase creation for %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('offers complete strength editing for %s without changing provider or lifecycle routes', sport => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');
@@ -154,7 +175,7 @@ describe('Training phase preview routing', () => {
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
   });
-  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan'])('routes an explicit rest-day edit: %s', prompt => {
+  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan', 'Add a plan rest day', "Add a plan’s rest day"])('routes an explicit rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_rest_days');
   });
   it.each(['Add a rest day on Sunday', 'Change my rest days', 'Make Sunday a rest day',
@@ -663,6 +684,35 @@ describe('Training preview model-tool selection', () => {
     expect(result.evidence[0].summary).toContain('unknown duration');
     expect(JSON.stringify(result.evidence)).not.toContain('opaque-workout');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never describe a partial subtotal as the complete duration');
+  });
+
+  it('routes explicit goal edits to the focused app-owned review, without workout or Apply tools', async () => {
+    for (const prompt of ['Add a goal to run three days per week.', 'Pause my marathon goal.', 'Change my goal priority to high.', 'Mark my milestone completed.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_goal_change');
+    }
+    expect(selectAssistantTrainingPreviewTool('Create a Running workout for my marathon goal.')).not.toBe('preview_training_goal_change');
+    expect(selectAssistantTrainingPreviewTool('Do not change my goal. Create a Running workout.')).not.toBe('preview_training_goal_change');
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_goal_change', title: 'Goal change', description: 'Preview goal', inputSchema: { type: 'object' as const } });
+    const after = { name: 'Marathon', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+      sportScope: 'all', sport: null, objective: 'Finish', planName: null, weeklyTarget: null };
+    const preview = { proposalRef: 'opaque-goal', expiresAtMs: Date.parse('2026-11-03T12:15Z'), permissionMode: 'schedule',
+      scheduleRevision: 0, requiresConfirmation: true, summary: 'Create goal.',
+      changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal.' }], providerPreviews: [], goalReview: { before: null, after } };
+    callTool.mockResolvedValue({ structuredContent: preview });
+    const reviews = vi.fn(); session.getTrainingWorkoutReviews = reviews;
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-11-03T12:00Z'), generateAnswer: async input => {
+        expect(input.tools.some(tool => tool.name.startsWith('apply_'))).toBe(false);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_goal_change']);
+        const { planName: _plan, ...goal } = after;
+        await input.tools.find(tool => tool.name === 'preview_training_goal_change')!.execute({ goalRef: null, expectedRevision: 0, goal: { ...goal, planRef: null } });
+        return { answer: 'Review and apply your goal in QS.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Add a marathon goal for November 8.',
+      timeZone: 'UTC', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.goalReview).toEqual(preview.goalReview); expect(reviews).not.toHaveBeenCalled();
   });
 
   it('prepares an independent calendar rest review with no model Apply tool', async () => {

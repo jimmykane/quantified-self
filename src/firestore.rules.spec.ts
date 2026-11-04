@@ -33,6 +33,61 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Calendar training goals', () => {
+        const path = 'users/goal-owner/trainingGoals/goal';
+        const statePath = 'users/goal-owner/trainingGoalState/current';
+        const goal = { schemaVersion: 1, id: 'goal', name: 'Run consistently', kind: 'ongoing', lifecycle: 'active',
+            priority: 'normal', startLocalDate: '2026-11-03', targetLocalDate: null, sportScope: 'all', sport: null,
+            objective: '', planId: null, weeklyTarget: { kind: 'days', value: 3 }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+        beforeEach(async () => { await testEnv.withSecurityRulesDisabled(async context => {
+            await context.firestore().doc('users/goal-owner').set({});
+        }); });
+        const write = (uid: string, value = goal, revision = 1) => {
+            const db = testEnv.authenticatedContext(uid).firestore(), batch = db.batch();
+            batch.set(db.doc(path), value);
+            batch.set(db.doc(statePath), { schemaVersion: 1, revision, goalCount: 1, lastGoalId: 'goal' });
+            return batch.commit();
+        };
+        it('allows owner atomic create/edit and bounded reads', async () => {
+            await assertSucceeds(write('goal-owner'));
+            await assertSucceeds(write('goal-owner', { ...goal, name: 'Updated', revision: 2, updatedAtMs: 2 }, 2));
+            const db = testEnv.authenticatedContext('goal-owner').firestore();
+            await assertSucceeds(db.doc(path).get());
+            await assertSucceeds(db.collection('users/goal-owner/trainingGoals').limit(201).get());
+            await assertFails(db.collection('users/goal-owner/trainingGoals').get());
+        });
+        it('denies other accounts, writes without a revision transaction and permanent deletes', async () => {
+            await assertFails(write('other'));
+            const db = testEnv.authenticatedContext('goal-owner').firestore();
+            await assertFails(db.doc(path).set(goal));
+            await assertSucceeds(write('goal-owner'));
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).get());
+            await assertFails(db.doc(path).delete());
+            await assertFails(write('goal-owner'));
+        });
+        it('rejects malformed dates, targets and unexpected fields', async () => {
+            await assertFails(write('goal-owner', { ...goal, startLocalDate: '2026-02-30' }));
+            await assertFails(write('goal-owner', { ...goal, weeklyTarget: { kind: 'days', value: 8 } }));
+            await assertFails(write('goal-owner', { ...goal, uid: 'other' } as typeof goal));
+            await assertFails(write('goal-owner', { ...goal, kind: 'event' }));
+        });
+        it('preserves goals whose linked plan has been deleted', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...goal, planId: 'missing' });
+                await context.firestore().doc(statePath).set({ schemaVersion: 1, revision: 1, goalCount: 1, lastGoalId: 'goal' });
+            });
+            await assertSucceeds(write('goal-owner', { ...goal, planId: 'missing', revision: 2, updatedAtMs: 2 }, 2));
+            await assertFails(write('goal-owner', { ...goal, planId: 'another-missing', revision: 3, updatedAtMs: 3 }, 3));
+        });
+        it('blocks writes during account deletion and hides server proposals', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/goal-owner').set({});
+            });
+            await assertFails(write('goal-owner'));
+            await assertFails(testEnv.authenticatedContext('goal-owner').firestore().doc('users/goal-owner/trainingGoalProposals/private').get());
+        });
+    });
+
     describe('Web Push registrations', () => {
         const id = '00000000-0000-4000-8000-000000000001';
         const path = `users/push-owner/pushSubscriptions/${id}`;

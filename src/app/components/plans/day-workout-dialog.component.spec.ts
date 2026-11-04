@@ -650,11 +650,11 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.more.set(true); fixture.detectChanges();
     const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox input')] as HTMLInputElement[];
-    expect(inputs).toHaveLength(11);
+    expect(inputs).toHaveLength(12);
     expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
-    expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true, goalsContext: true });
     component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
     const choice = (label: string) => [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox')]
       .find((element: HTMLElement) => element.textContent?.trim() === label)!.querySelector('input') as HTMLInputElement;
@@ -666,6 +666,7 @@ describe('DayWorkoutDialogComponent', () => {
     expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
     component.showSettings.set(true); fixture.detectChanges(); choice('Training plans & workouts').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
+    expect(choice('Goals').disabled).toBe(true);
     expect(choice('Reuse planned weights').disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
   });
   it('shows every data choice selected initially and disables derived readiness when a source is turned off', async () => {
@@ -723,7 +724,7 @@ describe('DayWorkoutDialogComponent', () => {
     for (const signal of ['Freshness', 'training load', 'HRV', 'Sleep', 'Overnight heart rate', 'Readiness', 'Feeling / RPE']) {
       expect(personalization.textContent).toContain(signal);
     }
-    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true, goalsContext: true });
     expect(element.querySelector('input[type="date"]')).toBeNull();
     expect(element.querySelector('.review-destination')!.textContent).toContain('Oct 28, 2026');
     expect(element.querySelector('mat-dialog-actions')!.textContent).toContain('Generate workout');

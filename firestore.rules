@@ -509,6 +509,85 @@ service cloud.firestore {
         }
 
         // Standalone calendar intent. It changes no workout, plan, provider consent or AI allowance.
+        function validGoalDate(value) {
+          let parts = value.split('-');
+          let year = int(parts[0]);
+          let month = int(parts[1]);
+          let day = int(parts[2]);
+          let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+          let days = month == 2 ? (leap ? 29 : 28) : (month in [4, 6, 9, 11] ? 30 : 31);
+          return value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && year >= 100
+            && month >= 1 && month <= 12 && day >= 1 && day <= days;
+        }
+        function goalStateBefore() {
+          return exists(/databases/$(database)/documents/users/$(userID)/trainingGoalState/current)
+            ? get(/databases/$(database)/documents/users/$(userID)/trainingGoalState/current).data
+            : {'revision': 0, 'goalCount': 0};
+        }
+        match /trainingGoalState/{stateID} {
+          allow read: if isOwner() && stateID == 'current';
+          allow create, update: if isOwner() && stateID == 'current' && mayWriteAccount(userID)
+            && exists(/databases/$(database)/documents/users/$(userID))
+            && request.resource.data.keys().hasAll(['schemaVersion', 'revision', 'goalCount', 'lastGoalId'])
+            && request.resource.data.keys().hasOnly(['schemaVersion', 'revision', 'goalCount', 'lastGoalId'])
+            && request.resource.data.schemaVersion == 1 && request.resource.data.revision is int
+            && request.resource.data.revision == goalStateBefore().revision + 1
+            && request.resource.data.goalCount is int && request.resource.data.goalCount >= 1 && request.resource.data.goalCount <= 200
+            && request.resource.data.lastGoalId is string
+            && request.resource.data.goalCount == goalStateBefore().goalCount
+              + (exists(/databases/$(database)/documents/users/$(userID)/trainingGoals/$(request.resource.data.lastGoalId)) ? 0 : 1)
+            && getAfter(/databases/$(database)/documents/users/$(userID)/trainingGoals/$(request.resource.data.lastGoalId)).data.revision
+              == (exists(/databases/$(database)/documents/users/$(userID)/trainingGoals/$(request.resource.data.lastGoalId))
+                ? get(/databases/$(database)/documents/users/$(userID)/trainingGoals/$(request.resource.data.lastGoalId)).data.revision + 1 : 1);
+          allow delete: if false;
+        }
+        match /trainingGoals/{goalID} {
+          function validTarget(value) {
+            return value == null || (value is map && value.keys().hasAll(['kind', 'value']) && value.keys().hasOnly(['kind', 'value'])
+              && value.kind in ['workouts', 'days', 'duration', 'distance'] && value.value is number && value.value > 0
+              && ((value.kind == 'workouts' && value.value is int && value.value <= 100)
+                || (value.kind == 'days' && value.value is int && value.value <= 7)
+                || (value.kind == 'duration' && value.value <= 604800)
+                || (value.kind == 'distance' && value.value <= 10000000)));
+          }
+          function validGoal() {
+            let v = request.resource.data;
+            return v.keys().hasAll(['schemaVersion', 'id', 'name', 'kind', 'lifecycle', 'priority', 'startLocalDate',
+                'targetLocalDate', 'sportScope', 'sport', 'objective', 'planId', 'weeklyTarget', 'revision', 'createdAtMs', 'updatedAtMs'])
+              && v.keys().hasOnly(['schemaVersion', 'id', 'name', 'kind', 'lifecycle', 'priority', 'startLocalDate',
+                'targetLocalDate', 'sportScope', 'sport', 'objective', 'planId', 'weeklyTarget', 'revision', 'createdAtMs', 'updatedAtMs'])
+              && v.schemaVersion == 1 && v.id == goalID && goalID.matches('^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
+              && v.name is string && v.name.size() > 0 && v.name.size() <= 120
+              && v.kind in ['event', 'milestone', 'ongoing'] && v.lifecycle in ['active', 'paused', 'completed', 'archived']
+              && v.priority in ['high', 'normal', 'low'] && validGoalDate(v.startLocalDate)
+              && ((v.kind == 'ongoing' && v.targetLocalDate == null)
+                || (v.kind != 'ongoing' && validGoalDate(v.targetLocalDate) && v.targetLocalDate >= v.startLocalDate))
+              && v.sportScope in ['all', 'sport', 'family']
+              && ((v.sportScope == 'all' && v.sport == null) || (v.sportScope != 'all' && v.sport is string && v.sport.size() > 0 && v.sport.size() <= 100))
+              && v.objective is string && v.objective.size() <= 2000
+              && (v.planId == null || (v.planId is string && v.planId.matches('^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')))
+              && validTarget(v.weeklyTarget) && (v.kind == 'ongoing' || v.weeklyTarget == null)
+              && v.revision is int && v.revision > 0 && v.revision <= 9007199254740991
+              && v.createdAtMs is int && v.createdAtMs >= 0 && v.updatedAtMs is int && v.updatedAtMs >= v.createdAtMs
+              && v.updatedAtMs <= request.time.toMillis() + 60000;
+          }
+          function stateChanged() {
+            let state = getAfter(/databases/$(database)/documents/users/$(userID)/trainingGoalState/current).data;
+            return state.revision == goalStateBefore().revision + 1 && state.lastGoalId == goalID;
+          }
+          allow get: if isOwner();
+          allow list: if isOwner() && request.query.limit != null && request.query.limit <= 201;
+          allow create: if isOwner() && mayWriteAccount(userID) && exists(/databases/$(database)/documents/users/$(userID))
+            && validGoal() && stateChanged() && request.resource.data.revision == 1
+            && (request.resource.data.planId == null || exists(/databases/$(database)/documents/users/$(userID)/trainingPlans/$(request.resource.data.planId)));
+          allow update: if isOwner() && mayWriteAccount(userID) && exists(/databases/$(database)/documents/users/$(userID))
+            && validGoal() && stateChanged() && request.resource.data.revision == resource.data.revision + 1
+            && request.resource.data.createdAtMs == resource.data.createdAtMs && request.resource.data.updatedAtMs >= resource.data.updatedAtMs
+            && (request.resource.data.planId == null || request.resource.data.planId == resource.data.planId
+              || exists(/databases/$(database)/documents/users/$(userID)/trainingPlans/$(request.resource.data.planId)));
+          allow delete: if false;
+        }
+
         match /trainingRestDays/{localDate} {
           function validRestDay() {
             let value = request.resource.data;

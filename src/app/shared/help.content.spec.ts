@@ -17,6 +17,13 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',
+      '**Suggest from goals & routine**', '**Suggest from recorded routine**',
+      'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
+  });
+
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
@@ -3115,4 +3122,10 @@ describe('dashboard performance history guidance', () => {
     expect(content).toContain('A saved context is retained when its evidence disappears');
     expect(content).toContain('provider estimates and manually recorded tests retain their separate meanings');
   });
+});
+
+it('explains Calendar goals, weekly progress, event guidance and explicit goal approval', () => {
+  const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')!.content;
+  for (const text of ['## Calendar goals', '**Add goal**', '**Training days**', '**Event-day guidance**',
+    'incomplete', 'never regenerates', 'explicit approval']) expect(calendar).toContain(text);
 });
