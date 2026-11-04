@@ -1,3 +1,5 @@
+import { PlanGenerationService } from '../../services/plan-generation.service';
+import type { PlanAssistantRequest } from '@shared/training-plan-generation';
 import { TrainingGoalDetailsComponent } from '../training-goals/training-goal-details.component';
 import { assistantReflectionReviewDetails } from '../../helpers/assistant-reflection-review.helper';
 import { CommonModule } from '@angular/common';
@@ -19,7 +21,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Auth } from 'app/firebase/auth';
+import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   isAssistantLocationAccess,
@@ -159,6 +161,11 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
 })
 export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
+  private readonly planGeneration = inject(PlanGenerationService);
+  readonly planRequest = signal<PlanAssistantRequest | null>(null);
+  private planRequestSession: FirebaseUserType | null = null;
+  readonly planRequestBusy = computed(() => this.loadingConversation() || !!this.conversationLoadError()
+    || this.sending() || this.resetting() || this.proposalActionInProgress() || !!this.pendingRequestId());
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly hapticsService = inject(AppHapticsService);
   private readonly userSettings = inject(AppUserSettingsQueryService);
@@ -389,6 +396,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.quota.set(quotaResult.value);
     }
     this.loadingConversation.set(false);
+    if (!this.planRequest() && !this.conversationLoadError()) {
+      this.planRequest.set(this.planGeneration.take(initializingUid));
+      this.planRequestSession = this.planRequest() ? this.auth.currentUser : null;
+    }
     if (requestToResume) {
       this.retryRequest.set(requestToResume);
       this.promptControl.setValue(requestToResume.message);
@@ -407,6 +418,26 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   useStarterPrompt(prompt: string): void {
     this.promptControl.setValue(prompt);
     this.promptControl.markAsDirty();
+  }
+
+  async startPlanChat(): Promise<void> {
+    const request = this.planRequest(), session = this.planRequestSession;
+    if (!request || this.planRequestBusy() || !this.canApplyAccountResult(session?.uid ?? null)) return;
+    if (this.auth.currentUser !== session) { this.planRequest.set(null); return; }
+    const replaced = await this.replaceConversation('coordinate_free', false, request.timelineNotesEnabled,
+      true, true, false, false, false, false, false);
+    if (replaced && !this.destroyed && this.auth.currentUser === session && this.planRequest() === request) {
+      this.useStarterPrompt(request.prompt);
+      this.planRequest.set(null);
+      this.planRequestSession = null;
+    }
+  }
+
+  dismissPlanRequest(): void {
+    if (!this.planRequest() || this.resetting()) return;
+    this.hapticsService.selection();
+    this.planRequest.set(null);
+    this.planRequestSession = null;
   }
 
   openExploreSheet(): void {
@@ -859,17 +890,19 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     timelineNoteChangesEnabled = false,
     measurementChangesEnabled = this.measurementChangesEnabled(),
     reflectionChangesEnabled = this.reflectionChangesEnabled(),
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.resetting()
       || this.sending()
       || this.proposalActionInProgress()) {
-      return;
+      return false;
     }
     const prompt = preservePrompt ? this.promptControl.value : '';
     const currentUid = this.viewOwnerUid ?? '';
-    if (!this.canApplyAccountResult(currentUid)) return;
+    const session = this.auth.currentUser;
+    const current = () => this.auth.currentUser === session && this.canApplyAccountResult(currentUid);
+    if (!current()) return false;
     this.hapticsService.selection();
     this.resetting.set(true);
     this.errorMessage.set(null);
@@ -878,7 +911,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null, trainingPlansEnabled,
         trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled,
       );
-      if (!this.canApplyAccountResult(currentUid)) return;
+      if (!current()) return false;
       this.conversation.set(conversation);
       this.locationAccess.set(locationAccess);
       this.timelineNotesEnabled.set(timelineNotesEnabled);
@@ -900,12 +933,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.expandedMap.set(false);
       this.promptControl.setValue(prompt);
       this.scrollToPageStart();
+      return true;
     } catch (error) {
-      if (!this.canApplyAccountResult(currentUid)) return;
+      if (!current()) return false;
       if (error instanceof AssistantError && error.code === 'CONVERSATION_CHANGED') {
         try {
           const state = await this.assistantService.getConversationState();
-          if (!this.canApplyAccountResult(currentUid)) return;
+          if (!current()) return false;
           this.conversation.set(state.conversation);
           this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
           this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
@@ -921,12 +955,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.retryRequest.set(null);
           if (state.pendingRequestId) this.startPendingResponseRecovery(state.pendingRequestId);
         } catch (refreshError) {
-          if (!this.canApplyAccountResult(currentUid)) return;
+          if (!current()) return false;
           this.conversationLoadError.set(this.assistantService.getErrorMessage(refreshError));
         }
       }
       this.errorMessage.set(this.assistantService.getConversationUpdateErrorMessage(error));
       this.hapticsService.error();
+      return false;
     } finally {
       if (this.canApplyAccountResult(currentUid)) this.resetting.set(false);
     }
@@ -1103,6 +1138,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   private clearAccountView(): void {
+    this.planRequest.set(null);
+    this.planRequestSession = null;
     this.cancelPendingResponsePoll();
     const requestId = this.pendingRequestId() ?? this.retryRequest()?.requestId;
     if (requestId) this.clearRememberedPendingRequest(requestId);

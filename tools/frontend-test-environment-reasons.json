@@ -43,6 +43,10 @@
     "environment": "angular",
     "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."
   },
+  "src/app/components/plans/plan-generation-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders Material controls and the shared sport picker in TestBed to verify live goal selection, optional creation, quota, consent defaults, validation and account-safe dialog closure."
+  },
   "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
@@ -154,6 +158,10 @@
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
+  },
+  "src/app/services/plan-generation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and DestroyRef to verify account-bound, single-use Assistant handoffs and lazy dialog navigation."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",

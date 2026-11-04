@@ -1,9 +1,16 @@
+import { buildPlanAssistantRequest } from '../../../shared/training-plan-generation';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE, TRAINING_STRENGTH_READ_GUIDANCE, TRAINING_STRENGTH_WRITE_GUIDANCE } from '../shared/training-authoring-guidance';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it.each([[], ['Spring marathon'], ['Strength consistency', 'Autumn race']].map(goalNames => ({ goalNames })))('routes the Plans setup request to plan review with goal focus $goalNames', ({ goalNames }) => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null, days: null,
+      minutes: null, goalNames, timelineNotesEnabled: true, instructions: '' }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+  });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('offers complete strength editing for %s without changing provider or lifecycle routes', sport => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');

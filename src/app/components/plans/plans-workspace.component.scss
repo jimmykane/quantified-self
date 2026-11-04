@@ -115,6 +115,8 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.plans-view-navigation { flex-wrap: wrap; }
+
 .plans-view-navigation,
 .workout-nodes-heading,
 .workout-list-heading {
@@ -338,6 +340,11 @@
   flex-direction: column;
   text-align: center;
   padding: 32px;
+}
+
+.plans-empty-state .plans-header-actions {
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .plans-empty-state h2,

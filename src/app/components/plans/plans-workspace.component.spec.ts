@@ -1,3 +1,4 @@
+import { PlanGenerationService } from '../../services/plan-generation.service';
 import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
@@ -130,6 +131,7 @@ describe('PlansWorkspaceComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
+        { provide: PlanGenerationService, useValue: { open: vi.fn().mockResolvedValue(undefined) } },
         { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true,
           canGenerate: vi.fn(() => true), open: vi.fn().mockResolvedValue(undefined) } },
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
@@ -172,6 +174,19 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('offers plan generation in Plans and keeps the handoff bound to its current view', async () => {
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const generator = TestBed.inject(PlanGenerationService);
+    expect(fixture.nativeElement.textContent).toContain('Generate plan');
+    await component.generatePlan();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, expect.any(Function));
+    const current = vi.mocked(generator.open).mock.calls[0][1]; expect(current()).toBe(true);
+    component.selectView('standalone'); fixture.detectChanges();
+    expect(current()).toBe(false);
+    await component.generatePlan(); expect(generator.open).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.textContent).not.toContain('Generate plan');
+  });
 
   it('opens AI generation from New Workout and replaces the reviewed draft without same-route navigation or a save', async () => {
     setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
@@ -2705,7 +2720,10 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
     expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.plans-empty-state')).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('.plans-empty-state button')?.textContent).toContain('Create your first plan');
+    const actions = [...fixture.nativeElement.querySelectorAll('.plans-empty-state button')] as HTMLButtonElement[];
+    expect(actions.map(button => button.textContent?.trim())).toEqual(['auto_awesomeGenerate plan', 'Create your first plan']);
+    actions[0].click(); await fixture.whenStable();
+    expect(TestBed.inject(PlanGenerationService).open).toHaveBeenCalledWith(user.uid, expect.any(Function));
   });
 
   it('restores Standalone on a fresh general Plans visit without saving or haptics', async () => {

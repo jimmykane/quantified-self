@@ -17,6 +17,12 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**',
+      'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
+  });
+
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',

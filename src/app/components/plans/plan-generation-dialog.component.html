@@ -1,0 +1,58 @@
+<h2 mat-dialog-title>Generate plan</h2>
+<mat-dialog-content>
+  <p>Choose a focus, then review an editable request in Assistant. Nothing is saved until you approve the proposed changes.</p>
+  <mat-form-field subscriptSizing="dynamic">
+    <mat-label>Goals (optional)</mat-label>
+    <mat-select multiple [value]="goalIds()" [disabled]="goalState().status !== 'ready'" (selectionChange)="selectGoals($event.value)" (openedChange)="$event && haptics.selection()">
+      @for (goal of goalOptions(); track goal.id) { <mat-option [value]="goal.id">{{ goal.name }} · {{ goal.priority }} priority</mat-option> }
+    </mat-select>
+  </mat-form-field>
+  @if (goalState().status === 'loading') { <p role="status">Loading goals…</p> }
+  @if (goalState().status === 'error') { <p role="status">Goals could not load. You can continue without a goal, or reopen this dialog to retry.</p> }
+  @if (!goalIds().length) {
+    <div class="goal-action"><span>Have a target in mind? Create a goal, then select it here.</span>
+      <button mat-button type="button" appHapticTap [disabled]="creatingGoal()" (click)="createGoal()">{{ creatingGoal() ? 'Opening…' : 'Create goal' }}</button>
+    </div>
+  } @else {
+    <button mat-button type="button" (click)="selectGoals([])">Clear goal selection</button>
+  }
+  <div class="plan-dates">
+    <mat-form-field subscriptSizing="dynamic"><mat-label>Start date</mat-label>
+      <input matInput type="date" [min]="today" [max]="latestDate" [ngModel]="options().startLocalDate" (ngModelChange)="update('startLocalDate', $event)">
+    </mat-form-field>
+    <mat-form-field subscriptSizing="dynamic"><mat-label>Length</mat-label>
+      <mat-select [value]="options().weeks" (selectionChange)="update('weeks', $event.value, true)" (openedChange)="$event && haptics.selection()">
+        @for (weeks of [1, 2, 3, 4, 5, 6, 7, 8]; track weeks) { <mat-option [value]="weeks">{{ weeks }} {{ weeks === 1 ? 'week' : 'weeks' }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <app-activity-filter-picker label="Sport" allLabel="Suggest from goals & routine" searchLabel="Search sports"
+    [options]="sportOptions" [multiple]="false" [selectedValues]="selectedSports()" (selectionChange)="update('sport', $event[0] ?? null, true)" />
+  <mat-checkbox [checked]="options().days === null" (change)="update('days', $event.checked ? null : [], true)">Use my recorded weekday routine</mat-checkbox>
+  @if (options().days !== null) {
+    <div class="weekdays" role="group" aria-label="Training days">
+      @for (day of weekdays; track day.value) { <mat-checkbox [checked]="options().days!.includes(day.value)" (change)="toggleDay(day.value, $event.checked)">{{ day.label }}</mat-checkbox> }
+    </div>
+  }
+  <mat-checkbox [checked]="options().minutes === null" (change)="update('minutes', $event.checked ? null : customMinutes(), true)">Use my usual session duration</mat-checkbox>
+  @if (options().minutes !== null) {
+    <mat-form-field subscriptSizing="dynamic"><mat-label>Time per session</mat-label>
+      <input matInput type="number" min="5" max="240" step="1" [ngModel]="options().minutes" (ngModelChange)="customMinutes.set($event); update('minutes', $event)"><span matTextSuffix>min</span>
+    </mat-form-field>
+  }
+  <p class="secondary">Assistant checks recent training and available recovery data. If your routine is unclear, it asks before planning.</p>
+  <button mat-button type="button" appHapticTap [attr.aria-expanded]="more()" aria-controls="plan-generation-options" (click)="more.set(!more())">{{ more() ? 'Hide' : 'Show' }} extra options</button>
+  <div id="plan-generation-options" [hidden]="!more()">
+    <mat-checkbox [checked]="options().timelineNotesEnabled" (change)="update('timelineNotesEnabled', $event.checked, true)">Use Timeline notes</mat-checkbox>
+    <mat-form-field subscriptSizing="dynamic"><mat-label>Equipment, constraints or preferences</mat-label>
+      <textarea matInput rows="2" maxlength="200" [ngModel]="options().instructions" (ngModelChange)="update('instructions', $event)"></textarea>
+    </mat-form-field>
+  </div>
+  @if (validation().error || error()) { <p role="alert">{{ error() || validation().error }}</p> }
+  <p class="secondary">Uses your Assistant allowance. Longer plans may need several reviewed batches.</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <span class="quota" aria-live="polite">{{ quotaText() }}</span>
+  <button mat-button type="button" appHapticTap mat-dialog-close>Cancel</button>
+  <button mat-flat-button type="button" appHapticTap [disabled]="!canContinue()" (click)="continue()">Continue in Assistant</button>
+</mat-dialog-actions>

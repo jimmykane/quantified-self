@@ -10027,6 +10027,37 @@ Before merging a Training change, confirm:
 - [ ] Help content and this document are current.
 - [ ] Focused tests, Functions build, frontend build, sports-lib build, and `git diff --check` pass.
 
+## Generate a plan from Plans
+
+Plans offers **Generate plan** beside **New plan** and in its empty state. The compact Material dialog reuses
+`ActivityFilterPickerComponent`, the shared owner goal listener and the existing goal editor. It defaults to next Monday,
+four weeks (1–8 supported), automatic sport selection and inference from the last 28 days of recorded weekday routine
+and usual session duration. These are requests for evidence-based defaults, not a new frontend activity scan. Manual
+days/time and equipment/constraints override inference. Active goals are optional and multiple selection is supported;
+the highest-priority active, unexpired goal starts selected. A new goal is saved through the existing explicit editor,
+then selected in setup. Changing the goal list never reselects goals the user intentionally cleared.
+
+`shared/training-plan-generation.ts` validates options and builds a bounded editable Assistant request. Selected goal
+names, dates and instructions are never silently truncated: requests over the existing 1,000-character limit must be
+shortened. The request preserves existing workouts/rest days and asks for a paused plan with separately reviewed
+activation, using the existing bounded proposal batches. Current recovery informs initial sessions, not a multiweek
+forecast. Timeline notes default to the saved daily-workout choice or on when no preference exists.
+
+`PlanGenerationService` retains the request only in memory for at most 15 minutes, bound to the exact Auth session and
+profile owner. It clears on consumption, navigation failure or auth change; no goal text enters URL/browser storage.
+The setup shows normal Assistant quota and never generates, saves a plan or enables provider delivery. Assistant shows
+an explicit **Start plan chat** action disclosing replacement of the existing conversation and Training read/change
+access (plus notes if selected). Pending responses prevent replacement. After a successful reset, the request enters
+the composer for editing and manual Send; failures preserve the existing draft. Unrelated mutation permissions and
+provider delivery stay off for this plan chat. Existing Assistant quota, preview/Apply, conflicts and batching remain
+authoritative. This adds no callable or scheduled/background work.
+
+MCP impact review: this entry point introduces no data fields, tools, mutation kinds or wire contracts. Existing
+Training goal/plan reads and reviewed Training proposals cover the complete flow; the same PR includes explicit goal
+read/write coverage. Actual generated requests have backend routing regression coverage, including no-goal and multiple-
+goal cases. MCP consent and provider actions are unchanged. No additional backend deployment is needed for this entry
+point beyond the Calendar goals backend already required by this feature branch.
+
 ## Calendar Training goals
 
 Goals are owner-authored intentions shared by the full Calendar, Dashboard calendar, MCP, Assistant and workout
