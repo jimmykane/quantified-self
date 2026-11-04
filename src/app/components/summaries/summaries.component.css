@@ -77,13 +77,20 @@
   margin: 0 0 0.85rem;
 }
 
-.dashboard-current-state-row {
+.dashboard-today-card {
   background: var(--qs-surface-raised, var(--mat-sys-surface-container-low));
   border: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   border-radius: 8px;
   margin: 0 0 0.85rem;
   min-width: 0;
   overflow: hidden;
+}
+
+.dashboard-current-state-row { min-width: 0; }
+
+.dashboard-today-card > app-daily-workout-suggestion {
+  display: block;
+  padding-inline: 0.85rem;
 }
 
 .dashboard-current-state-top {

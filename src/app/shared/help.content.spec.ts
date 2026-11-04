@@ -75,6 +75,8 @@ describe('help.content', () => {
 
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(help).toContain('suggestion row sits inside the Today card, below its metrics');
+    expect(help).toContain('It stays visible when you collapse Today’s state details');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
       'Provider selection stays in Preferences', '**Skip sending today**',
       'Supported provider adjustments are informational and need no separate approval', 'unsupported mappings require Review sync',
