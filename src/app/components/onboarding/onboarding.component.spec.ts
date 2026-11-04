@@ -325,6 +325,73 @@ describe('OnboardingComponent', () => {
         expect(local.user.acceptedTrackingPolicy).toBe(false);
     });
 
+    it('restores the starting point after reloading saved consent', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ start: 'connect' });
+        await setupComponent();
+        expect(component.startChoice()).toBe('connect');
+        component.canFinish = true;
+        await component.finishOnboarding();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services']);
+    });
+
+    it('persists a chosen starting point without adding browser history entries', async () => {
+        await setupComponent();
+        component.chooseStart('upload');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], expect.objectContaining({
+            relativeTo: routeStub, queryParams: { start: 'upload' }, queryParamsHandling: 'merge', replaceUrl: true,
+        }));
+    });
+
+    it('releases saved consent after acknowledgement so later privacy changes are respected', async () => {
+        await setupComponent();
+        const original = component.user;
+        setRequiredPoliciesAccepted();
+        const tracking = component.termsFormGroup.get('acceptTrackingPolicy')!;
+        tracking.setValue(true);
+        tracking.markAsDirty();
+        await component.onTermsSubmit();
+        expect(original.acceptedPrivacyPolicy).toBe(false);
+        expect(original.acceptedTrackingPolicy).toBe(false);
+        const acknowledged = { ...component.user };
+        component.user = acknowledged;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        const revoked = { ...acknowledged, acceptedTrackingPolicy: false };
+        component.user = revoked;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        expect(component.user.acceptedTrackingPolicy).toBe(false);
+        expect(tracking.value).toBe(false);
+        expect(revoked.acceptedTrackingPolicy).toBe(false);
+        await fixture.whenStable();
+    });
+
+    it('does not carry dirty consent into a different account', async () => {
+        await setupComponent();
+        setRequiredPoliciesAccepted();
+        component.stage.set('plan');
+        component.termsFormGroup.markAsDirty();
+        component.termsFormGroup.get('acceptPrivacyPolicy')!.markAsDirty();
+        component.user = { ...mockUser, uid: 'another-account' } as any;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        expect(component.termsFormGroup.valid).toBe(false);
+        expect(component.stage()).toBe('intro');
+        expect(component.termsFormGroup.get('acceptPrivacyPolicy')!.value).toBe(false);
+        await fixture.whenStable();
+    });
+
+    it.each(['destroy', 'account change'])('stops completion after %s during a membership read', async change => {
+        await setupComponent();
+        let resolveAccess!: (value: boolean) => void;
+        mockUserService.hasPaidAccess.mockReturnValue(new Promise<boolean>(resolve => resolveAccess = resolve));
+        const finishing = component.finishOnboarding();
+        if (change === 'destroy') fixture.destroy();
+        else component.user = { ...mockUser, uid: 'another-account' } as any;
+        resolveAccess(false);
+        await finishing;
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
     it('does not undo a deliberate Back to privacy on a background profile update', async () => {
         await setupComponent(false);
         setRequiredPoliciesAccepted();
@@ -381,11 +448,15 @@ describe('OnboardingComponent', () => {
         await localFixture.whenStable();
         if (choice === 'paid') {
             expect(mockPaymentService.appendCheckoutSession).toHaveBeenCalledWith(
-                expect.objectContaining({ id: 'price_pro_monthly' }), undefined, undefined, expect.any(Function), expect.any(Function),
+                expect.objectContaining({ id: 'price_pro_monthly' }),
+                expect.stringContaining('/payment/success?onboarding=%2Fonboarding'),
+                expect.stringMatching(/\/onboarding$/), expect.any(Function), expect.any(Function),
             );
             expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         } else {
-            expect(mockUserService.setFreeTier).toHaveBeenCalledWith(freshUser);
+            expect(mockUserService.setFreeTier).toHaveBeenCalledWith(expect.objectContaining({
+                uid: freshUser.uid, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true,
+            }));
             await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']));
         }
         expect(mockLoggerService.error).not.toHaveBeenCalled();
@@ -492,6 +563,30 @@ describe('OnboardingComponent', () => {
 
         expect(backButton?.disabled).toBe(true);
         expect(continueButton?.disabled).toBe(true);
+    });
+
+    it('disables every pricing action while account completion is pending', async () => {
+        await setupComponent(true);
+        mockPaymentService.getProducts.mockReturnValue(of([{
+            id: 'prod_pro', name: 'Pro', role: 'pro', active: true, metadata: { role: 'pro' }, images: [],
+            prices: [{ id: 'price_pro_monthly', active: true, currency: 'eur', unit_amount: 299,
+                type: 'recurring', recurring: { interval: 'month' } }],
+        }]));
+        component.stage.set('plan');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        component.canFinish = true;
+        let resolveWrite!: () => void;
+        mockUserService.updateUserProperties.mockReturnValue(new Promise<void>(resolve => resolveWrite = resolve));
+        const finishing = component.finishOnboarding();
+        fixture.detectChanges();
+        const pricing = fixture.debugElement.query(By.directive(PricingComponent)).componentInstance as PricingComponent;
+        expect(pricing.onboardingBusy).toBe(true);
+        const buttons = fixture.nativeElement.querySelectorAll('app-pricing .continue-free-button, app-pricing .subscribe-btn');
+        expect(buttons.length).toBe(2);
+        for (const button of buttons) expect(button.disabled).toBe(true);
+        resolveWrite();
+        await finishing;
     });
 
     it('should keep consent controls unchecked by default', async () => {

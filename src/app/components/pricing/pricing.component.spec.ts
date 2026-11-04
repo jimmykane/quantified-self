@@ -133,6 +133,39 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
     });
 
+    it('blocks checkout and Starter selection while the parent finishes onboarding', async () => {
+        (component as any).onboardingBusy = true;
+        const payment = TestBed.inject(AppPaymentService);
+        const checkout = vi.spyOn(payment, 'appendCheckoutSession');
+        const free = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier');
+        await component.subscribe('price_pro');
+        await component.selectFreeTier();
+        expect(checkout).not.toHaveBeenCalled();
+        expect(free).not.toHaveBeenCalled();
+    });
+
+    it('preserves onboarding intent in checkout success and cancellation URLs', async () => {
+        component.isOnboarding = true;
+        component.onboardingUser = acceptedPoliciesUser as any;
+        component.onboardingResumeUrl = '/onboarding?start=upload';
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        await component.subscribe('price_pro');
+        expect(checkout).toHaveBeenCalledWith('price_pro',
+            `${window.location.origin}/payment/success?onboarding=%2Fonboarding%3Fstart%3Dupload`,
+            `${window.location.origin}/onboarding?start=upload`, expect.any(Function), expect.any(Function));
+    });
+
+    it('rechecks parent completion after the asynchronous policy lookup', async () => {
+        let resolveUser!: (user: any) => void;
+        vi.spyOn(component as any, 'getUserWithRequiredPolicies').mockReturnValue(new Promise(resolve => resolveUser = resolve));
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        const pending = component.subscribe('price_pro');
+        component.onboardingBusy = true;
+        resolveUser(acceptedPoliciesUser);
+        await pending;
+        expect(checkout).not.toHaveBeenCalled();
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
         expect(haptics.selection).not.toHaveBeenCalled();

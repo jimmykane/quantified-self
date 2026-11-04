@@ -21,8 +21,7 @@ import { LoggerService } from '../../services/logger.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
-import { serviceSetupFromReturnUrl } from '../../helpers/service-setup-redirect.helper';
+import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { of } from 'rxjs';
 
 @Component({
@@ -56,6 +55,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private readonly haptics = inject(AppHapticsService);
     private completing = false;
     private advancing = false;
+    private formUserId: string | undefined;
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly setupProgress = computed(() => this.stage() === 'start' ? '01 / Your starting point'
@@ -95,25 +95,8 @@ export class OnboardingComponent implements OnInit, OnChanges {
         this.route.queryParamMap ?? of(this.route.snapshot.queryParamMap),
         { initialValue: this.route.snapshot.queryParamMap },
     );
-    private readonly returnTarget = computed(() => {
-        const params = this.completionQueryParams();
-        const returnUrl = params.get('returnUrl');
-        const priceId = membershipPriceIdFromReturnUrl(returnUrl);
-        const serviceSetup = serviceSetupFromReturnUrl(returnUrl);
-        const requestId = params.get('request_id') || '';
-        // Keep destinations explicit; never accept an external/client OAuth callback here.
-        const path = priceId ? '/subscriptions'
-            : serviceSetup ? '/services'
-            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions'
-                ? returnUrl
-                : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
-                    ? '/mcp/authorize' : '/dashboard';
-        const label = path === '/tools/compare' ? 'Compare'
-            : path === '/subscriptions' ? 'Subscriptions'
-                : path === '/services' ? 'Connections'
-                    : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
-        return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null };
-    });
+    private readonly returnTarget = computed(() => onboardingReturnTarget(this.completionQueryParams()));
+    readonly checkoutResumeUrl = computed(() => onboardingResumeUrl(this.completionQueryParams(), this.startChoice()));
 
     private readonly completionTarget = computed(() => {
         const target = this.returnTarget();
@@ -125,6 +108,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     get completionLabel(): string { return this.completionTarget().label; }
 
     ngOnInit() {
+        this.startChoice.set(onboardingStart(this.completionQueryParams().get('start')));
         // Log onboarding start
         this.analyticsService.logEvent('tutorial_begin');
 
@@ -133,11 +117,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.authService.user$
                 .pipe(takeUntilDestroyed(this.destroyRef))
                 .subscribe(user => {
-                    if (user) {
-                        this.user = user;
-                        this.updateForm();
-                        this.checkAndAdvance();
-                    }
+                    this.user = user ?? undefined!;
+                    this.updateForm();
+                    void this.checkAndAdvance();
                 });
         }
 
@@ -146,10 +128,31 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     private updateForm() {
-        const user = this.user || {} as User;
-        if (this.savedConsent && this.savedConsent.uid === user.uid) Object.assign(user, this.savedConsent.values);
+        let user = this.user || {} as User;
+        const accountChanged = this.formUserId !== user.uid;
+        if (accountChanged) {
+            if (this.formUserId) {
+                this.stage.set('intro');
+                this.chapterIndex.set(0);
+                this.errorMessage.set('');
+                this.expandedPolicyId = null;
+            }
+            this.savedConsent = null;
+            this.canFinish = false;
+            this.formUserId = user.uid;
+        }
+        if (this.savedConsent) {
+            const acknowledged = Object.entries(this.savedConsent.values).every(([key, value]) =>
+                (user as AppUserInterface)[key] === value);
+            if (acknowledged) this.savedConsent = null;
+            else {
+                // Overlay only until the saved values arrive. Never mutate the shared auth snapshot.
+                user = Object.assign(Object.create(Object.getPrototypeOf(user)), user, this.savedConsent.values);
+                this.user = user;
+            }
+        }
 
-        if (!this.termsFormGroup) {
+        if (!this.termsFormGroup || accountChanged) {
             const group: any = {};
             this.policies.forEach(policy => {
                 if (policy.formControlName) {
@@ -250,6 +253,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
     chooseStart(choice: 'connect' | 'upload' | 'explore') {
         if (this.startChoice() === choice) return;
         this.startChoice.set(choice);
+        void this.router.navigate([], {
+            relativeTo: this.route, queryParams: { start: choice }, queryParamsHandling: 'merge', replaceUrl: true,
+        });
         this.haptics.selection();
     }
 
@@ -303,26 +309,24 @@ export class OnboardingComponent implements OnInit, OnChanges {
         this.isLoading = true;
         this.errorMessage.set('');
         this.haptics.selection();
-        const user = this.user as AppUserInterface;
-        const previousValues: Partial<AppUserInterface> = {};
+        const user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user) as AppUserInterface;
         const submittedValues: Partial<AppUserInterface> = {};
         this.policies.forEach(policy => {
             if (!policy.formControlName) return;
             const property = this.mapFormControlNameToUserProperty(policy.formControlName);
-            previousValues[property] = user[property];
             submittedValues[property] = !!this.termsFormGroup.get(policy.formControlName)?.value;
             user[property] = submittedValues[property];
         });
         this.termsFormGroup.disable({ emitEvent: false });
-        let consentSaved = false;
         try {
             await this.userService.createOrUpdateUser(user);
-            consentSaved = true;
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
             // Auth may emit an older profile while the consent write is in flight.
             // Pricing must receive the choices that have just been saved.
-            this.savedConsent = { uid: user.uid, values: submittedValues };
-            Object.assign(this.user, submittedValues);
+            this.savedConsent = Object.entries(submittedValues).every(([key, value]) =>
+                (this.user as AppUserInterface)[key] === value) ? null : { uid: user.uid, values: submittedValues };
+            this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, submittedValues);
+            this.termsFormGroup.markAsPristine();
             this.analyticsService.logEvent('onboarding_step', { step_index: 1, step_label: 'Legal consent' });
             const isSubscribed = await this.userService.hasPaidAccess();
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
@@ -334,7 +338,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 this.moveTo('plan');
             }
         } catch (error) {
-            if (!consentSaved) Object.assign(user, previousValues);
+            if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error updating user terms:', error);
             this.errorMessage.set('We couldn’t finish saving your choices. Please try again.');
             this.haptics.error();
@@ -350,10 +354,11 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     async finishOnboarding() {
-        if (!this.user || this.completing) return;
+        if (!this.user || this.completing || this.destroyRef.destroyed) return;
         this.completing = true;
         this.isLoading = true;
         this.errorMessage.set('');
+        const user = this.user;
         try {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
@@ -366,20 +371,24 @@ export class OnboardingComponent implements OnInit, OnChanges {
             // and they don't have paid access, we assume they want the Free Tier.
             if (!this.canFinish) {
                 const isPro = await this.userService.hasPaidAccess();
+                if (!this.isCurrentUser(user.uid)) return;
                 if (!isPro) {
                     this.logger.log('[OnboardingComponent] Implicitly selecting Free Tier via Continue button.');
-                    await this.userService.setFreeTier(this.user);
+                    await this.userService.setFreeTier(user);
                 }
             }
 
             // Mark onboarding as completed in the database (ensures consistency)
-            await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
+            if (!this.isCurrentUser(user.uid)) return;
+            await this.userService.updateUserProperties(user, { onboardingCompleted: true });
+            if (!this.isCurrentUser(user.uid)) return;
 
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
             await this.navigateAfterOnboarding();
         } catch (error) {
+            if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error completing onboarding:', error);
             this.errorMessage.set('We couldn’t finish setting up your account. Please try again.');
             this.haptics.error();
@@ -387,6 +396,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.completing = false;
             this.isLoading = false;
         }
+    }
+
+    private isCurrentUser(uid: string): boolean {
+        return !this.destroyRef.destroyed && this.user?.uid === uid;
     }
 
     private navigateAfterOnboarding(): Promise<boolean> {

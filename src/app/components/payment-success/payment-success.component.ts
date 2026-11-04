@@ -1,10 +1,11 @@
+import { safeOnboardingResumeUrl } from '../../helpers/onboarding-navigation.helper';
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService, SubscriptionPlan, SubscriptionStartStatus } from '../../services/app.analytics.service';
@@ -24,6 +25,8 @@ export class PaymentSuccessComponent implements OnInit {
   private analyticsService = inject(AppAnalyticsService);
   private paymentService = inject(AppPaymentService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly resumeUrl = safeOnboardingResumeUrl(inject(ActivatedRoute).snapshot.queryParamMap.get('onboarding'));
+  readonly onboardingResume = this.resumeUrl ? inject(Router).parseUrl(this.resumeUrl) : null;
   isRefreshing = true;
   assignedRole: SubscriptionPlan | null = null;
 

@@ -31,6 +31,9 @@
             </svg>
           </div>
 
+          @if (onboardingResume) {
+            <p class="description">Your membership is ready. Continue setup to return to your chosen starting point.</p>
+          } @else {
           @switch (assignedRole) {
             @case ('pro') {
               <p class="description">
@@ -44,6 +47,7 @@
               </p>
             }
           }
+          }
           <p class="description">Review trial dates, renewal terms, and invoices in Membership.</p>
         } @else {
           <p class="description" role="status">
@@ -55,7 +59,9 @@
     </mat-card-content>
 
     <mat-card-actions>
-      @if (assignedRole === 'pro') {
+      @if (assignedRole && onboardingResume) {
+      <button mat-flat-button class="qs-mat-primary" [routerLink]="onboardingResume">Continue setup</button>
+      } @else if (assignedRole === 'pro') {
       <button mat-flat-button class="qs-mat-primary" routerLink="/services">
         Connect your devices
       </button>
