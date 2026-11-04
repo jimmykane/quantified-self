@@ -447,11 +447,11 @@ const derivedPayloadFixtures = {
 
 
 const nativeZoneRecipe = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'zone', purpose: 'work',
-  ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] };
+  ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, garminPowerAveragingSeconds: 10 }] }] };
 const trainingReadFixtures = {
  get_planned_workout_v4: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
    title: 'Zone', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
-   structure: nativeZoneRecipe, displaySteps: [{ nodeId: 'zone', text: 'Garmin power zone 2' }] } },
+   structure: nativeZoneRecipe, displaySteps: [{ nodeId: 'zone', text: 'Garmin power zone 2 · Garmin 10-second average' }] } },
  get_saved_workout_v3: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
    title: 'Zone', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: nativeZoneRecipe } },
  get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference', revision: 1,

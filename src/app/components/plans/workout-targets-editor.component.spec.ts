@@ -187,4 +187,28 @@ describe('WorkoutTargetsEditorComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
+  it('binds all averaging choices, hydrates silently and preserves values through changes', async () => {
+    const { child, host, fixture, settle } = await render();
+    const target = { kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200, garminPowerAveragingSeconds: 10 } as const;
+    host.targets.set([workoutTargetToManualEditor(target, host.sport, host.units)]); await settle();
+    const select = fixture.debugElement.queryAll(By.directive(MatSelect)).map(element => element.componentInstance as MatSelect)
+      .find(select => select.options.some(option => option.viewValue === '30 seconds'))!;
+    expect(select.value).toBe(10); expect(select.options.map(option => option.value)).toEqual([0, 3, 10, 30]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    select.selectionChange.emit({ value: 30 }); await settle();
+    expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toEqual({ ...target, garminPowerAveragingSeconds: 30 });
+    expect(fixture.nativeElement.textContent).toContain('Garmin 30-second average');
+    child.averaging(0, 30); child.averaging(0, 5); expect(haptics.selection).toHaveBeenCalledTimes(1);
+    host.disabled.set(true); await settle(); child.averaging(0, 3); expect(select.disabled).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    host.disabled.set(false); await settle(); select.selectionChange.emit({ value: 0 }); await settle();
+    expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toEqual({ kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200 });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    child.averaging(0, 3); await settle(); child.select(0, 'mode', 'garmin-zone'); await settle(); child.zone(0, 2); await settle();
+    expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toEqual({ kind: 'power', mode: 'garmin-zone', zone: 2, garminPowerAveragingSeconds: 3 });
+    child.select(0, 'kind', 'heart-rate'); await settle();
+    expect(host.targets()[0]).not.toHaveProperty('garminPowerAveragingSeconds');
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin power averaging');
+  });
+
 });

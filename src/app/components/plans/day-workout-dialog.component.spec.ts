@@ -956,4 +956,21 @@ describe('DayWorkoutDialogComponent', () => {
     expect(component.result()).toBeNull(); expect(close).toHaveBeenCalledOnce();
     expect(generate.mock.calls[1][2]()).toBe(false);
   });
+  it('offers Garmin averaging only for power choices and clears it on incompatible selections', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    component.set('sport', ActivityTypes.Running); component.more.set(true); fixture.detectChanges();
+    const find = () => fixture.debugElement.queryAll(By.css('mat-select')).map(element => element.componentInstance)
+      .find(select => select.options.some((option: { viewValue: string }) => option.viewValue === '30 seconds'));
+    expect(find().value).toBe(0); haptics.selection.mockClear();
+    find().selectionChange.emit({ value: 10 }); fixture.detectChanges();
+    expect(component.controls().garminPowerAveragingSeconds).toBe(10); expect(haptics.selection).toHaveBeenCalledOnce();
+    component.setAveraging(10); component.setAveraging(5); expect(haptics.selection).toHaveBeenCalledOnce();
+    component.set('target', 'heart-rate'); fixture.detectChanges();
+    expect(component.controls()).not.toHaveProperty('garminPowerAveragingSeconds'); expect(find()).toBeUndefined();
+    component.set('target', 'garmin-power-zone'); component.setAveraging(30); fixture.detectChanges();
+    expect(component.controls().garminPowerAveragingSeconds).toBe(30);
+    component.set('sport', ActivityTypes.StrengthTraining); fixture.detectChanges();
+    expect(component.controls()).not.toHaveProperty('garminPowerAveragingSeconds'); expect(find()).toBeUndefined();
+  });
+
 });

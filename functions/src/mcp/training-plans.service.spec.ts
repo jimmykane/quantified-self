@@ -1355,3 +1355,27 @@ describe('Garmin power zone safe full reads', () => {
       await expect(f.run(tool, { savedWorkoutRef: savedRef })).rejects.toThrow('get_saved_workout_v3');
   });
 });
+
+
+describe('Garmin averaging safe complete reads', () => {
+  it.each([3, 10, 30] as const)('returns %i seconds and fails legacy readers without stripping it', seconds => {
+    return (async () => {
+      const f = fixture();
+      const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 60 }, targets: [{ kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200, garminPowerAveragingSeconds: seconds }] }] };
+      f.structures.w1 = structure;
+      const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const read = TRAINING_READ_OUTPUTS.get_planned_workout_v4.parse(await f.run('get_planned_workout_v4', { workoutRef: ref }));
+      expect(read.workout.structure).toEqual(structure);
+      expect(JSON.stringify(read.workout.displaySteps)).toContain(`Garmin ${seconds}-second average`);
+      for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const)
+        await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v4');
+      f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Power', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+      f.structures.library = structure;
+      const savedRef = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+      expect(TRAINING_READ_OUTPUTS.get_saved_workout_v3.parse(await f.run('get_saved_workout_v3', { savedWorkoutRef: savedRef })).savedWorkout.structure).toEqual(structure);
+      for (const tool of ['get_saved_workout', 'get_saved_workout_v2'] as const)
+        await expect(f.run(tool, { savedWorkoutRef: savedRef })).rejects.toThrow('get_saved_workout_v3');
+    })();
+  });
+});

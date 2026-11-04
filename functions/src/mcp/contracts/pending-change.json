@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "9646b249a6c9ae1cfb3bc1e1a3c9a43f10166d256c94f8f598e7604145c0c10e",
+  "candidateSha256": "a32729a23933844934235f933258e7f01841f92c85c17348a06a1cd322a29f5a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain Sports Lib 23 and pending Training/strength, phases/rest, analysis, reflections, sync, endurance and Calendar goal read/progress/preview/apply additions. Add complete scheduled v4/saved v3 reads and focused/bulk previews for explicit single Garmin power zones, with legacy schemas frozen, unchanged grants/approval and aligned Assistant guidance. Baseline/history unchanged; backend release, developer rescan and client/plugin refresh remain separate.",
+  "summary": "Retain all pending Sports Lib/Training additions and the complete scheduled v4/saved v3 Garmin zone tools. Extend only these unregistered Garmin recipe contracts with explicit 3/10/30-second power averaging, legacy read/edit guards, before/after disclosures and aligned Assistant/bundled guidance. Registered baseline/history, grants, approval and provider consent are unchanged. Backend release, developer rescan and plugin/client refresh remain separate.",
   "rescanRequired": true
 }

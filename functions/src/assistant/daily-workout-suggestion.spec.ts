@@ -473,6 +473,7 @@ describe('daily sport preference from recorded weekday history', () => {
   it('chooses repeated strength Fridays, excludes today and falls back for sparse or tied evidence', () => {
     const strength = activities(ActivityTypes.StrengthTraining, ['2026-10-09', '2026-10-16', '2026-10-30']);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, strength)).toBe(ActivityTypes.StrengthTraining);
+    expect(dailyWorkoutSuggestionRoutineSport({ ...preferences, controls: { ...preferences.controls, garminPowerAveragingSeconds: 30 } }, dailyNow, strength)).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport({ ...preferences, controls: { ...dailyControls, timing: 'strict' } }, dailyNow, strength)).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, strength.slice(0, 1))).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, [...strength,

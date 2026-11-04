@@ -634,6 +634,10 @@ export function assessPlannedWorkoutProviderMappingV1(
     }
 
     step.targets.forEach((target, targetIndex) => {
+      if (provider !== 'garmin' && target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined) issues.push({
+        severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets[${targetIndex}].garminPowerAveragingSeconds`,
+        message: 'This power averaging choice requires Garmin. Remove it explicitly before sending to another service.',
+      });
       if (target.mode === 'garmin-zone') {
         if (provider !== 'garmin' || targetIndex !== 0) issues.push({
           severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets[${targetIndex}]`,

@@ -68,6 +68,16 @@
     </button>
     <div id="day-workout-more" [hidden]="!more()">
       <div class="controls-grid">
+        @if (averagingAvailable()) {
+          <mat-form-field subscriptSizing="dynamic"><mat-label>Garmin power averaging</mat-label>
+            <mat-select [value]="controls().garminPowerAveragingSeconds ?? 0" [disabled]="busy() || saveUncertain() || !!savedWorkoutId()"
+              (selectionChange)="setAveraging($event.value)">
+              <mat-option [value]="0">Default</mat-option><mat-option [value]="3">3 seconds</mat-option>
+              <mat-option [value]="10">10 seconds</mat-option><mat-option [value]="30">30 seconds</mat-option>
+            </mat-select>
+            <mat-hint>Applies to generated power targets for Garmin. Device support varies; this does not enable sending.</mat-hint>
+          </mat-form-field>
+        }
         @for (choice of moreChoices(); track choice.key) {
           <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
         }

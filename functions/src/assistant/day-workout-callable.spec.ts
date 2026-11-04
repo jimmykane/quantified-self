@@ -160,7 +160,7 @@ describe('generateDayWorkout callable', () => {
       }
     }
   });
-  it('corrects a native-zone reply without demanding an FTP reference or dropping its target', async () => {
+  it.each([undefined, 3, 10, 30] as const)('corrects a native-zone reply and replays the selected averaging (%s) without another charge', async seconds => {
     const reply = { kind: 'workout', title: 'Garmin zone run', rationale: 'Use your Garmin sport zones.',
       structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'set', count: 2,
         steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
@@ -168,14 +168,16 @@ describe('generateDayWorkout callable', () => {
     const invalid = structuredClone(reply); invalid.structure.nodes[0].steps[0].targets[0].zone = 8;
     const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(reply));
     const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
-    const generationRequest = { ...request, controls: { ...request.controls, target: 'garmin-power-zone' as const } };
+    const generationRequest = { ...request, controls: { ...request.controls, target: 'garmin-power-zone' as const, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) } };
     try {
       const response = await runGenerateDayWorkout(generationRequest, auth, deps);
       const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
       expect(correction).not.toContain('omit targets without available references');
       expect(correction).toContain('one primary Garmin power zone from 1 to 7');
       expect(correction).toContain('no athlete reference');
-      expect(response.draft?.structure).toEqual(reply.structure);
+      const expected = structuredClone(reply.structure);
+      if (seconds !== undefined) Object.assign(expected.nodes[0].steps[0].targets[0], { garminPowerAveragingSeconds: seconds });
+      expect(response.draft?.structure).toEqual(expected);
       expect(response).not.toHaveProperty('powerReference');
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.finalize).toHaveBeenCalledOnce();

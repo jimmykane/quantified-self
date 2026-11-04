@@ -382,3 +382,8 @@ requirement. Never infer this mode from a bare zone label, assume standard bound
 collapse a zone span. Running needs compatible native Running Power. Other services reject it; do not convert unknown
 watts or promise when later Garmin settings changes take effect. Preserve the target through edits and read-back;
 old tools must not erase it. A recipe save grants no new provider consent and proves neither cloud nor watch receipt.
+
+When a complete power target includes `garminPowerAveragingSeconds`, preserve its explicit 3, 10 or 30-second choice
+through full-recipe reads and previews. Omission retains the default; add or remove averaging only on explicit user
+intent and disclose the change. The choice is for Garmin workout execution and unsupported destinations must not
+silently drop it. It does not change watt/FTP/zone values, configure every watch data screen, or prove watch receipt.

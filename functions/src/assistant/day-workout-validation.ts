@@ -70,6 +70,9 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
         if (!['time', 'distance', 'manual'].includes(step.ending.kind)) throw new DayWorkoutSuggestionValidationError('Use editor-supported endings.');
         if (controls.timing === 'strict' && step.ending.kind !== 'time') throw new DayWorkoutSuggestionValidationError('Strict timing requires timed steps throughout.');
         for (const target of step.targets) {
+          if (target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined) {
+            throw new DayWorkoutSuggestionValidationError('Generation must leave power averaging to the explicit controls.');
+          }
           if (controls.target === 'garmin-power-zone') {
             if (target.mode !== 'garmin-zone' || step.targets.indexOf(target) !== 0) {
               throw new DayWorkoutSuggestionValidationError('Use one primary Garmin power zone without a watt reference.');
@@ -86,6 +89,13 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
   }
   if (!strength && controls.target === 'garmin-power-zone' && !hasGarminPowerZoneTargetV1(structure)) {
     throw new DayWorkoutSuggestionValidationError('Include a Garmin power zone target in the requested workout.');
+  }
+  // The server applies the athlete's execution choice after validating the model's prescription.
+  // No target is invented, and default/legacy requests remain byte-for-byte unchanged.
+  if (!strength && controls.garminPowerAveragingSeconds !== undefined) {
+    for (const node of structure.nodes) for (const step of node.kind === 'step' ? [node] : node.steps) {
+      for (const target of step.targets) if (target.kind === 'power') target.garminPowerAveragingSeconds = controls.garminPowerAveragingSeconds;
+    }
   }
   const analysis = analyzeWorkoutStructureV1(structure);
   if (controls.timing === 'strict' && (analysis.summary.duration.completeExactSeconds === null

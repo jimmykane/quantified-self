@@ -1104,3 +1104,41 @@ describe('single native Garmin power zones', () => {
         expect(() => serializeGarminWorkoutV1(structure, { name: 'Secondary', allowDegraded: true })).toThrow();
     });
 });
+
+
+describe('Garmin execution power averaging', () => {
+  const targets = [
+    { kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200 },
+    { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'critical-power', watts: 250 } },
+    { kind: 'power', mode: 'garmin-zone', zone: 2 },
+  ] as const;
+  it.each([3, 10, 30] as const)('maps %i seconds for absolute, relative and native zone power without mutating targets', seconds => {
+    for (const target of targets) {
+      const recipe = parseWorkoutStructureV1(oneStepStructure({ targets: [{ ...target, garminPowerAveragingSeconds: seconds }] }));
+      const before = JSON.stringify(recipe);
+      const output = serializeGarminWorkoutV1(recipe, { name: 'Power', allowDegraded: true }).artifact.segments[0].steps[0];
+      expect(output).toMatchObject({ targetType: `POWER_${seconds}S`, targetValueType: null,
+        targetValue: target.mode === 'garmin-zone' ? 2 : null,
+        targetValueLow: target.mode === 'garmin-zone' ? null : 150,
+        targetValueHigh: target.mode === 'garmin-zone' ? null : 200 });
+      expect(JSON.stringify(recipe)).toBe(before);
+      for (const provider of ['suunto', 'coros', 'wahoo'] as const) {
+        expect(assessPlannedWorkoutProviderMappingV1(provider, recipe)).toMatchObject({ level: 'unsupported',
+          issues: expect.arrayContaining([expect.objectContaining({ path: '$.nodes[0].targets[0].garminPowerAveragingSeconds' })]) });
+      }
+      const options = { name: 'Power', title: 'Power', owner: 'Quantified Self', url: 'https://example.com/workout',
+        location: 'outdoor' as const, localDate: '2026-11-05',
+        lastModifiedDate: '2026-11-04T12:00:00', athleteId: 1, workoutId: 2, sourceWorkoutId: 'synthetic', allowDegraded: true };
+      for (const serializer of [serializeSuuntoGuideJsonV1, serializeWahooPlanJsonV1, serializeCorosTrainingPlanV1])
+        expect(() => serializer(recipe, options)).toThrow(expect.objectContaining({ code: 'unsupported' }));
+    }
+  });
+  it.each([3, 10, 30] as const)('preserves secondary cycling target averaging %i', seconds => {
+    const recipe = { ...oneStepStructure({ targets: [
+      { kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 },
+      { ...targets[0], garminPowerAveragingSeconds: seconds },
+    ] }), sport: ActivityTypes.Cycling };
+    expect(serializeGarminWorkoutV1(recipe, { name: 'Power', allowDegraded: true }).artifact.segments[0].steps[0])
+      .toMatchObject({ targetType: 'CADENCE', secondaryTargetType: `POWER_${seconds}S`, secondaryTargetValueLow: 150, secondaryTargetValueHigh: 200 });
+  });
+});

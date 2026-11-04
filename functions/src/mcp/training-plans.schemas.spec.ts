@@ -685,3 +685,24 @@ describe('canonical sport compatibility for pending Training recipes', () => {
     }
   });
 });
+
+
+describe('pending Garmin power averaging contract', () => {
+  it.each([3, 10, 30] as const)('preserves %i seconds only in the pending full recipe previews', seconds => {
+    for (const target of [
+      { kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200 },
+      { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'critical-power', watts: 250 } },
+      { kind: 'power', mode: 'garmin-zone', zone: 2 },
+    ]) {
+      const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 60 }, targets: [{ ...target, garminPowerAveragingSeconds: seconds }] }] };
+      const change = { kind: 'create-workout', localKey: 'new', plan: null, localDate: '2026-11-05', title: 'Power', structure };
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v4_change.parse({ expectedScheduleRevision: 1, change }).change).toEqual(change);
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v4_changes.parse({ expectedScheduleRevision: 1, changes: [change] }).changes).toEqual([change]);
+      for (const schema of [TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change, TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change])
+        expect(schema.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(false);
+      const library = { kind: 'create', title: 'Power', structure };
+      expect(TRAINING_WRITE_INPUTS.preview_saved_workout_v3_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 0, change: library }).change).toEqual(library);
+    }
+  });
+});

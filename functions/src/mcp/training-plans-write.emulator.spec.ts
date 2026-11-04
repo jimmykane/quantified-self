@@ -2277,9 +2277,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
-  it('persists Garmin zones through preview/apply/replay and blocks legacy replacement', async () => {
+  it.each([undefined, 3, 10, 30] as const)('persists Garmin zones through preview/apply/replay and blocks legacy replacement (averaging: %s)', async seconds => {
     const native = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
-      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] },
+      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) }] },
     ] }] };
     const input = { uid, connectionId: 'connection', scopes };
     const args = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'native', plan: null,
@@ -2301,6 +2301,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         workout: { ref: created.createdReferences[0].reference }, plan: null, localDate: '2026-09-18',
         title: 'Native zone', structure: retargeted } } }, deps);
     expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
+    if (seconds !== undefined) expect(retargetPreview.changes[0].summary).toContain(`Garmin power averaging used: ${seconds}s → ${seconds}s`);
     expect((await saved.ref.get()).get('structure')).toEqual(native);
     const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
       plan: null, localDate: '2026-09-19', title: 'Explicit numeric replacement', structure };
@@ -2309,6 +2310,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const replacement = await previewPlannedWorkoutV4Changes({ ...input, arguments: {
       expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
     expect(replacement.changes[0].summary).toContain('Garmin power zones removed');
+    if (seconds !== undefined) expect(replacement.changes[0].summary).toContain(`${seconds}s → default`);
     await applyTrainingChanges({ ...input, arguments: { proposalRef: replacement.proposalRef, permissionMode: 'schedule' } }, deps);
     expect((await saved.ref.get()).get('structure')).toEqual(structure);
     await expect(previewPlannedWorkoutV4Change({ ...input, arguments: update }, deps)).rejects.toThrow('schedule changed');

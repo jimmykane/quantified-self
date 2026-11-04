@@ -14,7 +14,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { catchError, distinctUntilChanged, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
-  dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
+  dayWorkoutPurposes, dayWorkoutTargets, dayWorkoutSupportsGarminPowerAveraging, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
   type DayWorkoutControls, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '@shared/strength-workout';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
@@ -124,6 +124,7 @@ export class DayWorkoutDialogComponent {
     target?.focus({ preventScroll: true });
     target?.scrollIntoView?.({ block: 'nearest' });
   });
+  readonly averagingAvailable = computed(() => dayWorkoutSupportsGarminPowerAveraging(this.controls()));
   readonly strength = computed(() => isStrengthWorkoutSportV1(this.controls().sport));
   readonly planOptions = computed(() => this.schedule()?.plans.filter(plan => plan.lifecycle !== 'archived') ?? []);
   readonly selectedPlan = computed(() => this.planOptions().find(plan => plan.id === this.controls().destinationPlanId) ?? null);
@@ -332,12 +333,17 @@ export class DayWorkoutDialogComponent {
         next.purpose = 'suggest'; next.target = isStrengthWorkoutSportV1(next.sport) ? 'none' : 'auto'; next.timing = 'approximate';
         if (!next.equipment.length) next.equipment = ['bodyweight'];
       }
+      if (!dayWorkoutSupportsGarminPowerAveraging(next) || next.garminPowerAveragingSeconds === undefined) delete next.garminPowerAveragingSeconds;
       if (!dayWorkoutReadinessSourcesEnabled(next)) next.readinessContext = false;
       return next;
     });
     this.sequence++; this.result.set(null); this.request = null; this.command = null; this.reviewedSchedule = null;
     this.staleReview.set(false); this.error.set(null); this.watchSync();
     if (feedback) this.haptics.selection();
+  }
+  setAveraging(value: number): void {
+    if (!this.averagingAvailable() || ![0, 3, 10, 30].includes(value)) return;
+    this.set('garminPowerAveragingSeconds', value === 0 ? undefined : value as 3 | 10 | 30);
   }
   private watchSync(): void {
     if (this.savedWorkoutId()) { this.syncSubscription?.unsubscribe(); return; }

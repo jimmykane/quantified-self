@@ -334,9 +334,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
-  it('keeps Garmin zones in saved recipes and independent placements, requiring explicit full edits', async () => {
+  it.each([undefined, 3, 10, 30] as const)('keeps Garmin zones in saved recipes and independent placements, requiring explicit full edits (averaging: %s)', async seconds => {
     const { uid, user, deps, input } = await setup();
-    const native = { ...structure, nodes: [{ ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] };
+    const native = { ...structure, nodes: [{ ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) }] }] };
     const preview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 0,
       change: { kind: 'create', title: 'Native zone', structure: native } }), deps, 'v3');
     expect(preview.changes[0].summary).toContain('watts are unknown in QS');
@@ -351,6 +351,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
       change: { kind: 'update', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1,
         title: 'Native zone', structure: retargeted } }), deps, 'v3');
     expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
+    if (seconds !== undefined) expect(retargetPreview.changes[0].summary).toContain(`Garmin power averaging used: ${seconds}s → ${seconds}s`);
     expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(native);
     const placement = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 1,
       change: { kind: 'place', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, planRef: null,
@@ -362,6 +363,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
     await expect(previewSavedWorkoutChange(input(args), deps, 'v2')).rejects.toThrow('v3');
     const edit = await previewSavedWorkoutChange(input(args), deps, 'v3');
     expect(edit.changes[0].summary).toContain('Garmin power zones removed');
+    if (seconds !== undefined) expect(edit.changes[0].summary).toContain(`${seconds}s → default`);
     await applySavedWorkoutChange(input({ proposalRef: edit.proposalRef, permissionMode: 'schedule' }), deps);
     expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(structure);
     expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure')).toEqual(native);

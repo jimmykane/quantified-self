@@ -2614,3 +2614,13 @@ fields are not synthesized. Canonical metric labels and reparse compatibility ar
 Monitoring review: covered unchanged by the existing import/reparse queue monitoring. This is an offline parser and
 presentation extension: no provider transport, scopes, queue state, retry, scheduler, secret, data-write endpoint,
 alert condition or deployed resource changes. Existing sanitized persistence and provider outcomes remain authoritative.
+
+
+Garmin power averaging uses the explicit recipe field `garminPowerAveragingSeconds` (3, 10 or 30), mapped to the
+Training API's corresponding `POWER_3S`/`POWER_10S`/`POWER_30S` primary or supported secondary target type. Default
+keeps the historical artifact/digest. Other services reject the choice rather than silently dropping it. The existing
+Training Delivery monitoring, consent, revision, retry and uncertain-create boundaries are unchanged; actual watch
+execution is unverified. See [Training](training-workspace.md#garmin-execution-power-averaging) for authoring,
+generation, legacy MCP handling and release sequencing. Suunto native sport-mode 10/30-second display fields are
+separate from the Guide API, whose normal `power` field is documented as a three-second average with optional
+workout/manual-lap aggregation.

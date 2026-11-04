@@ -247,10 +247,12 @@ export const TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA = z.strictObject({ ...TRAININ
     steps: z.array(earlyLapStep).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
 }).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
 
-/** Additive wire v4: explicit Garmin zone identity without a fabricated watt snapshot. */
+/** Pending wire v4: explicit Garmin zone identity and optional execution averaging. Legacy schemas stay frozen. */
+const garminAveraging = { garminPowerAveragingSeconds: z.union([z.literal(3), z.literal(10), z.literal(30)]).optional() };
 export const TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA = z.strictObject({ kind: z.literal('power'), mode: z.literal('garmin-zone'),
-  zone: z.number().int().min(1).max(7) });
-const garminZoneStep = earlyLapStep.extend({ targets: z.array(z.union([...target.options, TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA]))
+  zone: z.number().int().min(1).max(7), ...garminAveraging });
+const garminZoneStep = earlyLapStep.extend({ targets: z.array(z.union([target.options[0], target.options[1], target.options[2].extend(garminAveraging),
+  target.options[3].extend(garminAveraging), ...target.options.slice(4), TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA]))
   .max(WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP) });
 export const TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA = z.strictObject({ ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape,
   nodes: z.array(z.union([garminZoneStep, z.strictObject({ kind: z.literal('repeat'), id: nodeId,
