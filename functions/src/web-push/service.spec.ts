@@ -38,7 +38,7 @@ describe('Web Push test sender', () => {
     expect(payload.notification).toHaveProperty('icon', origin + '/assets/favicons/android-chrome-192x192.png');
     expect(payload.notification.navigate).toBe(origin + '/settings?section=notifications');
     expect(payload.notification.data.onActionClick.default.url).toBe('/settings?section=notifications');
-    expect(isAutomaticPushOrigin(origin)).toBe(origin === 'https://quantified-self.io');
+    expect(isAutomaticPushOrigin(origin)).toBe(true);
   });
   it.each(['fcm/send', 'wp'])('sends to a Chrome %s token containing a colon without rewriting it', async path => {
     const h = harness('https://beta.quantified-self.io');

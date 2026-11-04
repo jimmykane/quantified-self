@@ -16,6 +16,8 @@ import { isAutomaticPushOrigin } from '../../../shared/web-push';
 import type { DeliveryNotificationTarget } from '../../../shared/activity-delivery-notifications';
 import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
+import { pushDeviceInfo } from '../helpers/push-device.helper';
+import { isPushDeviceInfo } from '@shared/web-push';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -95,6 +97,12 @@ export class AppPushService {
     } catch { return null; }
   }
   private origin(): string { return this.windows.windowRef.location.origin; }
+  isCurrentDevice(installationId: string, origin: string): boolean {
+    const local = this.readLocal();
+    return this.browser && !!this.owner && this.auth.currentUser === this.owner
+      && local?.uid === this.owner.uid && local.installationId === installationId && origin === this.origin();
+  }
+  async refreshRegistration(): Promise<void> { await this.refresh(); }
   private async pushManager(): Promise<PushManager | null> {
     const window = this.windows.windowRef as Window & { pushManager?: PushManager };
     if (window.pushManager) return window.pushManager;
@@ -188,6 +196,9 @@ export class AppPushService {
       const current = subscription.toJSON();
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
         await this.persist(owner, local.installationId, subscription, epoch, true);
+      } else if (!isPushDeviceInfo(saved.device)) {
+        // Enrich legacy registrations without rotating consent or recreating a removed document.
+        await updateDoc(ref, { device: pushDeviceInfo(window.navigator), updatedAt: serverTimestamp() });
       }
       if (this.current(owner, epoch)) this.state.set('enabled');
     } catch { if (this.epoch === epoch) this.state.set('unavailable'); }
@@ -202,7 +213,7 @@ export class AppPushService {
       vapidPublicKey: this.config.webPushPublicKey(), endpoint: json.endpoint ?? '', keys: { p256dh: json.keys?.['p256dh'] ?? '', auth: json.keys?.['auth'] ?? '' } };
     if (!isPushRegistration(value, environment.useFunctionsEmulator === true)) throw new Error('Invalid subscription.');
     const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${id}`);
-    const record = { ...value, updatedAt: serverTimestamp() };
+    const record = { ...value, device: pushDeviceInfo(this.windows.windowRef.navigator), updatedAt: serverTimestamp() };
     // Background rotation must not resurrect consent removed after our server read.
     if (reconcile) await updateDoc(ref, record); else await setDoc(ref, record);
     if (!this.current(owner, epoch)) {

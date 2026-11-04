@@ -6,7 +6,7 @@ import { notificationPreferencePath, readNotificationCategoryPreference } from '
 
 export function readDeliveryNotificationRequest(value: unknown, origin?: string, impersonatedBy?: unknown): (DeliveryNotificationTarget & { origin: string }) | undefined {
   if (value === undefined) return undefined;
-  if (impersonatedBy || !origin || !isAutomaticPushOrigin(origin)) throw new HttpsError('permission-denied', 'Delivery notifications require your own production account.');
+  if (impersonatedBy || !origin || !isAutomaticPushOrigin(origin)) throw new HttpsError('permission-denied', 'Delivery notifications require your own account on a supported QS site.');
   if (!isDeliveryNotificationTarget(value)) throw new HttpsError('invalid-argument', 'Choose a registered notification device.');
   return { ...value, origin };
 }

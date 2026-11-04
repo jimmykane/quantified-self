@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
-import { isPushId, isPushRegistration, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
+import { isPushId, isPushRegistration, isAutomaticPushOrigin, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { ACTIVITY_PUSH, activityNotificationPayload, liveActivitySource, timestampMs,
@@ -57,7 +57,7 @@ export async function admitActivityNotification(uid: string, candidate: Activity
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, now);
     const [preferenceSnapshot, stateSnapshot, registrations, entry] = await Promise.all([
       tx.get(db.doc(notificationPreferencePath(uid, 'activity_sync'))), tx.get(ref),
-      tx.get(db.collection(`users/${uid}/pushSubscriptions`).where('origin', '==', WEB_PUSH_ORIGINS[0]).limit(ACTIVITY_PUSH.deviceLimit)),
+      tx.get(db.collection(`users/${uid}/pushSubscriptions`).where('origin', 'in', [...WEB_PUSH_ORIGINS]).limit(ACTIVITY_PUSH.deviceLimit)),
       currentEntry(db, tx, uid, candidate, now),
     ]);
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
@@ -124,7 +124,7 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
         const liveEntries = entries.filter((entry): entry is ActivityPushEntry => !!entry);
         if (guard.shouldSkip || !preference?.enabled || preference.revision !== claim.batch.categoryRevision
           || snapshot.data()?.lastClaimId !== claim.batch.id || !liveEntries.length
-          || !isPushRegistration(registration) || registration.origin !== WEB_PUSH_ORIGINS[0]
+          || !isPushRegistration(registration) || !isAutomaticPushOrigin(registration.origin)
           || registration.generation !== target.generation || registration.vapidPublicKey !== config.publicKey) return null;
         return { registration, entries: liveEntries };
       });

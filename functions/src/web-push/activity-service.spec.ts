@@ -18,7 +18,7 @@ function harness() {
   const hooks: { afterCommit(count: number): void; beforeRead(path: string): void } = { afterCommit: () => {}, beforeRead: () => {} };
   const snapshot = (path: string) => ({ id: path.split('/').at(-1), exists: rows.has(path), data: () => structuredClone(rows.get(path)) });
   const collection = (path: string) => ({ path, doc: (uid: string) => ({ path: `${path}/${uid}` }),
-    where: (_field: string, _op: string, value: string) => ({ limit: (limit: number) => ({ query: path, value, limit }) }) });
+    where: (_field: string, _op: string, value: string | string[]) => ({ limit: (limit: number) => ({ query: path, value, limit }) }) });
   const db = { doc: (path: string) => ({ path }), collection,
     runTransaction: (fn: (tx: any) => Promise<unknown>) => {
       const operation = lock.then(async () => {
@@ -27,7 +27,7 @@ function harness() {
           get: async (ref: any) => {
             if (writes.length) throw new Error('Read after write');
             hooks.beforeRead(ref.path ?? ref.query);
-            if (ref.query) return { docs: [...rows.keys()].filter(path => path.startsWith(ref.query + '/') && rows.get(path).origin === ref.value)
+            if (ref.query) return { docs: [...rows.keys()].filter(path => path.startsWith(ref.query + '/') && (Array.isArray(ref.value) ? ref.value.includes(rows.get(path).origin) : rows.get(path).origin === ref.value))
               .slice(0, ref.limit).map(snapshot) };
             return snapshot(ref.path);
           },
@@ -65,6 +65,18 @@ function harness() {
 }
 
 describe('new activity notifications', () => {
+  it('notifies both deployed sites using their own destinations and one account-wide attempt', async () => {
+    const h = harness(); const betaId = '00000000-0000-4000-8000-000000000003';
+    h.rows.set(`users/owner/pushSubscriptions/${betaId}`, { ...h.rows.get(`users/owner/pushSubscriptions/${id}`),
+      origin: 'https://beta.quantified-self.io', endpoint: 'https://web.push.apple.com/beta' });
+    await h.admit(); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledTimes(2);
+    for (const [registration, body] of vi.mocked(h.deps.send).mock.calls) {
+      expect(JSON.parse(body).notification.navigate).toBe(registration.origin + '/user/owner/event/event');
+    }
+    expect(h.state().attempts).toHaveLength(1);
+    await h.admit(h.seed('another')); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledTimes(2);
+  });
   it('batches twenty new activities across providers into one generic declarative/worker-compatible alert', async () => {
     const h = harness();
     const services = [ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.GarminAPI, ServiceNames.WahooAPI];
@@ -90,7 +102,7 @@ describe('new activity notifications', () => {
   it.each(['unknown source', 'manual history', 'OAuth history', 'old backlog', 'future workout', 'future queue', 'invalid time',
     'before connection', 'missing connection time', 'reconnect backlog', 'manual provider upload', 'provider edit',
     'wrong owner', 'wrong provider account', 'wrong queue revision', 'wrong queue date', 'missing event', 'changed event',
-    'disconnected', 'missing generation', 'deleted account', 'missing account', 'off', 'malformed preference', 'no devices', 'only beta', 'wrong key', 'disabled'])('rejects %s at admission', async reason => {
+    'disconnected', 'missing generation', 'deleted account', 'missing account', 'off', 'malformed preference', 'no devices', 'unsupported origin', 'wrong key', 'disabled'])('rejects %s at admission', async reason => {
     const h = harness(); const q = h.queue(), m = h.meta(), c = h.candidate;
     if (reason === 'unknown source') delete q.activityNotificationOrigin;
     if (reason === 'manual history') q.fromHistory = true;
@@ -117,7 +129,7 @@ describe('new activity notifications', () => {
     if (reason === 'off') h.preference(false, 1);
     if (reason === 'malformed preference') h.rows.set('users/owner/notificationPreferences/activity_sync', {});
     if (reason === 'no devices') h.rows.delete(`users/owner/pushSubscriptions/${id}`);
-    if (reason === 'only beta') h.rows.get(`users/owner/pushSubscriptions/${id}`).origin = 'https://beta.quantified-self.io';
+    if (reason === 'unsupported origin') h.rows.get(`users/owner/pushSubscriptions/${id}`).origin = 'https://evil.example';
     if (reason === 'wrong key') h.rows.get(`users/owner/pushSubscriptions/${id}`).vapidPublicKey = 'B' + 'Z'.repeat(86);
     if (reason === 'disabled') vi.mocked(h.deps.configuration).mockResolvedValue({ enabled: false, publicKey });
     await h.admit(); expect(h.state()).toBeUndefined();
@@ -194,7 +206,7 @@ describe('new activity notifications', () => {
     expect(h.deps.outcome).toHaveBeenCalledWith('accepted'); expect(h.deps.outcome).toHaveBeenCalledWith('failed');
     expect(h.deps.send).toHaveBeenCalledTimes(2); expect(h.state().attempts).toHaveLength(1);
   });
-  it('snapshots at most ten production devices and never transfers an old batch to a later installation', async () => {
+  it('snapshots at most ten devices across both sites and never transfers an old batch to a later installation', async () => {
     const h = harness(); const registration = h.rows.get(`users/owner/pushSubscriptions/${id}`);
     for (let n = 3; n < 15; n++) h.rows.set(`users/owner/pushSubscriptions/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
       { ...registration, endpoint: `https://web.push.apple.com/device${n}` });
@@ -261,10 +273,10 @@ describe('new activity notifications', () => {
     expect(h.deps.send).toHaveBeenCalledTimes(attempts);
     expect(h.state().pending).toBeUndefined(); expect(h.state().attempts).toHaveLength(1);
   });
-  it('accepts exactly 48-hour-old completed workouts and rejects beta payloads', () => {
+  it('accepts exactly 48-hour-old completed workouts and rejects unsupported payload origins', () => {
     const h = harness(); h.candidate.startMs = now - ACTIVITY_PUSH.recentMs - 1000; h.candidate.endMs = now - ACTIVITY_PUSH.recentMs;
     h.candidate.connectedAtMs = now - ACTIVITY_PUSH.recentMs - 10000;
     expect(liveActivitySource('owner', h.candidate, h.queue(), h.meta(), now)).toBe(true);
-    expect(() => activityNotificationPayload('https://beta.quantified-self.io', 'owner', [{ ...h.candidate, connectionGeneration: 'connection' }])).toThrow();
+    expect(() => activityNotificationPayload('https://evil.example', 'owner', [{ ...h.candidate, connectionGeneration: 'connection' }])).toThrow();
   });
 });

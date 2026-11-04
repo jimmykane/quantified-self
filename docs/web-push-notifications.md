@@ -2,13 +2,13 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training, billing, marketing and reminder categories are not implemented. There is no notification inbox or subscription list; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training, billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
-Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits production only. Do not add a preferred-site setting or infer shared device identity across origins.
+Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
 ## Data flow and ownership
 
-The browser obtains a subscription through `window.pushManager` when available, otherwise Angular's existing root worker. The browser writes a private leaf at `users/{uid}/pushSubscriptions/{installationId}` with schema version, origin, public signing-key version, random generation, endpoint, encryption keys and server timestamp. Firestore Rules permit direct owner CRUD, prohibit listing/descendants and impersonated writes, validate supported endpoints and fence deleted/missing accounts. Subscription endpoints and encryption material are capability credentials: never log or publish them.
+The browser obtains a subscription through `window.pushManager` when available, otherwise Angular's existing root worker. The browser writes a private leaf at `users/{uid}/pushSubscriptions/{installationId}` with schema version, origin, public signing-key version, random generation, endpoint, encryption keys and server timestamp. Firestore Rules permit direct owner CRUD, allow bounded owner-only listing (maximum 26 documents per request), prohibit descendants and impersonated listing/writes, validate supported endpoints and fence deleted/missing accounts. Optional `device: { browser, platform }` contains only allowlisted coarse display hints, never a raw user agent or hardware identifier. Subscription endpoints and encryption material are capability credentials: never log or publish them.
 
 Endpoint validation is shared by browser/server code and mirrored in Rules: Google FCM, Mozilla Push, Apple Web Push, and a single DNS label under `notify.windows.com` for Edge's Windows Push Notification Service (WNS). HTTPS, hostname boundaries and the absence of credentials, custom ports and fragments remain mandatory. [Microsoft documents Edge's WNS transport](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/forcebuiltinpushmessagingclient) and [its service domain](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/firewall-allowlist-config). WNS requests retain Web Push encryption/VAPID and add the [raw notification type and 60-second WNS expiry headers](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/push-request-response-headers); `web-push` supplies the encrypted binary content type.
 
@@ -38,13 +38,47 @@ A standard development Angular build has no service worker. Offline unit tests m
 
 For key rotation, provision the new matching pair and public parameter together with authorized redeployment, keeping the enabled flag off during transition. Existing registrations with a different public key must be disabled and explicitly re-enabled; no silent migration or permission prompt. Do not delete the old cloud secret/version without separate approval.
 
+## Managing notification devices
+
+The Notifications settings component owns a short-lived device-list service. It reads only the signed-in owner's
+`pushSubscriptions` collection, ordered by document ID, in pages of 25 plus one lookahead document. Rules require
+an explicit limit of at most 26 and deny impersonated and cross-account queries. The SDK reads the existing private
+registration records directly; there is no new callable, public projection or collection-group query. Only identifiers,
+coarse browser/platform hints, exact site and the registration-update timestamp enter view state. Endpoints and
+subscription keys must never be rendered, logged or added to analytics.
+
+Both sites display the same list, with Production/Beta labels and a This browser marker only for the exact local
+installation and origin. These are registered destinations, not proof of current browser permission, online presence
+or OS display. No device model or user-assigned computer name is inferred. Older registrations use a generic label
+and short identifier until their browser opens QS; metadata enrichment is update-only and does not rotate the
+registration generation or transfer pending consent. The displayed timestamp is registration updated, not last seen.
+
+Disable removes only the selected leaf in an owner transaction that rechecks its exact generation and origin. A
+replacement registration is preserved and the user is asked to refresh. Successful current-browser removal invokes
+existing browser reconciliation; remote browsers reconcile on their next startup/focus. Backend senders recheck live
+registrations before transport, so a remotely removed device stops receiving future sends even while offline.
+Permission at the other browser remains unchanged; re-enabling requires an explicit action there. An already
+accepted push cannot be recalled. Account changes and component teardown invalidate pending reads and mutations.
+List errors retain prior rows but block removal until a fresh server read succeeds. Refresh and pagination are explicit.
+
+After separate deployment authorization, deploy Rules before releasing the frontend: old Rules reject device metadata
+and listing. Beta automatic delivery also requires redeploying the three senders, two delivery admission triggers,
+manual history admission callables, activity-send command, and import workers containing activity admission. Deploy
+all affected targets before checking beta. Existing switches/keys, schedules and indexes are unchanged; do not create
+a beta-only flag or reset rate-limit state. Verify both site destinations with authorized test events, individual remote
+disable, and shared caps. Source tests and a local mock UI do not establish live push delivery.
+
+Monitoring coverage is **unchanged**: `tools/web-push-monitoring/definitions.mjs` selects the same sender/admission
+services and fixed outcomes without filtering by origin. Beta uses the existing heartbeat, failure, backlog and
+outcome metrics and existing alert channel; no new worker, schedule, retry, dead-letter path or telemetry label is added.
+
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
 categories are `history_import` (History imports), `activity_sync` (New activities synced), and `activity_delivery` (Activity delivery). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
-An enabled category still requires an enabled production device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
+An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
 
 An owner-scoped private leaf at `users/{uid}/notificationPreferences/{category}` stores `schemaVersion: 1`,
 `enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means
@@ -71,7 +105,7 @@ default, not another sender's per-event consent. Do not expose placeholder switc
 
 The first automatic notification is an explicit, one-time choice on a **manual activity-history import** for Suunto, COROS or Wahoo. The checkbox starts unchecked. If device registration is needed, a separate button invokes the existing permission flow directly from its click; successful registration does not check the import option. No permission prompt appears during page load, hydration or completion. A pending registration lookup stays bound to the starting account, view and provider connection generation; replacing or removing that connection cancels submission and clears the import choice, while an ordinary metadata refresh keeps it valid. Garmin is excluded because its completed coordinator records requested history, not correlated ingestion. OAuth recent-history imports, Sleep, Health and routes are excluded.
 
-The existing three admission callables accept optional `notification: { installationId, generation }` only with `background: true`. Auth, App Check, Pro, date/range and existing connection checks remain in force. Origin comes from the HTTP request; impersonated requests and non-production origins are rejected. The admission transaction validates the current owner's registration, exact generation, origin, public key and enabled category, and stores that consent with its server category revision on the private run. No endpoint, key or consent is added to the public progress projection. Unchecked imports retain their existing request and admission behavior, without fetching push configuration.
+The existing three admission callables accept optional `notification: { installationId, generation }` only with `background: true`. Auth, App Check, Pro, date/range and existing connection checks remain in force. Origin comes from the HTTP request; impersonated requests and origins outside the two deployed sites are rejected. The admission transaction validates the current owner's registration, exact generation, origin, public key and enabled category, and stores that consent with its server category revision on the private run. No endpoint, key or consent is added to the public progress projection. Unchecked imports retain their existing request and admission behavior, without fetching push configuration.
 
 `sendHistoryImportNotification` observes `connectionHistoryImports/{runId}` writes. Only a transition from active to terminal on a consented custom activity-only run enters delivery. The existing coordinator already waits for committed child outcomes and retryable work; this change adds no child notifications and changes no provider queues, retry policy or canonical ingestion. A completed scan with failures says **finished with issues**; a terminal stop before the scan/children finished says **needs attention**. It never calls a stopped run successful. An explicit owner retry after a send attempt does not create a second alert.
 
@@ -85,7 +119,7 @@ The generic standard/declarative payload contains no activity count, title or he
 
 ### Release and rollback
 
-This feature defaults off through a **new**, unconditional top-level Remote Config switch, `web_push_history_import_enabled=false`. Both this and `web_push_enabled` must be true, with the matching `web_push_vapid_public_key`. Do not change the existing foundation flag/key merely to prepare this feature. Missing/conditional settings fail closed on the server; cached frontend configuration may lag and display an option the server now rejects. The user can uncheck it and import normally. Beta remains self-test-only; automatic consent and delivery are production-origin-only.
+This feature defaults off through a **new**, unconditional top-level Remote Config switch, `web_push_history_import_enabled=false`. Both this and `web_push_enabled` must be true, with the matching `web_push_vapid_public_key`. Do not change the existing foundation flag/key merely to prepare this feature. Missing/conditional settings fail closed on the server; cached frontend configuration may lag and display an option the server now rejects. The user can uncheck it and import normally. Both production and beta support automatic consent and delivery through the same shared switches.
 
 After separate approval, deploy the category Rules, existing admission callables and new isolated sender before releasing the frontend:
 
@@ -102,8 +136,8 @@ Rollback of new admissions/sends is the new switch set to false; existing import
 `activity_sync` defaults on as an account preference, independently of `history_import`. Sending additionally requires
 both unconditional Remote Config defaults `web_push_enabled=true` and **`web_push_activity_sync_enabled=true`**,
 plus the matching public key. The new sender defaults off when its parameter is absent; prepare it as false. No new
-signing key, permission prompt, paid service or client-targeted rollout is introduced. Existing production device
-registrations are eligible. Beta registrations remain self-test-only.
+signing key, permission prompt, paid service or client-targeted rollout is introduced. Existing production and beta device
+registrations are eligible under the same account-wide limits.
 
 Eligibility is proven after successful canonical event, child, metadata and original-file persistence:
 
@@ -123,7 +157,7 @@ Eligibility is proven after successful canonical event, child, metadata and orig
   request failure. This intentionally can suppress genuine new Garmin workouts through a requested future/end-of-day
   bound; it cannot mislabel those history callbacks as new workouts.
 - Admission and sending recheck the exact queue date/revision, provider account, connection generation, event dates
-  and existence, account deletion guard, preference revision and production registration generations. These are masked
+  and existence, account deletion guard, preference revision and registration generations on both sites. These are masked
   metadata reads; no metrics, streams or full sports models are hydrated to prepare a notification.
 
 One private leaf, `users/{uid}/pushState/activitySync`, holds at most one pending batch, four attempt timestamps,
@@ -132,8 +166,7 @@ are pruned on new admission. Recreating the same canonical event during this per
 receipt limit, further arrivals are silently omitted until space becomes available. This bounded state is denied to
 clients by existing Rules and removed by existing recursive account cleanup; no TTL policy is needed.
 
-The first eligible arrival fixes a two-minute batching deadline and snapshots at most ten registered production
-devices. Later arrivals do not extend that deadline or add newly enabled devices. The batch holds at most 50 unique
+The first eligible arrival fixes a two-minute batching deadline and snapshots at most ten registered devices across production and beta. Later arrivals do not extend that deadline or add newly enabled devices. The batch holds at most 50 unique
 workouts; excess arrivals are suppressed. The minute scheduler normally sends after roughly two to three minutes.
 One workout opens `/user/<uid>/event/<eventId>`; multiple workouts open `/activities`. The payload exposes only a generic
 message/count, no workout names or metrics, using the shared QS icon, declarative `web_push: 8030`, Angular click
@@ -178,10 +211,10 @@ npm run firebase -- deploy --only functions:sendActivitySyncNotifications,functi
 Verify the deployed scheduler is once per minute in UTC, `europe-west2`, 256 MiB, timeout 120 seconds, concurrency one,
 maximum one instance, zero minimum instances and no Scheduler retries. Verify the existing VAPID binding is limited
 to the three senders. Apply/read back the expanded existing monitoring bundle and its initial heartbeat series, then
-release the frontend to beta for category/permission UI checks. Actual automatic delivery remains production-only.
+release the frontend to beta for category/permission UI checks. Automatic delivery supports both deployed sites.
 An explicitly authorized short production window should verify a new recorded workout, grouped arrivals, separate
 history exclusion, off/on cancellation, click routing and real OS display before broader activation. All default-on
-accounts with enabled production devices become eligible when the shared activity flag turns on; this is not a
+accounts with enabled production or beta devices become eligible when the shared activity flag turns on; this is not a
 single-user targeted switch. [#1011](https://github.com/jimmykane/quantified-self/issues/1011) tracks activation/readback.
 
 Rollback is the activity sender flag false; imports continue normally and due batches are discarded. Claimed pushes
@@ -199,7 +232,7 @@ Before claiming device compatibility, verify physical iPhone/iPad Home Screen, S
 ## Activity delivery notifications
 
 `activity_delivery` defaults on as an account preference, but transport additionally requires the unconditional
-`web_push_enabled` and **`web_push_activity_delivery_enabled`** switches, a matching public key, and production device
+`web_push_enabled` and **`web_push_activity_delivery_enabled`** switches, a matching public key, and production or beta device
 registration. Missing or conditional sender configuration fails closed. Keep the new switch false during preparation.
 This category concerns recorded activities sent **from QS to providers**, not imports, planned workouts or routes.
 
@@ -212,8 +245,7 @@ never prevents an unchecked send. Category-off links/actions use the existing ow
 Owner, provider, source, draft revision and permission changes fence a pending device lookup; an unavailable choice
 can still be unchecked. Completed sends show only that a notification was requested, not a delivery guarantee.
 
-Confirmation optionally accepts exactly `{ installationId, generation }`. The existing callable validates production
-Origin, own-account (no impersonation), configuration, current registration/key, category revision and destination
+Confirmation optionally accepts exactly `{ installationId, generation }`. The existing callable validates the request Origin against production and beta, own-account (no impersonation), configuration, current registration/key, category revision and destination
 account/generation transactionally with confirmation. Consent stays in private `activitySendOperations`; the public
 batch exposes only `notificationRequested: true`. No new CRUD callable or provider action is introduced.
 
@@ -279,7 +311,7 @@ npm run firebase -- deploy --only functions:activitySendCommand,functions:projec
 Both admission triggers use 256 MiB, 60 seconds, retry enabled, concurrency ten, max two and min zero in europe-west2;
 neither binds a signing secret. The delivery scheduler uses 256 MiB, 120 seconds, concurrency/max one, min zero,
 zero Scheduler retries and the existing `WEB_PUSH_VAPID_KEYPAIR`. Isolated loading/resource checks cover all three.
-Release the verified frontend through the existing separately authorized workflow. Beta remains self-test-only.
+Release the verified frontend through the existing separately authorized workflow. Both deployed sites support delivery alerts.
 Apply/read back the existing monitoring bundle on its existing channel before enabling the delivery switch and
 checking an authorized production batch. Rollback sets only `web_push_activity_delivery_enabled=false`; it does not
 stop uploads, clear receipts or replay results. Already claimed/accepted pushes may finish.

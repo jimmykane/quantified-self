@@ -21,7 +21,8 @@ const key = 'B' + 'A'.repeat(86);
 const categoryEnabled = signal(true);
 const localKey = 'qs.web-push.installation.v1';
 const registration = { schemaVersion: 1, origin: 'https://quantified-self.io', vapidPublicKey: key, generation: id,
-  endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) } };
+  endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) },
+  device: { browser: 'Browser', platform: 'Unknown device' } };
 const tick = async () => { TestBed.tick(); for (let n = 0; n < 30; n++) await Promise.resolve(); };
 let owner: { uid: string; getIdTokenResult: ReturnType<typeof vi.fn> };
 let owner$: BehaviorSubject<typeof owner | null>;
@@ -171,6 +172,27 @@ describe('device notification lifecycle', () => {
     const service = setup(); await tick(); expect(service.state()).toBe('enabled'); expect(setDoc).not.toHaveBeenCalled();
     await service.sendTest(); expect(functions.call).toHaveBeenCalledWith('sendTestPushNotification', { installationId: id }, expect.any(Object));
     expect(service.message()).toContain('Test notification sent');
+  });
+  it('enriches a legacy registration without replacing consent, and identifies only this site', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const { device, ...legacy } = registration;
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => legacy } as never);
+    const service = setup(); await tick();
+    expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { device, updatedAt: expect.anything() });
+    expect(setDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(true);
+    expect(service.isCurrentDevice(id, 'https://beta.quantified-self.io')).toBe(false);
+  });
+  it('reconciles remote disable without restoring consent or requesting permission', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false, data: () => undefined } as never);
+    await service.refreshRegistration();
+    expect(subscription.unsubscribe).toHaveBeenCalledOnce(); expect(service.state()).toBe('disabled');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(false);
+    expect(setDoc).not.toHaveBeenCalled(); expect(notifications.requestPermission).not.toHaveBeenCalled();
   });
   it('revokes stale subscriptions after key rotation', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
@@ -349,14 +371,18 @@ describe('one-import notification device consent', () => {
     config.webPushDeliveryEnabled.set(true); categoryEnabled.set(false);
     await expect(service.deliveryNotificationTarget('owner')).rejects.toThrow('Activity delivery');
   });
-  it('keeps beta and a disabled history switch out of automatic notification consent', async () => {
+  it('allows beta while retaining the independent history switch', async () => {
     const service = await enabled(); config.webPushHistoryEnabled.set(false);
     expect(service.historyNotificationsAvailable()).toBe(false);
     await expect(service.historyNotificationTarget('owner')).rejects.toThrow();
     config.webPushHistoryEnabled.set(true);
     Object.defineProperty(windows, 'location', { value: { origin: 'https://beta.quantified-self.io' }, configurable: true });
     config.webPushEnabled.set(false); config.webPushEnabled.set(true);
-    expect(service.historyNotificationsAvailable()).toBe(false);
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, origin: 'https://beta.quantified-self.io' }) } as never);
+    expect(service.historyNotificationsAvailable()).toBe(true);
+    expect(service.deliveryNotificationsAvailable()).toBe(true);
+    expect(await service.historyNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
+    expect(await service.deliveryNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
   });
   it('keeps category opt-out separate from device permission and self-tests', async () => {
     const service = await enabled(); categoryEnabled.set(false);

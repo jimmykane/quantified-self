@@ -154,6 +154,7 @@
     "src/app/helpers/power-curve-chart.helper.spec.ts",
     "src/app/helpers/power-curve.shared.spec.ts",
     "src/app/helpers/provider-presentation.helper.spec.ts",
+    "src/app/helpers/push-device.helper.spec.ts",
     "src/app/helpers/route-delivery-auto-sync-prompt.helper.spec.ts",
     "src/app/helpers/route-detail.helper.spec.ts",
     "src/app/helpers/route-echarts-data.helper.spec.ts",
