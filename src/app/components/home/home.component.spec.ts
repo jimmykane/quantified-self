@@ -37,6 +37,7 @@ describe('HomeComponent', () => {
         { provide: AppAuthService, useValue: { user$: userSubject.asObservable() } },
         { provide: AppHapticsService, useValue: { selection } },
         { provide: EChartsLoaderService, useValue: {
+          load: vi.fn().mockResolvedValue(undefined),
           init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(), getWidth: () => 320 }),
           setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
           subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
@@ -164,6 +165,59 @@ describe('HomeComponent', () => {
     expect(visual.classList.contains('hero-motion-paused')).toBe(false);
     expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
     expect(selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('suspends offscreen and hidden-page motion without overriding the visitor pause choice', async () => {
+    const observers: { callback: IntersectionObserverCallback; targets: Element[]; disconnect: ReturnType<typeof vi.fn> }[] = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      readonly targets: Element[] = [];
+      readonly disconnect = vi.fn();
+      readonly unobserve = vi.fn();
+      constructor(readonly callback: IntersectionObserverCallback) { observers.push(this); }
+      observe(target: Element): void { this.targets.push(target); }
+    });
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const removeListener = vi.spyOn(document, 'removeEventListener');
+    try {
+      renderHome();
+      await fixture.whenStable();
+      const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
+      const observer = observers.find(item => item.targets.includes(visual))!;
+      expect(observer).toBeTruthy();
+      const intersect = (isIntersecting: boolean) => {
+        observer.callback([{ target: visual, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver);
+        fixture.detectChanges();
+      };
+      expect(fixture.componentInstance.heroMotionSuspended()).toBe(true);
+      intersect(true);
+      expect(visual.classList.contains('hero-motion-suspended')).toBe(false);
+      const toggle = visual.querySelector('.hero-motion-toggle') as HTMLButtonElement;
+      toggle.click();
+      intersect(false);
+      expect(visual.classList.contains('hero-motion-suspended')).toBe(true);
+      intersect(true);
+      expect(visual.classList.contains('hero-motion-suspended')).toBe(false);
+      expect(visual.classList.contains('hero-motion-paused')).toBe(true);
+      expect(toggle.getAttribute('aria-label')).toBe('Play connection animation');
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
+      expect(visual.classList.contains('hero-motion-suspended')).toBe(true);
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
+      expect(visual.classList.contains('hero-motion-suspended')).toBe(false);
+      expect(visual.classList.contains('hero-motion-paused')).toBe(true);
+      expect(selection).toHaveBeenCalledTimes(1);
+      fixture.destroy();
+      expect(observer.disconnect).toHaveBeenCalledOnce();
+      expect(removeListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    } finally {
+      fixture?.destroy();
+      visibility.mockRestore();
+      removeListener.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {

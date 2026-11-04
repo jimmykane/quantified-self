@@ -129,6 +129,7 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(fixture.debugElement.query(By.directive(ChartsFreshnessForecastComponent))).toBeNull();
     expect(fixture.debugElement.query(By.directive(ChartsPowerCurveComponent))).toBeNull();
     expect(form.hasData()).toBe(true);
+    expect(form.useAnimations).toBe(false);
     const current = fixture.componentInstance.heroPreviewData().formTimeline.at(-1)!;
     const today = new Date();
     expect(current.time).toBe(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
@@ -144,6 +145,7 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Example post-workout estimate');
     expect(fixture.nativeElement.textContent).not.toContain('no additional training load');
     const option = loader.setOption.mock.calls[0][1];
+    expect(option.animation).toBe(false);
     expect(option.series.map((series: { name: string }) => series.name))
       .toEqual(['Fitness (CTL)', 'Fatigue (ATL)', 'Form (TSB)']);
     expect(option.xAxis[0].max - option.xAxis[0].min).toBe(84 * 86400000);
