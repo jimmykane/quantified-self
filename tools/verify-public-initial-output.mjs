@@ -324,6 +324,19 @@ function assertNoInitialStylesheet(label, pattern) {
   }
 }
 
+function assertHomeFlowAnimations(documentRef) {
+  const css = [...documentRef.querySelectorAll('style')].map(style => style.textContent).join('\n');
+  const keyframes = new Set([...css.matchAll(/@(?:-webkit-)?keyframes\s+([\w-]+)/g)].map(match => match[1]));
+  const declarations = [...css.matchAll(/\banimation(?:-name)?\s*:\s*([^;}]+)/g)].map(match => match[1]);
+  for (const animation of ['heroConnectionFlow', 'heroBorderTravel']) {
+    const names = declarations.flatMap(value => [...value.matchAll(new RegExp(`\\b[\\w-]*${animation}\\b`, 'g'))]
+      .map(match => match[0]));
+    if (names.length === 0 || names.some(name => !keyframes.has(name))) {
+      throw new Error(`Homepage ${animation} references missing keyframes in optimized, encapsulated CSS.`);
+    }
+  }
+}
+
 function assertPrerenderedDocuments() {
   const documentPaths = collectIndexDocuments(outputDirectory);
   const actualRoutes = documentPaths.map(routeForDocument);
@@ -345,6 +358,10 @@ function assertPrerenderedDocuments() {
     const route = routeForDocument(documentPath);
     const dom = new JSDOM(fs.readFileSync(documentPath, 'utf8'));
     const documentRef = dom.window.document;
+
+    if (route === '/') {
+      assertHomeFlowAnimations(documentRef);
+    }
 
     assertDocumentValue(route, 'title', documentRef.title);
     assertDocumentValue(

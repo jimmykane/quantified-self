@@ -167,6 +167,50 @@
   }
 }
 
+// Public benefit sequences share the same semantic heading, icon and body.
+.compact-row--journey {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 14px;
+  padding: 0;
+  text-align: center;
+
+  .compact-row__icon {
+    grid-column: 1;
+    grid-row: 1;
+    box-sizing: border-box;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    color: var(--compact-row-accent, var(--mat-sys-primary));
+    background: var(--mat-sys-surface);
+    border: 1px solid color-mix(in srgb, var(--compact-row-accent, var(--mat-sys-primary)) 45%, var(--mat-sys-outline-variant));
+  }
+
+  .compact-row__title { grid-column: 1; grid-row: 2; min-height: 0; margin-top: 4px; font: var(--mat-sys-title-large); font-weight: 600; }
+  .compact-row__body { grid-column: 1; grid-row: 3; max-width: 290px; padding: 0; }
+  .compact-row__summary { font: var(--mat-sys-body-medium); line-height: 1.75; }
+  .compact-row__action { grid-column: 1; grid-row: 4; }
+
+  @media (max-width: 799.98px) {
+    grid-template-columns: 56px minmax(0, 1fr);
+    justify-items: start;
+    gap: 8px 24px;
+    text-align: left;
+
+    .compact-row__title { grid-column: 2; grid-row: 1; min-height: 56px; margin: 0; }
+    .compact-row__body { grid-column: 2; grid-row: 2; max-width: none; }
+    .compact-row__action { grid-column: 2; grid-row: 3; }
+
+    &.compact-row--without-icon {
+      grid-template-columns: minmax(0, 1fr);
+      .compact-row__title, .compact-row__body, .compact-row__action { grid-column: 1; }
+    }
+  }
+
+  @media (max-width: 380px) { column-gap: 16px; }
+}
+
 .compact-row--compact {
   gap: 0.4rem 0.5rem;
   padding: 0.5rem 0;

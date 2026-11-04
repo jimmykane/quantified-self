@@ -39,28 +39,40 @@
 .home-navigation { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem; padding-block: 0.5rem 1rem; }
 .home-navigation a { font-family: 'QS Home Navigation', sans-serif; }
 .home-benefits {
+  --benefits-gap: 48px;
+  --compact-row-accent: var(--mat-sys-primary);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding-block: 1rem 1.75rem;
+  gap: var(--benefits-gap);
+  padding-block: 1rem 2rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 
-  app-compact-row { padding-inline: 1.75rem; }
-  app-compact-row:first-child { padding-inline-start: 0; }
-  app-compact-row:last-child { padding-inline-end: 0; }
-  app-compact-row + app-compact-row { border-inline-start: 1px solid var(--mat-sys-outline-variant); }
+  app-compact-row { position: relative; }
+  // Join icon centers, leaving a little space around each 56px circle.
+  app-compact-row:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    inset-block-start: 28px;
+    inset-inline-start: calc(50% + 38px);
+    width: calc(100% + var(--benefits-gap) - 76px);
+    height: 1px;
+    background: color-mix(in srgb, var(--compact-row-accent) 35%, var(--mat-sys-outline-variant));
+  }
 
   @media (max-width: 799.98px) {
+    --benefits-gap: 28px;
     grid-template-columns: minmax(0, 1fr);
-    padding-block: 0 1rem;
-
-    app-compact-row { padding: 0.75rem 0; }
-    app-compact-row + app-compact-row {
-      border-inline-start: 0;
-      border-top: 1px solid var(--mat-sys-outline-variant);
+    app-compact-row:not(:last-child)::after {
+      inset-block-start: 66px;
+      inset-inline-start: 28px;
+      width: 1px;
+      height: calc(100% + var(--benefits-gap) - 76px);
     }
   }
 }
+:host-context(.dark-theme) .home-benefits { --compact-row-accent: var(--qs-theme-accent); }
 .hero-section { padding-block: clamp(1.5rem, 3vw, 2rem); text-align: center; }
 .hero-content { max-width: 64rem; margin-inline: auto; }
 .brand-badge { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
@@ -258,7 +270,7 @@
 .hero-connection-port { fill: var(--mat-sys-surface); stroke: currentColor; stroke-width: 1.25; }
 .hero-provider-wires--mobile { display: none; }
 .hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
-.hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
+.hero-motion-toggle { display: inline-flex; color: var(--mat-sys-on-surface-variant); }
 @keyframes heroConnectionFlow {
   0% { stroke-dashoffset: 8; opacity: 0; }
   6% { opacity: 1; }
@@ -270,19 +282,21 @@
   5%, 90% { opacity: .45; }
   100% { --qs-hero-border-angle: 360deg; opacity: 0; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  // Normalize whole paths so arrivals stay synchronized at every viewport size.
-  .hero-connection { --hero-flow-delay: 0s; }
-  .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
-  .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
-  .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
-  .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
-  // Two quiet traces take 4.8s per lap, acknowledging every other 1.2s arrival.
-  // Both still start at the connection point as an incoming leading edge arrives.
-  .hero-border-glow { animation: heroBorderTravel 4.8s linear -.064s infinite; }
-  .hero-border-glow--following { animation-delay: -2.464s; }
-  .hero-motion-toggle { display: inline-flex; }
-  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
+// Keep named animations at the top level. Angular does not scope references
+// inside minified media blocks consistently, leaving release keyframes unmatched.
+// Normalize whole paths so arrivals stay synchronized at every viewport size.
+.hero-connection { --hero-flow-delay: 0s; }
+.hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
+.hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
+.hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
+.hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
+// Two quiet traces take 4.8s per lap, acknowledging every other 1.2s arrival.
+.hero-border-glow { animation: heroBorderTravel 4.8s linear -.064s infinite; }
+.hero-border-glow--following { animation-delay: -2.464s; }
+.hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-connection-pulse, .hero-connection-halo, .hero-border-glow { animation: none; }
+  .hero-motion-toggle { display: none; }
 }
 @media (min-width: 1200px) and (max-width: 1320px) {
   .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
