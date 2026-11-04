@@ -152,6 +152,10 @@ turned off. Turning the switch off revokes only the current device; other device
 The switch remains On while any category is active on an enabled device, so a partial category selection is never
 presented as a silent device. Existing per-request history/delivery intent and sender throttles still apply.
 The switch can retry temporary worker/device-check failures after support, account and site configuration checks succeed.
+Retry verifies browser subscription ownership again, revoking foreign/orphaned endpoints before registering and
+reusing the current account's installation ID to avoid duplicate device rows. Before subscribing or starting a registration
+write, an observed newer local installation from another tab supersedes the pending enable. Site enablement and signing-key
+changes are checked again around asynchronous work.
 Permission remains in the original user gesture, before worker waits or category writes. Non-retryable configuration/read
 states offer a support Retry action; blocked permissions and installation requirements retain their browser instructions.
 

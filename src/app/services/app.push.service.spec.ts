@@ -71,6 +71,100 @@ beforeEach(() => {
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
+  it('reuses this account’s installation when retrying a failed server check', async () => {
+    const retainedId = '00000000-0000-4000-8000-000000000002';
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: retainedId }));
+    vi.mocked(getDocFromServer).mockRejectedValue(new Error('Offline'));
+    const service = setup(); await tick(); expect(service.state()).toBe('unavailable');
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${retainedId}` }), expect.anything());
+    expect(JSON.parse(storage.getItem(localKey)!)).toEqual({ uid: 'owner', installationId: retainedId });
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+  });
+  it('revokes a previous account’s endpoint before registering the retry for this account', async () => {
+    storage.setItem(localKey, JSON.stringify({ uid: 'previous-owner', installationId: id }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick(); expect(service.state()).toBe('unavailable');
+    const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/new-owner',
+      toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/new-owner', keys: registration.keys })) };
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    manager.subscribe.mockImplementation(async () => {
+      expect(subscription.unsubscribe).toHaveBeenCalledOnce();
+      manager.getSubscription.mockResolvedValue(replacement); return replacement;
+    });
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, endpoint: replacement.endpoint }) } as never);
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }),
+      expect.objectContaining({ endpoint: replacement.endpoint }));
+    expect(deleteDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+  });
+  it('keeps the same device entry when retrying with a different subscription key', async () => {
+    const retainedId = '00000000-0000-4000-8000-000000000002';
+    notifications.permission = 'granted'; storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: retainedId }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    const previous = { ...subscription, options: { applicationServerKey: new Uint8Array([1]).buffer }, unsubscribe: vi.fn().mockResolvedValue(true) };
+    manager.getSubscription.mockResolvedValue(previous);
+    manager.subscribe.mockImplementation(async () => {
+      expect(previous.unsubscribe).toHaveBeenCalledOnce();
+      manager.getSubscription.mockResolvedValue(subscription); return subscription;
+    });
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${retainedId}` }), expect.anything());
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(retainedId);
+  });
+  it.each(['previous account', 'orphan'])('does not register a retry when %s subscription cleanup fails', async kind => {
+    if (kind === 'previous account') storage.setItem(localKey, JSON.stringify({ uid: 'previous-owner', installationId: id }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    manager.getSubscription.mockResolvedValue(subscription); subscription.unsubscribe.mockResolvedValue(false);
+    await expect(service.enable()).rejects.toThrow('Notification enable failed'); await tick();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+  });
+  it('preserves a newer installation from another tab during an enable retry', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    vi.mocked(getDocFromServer).mockRejectedValue(new Error('Offline'));
+    const service = setup(); await tick();
+    let finish!: (value: typeof subscription) => void;
+    manager.getSubscription.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); await tick();
+    const replacementId = '00000000-0000-4000-8000-000000000002';
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: replacementId }));
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
+    finish(subscription); await expect(pending).rejects.toThrow(); await tick();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(replacementId);
+  });
+  it.each(['flag', 'key'])('stops offering enable immediately when the site %s changes', async change => {
+    const service = setup(); await tick(); expect(service.canEnable()).toBe(true);
+    if (change === 'flag') config.webPushEnabled.set(false); else config.webPushPublicKey.set('');
+    expect(service.canEnable()).toBe(false); await service.enable();
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('does not subscribe if the site is disabled while permission is pending', async () => {
+    const service = setup(); await tick();
+    let finish!: (value: string) => void;
+    notifications.requestPermission.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); config.webPushEnabled.set(false); finish('granted');
+    await expect(pending).rejects.toThrow();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+  });
+  it('does not replace another tab’s consent when subscription creation finishes late', async () => {
+    const service = setup(); await tick();
+    let finish!: (value: typeof subscription) => void;
+    manager.subscribe.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); await tick();
+    const replacementId = '00000000-0000-4000-8000-000000000002';
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: replacementId }));
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    finish(subscription); await expect(pending).rejects.toThrow(); await tick();
+    expect(setDoc).not.toHaveBeenCalled(); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(replacementId);
+  });
   it('allows an explicit enable retry after the worker was initially unavailable, requesting permission before waiting', async () => {
     delete windows.pushManager;
     const service = setup(); await tick();

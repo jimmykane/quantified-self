@@ -44,11 +44,14 @@ export class AppPushService {
   readonly registered = signal(false);
   private readonly permissionUnasked = signal(false);
   private readonly retryableEnable = signal(false);
+  private readonly siteAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && isVapidPublicKey(this.config.webPushPublicKey())
+    && isPushOrigin(this.origin(), environment.useFunctionsEmulator === true));
   readonly unavailableReason = signal('');
   /** Granted-but-unregistered legacy devices may have been explicitly disabled. Offer only in the tray. */
   readonly canInvite = computed(() => this.state() === 'disabled' && this.canEnable() && this.permissionUnasked());
   readonly canEnable = computed(() => !this.operation() && (this.state() === 'disabled'
-    || this.state() === 'unavailable' && this.retryableEnable()));
+    || this.state() === 'unavailable' && this.retryableEnable()) && this.siteAvailable());
   readonly canTest = computed(() => this.state() === 'enabled' && !this.operation());
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
   readonly historyNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
@@ -155,9 +158,7 @@ export class AppPushService {
       }
       // iOS browser tabs can hide these APIs until the app is opened from the Home Screen.
       if (!this.compatibility.checkPushSupport()) { this.state.set('unsupported'); return; }
-      this.retryableEnable.set(Notification.permission !== 'denied' && this.config.webPushEnabled()
-        && isVapidPublicKey(this.config.webPushPublicKey())
-        && isPushOrigin(this.origin(), environment.useFunctionsEmulator === true));
+      this.retryableEnable.set(Notification.permission !== 'denied' && this.siteAvailable());
       const manager = await this.pushManager();
       if (!this.current(owner, epoch)) return;
       this.manager = manager;
@@ -181,8 +182,7 @@ export class AppPushService {
         if (this.current(owner, cleanupEpoch)) this.state.set('denied');
         return;
       }
-      if (!this.config.webPushEnabled() || !isVapidPublicKey(this.config.webPushPublicKey())
-        || !isPushOrigin(this.origin(), environment.useFunctionsEmulator === true)) {
+      if (!this.siteAvailable()) {
         this.unavailableReason.set('Notifications are not available from this site right now.');
         this.state.set('unavailable'); return;
       }
@@ -272,6 +272,8 @@ export class AppPushService {
   async enable(expectedUid = this.owner?.uid): Promise<void> {
     if (!this.canEnable() || !this.owner || this.owner.uid !== expectedUid || this.auth.currentUser !== this.owner) return;
     const owner = this.owner; const epoch = ++this.epoch;
+    const retry = this.state() === 'unavailable', key = this.config.webPushPublicKey();
+    let local = this.readLocal();
     // Request synchronously in the button gesture, before any network or worker awaits.
     const permission = Notification.requestPermission();
     this.operation.set('enable'); this.message.set('');
@@ -280,16 +282,39 @@ export class AppPushService {
         if (this.current(owner, epoch)) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
         throw new Error('Permission was not granted.');
       }
-      if (!this.current(owner, epoch)) throw new Error('Account changed.');
+      if (!this.current(owner, epoch) || !this.siteAvailable() || this.config.webPushPublicKey() !== key
+        || !this.sameInstallation(local)) throw new Error('Registration context changed.');
       const manager = this.manager ?? await this.pushManager();
       if (!this.current(owner, epoch) || !manager) throw new Error('Browser notification service unavailable.');
       this.manager = manager;
-      const id = this.compatibility.createRandomUUID(); if (!id) throw new Error('Device storage unavailable.');
-      const key = this.config.webPushPublicKey();
+      const retainedId = local?.uid === owner.uid ? local.installationId : null;
+      if (retry) {
+        // A failed check did not establish subscription ownership. Repeat that check
+        // before adopting an endpoint or reusing this account's existing installation.
+        const observed = await manager.getSubscription();
+        if (!this.current(owner, epoch) || !this.sameInstallation(local)) throw new Error('Registration context changed.');
+        const actualKey = observed?.options.applicationServerKey;
+        if (local && local.uid !== owner.uid
+          || observed && (local?.uid !== owner.uid || !actualKey || this.encodeKey(actualKey) !== key)) {
+          if (!await this.revokeBrowser(local, observed)) throw new Error('Browser cleanup superseded.');
+          local = null;
+        }
+      }
+      if (!this.current(owner, epoch) || !this.siteAvailable() || this.config.webPushPublicKey() !== key
+        || !this.sameInstallation(local)) throw new Error('Registration context changed.');
+      const id = retainedId ?? this.compatibility.createRandomUUID();
+      if (!id) throw new Error('Device storage unavailable.');
       const bytes = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
       const subscription = await manager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+      if (!this.sameInstallation(local)) {
+        if (this.owner !== owner || this.auth.currentUser !== owner) await subscription.unsubscribe();
+        throw new Error('Registration context changed.');
+      }
       this.subscription = subscription;
-      try { await this.persist(owner, id, subscription, epoch); } catch (error) { await subscription.unsubscribe(); throw error; }
+      try {
+        if (!this.siteAvailable() || this.config.webPushPublicKey() !== key) throw new Error('Site configuration changed.');
+        await this.persist(owner, id, subscription, epoch);
+      } catch (error) { await subscription.unsubscribe(); throw error; }
       this.registered.set(true); this.state.set('enabled'); this.message.set('Notifications enabled on this device.');
       this.invitation.recordDeviceChoice(owner.uid, 'enabled');
     } catch { this.message.set('Notifications could not be enabled. Check permission and try again.'); throw new Error('Notification enable failed.'); }
