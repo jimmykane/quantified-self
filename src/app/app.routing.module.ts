@@ -316,17 +316,17 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'Compare FIT & GPX Files | Workout Data Comparison Tool',
+      title: 'Compare GPX & FIT Files',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings side by side. Review GNSS, heart-rate, altitude, power, and other recorded metrics. Sign in to compare files.',
+      description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',
-        name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',
+        name: 'GPX & FIT File Comparison Tool',
         applicationCategory: 'HealthApplication',
         operatingSystem: 'Web',
-        description: 'Create saved benchmark comparisons from FIT, GPX, TCX, JSON, and SML workout files with GNSS, heart-rate, and altitude error metrics.',
+        description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
         url: 'https://quantified-self.io/tools/compare',
         inLanguage: 'en',
         featureList: [

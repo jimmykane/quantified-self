@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
+import { TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -387,6 +387,9 @@ function assertPrerenderedDocuments() {
     if (route === TRAINING_PLANS_ROUTE) {
       assertTrainingPlansDocument(documentRef);
     }
+    if (route === '/tools/compare') {
+      assertToolsCompareDocument(documentRef);
+    }
 
     dom.window.close();
   }
@@ -394,6 +397,30 @@ function assertPrerenderedDocuments() {
   console.log(
     `Verified ${documentPaths.length} prerendered pages: title, description, H1, valid JSON-LD, and public footer.`,
   );
+}
+
+function assertToolsCompareDocument(documentRef) {
+  const expectedTitle = `${TOOLS_COMPARE_PRERENDER_METADATA.title} - Quantified Self`;
+  for (const [label, actual, expected] of [
+    ['title', documentRef.title, expectedTitle],
+    ['H1', documentRef.querySelector('h1')?.textContent?.trim(), TOOLS_COMPARE_PRERENDER_METADATA.h1],
+    ['canonical', documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href'), 'https://quantified-self.io/tools/compare'],
+    ['description', documentRef.querySelector('meta[name="description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+    ['Open Graph title', documentRef.querySelector('meta[property="og:title"]')?.getAttribute('content'), expectedTitle],
+    ['Twitter title', documentRef.querySelector('meta[name="twitter:title"]')?.getAttribute('content'), expectedTitle],
+    ['Open Graph description', documentRef.querySelector('meta[property="og:description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+    ['Twitter description', documentRef.querySelector('meta[name="twitter:description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+  ]) {
+    if (actual !== expected) {
+      throw new Error(`Prerendered /tools/compare has unexpected ${label}.`);
+    }
+  }
+  const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  for (const copy of TOOLS_COMPARE_PRERENDER_METADATA.visibleCopy) {
+    if (!pageText.includes(copy)) {
+      throw new Error(`Prerendered /tools/compare is missing guest copy: ${copy}`);
+    }
+  }
 }
 
 function assertTrainingPlansDocument(documentRef) {

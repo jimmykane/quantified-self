@@ -430,14 +430,13 @@ describe('AppRoutingModule routes', () => {
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('Compare FIT & GPX Files | Workout Data Comparison Tool');
+    expect(compareRoute?.data?.['title']).toBe('Compare GPX & FIT Files');
     expect(compareRoute?.data?.['description']).not.toMatch(/trusted by device reviewers/i);
-    expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, altitude, power');
-    expect(compareRoute?.data?.['description']).toContain('other recorded metrics');
-    expect(compareRoute?.data?.['description']).toContain('Sign in to compare files');
+    expect(compareRoute?.data?.['description']).toBe('Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
-      name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',
+      name: 'GPX & FIT File Comparison Tool',
+      description: compareRoute?.data?.['description'],
       operatingSystem: 'Web',
       url: 'https://quantified-self.io/tools/compare',
       offers: {
