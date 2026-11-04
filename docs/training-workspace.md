@@ -3263,6 +3263,19 @@ accepted content digest; a positive Suunto readback of an identical payload can 
 This prevents a permanent false “differs from QS” status, while stale attempts, leases,
 provider backoff, unknown acceptance and retained remote identities keep their existing protections.
 
+Request admission rechecks both the current provider payload and full canonical prescription before each mutating request,
+for single-workout and batch sends. A canonical-only edit cannot let an old operation continue just because the provider
+omits that data. Historical/uncertain attempts remain recoverable; proven unaccepted stale operations retire before a
+new current attempt. Inspection and replacement-review bindings also hash the current canonical prescription rather
+than trusting a cached ledger digest. Recipe edits invalidate an earlier review even if the export is identical;
+revision/timestamp changes alone do not. Earlier stored inspection bindings need a fresh Check after this backend release
+before any replacement; this is a conservative private-proof refresh, not renewed ordinary mapping consent.
+
+This review fix has no MCP wire, scope, tool, instruction or plugin impact. Existing plan/workout reads and strict private-
+field exclusions remain unchanged; native authored-change/initial-Send confirmation still applies. Help already describes
+current-workout recovery checks, so no product-copy change is needed. Monitoring remains covered/unchanged by the existing
+admission, stale-suppression, recovery and delivery outcomes; no queue, schedule, retry budget or telemetry label is added.
+
 MCP impact: focused create/Send and plan/workout delivery previews disclose warnings with zero mapping-approval count
 and no mapping-approval digest. Extensive informational warnings use the existing bounded summary and link users to
 compatibility details. Obsolete `approve` proposals are rejected with guidance to use normal sync; the frozen action enum

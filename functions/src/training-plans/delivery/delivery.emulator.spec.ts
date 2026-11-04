@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ExpectedTrainingScheduleRevision, ScheduledWorkoutV1, TrainingScheduleMutationOperationV1 } from '../../../../shared/training-plans';
 import { parseTrainingDeliveryStatusV1, type TrainingDeliveryCommandV1, type TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
-import { DELIVERY_LEDGER, DELIVERY_QUEUE, TrainingDeliveryTransportError, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
+import { DELIVERY_LEDGER, DELIVERY_QUEUE, TrainingDeliveryTransportError, type DeliveryLedgerV1, type DeliveryRuntime, type TrainingDeliveryTransport } from './contracts';
 import { trainingDeliveryCommand } from './commands';
 import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
@@ -815,6 +815,33 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(10);
     expect(new Set(transport.calls.map(call => call.id)).size).toBe(1);
   });
+  it('suppresses a stale single-workout request when an omitted QS edit arrives before the provider write', async () => {
+    const assessment = transport.assess(workout(), account, 'Europe/Helsinki');
+    vi.spyOn(transport, 'assess').mockReturnValue(assessment);
+    const row = await send();
+    const guarded: TrainingDeliveryTransport = { mappingVersion: transport.mappingVersion,
+      horizonDays: transport.horizonDays, assess: transport.assess.bind(transport),
+      canRemove: transport.canRemove.bind(transport), recover: transport.recover.bind(transport),
+      execute: async (operation, checkpoint, guard) => {
+        await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w')
+          .update({ title: 'New full prescription outside the provider payload' });
+        await guard(true);
+        return transport.execute(operation, checkpoint);
+      } };
+    runtime.transport = () => guarded;
+    await processTrainingDelivery(runtime, uid, row.id);
+    expect(transport.calls).toHaveLength(0);
+    const blocked = (await ledgers())[0];
+    expect(blocked).toMatchObject({ status: 'retrying', actual: null });
+    runtime.transport = () => transport;
+    now = blocked.retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(transport.calls).toHaveLength(1);
+    expect(transport.calls[0].workout?.title).toBe('New full prescription outside the provider payload');
+    expect((await ledgers())[0].status).toBe('delivered');
+  });
+
   it('keeps a newer full-content edit pending when a matching payload is accepted during the edit', async () => {
     // Model a provider whose text limit omits an authored edit from its payload digest.
     const assessment = transport.assess(workout('w'), account, 'Europe/Helsinki');

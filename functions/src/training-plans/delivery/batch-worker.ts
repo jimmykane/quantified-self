@@ -224,7 +224,8 @@ async function batchAdmission(runtime: DeliveryRuntime, uid: string, claim: Batc
         || context.connection.generation !== operation.connectionGeneration
         || context.connection.epoch !== ledger.connectionEpoch
         || ledger.blockedConnectionGeneration === operation.connectionGeneration
-        || !((operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
+        || !((operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest
+          && deliveryContentDigest(context.workout, intent.timeZone, context.strength) === operation.contentDigest)
           || (operation.kind === 'remove' && intent.desired === 'absent'))) return false;
     }
     return true;

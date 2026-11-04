@@ -369,7 +369,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || !canExecuteDeliveryRepair(context.transport.inspection.policy, operation.repair)
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
-      return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
+      return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest
+        && deliveryContentDigest(context.workout, intent.timeZone, context.strength) === operation.contentDigest)
         || (operation.kind === 'remove' && intent.desired === 'absent') ? 'execute' : 'recover-only';
     });
   };

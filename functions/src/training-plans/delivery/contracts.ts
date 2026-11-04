@@ -36,9 +36,7 @@ export interface DeliveryAssessment {
 /** Supported provider adjustments are covered by ordinary Send/Enable consent.
  * Keep one policy boundary for app/MCP previews and existing callers; serializer
  * warnings remain visible and unsupported mappings are rejected independently. */
-export function requiresDeliveryMappingApproval(_assessment: DeliveryAssessment): boolean {
-  return false;
-}
+export const requiresDeliveryMappingApproval: (assessment: DeliveryAssessment) => boolean = () => false;
 export interface DeliveryArtifact {
   ids: Record<string, string>;
   localDate: string;

@@ -397,6 +397,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
       .collection('batches').get()).docs[0].data()).toMatchObject({ state: 'superseded' });
   });
 
+  it('suppresses a stale batch when an omitted QS edit arrives before the provider write', async () => {
+    const [id] = await seed(1);
+    const assessment = transport.assess(workout(0), 'destination', 'Europe/Helsinki');
+    vi.spyOn(transport, 'assess').mockReturnValue(assessment);
+    let posted = false;
+    client.mockImplementationOnce(async (_request, beforeSend) => {
+      await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w0')
+        .update({ title: 'New full prescription outside the provider payload' });
+      await beforeSend();
+      posted = true;
+      return { status: 200, body: { result: '0000', data: { StartDate: '20260918', EndDate: '20260918' } } };
+    });
+    await processTrainingDelivery(runtime, uid, id);
+    expect(posted).toBe(false);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection(DELIVERY_LEDGER).doc(id).get()).data())
+      .toMatchObject({ status: 'pending', attempt: null, lease: null, actual: null });
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('batches').get()).docs[0].get('state'))
+      .toBe('superseded');
+  });
+
   it('retains a late accepted removal even after lease ownership changes', async () => {
     const [id] = await seed(1);
     await processTrainingDelivery(runtime, uid, id);

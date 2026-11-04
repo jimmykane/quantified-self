@@ -171,7 +171,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   });
 
   it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.flatMap(sport => ['standalone', 'plan'].map(scope => ({ sport, scope }))))(
-    'requires current approval for $sport Generic in $scope and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
+    'syncs $sport Generic in $scope under existing consent and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
     const planId = scope === 'plan' ? 'p' : null;
     if (planId) await mutate({ kind: 'create-plan', planId, name: 'Synthetic Generic plan', startLocalDate: '2026-09-20',
       endLocalDate: '2026-09-27', activate: true });
