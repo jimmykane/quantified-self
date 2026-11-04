@@ -201,9 +201,16 @@
   mask-composite: exclude;
 }
 .hero-provider-flow { position: relative; z-index: 1; display: grid; grid-template-columns: 92px 136px; align-items: center; min-width: 0; }
-.hero-providers.logos-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
+.hero-providers.logos-container { --hero-logo-width: 72px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
 .hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; }
-.hero-provider .partner-logo { width: 72px; height: 25px; }
+.hero-provider .partner-logo { width: var(--hero-logo-width); height: 25px; }
+@media (min-width: 700.01px) {
+  // Center the lettering on each dot, excluding the emblems above Garmin/Suunto.
+  // Optical offsets come from the SVG wordmark bounds and scale with logo width.
+  .hero-provider[data-provider='garmin'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.064)); }
+  .hero-provider[data-provider='suunto'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.074)); }
+  .hero-provider[data-provider='coros'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.0085)); }
+}
 .hero-connection-field { position: relative; min-width: 0; }
 .hero-provider-wires { display: block; width: 136px; height: 336px; color: var(--hero-flow-color); overflow: visible; pointer-events: none; }
 .hero-provider-wires--desktop { clip-path: inset(-8px 0 -8px -8px); }
@@ -258,7 +265,7 @@
   .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
   .hero-provider-flow { grid-template-columns: 80px 104px; }
   .hero-provider-wires--desktop { width: 104px; }
-  .hero-provider .partner-logo { width: 64px; }
+  .hero-providers.logos-container { --hero-logo-width: 64px; }
 }
 @media (max-width: 1199.98px) {
   .hero-section { grid-template-columns: minmax(0, 1fr); }
