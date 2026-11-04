@@ -10,6 +10,30 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it.each(['syncGarminToWahoo', 'importActivitiesToWahoo'] as const)(
+    'teaches destination-side saved activity sending in %s', key => {
+      const page = PUBLIC_SEO_PAGES[key];
+      const copy = JSON.stringify(page);
+      for (const phrase of ['Connections', 'Wahoo', 'Send past activities', 'Saved activities',
+        'Activity sources', 'Preview saved activities', 'Preview sends nothing', 'Send',
+        'Pro', 'write access', 'original FIT', 'skipped', 'queueing, not delivery', 'Recent sends']) {
+        expect(copy).toContain(phrase);
+      }
+      expect(copy).not.toContain('Sync past activities');
+      expect(copy).not.toContain('Send activity files');
+      expect(copy).not.toContain('then run Preview.');
+      const historyFaq = page.faqItems.find(item => /older Garmin workouts|past activities to Wahoo/.test(item.question))!.answer;
+      expect(historyFaq).toContain('Saved activities');
+      expect(historyFaq).toContain('Preview saved activities');
+      expect(historyFaq).toContain('automatic sync');
+      const steps = page.howToSteps.join(' ');
+      expect(steps).toContain('Saved activities');
+      expect(steps).toContain('Activity sources');
+      expect(steps).toContain('Preview saved activities');
+      expect(steps).toContain('review');
+    },
+  );
+
   it('keeps Training FAQ target limits and swim delivery consistent with supported recipes', () => {
     const page = PUBLIC_SEO_PAGES.trainingPlans;
     const faq = page.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')!.answer;

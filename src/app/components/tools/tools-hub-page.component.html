@@ -3,8 +3,9 @@
     <p class="eyebrow">Tools</p>
     <h1 id="tools-title">Workout data tools</h1>
     <p class="hero-copy">
-      Start file comparison directly, then keep benchmark results inside the same activity archive.
+      Compare recordings, analyze an uploaded activity, or review saved benchmark reports in your account.
     </p>
+    <p>Sign in to upload activities and open saved comparisons. Uploads and new comparisons use your activity allowance; existing account limits and feature access still apply.</p>
     <div class="hero-actions" aria-label="Primary actions">
       <a mat-flat-button class="qs-mat-primary" routerLink="/tools/compare" (click)="logCompareEntry('tools_hub_hero')">
         Compare Files
@@ -30,14 +31,14 @@
             <mat-icon>{{ tool.icon }}</mat-icon>
           </div>
           <mat-card-title>{{ tool.title }}</mat-card-title>
-          <mat-card-subtitle>{{ tool.status === 'available' ? 'Available' : 'Roadmap' }}</mat-card-subtitle>
+          <mat-card-subtitle>{{ tool.status }}</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
           <p>{{ tool.description }}</p>
         </mat-card-content>
         <mat-card-actions>
           <a mat-stroked-button [routerLink]="tool.route" (click)="logToolCardEntry(tool.route)">
-            {{ tool.status === 'available' ? 'Open' : 'Learn More' }}
+            {{ tool.actionLabel }}
           </a>
         </mat-card-actions>
       </mat-card>

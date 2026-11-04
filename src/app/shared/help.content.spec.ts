@@ -17,6 +17,16 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('limits Health read-only claims to read permission and protects imported measurements', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('This read permission cannot add, edit, delete or backfill measurements');
+    expect(copy).toContain('measurements:write');
+    expect(copy).toContain('Imported Health and Sleep readings cannot be changed');
+    expect(copy).toContain('Existing clients must authorize again');
+    expect(copy).toContain('The MCP host controls whether it asks on every call');
+    expect(copy).not.toContain('MCP cannot add, edit, delete or backfill measurements');
+  });
+
   it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',

@@ -68,7 +68,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'health:read': {
     title: 'Health metrics',
-    description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. No measurements can be added, edited or deleted.',
+    description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. This read permission cannot add, edit or delete measurements. Managing manual entries requires the separate Manage manual Health measurements permission; provider imports remain protected.',
   },
   'metrics:read': {
     title: 'Activity and Training metrics',
