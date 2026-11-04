@@ -92,6 +92,18 @@ describe('source-aware generation power references', () => {
   });
 });
 describe('private power settings codec', () => {
+  it.each([...Array.from({ length: 32 }, (_, code) => code), 0x7f])(
+    'rejects source names with ASCII control code %i, including before trimming', code => {
+      const control = String.fromCharCode(code);
+      for (const source of [`Watch${control}power`, `${control}Watch power`, `Watch power${control}`]) {
+        expect(() => parseWorkoutPowerProfileV1({ ...profile, source })).toThrow();
+      }
+    });
+  it('preserves printable ASCII boundaries and Unicode source names while trimming spaces', () => {
+    const source = ' !Watch ~ Ελληνικά café 👟';
+    expect(parseWorkoutPowerProfileV1({ ...profile, source: ` ${source} ` }).source).toBe(source.trim());
+    expect(parseWorkoutPowerProfileV1({ ...profile, source: 'a'.repeat(80) }).source).toBe('a'.repeat(80));
+  });
   it('defaults only an absent branch and canonically sorts exact-sport profiles', () => {
     expect(parseWorkoutPowerSettingsV1(undefined)).toEqual({ version: 1, revision: 0, profiles: [] });
     const settings = parseWorkoutPowerSettingsV1({ version: 1, revision: 1, profiles: [profile,
