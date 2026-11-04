@@ -7,6 +7,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MAT_TOOLTIP_DEFAULT_OPTIONS, MatTooltipModule } from '@angular/material/tooltip';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { DAILY_WORKOUT_PRO_BENEFIT, WORKOUT_GENERATION_SECTION } from '../public-seo/workout-generation.content';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
@@ -66,9 +67,26 @@ export class HomeComponent implements OnInit {
   private currentFeatureFragment = '';
   private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
   readonly features = HOME_FEATURES;
+  readonly heroMotionPaused = signal(false);
+  readonly heroProviders = [
+    { icon: 'garmin', name: 'Garmin', tooltip: 'Garmin Connect', startY: 36,
+      path: 'M 2 36 C 44 36 40 168 84 168', mobilePath: 'M 50 0 C 50 38 200 24 200 64' },
+    { icon: 'suunto', name: 'Suunto', tooltip: 'Suunto App', startY: 124,
+      path: 'M 2 124 C 42 124 44 168 84 168', mobilePath: 'M 150 0 C 150 28 200 36 200 64' },
+    { icon: 'coros', name: 'COROS', tooltip: 'COROS', startY: 212,
+      path: 'M 2 212 C 42 212 44 168 84 168', mobilePath: 'M 250 0 C 250 28 200 36 200 64' },
+    { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo', startY: 300,
+      path: 'M 2 300 C 44 300 40 168 84 168', mobilePath: 'M 350 0 C 350 38 200 24 200 64' },
+  ].map(provider => ({
+    ...provider,
+    // One continuous curve through the junction, ending exactly at the card border.
+    flowPath: `${provider.path} H 136`,
+    mobileFlowPath: `${provider.mobilePath} V 104`,
+  }));
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
+  readonly workoutGeneration = WORKOUT_GENERATION_SECTION;
   readonly memberships = [
     { name: 'Starter', label: 'Free', copy: 'Core tools, free forever.', route: '/login', action: 'Start free',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.free)} activities`,
@@ -79,8 +97,9 @@ export class HomeComponent implements OnInit {
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
-    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus automatic activity imports and supported cross-provider sync.', route: '/pricing', action: 'See pricing',
+    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus automatic imports, supported sync and daily workout suggestions.', route: '/pricing', action: 'See pricing',
       features: ['Unlimited activities and routes', 'Automatic activity imports', 'Supported cross-provider sync', 'Compatible workout delivery',
+        DAILY_WORKOUT_PRO_BENEFIT,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.pro)} Assistant requests per billing period`] },
   ];
   readonly faqs = [
@@ -212,6 +231,11 @@ export class HomeComponent implements OnInit {
     if (this.featureScrollFrame === null) return;
     this.document.defaultView?.cancelAnimationFrame(this.featureScrollFrame);
     this.featureScrollFrame = null;
+  }
+
+  toggleHeroMotion(): void {
+    this.heroMotionPaused.update(paused => !paused);
+    this.haptics.selection();
   }
 
   toggleFaq(id: string): void {

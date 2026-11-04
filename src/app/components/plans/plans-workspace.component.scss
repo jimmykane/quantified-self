@@ -147,6 +147,7 @@
   row-gap: 16px;
 }
 .workout-editor-basics--library { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workout-duration-input { grid-column: 1 / -1; }
 .workout-pool-fields {
   display: grid;
   grid-column: 1 / -1;
@@ -525,6 +526,7 @@
 }
 
 .editor-save-actions {
+  flex-wrap: wrap;
   position: sticky;
   bottom: 0;
   z-index: 2;
@@ -532,6 +534,10 @@
   padding: 12px 0 max(12px, env(safe-area-inset-bottom));
   background: var(--mat-sys-surface);
   border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.editor-delete-action {
+  margin-inline-end: auto;
 }
 
 .workout-summary {
@@ -635,7 +641,6 @@ mat-card-actions button,
 
 @media (max-width: 1100px) {
   .step-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workout-duration-input { grid-column: 1 / -1; }
   .strength-set-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .strength-set-number { grid-column: 1; grid-row: 1; padding-top: 0; align-self: center; }
   .strength-set-fields > button { grid-column: 2; grid-row: 1; justify-self: end; }
@@ -664,9 +669,9 @@ mat-card-actions button,
 }
 
 @media (max-width: 600px) {
-  .workout-row-actions,
-  .editor-save-actions { flex-wrap: wrap; }
-  .editor-library-copy-action { flex: 1 1 100%; }
+  .workout-row-actions { flex-wrap: wrap; }
+  .editor-library-copy-action,
+  .editor-delete-action { flex: 1 1 100%; }
   .strength-set-type,
   .strength-set-rest { grid-column: 1 / -1; }
   .plans-view-navigation {

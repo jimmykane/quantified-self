@@ -98,15 +98,35 @@ describe('recent history status', () => {
   it('restores durable status and never equates Garmin submission with delivery', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('status', { ...status, canRetry: false, steps: [{ ...status.steps[0], status: 'requested' }] }); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('History requested; data may take hours or days to arrive.');
+    expect(fixture.nativeElement.textContent).toContain('Requested; delivery may take hours or days');
+    expect(fixture.nativeElement.textContent).toContain('1 request scheduled');
     expect(fixture.nativeElement.textContent).not.toContain('has been processed'); expect(haptics.success).not.toHaveBeenCalled();
   });
-  it('describes a completed maximum-range run as selected history', () => {
+  it('describes a completed maximum-range Garmin run as finished request processing', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('status', { ...status, rangePreset: 'maximum', canRetry: false,
       steps: [{ ...status.steps[0], status: 'processed' }] }); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Selected history has been processed.');
+    expect(fixture.nativeElement.textContent).toContain('Request processing finished');
+    expect(fixture.nativeElement.textContent).toContain('not records received');
     expect(fixture.nativeElement.textContent).not.toContain('Recent history');
+  });
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('shows shared %s counts and retry explanations directly inside the history dialog', service => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('service', service); fixture.componentRef.setInput('inline', true);
+    fixture.componentRef.setInput('connectionState', 'connected');
+    fixture.componentRef.setInput('status', {...status, active: true, canRetry: false, steps: [{...status.steps[0],
+      status: 'retrying', count: 128, message: 'History scan finished. Workouts: 1 waiting to retry.'}]});
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('mat-expansion-panel')).toBeNull();
+    expect(host.querySelector('app-history-import-summary')).not.toBeNull();
+    expect(host.querySelector('.history-step')?.textContent).toContain('Activities');
+    expect(host.querySelector('.step-copy small')?.textContent).toContain(service === ServiceNames.GarminAPI ? '128 requests scheduled' : '128 items or requests');
+    expect(host.querySelector('.step-explanation')?.textContent).toContain('1 waiting to retry');
+    expect(host.querySelector('mat-progress-bar')).toBeNull();
+    expect(users.retryConnectionHistoryImport).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('connectionState', null); fixture.detectChanges();
+    expect(host.querySelector('app-history-import-summary')).toBeNull();
   });
   it('retries the opaque run once and gives feedback only after acceptance', async () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent); fixture.componentRef.setInput('status', status);
@@ -181,6 +201,16 @@ describe('recent history status', () => {
     for (let i = 0; i < 10; i++) { fixture.detectChanges(); TestBed.flushEffects(); await Promise.resolve(); }
     fixture.detectChanges();
   };
+  it('keeps stored calendar dates in UTC and avoids new reads when only progress counts change in an inline dialog', async () => {
+    const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
+    fixture.componentRef.setInput('inline', true); fixture.componentRef.setInput('status', sleepHealthStatus);
+    await flush(fixture);
+    expect(fixture.nativeElement.textContent).toContain('first stored date Sep 12, 2026');
+    expect(history.firstSleepDate).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('status', {...sleepHealthStatus, steps: sleepHealthStatus.steps.map(step => ({...step, count: step.count + 1}))});
+    await flush(fixture); expect(history.firstSleepDate).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('checks owner-scoped stored dates only on expansion, separately from requested range and historical Sleep limits', async () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('status', sleepHealthStatus); await flush(fixture);

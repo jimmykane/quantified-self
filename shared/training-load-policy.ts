@@ -9,6 +9,8 @@ export type TrainingLoadHrAlgorithm = 'BANISTER' | 'THRESHOLD';
 export interface TrainingLoadPolicy {
   method: TrainingLoadMethod;
   included: boolean;
+  /** Independent CSS in metres/second, valid only for the Swimming family. */
+  swimThresholdSpeed?: number;
 }
 export interface AppliedTrainingLoadPolicy extends TrainingLoadPolicy {
   family: TrainingSportId | null;
@@ -87,7 +89,15 @@ export function validTrainingLoadOverride(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 9999;
 }
 export function isTrainingLoadMethod(value: unknown): value is TrainingLoadMethod {
-  return value === 'AUTOMATIC' || value === 'HR' || value === 'MET';
+  return value === 'AUTOMATIC' || value === 'HR' || value === 'MET' || value === 'SWIM_PACE';
+}
+export function validSwimThresholdSpeed(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100;
+}
+export function validTrainingLoadPolicy(family: unknown, policy: TrainingLoadPolicy): boolean {
+  return isTrainingLoadMethod(policy.method) && typeof policy.included === 'boolean'
+    && (policy.method !== 'SWIM_PACE' || family === 'swimming')
+    && (policy.swimThresholdSpeed === undefined || family === 'swimming' && validSwimThresholdSpeed(policy.swimThresholdSpeed));
 }
 export function recordedTrainingStressScore(source: { stats?: unknown; getStat?: TrainingLoadActivity['getStat'] }): number | null {
   const stats = source.stats && typeof source.stats === 'object' ? source.stats as Record<string, unknown> : {};
@@ -144,10 +154,16 @@ export function resolveEffectiveTrainingLoad(
     if ((control?.included ?? policy.included) === false) return excluded();
     if (validTrainingLoadOverride(control?.override)) return { score: control.override, status: 'available',
       method: 'OVERRIDE', estimated: false, reasons: [] };
+    // Explicit reassociation may bring a different saved CSS to this leg. Only source reparse
+    // can recompute its candidate; do not present the target's old calibration as the retained one.
+    if (associated && policy.swimThresholdSpeed !== entry?.[1].policy.swimThresholdSpeed &&
+      entry?.[1].evaluations?.automatic.provenance !== 'imported')
+      return unavailable('reparse-required');
     const method = control?.method ?? policy.method;
     const evaluations = entry?.[1].evaluations;
     if (evaluations) {
-      const result = evaluations[method === 'HR' ? 'hr' : method === 'MET' ? 'met' : 'automatic'];
+      const result = evaluations[method === 'HR' ? 'hr' : method === 'MET' ? 'met' : method === 'SWIM_PACE' ? 'swimPace' : 'automatic'];
+      if (!result) return unavailable('reparse-required');
       const hrAlgorithm = evaluationHrAlgorithm(result);
       return { score: result.score, status: result.score === null ? 'unavailable' : 'available',
         method: result.method, estimated: result.estimated, reasons: [...result.reasons],

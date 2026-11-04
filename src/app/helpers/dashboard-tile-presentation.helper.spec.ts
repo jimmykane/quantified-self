@@ -7,7 +7,7 @@ import { hasDashboardTileSettings, resolveDashboardTileCollectionPresentation, r
 describe('dashboard tile presentation', () => {
   it('offers settings only for charts and maps that have editable properties', () => {
     for (const entry of getDashboardChartCatalog()) {
-      expect(hasDashboardTileSettings(entry.tile), entry.definition.id).toBe((['custom', 'map', 'health'].includes(entry.definition.category) || ['curated-sleep','curated-hrv'].includes(entry.definition.id)));
+      expect(hasDashboardTileSettings(entry.tile), entry.definition.id).toBe((['custom', 'map', 'health'].includes(entry.definition.category) || ['curated-sleep','curated-hrv','curated-critical-power','curated-w-prime','curated-maximum-power','curated-durability'].includes(entry.definition.id)));
     }
     expect(hasDashboardTileSettings(null)).toBe(false);
     expect(hasDashboardTileSettings({ type: TileTypes.Chart, chartType: 'FutureRenderer' })).toBe(false);
@@ -43,4 +43,12 @@ describe('dashboard tile presentation', () => {
     const tiles = getDashboardChartCatalog().filter(entry => entry.lane === lane).map(entry => entry.tile);
     expect(resolveDashboardTileCollectionPresentation(tiles).add).toBe(action);
   });
+});
+
+
+describe('performance context settings', () => {
+  it.each(['CriticalPowerHistory', 'WPrimeHistory', 'MaximumPowerHistory', 'DurabilityTrend'])(
+    'exposes the shared settings action for %s', chartType => {
+      expect(hasDashboardTileSettings({ type: TileTypes.Chart, chartType })).toBe(true);
+    });
 });

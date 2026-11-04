@@ -34,6 +34,9 @@ export class PlanPhasesDialogComponent {
       validateTrainingPlanDateRange(this.start(), this.end());
       const phases = parseTrainingPlanPhasesV1({ version: 1, items: this.items() });
       validateTrainingPlanPhaseRange(phases, this.start(), this.end());
+      if (this.data.plan.restDays?.some(date => date < this.start() || date > this.end())) {
+        return { error: 'The plan range must contain every rest day. Remove excluded rest days first.', phases: null };
+      }
       if (this.data.currentWorkoutDates.some(date => date < this.start() || date > this.end())) {
         return { error: 'The plan range must contain every current workout. Move or remove excluded workouts first.', phases: null };
       }

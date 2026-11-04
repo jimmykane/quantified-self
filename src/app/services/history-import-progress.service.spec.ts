@@ -58,6 +58,23 @@ describe('HistoryImportProgressService', () => {
     stream('a').next({connectionState: 'connected', connectionHistoryImport: {...status(), steps: [{id: 'activities', resources: ['activities'], status: 'requesting', count: 12}]}});
     expect(dashboard().items[0].steps[0].count).toBe(12);
   });
+  it('shares the active data blocker without extra reads and excludes routes and terminal Garmin requests', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(true);
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: { ...status(), steps: [{ id: 'routes', resources: ['routes'], status: 'requesting' }] } });
+    expect(service.dataImportActive()).toBe(false);
+    stream('a', ServiceNames.GarminAPI).next({ connectionState: 'connected', connectionHistoryImport: { ...status(false), steps: [{ id: 'activities', resources: ['activities'], status: 'requested' }] } });
+    expect(service.dataImportActive()).toBe(false); expect(getMeta).toHaveBeenCalledTimes(4);
+    sessions$.next(null); auth.currentUser = null; expect(service.dataImportActive()).toBe(false);
+  });
+  it.each([null, 'disconnect_pending', 'reconnect_required'])('does not block on retained import metadata from unavailable connection %s', connectionState => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(true);
+    stream('a').next({ connectionState, connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(false);
+  });
   it('clears immediately on raw sign-out, before a delayed profile emission', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
     stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});
@@ -92,12 +109,30 @@ describe('HistoryImportProgressService', () => {
     expect(service.view().items[0].kind).toBe('active');
     expect(getMeta).toHaveBeenCalledTimes(8);
   });
-  it('expires recent terminal context without polling or further metadata reads', () => {
+  it.each(['processed', 'failed', 'skipped'])('expires %s terminal context without polling or further metadata reads', terminalStatus => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    stream('a').next({connectionState: 'connected', connectionHistoryImport: status(false)}); TestBed.flushEffects();
+    const projection = {...status(false), steps: [{id: 'activities', resources: ['activities'], status: terminalStatus, count: 7}]};
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: projection}); TestBed.flushEffects();
     expect(service.view().items).toHaveLength(1);
     vi.advanceTimersByTime(HISTORY_IMPORT_RECENT_MS); TestBed.flushEffects();
     expect(service.view().items).toEqual([]);
+    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: terminalStatus === 'processed' ? 'processed' : 'attention', updatedAtMs: now}]);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+  });
+  it('keeps latest Connections status after dismissing a notification and drops it on disconnect or sign-out', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    const result = service.view().items[0];
+    expect(service.dismissResult(result, service.owner())).toBe(true);
+    expect(service.view().items).toEqual([]);
+    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: 'attention', updatedAtMs: now}]);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+    stream('a').next({connectionState: 'disconnect_pending', connectionHistoryImport: failedStatus()});
+    expect(service.latestImports()).toEqual([]);
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    expect(service.latestImports()).toHaveLength(1);
+    auth.currentUser = null; sessions$.next(null);
+    expect(service.latestImports()).toEqual([]);
     expect(getMeta).toHaveBeenCalledTimes(4);
   });
   it('unsubscribes and cancels timers on destruction', () => {

@@ -30,6 +30,10 @@ export const FUNCTIONS_MANIFEST = {
     previewAdminSubscriptionGift: { name: 'previewAdminSubscriptionGift', region: 'europe-west2' },
     grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
+    sendTestPushNotification: { name: 'sendTestPushNotification', region: 'europe-west2' },
+    sendHistoryImportNotification: { name: 'sendHistoryImportNotification', region: 'europe-west2' },
+    sendActivitySyncNotifications: { name: 'sendActivitySyncNotifications', region: 'europe-west2' },
+
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
     getMcpAuthorizationRequest: { name: 'getMcpAuthorizationRequest', region: 'europe-west2' },
@@ -136,6 +140,7 @@ export const FUNCTIONS_MANIFEST = {
         region: 'europe-west2',
         clientTimeoutMs: 190_000,
     },
+    generateDayWorkout: { name: 'generateDayWorkout', region: 'europe-west2', clientTimeoutMs: 190_000 },
     getAssistantQuotaStatus: { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
     getAssistantConversation: { name: 'getAssistantConversation', region: 'europe-west2' },
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
@@ -152,6 +157,7 @@ export const FUNCTIONS_MANIFEST = {
     onTrainingDeliveryQueued: { name: 'onTrainingDeliveryQueued', region: 'europe-west2' },
     onTrainingDeliveryConnectionChanged: { name: 'onTrainingDeliveryConnectionChanged', region: 'europe-west2' },
     onTrainingDeliveryEntitlementChanged: { name: 'onTrainingDeliveryEntitlementChanged', region: 'europe-west2' },
+    onTrainingDeliveryOwnerUnitsChanged: { name: 'onTrainingDeliveryOwnerUnitsChanged', region: 'europe-west2' },
     getTrainingScheduleHistory: { name: 'getTrainingScheduleHistory', region: 'europe-west2' },
     previewTrainingScheduleRestore: { name: 'previewTrainingScheduleRestore', region: 'europe-west2' },
     restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },

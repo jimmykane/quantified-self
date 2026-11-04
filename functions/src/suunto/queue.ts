@@ -75,6 +75,7 @@ async function enqueueSuuntoWorkout(userName: string, workoutID: string, res: fu
           userName,
           workoutID,
           firebaseUserID,
+          activityNotificationOrigin: 'live',
         });
         return 'queued' as const;
       } catch (error) {

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { TRAINING_REST_DAYS_COLLECTION, parseTrainingRestDayV1 } from '../../../shared/training-rest-days';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -50,6 +51,7 @@ import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.servi
 import {
   TRAINING_CHANGE_SCHEMA,
   TRAINING_PLAN_PHASE_CHANGE_SCHEMA,
+  TRAINING_REST_DAYS_CHANGE_SCHEMA,
   TRAINING_DELETION_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
   TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA,
@@ -75,9 +77,11 @@ const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entity
 
 type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
   | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>
-  | z.infer<typeof TRAINING_PLAN_PHASE_CHANGE_SCHEMA>;
+  | z.infer<typeof TRAINING_PLAN_PHASE_CHANGE_SCHEMA> | z.infer<typeof TRAINING_REST_DAYS_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes> & {
   phaseReview?: z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_plan_phases>['phaseReview'];
+  calendarRestDayReview?: z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_calendar_rest_day>['calendarRestDayReview'];
+  restDayReview?: z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_rest_days>['restDayReview'];
 };
 type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
 type ReplacementPreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement>;
@@ -125,6 +129,7 @@ interface StoredProposal {
   nextScheduleOperation: number;
   scheduleRequests: StoredScheduleOperation[];
   planDeletion?: StoredPlanDeletion;
+  calendarRestDay?: { localDate: string; isRestDay: boolean; expectedRevision: number };
   providerOperations: StoredProviderOperation[];
   localEntities: Array<{ localKey: string; kind: 'plan' | 'workout'; id: string }>;
   preview: PreviewResult | ReplacementPreviewResult;
@@ -417,7 +422,7 @@ function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: Trai
   };
   switch (operation.kind) {
     case 'create-plan': if (operation.activate) addPlan(snapshot.state.activePlanId); break;
-    case 'rename-plan': case 'set-plan-color': case 'set-plan-phases': case 'shift-plan': addPlan(operation.planId); break;
+    case 'rename-plan': case 'set-plan-color': case 'set-plan-phases': case 'set-plan-rest-days': case 'shift-plan': addPlan(operation.planId); break;
     case 'set-plan-lifecycle': addPlan(operation.planId); if (operation.lifecycle === 'active') addPlan(snapshot.state.activePlanId); break;
     case 'create-workout': case 'bulk-create-workouts': addPlan(operation.planId); break;
     case 'update-workout': case 'move-workout': {
@@ -447,6 +452,7 @@ function describeOperation(operation: TrainingScheduleMutationOperationV1): stri
     case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ' as paused (not active; no plan delivery)'}.`;
     case 'rename-plan': return `Rename a plan to “${operation.name}”.`;
     case 'set-plan-color': return `Change the plan color to ${operation.color}.`;
+    case 'set-plan-rest-days': return `Replace the plan's explicit rest days with ${operation.restDays.length} date${operation.restDays.length === 1 ? '' : 's'}. No workouts, training load or provider deliveries are created.`;
     case 'set-plan-phases': return `Replace the plan phases with ${operation.phases.items.length} phase${operation.phases.items.length === 1 ? '' : 's'}; plan dates become ${operation.startLocalDate} to ${operation.endLocalDate}. Workouts and provider delivery settings stay unchanged.`;
     case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
     case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
@@ -558,6 +564,11 @@ function resolveScheduleOperation(
     }
     case 'rename-plan': return { kind: change.kind, planId: plan(change.plan)!, name: change.name };
     case 'set-plan-color': return { kind: change.kind, planId: plan(change.plan)!, color: change.color };
+    case 'set-plan-rest-days': {
+      const planId = plan(change.plan)!;
+      if (snapshot.plans.get(planId)?.revision !== change.expectedPlanRevision) invalid('The plan changed. Read its current rest days and review again.');
+      return { kind: change.kind, planId, restDays: change.restDays };
+    }
     case 'set-plan-phases': {
       const planId = plan(change.plan)!;
       if (snapshot.plans.get(planId)?.revision !== change.expectedPlanRevision) invalid('The plan changed. Read its current phases and review again.');
@@ -876,11 +887,14 @@ export async function previewGarminWorkoutReplacement(
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'deletion' | 'phases' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'deletion' | 'phases' | 'rest-days' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
-  const parsed = recipeMode === 'phases'
+  const parsed = recipeMode === 'rest-days'
+    ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+      changes: z.array(TRAINING_REST_DAYS_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'phases'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_PLAN_PHASE_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
     : recipeMode === 'strength'
@@ -1108,7 +1122,14 @@ export async function previewTrainingChanges(
     scheduleRevision: loaded.snapshot.state.revision,
     summary: `${publicChanges.length} Training change${publicChanges.length === 1 ? '' : 's'} proposed for client approval. Provider actions have independent results from authored changes.${hasUnsupportedDestination ? ' At least one requested provider action targets an unsupported workout version. No update will be sent there; an earlier copy may remain unchanged. Review each provider preview before confirming.' : ''}`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
-  if (recipeMode === 'phases') {
+  if (recipeMode === 'rest-days') {
+    const operation = scheduleRequests[0].request.operation;
+    if (operation.kind !== 'set-plan-rest-days') invalid('Invalid rest-day-only proposal.');
+    const before = loaded.snapshot.plans.get(operation.planId)!, after = simulated.plans.get(operation.planId)!;
+    preview.restDayReview = { planName: before.name, startDate: before.startLocalDate, endDate: before.endLocalDate,
+      before: before.restDays ?? [], after: after.restDays ?? [] };
+    TRAINING_WRITE_OUTPUTS.preview_training_rest_days.parse(preview);
+  } else if (recipeMode === 'phases') {
     const operation = scheduleRequests[0].request.operation;
     if (operation.kind !== 'set-plan-phases') invalid('Invalid phase-only proposal.');
     const before = loaded.snapshot.plans.get(operation.planId)!, after = simulated.plans.get(operation.planId)!;
@@ -1236,6 +1257,83 @@ export async function previewPlannedWorkoutV3Changes(input: TrainingWriteInput, 
     invalid('Use the complete strength workout preview for exercise and set prescriptions.');
   }
   return previewTrainingChanges({ ...input, arguments: parsed.data }, provided, 'v3-batch');
+}
+
+/** A single independent calendar date: captures its own revision without reading plan/workout history. */
+export async function previewTrainingCalendarRestDay(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const args = TRAINING_WRITE_INPUTS.preview_training_calendar_rest_day.safeParse(input.arguments);
+  if (!args.success) invalid('Choose one valid calendar date and whether it is a rest day.');
+  const required = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE];
+  assertScopes(input.scopes, required);
+  const deps = provided ?? defaultDependencies(), createdAtMs = deps.now(), expiresAtMs = createdAtMs + PROPOSAL_LIFETIME_MS;
+  const id = `proposal-${deps.randomId().replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
+  const ref = proposalRef(id, createdAtMs, input.uid, input.connectionId), user = deps.db.collection('users').doc(input.uid);
+  return deps.db.runTransaction(async tx => {
+    const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required);
+    const [marker, state] = await tx.getAll(user.collection(TRAINING_REST_DAYS_COLLECTION).doc(args.data.localDate),
+      user.collection('trainingPlanState').doc('current'), { fieldMask: ['schemaVersion', 'localDate', 'isRestDay', 'revision'] });
+    const previous = marker.exists ? parseTrainingRestDayV1(marker.data(), marker.id) : null;
+    const summary = `${args.data.localDate}: ${previous?.isRestDay ? 'Rest day' : 'No calendar rest marker'} → ${args.data.isRestDay ? 'Rest day' : 'No calendar rest marker'}. Only this calendar marker changes; plan rest days and workouts stay unchanged. Daily generation allowance is unchanged; no provider action.`;
+    const preview = TRAINING_WRITE_OUTPUTS.preview_training_calendar_rest_day.parse({ proposalRef: ref, expiresAtMs,
+      permissionMode: 'schedule', scheduleRevision: state.get('revision') ?? 0, summary, requiresConfirmation: true,
+      changes: [{ index: 0, kind: 'set-calendar-rest-day', summary }], providerPreviews: [],
+      calendarRestDayReview: { localDate: args.data.localDate, before: previous?.isRestDay ?? false, after: args.data.isRestDay } });
+    const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
+      accessGeneration: generation, requiredScopes: required, createdAtMs, expiresAtMs, expireAt: Timestamp.fromMillis(expiresAtMs),
+      status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0, scheduleRequests: [], providerOperations: [], localEntities: [],
+      preview, changeResults: [], providerResults: [], calendarRestDay: { ...args.data, expectedRevision: previous?.revision ?? 0 } };
+    tx.create(user.collection(PROPOSALS).doc(id), stored);
+    return preview;
+  });
+}
+
+/** Marker and durable result commit together. Replaying an approved proposal never reapplies later-cleared intent. */
+async function applyCalendarRestDay(input: TrainingWriteInput, current: Awaited<ReturnType<typeof readProposal>>,
+  deps: TrainingWriteDependencies): Promise<ApplyResult> {
+  const user = deps.db.collection('users').doc(input.uid), proposalDoc = user.collection(PROPOSALS).doc(current.id);
+  return deps.db.runTransaction(async tx => {
+    const snapshot = await tx.get(proposalDoc), proposal = snapshot.data() as StoredProposal | undefined;
+    if (!proposal || proposal.uid !== input.uid || proposal.connectionId !== input.connectionId
+      || proposal.createdAtMs !== current.proposal.createdAtMs || proposal.cancelledAtMs !== undefined) invalid('This Training proposal is unavailable.');
+    const required = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE];
+    assertScopes(input.scopes, required);
+    if (proposal.requiredScopes.length !== 2 || required.some(scope => !proposal.requiredScopes.includes(scope))
+      || proposal.scheduleRequests.length || proposal.providerOperations.length || proposal.localEntities.length || proposal.planDeletion) invalid('Invalid calendar rest proposal.');
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined);
+    if (proposal.result) return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+    if (proposal.status !== 'pending' || proposal.expiresAtMs <= deps.now()) invalid('This Training proposal expired or changed. Prepare it again.');
+    const operation = TRAINING_WRITE_INPUTS.preview_training_calendar_rest_day.extend({ expectedRevision: z.number().int().nonnegative().safe() }).parse(proposal.calendarRestDay);
+    const review = TRAINING_WRITE_OUTPUTS.preview_training_calendar_rest_day.parse(proposal.preview).calendarRestDayReview;
+    if (operation.localDate !== review.localDate || operation.isRestDay !== review.after) invalid('The calendar rest review changed.');
+    const marker = user.collection(TRAINING_REST_DAYS_COLLECTION).doc(operation.localDate);
+    const [markerDoc, state] = await tx.getAll(marker, user.collection('trainingPlanState').doc('current'),
+      { fieldMask: ['schemaVersion', 'localDate', 'isRestDay', 'revision'] });
+    const previous = markerDoc.exists ? parseTrainingRestDayV1(markerDoc.data(), markerDoc.id) : null;
+    if ((previous?.revision ?? 0) !== operation.expectedRevision || (previous?.isRestDay ?? false) !== review.before) {
+      invalid('This calendar rest day changed. Prepare and review it again.');
+    }
+    const changed = review.before !== review.after;
+    const result: ApplyResult = TRAINING_WRITE_OUTPUTS.apply_training_changes.parse({ proposalRef: current.ref, status: 'applied',
+      scheduleRevision: state.get('revision') ?? 0, changes: [{ index: 0, kind: 'set-calendar-rest-day',
+        status: changed ? 'applied' : 'already_applied', message: `${operation.localDate}: calendar rest day ${operation.isRestDay ? 'marked' : 'removed'}. Plan rest days and workouts stay unchanged.` }],
+      providers: [], createdReferences: [] });
+    if (changed) tx.set(marker, parseTrainingRestDayV1({ schemaVersion: 1, localDate: operation.localDate,
+      isRestDay: operation.isRestDay, revision: operation.expectedRevision + 1 }, operation.localDate));
+    tx.update(proposalDoc, { status: 'applied', result, changeResults: result.changes, providerResults: [],
+      approvedAtMs: deps.now(), leaseUntilMs: null, expireAt: Timestamp.fromMillis(deps.now() + PROPOSAL_RESULT_LIFETIME_MS) });
+    return result;
+  });
+}
+
+/** Additive rest-day-only proposal; the existing separately approved apply owns persistence. */
+export async function previewTrainingRestDays(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_training_rest_days.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide the current plan and schedule revisions and the complete intended rest-day list.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'rest-days');
 }
 
 /** Additive phase-only proposal; the existing separately approved apply owns persistence. */
@@ -1523,6 +1621,13 @@ async function applyTrainingChangesInternal(
   moveToStage: (stage: TrainingApplyStage) => void,
 ): Promise<ApplyResult> {
   const current = await readProposal(input, deps);
+  if (current.proposal.calendarRestDay) {
+    timing.operationCount = 1; timing.scheduleOperationCount = 1; timing.providerOperationCount = 0;
+    moveToStage('schedule');
+    const result = await applyCalendarRestDay(input, current, deps);
+    timing.outcome = current.proposal.result ? 'replayed' : result.status;
+    return result;
+  }
   const ref = current.ref;
   const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
   let proposal = await deps.db.runTransaction(async tx => {

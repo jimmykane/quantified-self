@@ -121,6 +121,16 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
     return bars([weeks.map(week => week.easySeconds), weeks.map(week => week.moderateSeconds), weeks.map(week => week.hardSeconds)],
       ['#43a047', '#fb8c00', '#e53935'], true);
   }
+  if (C.isDashboardPerformanceChartType(type)) {
+    const context = tile.performanceTrend;
+    if (context?.powerTrend) return cartesian([line(context.powerTrend.points.map(point => [point.dayMs, point.value]), theme.trendLineColor)]);
+    const points = context?.trajectory?.points || [];
+    return { ...bars([points.map(point => point.sourceActivityCount)], [theme.splitLineColor]),
+      yAxis: [{ type: 'value', show: false, min: 0 }, { type: 'value', show: false, scale: true }],
+      series: [{ type: 'bar', data: points.map(point => point.sourceActivityCount), silent: true, itemStyle: { color: theme.splitLineColor } },
+        { ...line(points.map((point, i) => [i, point.value]), theme.trendLineColor), yAxisIndex: 1 }],
+    };
+  }
   if (type === C.DASHBOARD_POWER_CURVE_CHART_TYPE) {
     const powerSeries = (tile.powerCurve?.series || []).filter(series => series.points?.length);
     return { ...cartesian(powerSeries.map((series, index) =>

@@ -1,0 +1,10 @@
+.connection-history-actions > button {
+    margin-right: 0;
+}
+
+.suunto-sign-in-hint {
+    margin: 0;
+    min-width: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+}

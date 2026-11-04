@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { notifyNewActivityAfterPersistence } from '../web-push/activity-admission';
 import { FieldValue } from 'firebase-admin/firestore';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin, resolveFirebaseUserIDForGarminUserID } from '../queue';
@@ -32,6 +33,8 @@ import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueu
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
+import { skipVerifiedProviderFITCopy } from '../shared/provider-fit-copy';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
 } from '../queue/token-refresh-contention';
@@ -57,6 +60,7 @@ export const GARMIN_ACTIVITY_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
 export const GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface GarminActivityQueueInput {
+  suppressAutomaticActivitySync?: boolean,
   userID: string,
   startTimeInSeconds: number,
   manual: boolean,
@@ -239,13 +243,18 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
   }
 
   const firebaseUserIDByGarminUserID = new Map<string, string | null>();
+  const activitySyncCutoffByGarminUserID = new Map<string, number>();
   const distinctGarminUserIDs = Array.from(new Set(queueItems.map((queueItem) => queueItem.userID)));
   try {
     await mapWithConcurrency(distinctGarminUserIDs, GARMIN_CALLBACK_QUEUE_CONCURRENCY, async (garminUserID) => {
-      firebaseUserIDByGarminUserID.set(
-        garminUserID,
-        await resolveFirebaseUserIDForGarminUserID(garminUserID),
-      );
+      const firebaseUserID = await resolveFirebaseUserIDForGarminUserID(garminUserID);
+      firebaseUserIDByGarminUserID.set(garminUserID, firebaseUserID);
+      if (firebaseUserID) {
+        const cutoffMs = (await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI))?.activitySyncCutoffMs;
+        if (typeof cutoffMs === 'number' && Number.isFinite(cutoffMs) && cutoffMs > 0) {
+          activitySyncCutoffByGarminUserID.set(garminUserID, cutoffMs);
+        }
+      }
     });
   } catch (e: unknown) {
     logger.error(e);
@@ -263,9 +272,14 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
       });
       return [];
     }
+    const cutoffMs = activitySyncCutoffByGarminUserID.get(queueItem.userID);
+    const recordingStartMs = typeof queueItem.startTimeInSeconds === 'number' ? queueItem.startTimeInSeconds * 1000 : NaN;
+    const suppressAutomaticActivitySync = cutoffMs !== undefined
+      && (!Number.isFinite(recordingStartMs) || recordingStartMs < cutoffMs);
     return [{
       ...queueItem,
       firebaseUserID,
+      ...(suppressAutomaticActivitySync ? { suppressAutomaticActivitySync: true } : {}),
     }];
   });
 
@@ -415,8 +429,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     if (status === 410) {
       return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'RESOURCE_GONE');
     }
-    await increaseRetryCountForQueueItem(queueItem, safeError, status === 400 || status === 500 ? 20 : 1, bulkWriter);
-    return QueueResult.RetryIncremented;
+    return increaseRetryCountForQueueItem(queueItem, safeError, 1, bulkWriter);
   };
 
   try {
@@ -430,6 +443,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   }
 
 
+  let importedEventID: string | undefined;
   try {
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
@@ -484,10 +498,13 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       providerEventSecondaryID: queueItem.activityFileType,
       providerEventSecondaryIDField: 'serviceActivityFileType',
     });
+    importedEventID = eventID;
     if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_event_write')) {
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
     const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    if (!bulkWriter) await notifyNewActivityAfterPersistence(firebaseUserID, ServiceNames.GarminAPI, queueItem,
+      setEventResult, event.startDate, event.endDate, tokenQuerySnapshots.docs[0].data().dateCreated);
     if (parsedFromFIT) {
       await retainGarminFITWorkoutReferences(
         admin.firestore(),
@@ -505,25 +522,39 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
       }
 
-      try {
-        const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
-        const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
-        await enqueueActivitySyncJobsForImportedEvent({
-          userID: firebaseUserID,
-          eventID: activitySyncEventID,
-          sourceServiceName: ServiceNames.GarminAPI,
-          sourceActivityID: queueItem.activityFileID,
-          originalFiles: activitySyncOriginalFiles,
-        });
-      } catch (activitySyncError) {
-        logger.error(`[ActivitySync] Failed to enqueue Garmin->destination sync for event ${eventID} and user ${firebaseUserID}. Import remains successful.`, activitySyncError);
+      if (queueItem.suppressAutomaticActivitySync !== true) {
+        try {
+          const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
+          const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
+          await enqueueActivitySyncJobsForImportedEvent({
+            userID: firebaseUserID,
+            eventID: activitySyncEventID,
+            sourceServiceName: ServiceNames.GarminAPI,
+            sourceActivityID: queueItem.activityFileID,
+            originalFiles: activitySyncOriginalFiles,
+          });
+        } catch (activitySyncError) {
+          logger.error(`[ActivitySync] Failed to enqueue Garmin->destination sync for event ${eventID} and user ${firebaseUserID}. Import remains successful.`, activitySyncError);
+        }
       }
     }
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
+    if (e instanceof ProviderImportDuplicateError) {
+      logger.info('Skipping a verified cross-provider recording of an existing activity.', {
+        serviceName: ServiceNames.GarminAPI, queueItemId: queueItem.id, eventID: e.eventID,
+      });
+      return updateToProcessed(queueItem, bulkWriter, {
+        resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID,
+      });
+    }
     if (isActivityIdentityConflict(e)) {
+      if (importedEventID) {
+        const copy = await skipVerifiedProviderFITCopy(queueItem, firebaseUserID, importedEventID, result);
+        if (copy !== null) return copy;
+      }
       return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.code);
     }
     logger.error(e);

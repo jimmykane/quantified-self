@@ -5,10 +5,11 @@
         <mat-icon svgIcon="logo" class="brand-logo" aria-hidden="true"></mat-icon>
         <p class="brand-name">Quantified Self.io</p>
       </div>
-      <h1 id="home-title">Your Training Data, Connected. <span class="highlight-text">One Dashboard. Every Activity in Context.</span></h1>
-      <p class="hero-subtitle">Spend less time moving files. Pro imports new activities automatically and syncs supported recordings along the paths you choose.</p>
+      <p class="eyebrow hero-eyebrow">Endurance training intelligence</p>
+      <h1 id="home-title">All your training data. <span>Across your devices. </span><span class="highlight-text">Under your control.</span></h1>
+      <p class="hero-subtitle">Bring your Garmin, Suunto, COROS and Wahoo activities together. Understand your training, explore insights with AI, and keep your original files under your control.</p>
       <div class="hero-actions" data-nosnippet>
-        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+        <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started Free <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
         <a mat-stroked-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>monitoring</mat-icon></a>
       </div>
       <p class="hero-access-note">Start with manual uploads and training analysis on free Starter. Provider connections and automatic sync require Pro.</p>
@@ -18,6 +19,68 @@
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
     </div>
+    <div class="hero-visual" [class.hero-motion-paused]="heroMotionPaused()" role="group" aria-label="Supported provider activities flow into Quantified Self">
+      <!-- Decorative connection geometry; all data charts remain shared app components. -->
+      <div class="hero-provider-flow">
+        <div class="logos-container hero-providers" role="group" aria-label="Supported providers">
+          @for (provider of heroProviders; track provider.icon) {
+            <div class="hero-provider" [attr.data-provider]="provider.icon">
+              <mat-icon [svgIcon]="provider.icon" class="partner-logo" [matTooltip]="provider.tooltip" role="img" [attr.aria-label]="provider.name" aria-hidden="false"></mat-icon>
+            </div>
+          }
+        </div>
+        <div class="hero-connection-field" aria-hidden="true">
+          <svg class="hero-provider-wires hero-provider-wires--desktop" viewBox="0 0 136 336" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            @for (provider of heroProviders; track provider.icon) {
+              <g class="hero-connection" [attr.data-provider]="provider.icon">
+                <path class="hero-connection-track" [attr.d]="provider.path"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.flowPath" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.flowPath" pathLength="100"></path>
+                <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
+              </g>
+            }
+            <g class="hero-aggregate">
+              <path class="hero-connection-track" d="M 84 168 H 136"></path>
+            </g>
+          </svg>
+          <svg class="hero-provider-wires hero-provider-wires--mobile" viewBox="0 0 400 104" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            @for (provider of heroProviders; track provider.icon) {
+              <g class="hero-connection" [attr.data-provider]="provider.icon">
+                <path class="hero-connection-track" [attr.d]="provider.mobilePath"></path>
+                <path class="hero-connection-halo" [attr.d]="provider.mobileFlowPath" pathLength="100"></path>
+                <path class="hero-connection-pulse" [attr.d]="provider.mobileFlowPath" pathLength="100"></path>
+              </g>
+            }
+            <g class="hero-aggregate">
+              <path class="hero-connection-track" d="M 200 64 V 104"></path>
+            </g>
+          </svg>
+          <!-- Keep the junction circular while the decorative paths stretch to fit. -->
+          <span class="hero-aggregation-point"></span>
+        </div>
+      </div>
+      <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
+        <span class="hero-border-glow" aria-hidden="true"></span>
+        <span class="hero-border-glow hero-border-glow--following" aria-hidden="true"></span>
+        <div class="hero-product-header">
+          <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, together.</h2></div>
+          <div class="hero-preview-controls">
+            <span class="hero-sample-label">Sample data</span>
+            <button mat-icon-button class="hero-motion-toggle" (click)="toggleHeroMotion()"
+              [attr.aria-label]="heroMotionPaused() ? 'Play connection animation' : 'Pause connection animation'"
+              [matTooltip]="heroMotionPaused() ? 'Play animation' : 'Pause animation'">
+              <mat-icon aria-hidden="true">{{ heroMotionPaused() ? 'play_arrow' : 'pause' }}</mat-icon>
+            </button>
+          </div>
+        </div>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-hero"></app-public-feature-preview>
+        <p class="hero-product-caption">Explore the same charts inside Quantified Self.</p>
+      </mat-card>
+    </div>
+    <div class="provider-compatibility">
+      <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
+      <p class="provider-compatibility__copy">Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
+    </div>
   </section>
 
   <nav class="home-navigation" aria-label="Homepage features">
@@ -25,33 +88,6 @@
       <a mat-button [href]="'#home-' + feature.id" (click)="jumpToFeature(feature.id, $event)">{{ feature.label }}</a>
     }
   </nav>
-
-  <section id="home-integrations" class="integrations-section" aria-labelledby="home-integrations-title">
-    <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
-    <div appHomeReveal class="logos-container" aria-label="Supported providers">
-      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon>
-    </div>
-    <p>Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
-    <div class="integration-actions" data-nosnippet>
-      <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-      <a mat-stroked-button routerLink="/integrations">Explore integrations <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-    </div>
-    <div class="compact-row-stack integration-details">
-      <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
-        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
-      <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
-        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
-        <app-public-feature-preview [prepareAhead]="true" previewKey="provider-flow"></app-public-feature-preview>
-        <p><strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.</p>
-        <p><strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes can also be sent manually to Garmin, Suunto, COROS, or Wahoo.</p>
-      </app-compact-row>
-      <app-compact-row appHomeReveal layout="stacked" icon="upload_file" title="Upload Your Own Files" [showDivider]="false"
-        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."></app-compact-row>
-    </div>
-  </section>
 
   <section id="home-training" class="feature-section training-section" aria-labelledby="home-training-title">
     <div appHomeReveal class="feature-copy section-heading">
@@ -103,6 +139,9 @@
       <p>{{ trainingPlansFeature.accessNote }}</p>
       <a mat-button [routerLink]="trainingPlansFeature.cta.routerLink">{{ trainingPlansFeature.cta.label }} <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon></a>
     </div>
+    <app-compact-row appHomeReveal layout="stacked" icon="auto_awesome"
+      [title]="workoutGeneration.title" [summary]="workoutGeneration.copy" [showDivider]="false"></app-compact-row>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal [previewKey]="workoutGeneration.preview"></app-public-feature-preview>
     <div class="compact-row-stack">
       @for (row of trainingPlansFeature.rows; track row.title; let last = $last) {
         <app-compact-row appHomeReveal layout="stacked" density="compact" [icon]="row.icon" [iconTone]="row.iconTone"
@@ -178,6 +217,26 @@
       <a mat-button routerLink="/features/workout-data-comparison">Compare Workouts and Devices <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>
     <app-public-feature-preview [prepareAhead]="true" appHomeReveal class="feature-visuals" previewKey="reviewer-benchmark"></app-public-feature-preview>
+  </section>
+
+  <section id="home-integrations" class="integrations-section" aria-labelledby="home-integration-details-title">
+    <h2 id="home-integration-details-title" class="cdk-visually-hidden" tabindex="-1">Integrations</h2>
+    <div class="integration-actions" data-nosnippet>
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+      <a mat-stroked-button routerLink="/integrations">Explore integrations <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </div>
+    <div class="compact-row-stack integration-details">
+      <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
+        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
+      <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
+        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
+        <app-public-feature-preview [prepareAhead]="true" previewKey="provider-flow"></app-public-feature-preview>
+        <p><strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.</p>
+        <p><strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes can also be sent manually to Garmin, Suunto, COROS, or Wahoo.</p>
+      </app-compact-row>
+      <app-compact-row appHomeReveal layout="stacked" icon="upload_file" title="Upload Your Own Files" [showDivider]="false"
+        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."></app-compact-row>
+    </div>
   </section>
 
   <section class="getting-started-section" aria-labelledby="home-start-title">

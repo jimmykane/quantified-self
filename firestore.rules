@@ -48,6 +48,58 @@ service cloud.firestore {
         ]);
       allow delete: if false;
       
+      // Private device registrations are leaves, never event/metric or MCP data.
+      match /pushSubscriptions/{installationID} {
+        function validId(value) { return value is string && value.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'); }
+        function validRegistration() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['schemaVersion', 'origin', 'vapidPublicKey', 'generation', 'endpoint', 'keys', 'updatedAt'])
+            && d.keys().hasAll(['schemaVersion', 'origin', 'vapidPublicKey', 'generation', 'endpoint', 'keys', 'updatedAt'])
+            && d.schemaVersion == 1 && validId(installationID) && validId(d.generation)
+            && d.origin in ['https://quantified-self.io', 'https://beta.quantified-self.io']
+            && d.vapidPublicKey is string && d.vapidPublicKey.matches('^B[A-Za-z0-9_-]{86}$')
+            && d.endpoint is string && d.endpoint.size() <= 4096
+            && d.endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.]notify[.]windows[.]com)/[A-Za-z0-9_./~%?=&+:-]+$')
+            && d.keys is map && d.keys.keys().hasOnly(['p256dh', 'auth']) && d.keys.keys().hasAll(['p256dh', 'auth'])
+            && d.keys.p256dh is string && d.keys.p256dh.matches('^B[A-Za-z0-9_-]{86}$')
+            && d.keys.auth is string && d.keys.auth.matches('^[A-Za-z0-9_-]{22}$')
+            && d.updatedAt == request.time;
+        }
+        allow get: if isOwner();
+        allow list: if false;
+        allow create, update: if mayWriteAccount(userID)
+          && !('impersonatedBy' in request.auth.token)
+          && exists(/databases/$(database)/documents/users/$(userID)) && validRegistration();
+        allow delete: if isOwner() && !('impersonatedBy' in request.auth.token);
+        match /{descendants=**} { allow read, write: if false; }
+      }
+      match /pushState/{document=**} { allow read, write: if false; }
+
+      // Account-wide category preferences. Revisions cancel consent from before a toggle.
+      // Leaves cannot be deleted/reset by clients, including when all categories are on.
+      match /notificationPreferences/{category} {
+        function validPreference() {
+          let d = request.resource.data;
+          return category in ['history_import', 'activity_sync', 'activity_delivery']
+            && d.keys().hasOnly(['schemaVersion', 'enabled', 'revision', 'updatedAt'])
+            && d.keys().hasAll(['schemaVersion', 'enabled', 'revision', 'updatedAt'])
+            && d.schemaVersion == 1 && d.enabled is bool
+            && d.revision is int && d.revision >= 1 && d.revision <= 9007199254740991
+            && d.updatedAt == request.time;
+        }
+        function mayWritePreference() {
+          return mayWriteAccount(userID) && !('impersonatedBy' in request.auth.token)
+            && exists(/databases/$(database)/documents/users/$(userID)) && validPreference();
+        }
+        allow get: if isOwner() && category in ['history_import', 'activity_sync', 'activity_delivery'];
+        allow list, delete: if false;
+        allow create: if mayWritePreference() && request.resource.data.revision == 1;
+        allow update: if mayWritePreference()
+          && request.resource.data.enabled != resource.data.enabled
+          && request.resource.data.revision == resource.data.revision + 1;
+        match /{descendants=**} { allow read, write: if false; }
+      }
+
       // Legal Agreements (Write-Once / Monotonic)
       match /legal/agreements {
         allow read: if request.auth.uid == userID;
@@ -115,10 +167,13 @@ service cloud.firestore {
           let data = request.resource.data;
           return family in ['running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing',
             'strength', 'fitness-gym', 'paddling', 'other-training']
-            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt'])
+            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed'])
             && data.revision is int && data.revision > 0
             && data.revisionId is string && data.revisionId.matches('^[a-zA-Z0-9-]{1,64}$')
-            && data.method in ['AUTOMATIC', 'HR', 'MET'] && data.included is bool
+            && data.method in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE'] && data.included is bool
+            && (data.method != 'SWIM_PACE' || family == 'swimming')
+            && (!('swimThresholdSpeed' in data) || (family == 'swimming'
+              && data.swimThresholdSpeed is number && data.swimThresholdSpeed > 0 && data.swimThresholdSpeed <= 100))
             && data.effectiveAt == request.time;
         }
         function matchingRevision() {
@@ -285,7 +340,7 @@ service cloud.firestore {
                 return key is string && key.matches('^[a-zA-Z0-9_-]{1,128}$')
                   && (key in legs || (legacy && exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
                   && control is map && control.keys().hasOnly(['method', 'included', 'override', 'activityId', 'dismissed'])
-                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET']
+                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE']
                   && control.get('included', true) is bool
                   && (!('override' in control) || (control.override is number && control.override >= 0 && control.override <= 9999))
                   && (!('activityId' in control) || (key in legs && legs[key].activityId == null
@@ -451,6 +506,33 @@ service cloud.firestore {
         match /derivedMetrics/{document=**} {
           allow read: if request.auth.uid == userID;
           allow write: if false;
+        }
+
+        // Standalone calendar intent. It changes no workout, plan, provider consent or AI allowance.
+        match /trainingRestDays/{localDate} {
+          function validRestDay() {
+            let value = request.resource.data;
+            let parts = localDate.split('-');
+            let year = int(parts[0]);
+            let month = int(parts[1]);
+            let day = int(parts[2]);
+            let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            let days = month == 2 ? (leap ? 29 : 28) : (month in [4, 6, 9, 11] ? 30 : 31);
+            return localDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+              && year >= 100 && month >= 1 && month <= 12 && day >= 1 && day <= days
+              && value.keys().hasAll(['schemaVersion', 'localDate', 'isRestDay', 'revision'])
+              && value.keys().hasOnly(['schemaVersion', 'localDate', 'isRestDay', 'revision'])
+              && value.schemaVersion == 1 && value.localDate == localDate && value.isRestDay is bool
+              && value.revision is int && value.revision > 0 && value.revision <= 9007199254740991;
+          }
+          allow get: if isOwner();
+          allow list: if isOwner() && request.query.limit != null && request.query.limit <= 367;
+          allow create: if isOwner() && exists(/databases/$(database)/documents/users/$(userID)) && mayWriteAccount(userID) && validRestDay()
+            && request.resource.data.revision == 1;
+          allow update: if isOwner() && exists(/databases/$(database)/documents/users/$(userID)) && mayWriteAccount(userID) && validRestDay()
+            && request.resource.data.revision == resource.data.revision + 1;
+          // A retained false marker preserves concurrency/retry fences. Account cleanup remains recursive.
+          allow delete: if false;
         }
 
         // Current training-plan state is owner-readable for live UI listeners,

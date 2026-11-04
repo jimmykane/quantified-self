@@ -144,6 +144,36 @@ describe('request-helper', () => {
         await expect(requestHelper.post('https://example.com', { json: true, onResponseMetadata })).rejects.toBeInstanceOf(SyntaxError);
     });
 
+    it.each([200, 503])('reports actual bounded response bytes while preserving HTTP %s handling', async status => {
+        const body = ' {"private":"\u03b1"} ';
+        vi.mocked(fetch).mockResolvedValue(new Response(body, {
+            status, headers: { 'content-type': 'application/json', 'content-length': '1', 'set-cookie': 'private=value' },
+        }));
+        const onResponseMetadata = vi.fn();
+        const operation = requestHelper.get('https://example.com', { json: true, maxResponseBytes: 64, onResponseMetadata });
+        if (status === 200) await expect(operation).resolves.toEqual({ private: '\u03b1' });
+        else await expect(operation).rejects.toMatchObject({ statusCode: 503, error: { private: '\u03b1' } });
+        expect(onResponseMetadata).toHaveBeenCalledExactlyOnceWith({
+            statusCode: status, contentType: 'application/json', responseBytes: Buffer.byteLength(body),
+        });
+    });
+
+    it('preserves bounded decoding and size errors when the diagnostic callback throws', async () => {
+        const onResponseMetadata = vi.fn(() => { throw new Error('Diagnostic failure'); });
+        vi.mocked(fetch).mockResolvedValueOnce(new Response('not JSON'));
+        await expect(requestHelper.get('https://example.com', { json: true, maxResponseBytes: 16, onResponseMetadata }))
+            .rejects.toBeInstanceOf(SyntaxError);
+        expect(onResponseMetadata).toHaveBeenLastCalledWith({ statusCode: 200, contentType: 'text/plain;charset=UTF-8', responseBytes: 8 });
+        vi.mocked(fetch).mockResolvedValueOnce(new Response('oversized private response'));
+        await expect(requestHelper.get('https://example.com', { json: true, maxResponseBytes: 16, onResponseMetadata }))
+            .rejects.toBeInstanceOf(ResponseBodyTooLargeError);
+        expect(onResponseMetadata).toHaveBeenLastCalledWith({ statusCode: 200, contentType: 'text/plain;charset=UTF-8' });
+        vi.mocked(fetch).mockResolvedValueOnce(new Response('[]'));
+        await expect(requestHelper.get('https://example.com', { json: true, maxResponseBytes: 16, onResponseMetadata }))
+            .resolves.toEqual([]);
+        expect(onResponseMetadata).toHaveBeenLastCalledWith({ statusCode: 200, contentType: 'text/plain;charset=UTF-8', responseBytes: 2 });
+    });
+
     it.each(['7200', 'Mon, 14 Sep 2026 15:00:00 GMT'])('preserves Retry-After %s for the queue retry policy', async retryAfter => {
         vi.mocked(fetch).mockResolvedValue(new Response('Busy', { status: 429, headers: { 'retry-after': retryAfter } }));
         await expect(requestHelper.get('https://example.com')).rejects.toMatchObject({

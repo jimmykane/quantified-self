@@ -38,6 +38,14 @@ export function buildActivityDeliveryMonitoring(project, channel) {
   metric('sampled_age', 'cloud_function', 'jsonPayload.event="queue_sample" jsonPayload.ageLowerBoundMs>=0', 'Conservative last-write/due-time delay, not the age of the source recording.', ['destination'], 'ageLowerBoundMs');
   metric('overdue_samples', 'cloud_function', 'jsonPayload.event="queue_sample" jsonPayload.dueSample>0 jsonPayload.ageLowerBoundMs>=3600000', 'Eligible work >=1h old. Accepted Wahoo/COROS polls must also be >=2h past saved due time with no native tasks.');
   metric('probe_failures', 'cloud_function', '(jsonPayload.event="queue_sample_unavailable" OR (jsonPayload.event="queue_sample" jsonPayload.unknownSample>0))', 'Unknown/failed observations, not healthy zero. Sample saturation alone is diagnostic, not failure.');
+  const corosSportFailures = { name: 'qs_activity_delivery_coros_sport_failures_v1',
+    description: `[${OWNER}] Confirmed COROS processing-failure observations by original FIT sport/sub-sport. Counts attempts, including retries, not distinct workouts or proven unsupported sports.`,
+    filter: `resource.type="cloud_run_revision" resource.labels.project_id="${project}" severity=WARNING jsonPayload.message="[COROSActivityUpload] Processing failed." jsonPayload.telemetryVersion=1 jsonPayload.fit_sport:* jsonPayload.fit_sub_sport:*`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1',
+      labels: ['fit_sport', 'fit_sub_sport'].map(key => ({ key, valueType: 'STRING', description: 'Original FIT enum code 0-254, or unknown; no names or identifiers.' })) },
+    labelExtractors: Object.fromEntries(['fit_sport', 'fit_sub_sport'].map(key => [key, `EXTRACT(jsonPayload.${key})`])),
+  };
+  metrics.push(corosSportFailures);
 
   const sum = (period, fields = ['metric.label.destination']) => ({ alignmentPeriod: period, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: fields });
   const filter = (key, resource = 'cloud_run_revision', extra = '') => `metric.type="${metricType(key)}" resource.type="${resource}" resource.labels.project_id="${project}" ${extra}`.trim();
@@ -47,9 +55,9 @@ export function buildActivityDeliveryMonitoring(project, channel) {
       thresholdValue: count - 1, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } };
   }
   const policies = [];
-  function policy(id, title, severity, conditions, instructions) {
+  function policy(id, title, severity, conditions, instructions, alertStrategy = { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] }) {
     policies.push({ displayName: `QS Activity Delivery: ${title}`, userLabels: { managed_by: OWNER, policy_id: id }, enabled: true, severity, combiner: 'OR', conditions,
-      notificationChannels: channel ? [channel] : [], alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+      notificationChannels: channel ? [channel] : [], alertStrategy,
       documentation: { mimeType: 'text/markdown', subject: `[QS Activity Delivery] ${title}`,
         links: [{ displayName: 'Queue Monitor', url: 'https://quantified-self.io/admin/queues' },
           { displayName: 'Cloud dashboards', url: `https://console.cloud.google.com/monitoring/dashboards?project=${project}` },
@@ -65,6 +73,11 @@ export function buildActivityDeliveryMonitoring(project, channel) {
   policy('telemetry', 'Observations unavailable', 'WARNING', [threshold('probe_failures', 'cloud_function', 2, '5400s')], 'Two unknown/unavailable observations per destination in 90m. Missing observations are not zero backlog.');
   policy('send-cleanup', 'Temporary source cleanup failures', 'ERROR', [threshold('send_cleanup_failures', 'cloud_run_revision', 2, '10800s')], 'Two hourly cleanup failures in three hours. Check Storage/Firestore access and the scheduler privately. Preserve account deletion guards, exact generations, accepted operation identifiers and recursive retention cleanup.');
   policy('send-cleanup-heartbeat', 'Temporary source cleanup heartbeat missing', 'WARNING', [{ displayName: 'Hourly cleanup absent', conditionAbsent: { filter: filter('send_cleanup_runs', 'cloud_run_revision'), aggregations: [sum('3600s')], duration: '10800s', trigger: { count: 1 } } }], 'No hourly temporary-source cleanup observation for three hours. Idle runs still report. Read back positive series after activation; absence cannot establish readiness before the first sample.');
+  const sportGroups = ['metric.label.fit_sport', 'metric.label.fit_sub_sport'];
+  policy('coros-sport', 'Review COROS FIT category', 'WARNING', [{ displayName: 'Confirmed processing failures by original sport', conditionMatchedLog: {
+    filter: corosSportFailures.filter, labelExtractors: corosSportFailures.labelExtractors,
+  } }], 'COROS confirmed processing failure. Original FIT sport: ${log.extracted_label.fit_sport}; sub-sport: ${log.extracted_label.fit_sub_sport}. Notifications group by these codes and are limited to one per pair per 24 hours. See the dashboard for failed-attempt counts, including retries, not distinct workouts. Pending uploads, HTTP/auth/quota errors and successful category conversion are excluded. Unknown means a missing or unreadable original code, including legacy/direct uploads. This does not prove the sport is unsupported. Inspect the linked logs, test a representative original only with authorization, then add a verified mapping if needed.',
+    { autoClose: '86400s', notificationRateLimit: { period: '86400s' }, notificationPrompts: ['OPENED'] });
   policy('heartbeat', 'Required observation heartbeat missing', 'WARNING', destinations.map(destination => ({ displayName: `${destination} heartbeat absent`,
     conditionAbsent: { filter: filter('queue_samples', 'cloud_function', `metric.labels.destination="${destination}"`), aggregations: [sum('1800s')], duration: '7200s', trigger: { count: 1 } },
   })), 'No operational observation for two hours. Idle destinations still report; lack of new athlete activity never pages. Absence requires initial series, so activation needs positive sample proof.');
@@ -78,6 +91,7 @@ export function buildActivityDeliveryMonitoring(project, channel) {
     chart('Committed outcomes by source / destination / mode', filter('committed'), sum('900s', [...flow, 'metric.label.outcome'])),
     chart('Worker acknowledgements / pending / failures', filter('worker_attempts'), sum('900s', [...flow, 'metric.label.outcome'])),
     chart('Whole-worker latency p95', filter('worker_latency'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: flow }, 'ms'),
+    chart('COROS confirmed processing failures by original FIT sport — attempts', filter('coros_sport_failures'), sum('3600s', sportGroups)),
     ...[['send_cleanup_runs', 'Temporary source cleanup heartbeat'], ['send_cleanup_failures', 'Temporary source cleanup failures'], ['worker_failures', 'Failed attempts / actual retries'], ['new_dead_letters', 'Newly committed permanent failures'], ['new_reconciliation', 'New unresolved provider outcomes'], ['dispatch_failures', 'Dispatch failures'], ['queue_samples', 'Observation heartbeats'], ['probe_failures', 'Unknown / unavailable observations']].map(([key, title]) => chart(title, filter(key, ['dispatch_failures', 'queue_samples', 'probe_failures'].includes(key) ? 'cloud_function' : 'cloud_run_revision'), sum('900s'))),
     ...[['sampled_due', 'Eligible due sample — hourly mean/lower bound', '1'], ['sampled_age', 'Last-write delay lower bound — hourly mean', 'ms']].map(([key, title, unit]) => chart(title, filter(key, 'cloud_function'), { alignmentPeriod: '3600s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_MEAN', groupByFields: ['metric.label.destination'] }, unit)),
   ];

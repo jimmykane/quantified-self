@@ -1,5 +1,12 @@
 <!-- Google supports data-nosnippet on native div/span/section, not Angular custom elements. -->
-<div class="preview-content" data-nosnippet>
+<div class="preview-content" [class.preview-content--hero]="previewKey() === 'training-hero'" data-nosnippet>
+@if (previewKey() === 'daily-workout') {
+  @defer (on viewport; when previewReady()) {
+    <app-daily-workout-preview></app-daily-workout-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--daily-workout" aria-hidden="true"></div>
+  }
+}
 @if (previewKey() === 'health-note-comparison') {
   @defer (on viewport; when previewReady()) {
     <app-health-note-comparison-preview></app-health-note-comparison-preview>
@@ -47,11 +54,11 @@
   }
 }
 
-@if (previewKey() === 'training-signals') {
+@if (previewKey() === 'training-signals' || previewKey() === 'training-hero') {
   @defer (on viewport; when previewReady()) {
-    <app-home-signal-charts-preview></app-home-signal-charts-preview>
+    <app-home-signal-charts-preview [hero]="previewKey() === 'training-hero'"></app-home-signal-charts-preview>
   } @placeholder {
-    <div class="preview-placeholder preview-placeholder--signals" aria-hidden="true"></div>
+    <div class="preview-placeholder" [class.preview-placeholder--signals]="previewKey() === 'training-signals'" [class.preview-placeholder--hero]="previewKey() === 'training-hero'" aria-hidden="true"></div>
   }
 }
 

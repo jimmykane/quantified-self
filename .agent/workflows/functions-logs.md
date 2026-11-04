@@ -8,16 +8,16 @@ View logs from deployed Firebase Cloud Functions.
 
 ## View All Function Logs
 ```bash
-cd functions && npm run logs
+npm --prefix functions run logs
 ```
 
 ## View Specific Function Logs
 Replace `<function-name>` with the actual function name:
 ```bash
-firebase functions:log --only <function-name>
+npm run firebase -- functions:log --only <function-name>
 ```
 
 ## View Logs with Limit
 ```bash
-firebase functions:log -n 50
+npm run firebase -- functions:log -n 50
 ```

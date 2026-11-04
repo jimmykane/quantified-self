@@ -3,7 +3,7 @@ import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-
 import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
 import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
 import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/core/testing';
-import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal, input } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
@@ -46,6 +46,9 @@ import { buildDashboardFormPointsFromDailyLoads } from '../../helpers/dashboard-
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
 class TimelineNotesWorkspaceStubComponent { context = signal<TimelineNoteChartContext | null>(null); }
+
+@Component({ selector: 'app-current-plan-rest-day', standalone: true, template: '' })
+class CurrentPlanRestDayStubComponent { ownerUid = input<string | null>(null); localDate = input(''); isRestDay = signal(false); }
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -200,6 +203,7 @@ describe('TrainingWorkspaceComponent', () => {
         PageHeaderComponent,
         TrainingSummaryCardsComponent,
         ActiveSicknessNoteComponent,
+        CurrentPlanRestDayStubComponent,
         TrainingMetricGridComponent,
       ],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
@@ -349,6 +353,10 @@ describe('TrainingWorkspaceComponent', () => {
     workspace.context.set(null); fixture.detectChanges();
     expect(element.querySelector('app-active-sickness-note button')).toBeNull();
     expect(element.querySelector('.training-state-panel')?.textContent).toContain('Ready to train');
+    const rest = fixture.debugElement.query(By.directive(CurrentPlanRestDayStubComponent)).componentInstance as CurrentPlanRestDayStubComponent;
+    expect(rest.ownerUid()).toBe('user-1'); rest.isRestDay.set(true); fixture.detectChanges();
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Low training load');
+    expect(fixture.componentInstance.trainingReadiness.scoreText).toBe(readiness);
   });
 
   it('shows the validated training-summary cutoff when the route is ready', async () => {
@@ -3058,7 +3066,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(statusDetails.nextElementSibling?.classList).toContain('training-destination-navigation');
     const sicknessContext = statusDetails.nextElementSibling?.nextElementSibling;
     expect(sicknessContext?.tagName.toLowerCase()).toBe('app-active-sickness-note');
-    expect(sicknessContext?.nextElementSibling).toBe(firstSection);
+    const restContext = sicknessContext?.nextElementSibling;
+    expect(restContext?.tagName.toLowerCase()).toBe('app-current-plan-rest-day');
+    expect(restContext?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
     derivedState$.next({

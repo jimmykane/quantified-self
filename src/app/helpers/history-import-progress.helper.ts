@@ -5,6 +5,7 @@ import { SERVICE_CONNECTION_STATES, type ServiceConnectionState } from '@shared/
 
 export const HISTORY_IMPORT_PROVIDERS = [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI] as const;
 export const HISTORY_IMPORT_RECENT_MS = 24 * 60 * 60 * 1000;
+export const HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX = 'history-import.dismissed-result.v1.';
 export type HistoryImportKind = 'active' | 'retrying' | 'attention' | 'requested' | 'processed' | 'unavailable';
 export interface HistoryImportSource {
   serviceName: ServiceNames; projection?: unknown; unavailable?: boolean;
@@ -24,7 +25,7 @@ export interface HistoryImportResultDismissal {
   serviceName: ServiceNames; runId: string; updatedAtMs: number;
 }
 export interface HistoryImportProgressView {
-  items: HistoryImportProgressItem[]; active: boolean; label: string; nextExpiryAtMs: number | null;
+  items: HistoryImportProgressItem[]; active: boolean; busy: boolean; label: string; nextExpiryAtMs: number | null;
 }
 const resourceNames: Record<HistoryResource, string> = {activities: 'Activities', sleep: 'Sleep', health: 'Health', routes: 'Saved routes'};
 const descriptions: Record<ConnectionHistoryStatus, string> = {
@@ -44,11 +45,22 @@ const requestLabels: Record<HistoryImportKind, string> = {...labels,
 const order: Record<HistoryImportKind, number> = {active: 0, retrying: 1, attention: 2, unavailable: 3, requested: 4, processed: 5};
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
 function validTime(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0 && !Number.isNaN(new Date(value).getTime()); }
+/** Keep only the inert receipt fields when reading or preserving browser preferences. */
+export function parseHistoryImportResultDismissal(serialized: string | null): HistoryImportResultDismissal | null {
+  try {
+    const value: unknown = JSON.parse(serialized ?? 'null');
+    if (!record(value)) return null;
+    const serviceName = HISTORY_IMPORT_PROVIDERS.find(provider => provider === value.serviceName);
+    if (!serviceName || typeof value.runId !== 'string' || !value.runId || value.runId.length > 256
+      || !validTime(value.updatedAtMs)) return null;
+    return {serviceName, runId: value.runId, updatedAtMs: value.updatedAtMs};
+  } catch { return null; }
+}
 function unavailable(serviceName: ServiceNames): HistoryImportProgressItem {
   return {serviceName, name: getProviderDisplayName(serviceName), runId: null, kind: 'unavailable',
     label: labels.unavailable, rangeLabel: null, steps: []};
 }
-function item(source: HistoryImportSource, nowMs: number): HistoryImportProgressItem | null {
+function item(source: HistoryImportSource): HistoryImportProgressItem | null {
   const {serviceName, projection: value} = source;
   const requestOnly = serviceName === ServiceNames.GarminAPI;
   if (source.unavailable) return unavailable(serviceName);
@@ -72,14 +84,15 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
       message: typeof step.message === 'string' && step.message.trim() ? step.message.slice(0, 1000) : null});
   }
   if (!value.active && steps.some(step => step.status === 'queued' || step.status === 'requesting' || step.status === 'retrying')) return unavailable(serviceName);
+  // The coordinator runs sections in order; later queued sections wait behind the current retry.
+  const currentStep = steps.find(step => step.status === 'queued' || step.status === 'requesting' || step.status === 'retrying');
   const kind: HistoryImportKind = value.active
-    ? steps.some(step => step.status === 'retrying') && !steps.some(step => step.status === 'queued' || step.status === 'requesting') ? 'retrying' : 'active'
+    ? currentStep?.status === 'retrying' ? 'retrying' : 'active'
     : steps.some(step => step.status === 'failed' || step.status === 'skipped') ? 'attention'
       : steps.some(step => step.status === 'requested') ? 'requested' : 'processed';
   // A submitted provider request is not a live delivery tracker. Keep recent terminal
   // outcomes for context, without an indefinite activity spinner or delivery claim.
-  const expiresAtMs = kind === 'requested' || kind === 'processed' ? value.updatedAtMs + HISTORY_IMPORT_RECENT_MS : undefined;
-  if (expiresAtMs !== undefined && expiresAtMs <= nowMs) return null;
+  const expiresAtMs = !value.active ? value.updatedAtMs + HISTORY_IMPORT_RECENT_MS : undefined;
   const range = typeof value.rangePreset === 'string' && (value.rangePreset === 'custom'
     || historyRangeOptions(serviceName).some(option => option.value === value.rangePreset))
     ? historyRangeLabel(serviceName, value.rangePreset as Parameters<typeof historyRangeLabel>[1]) : null;
@@ -92,21 +105,28 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
     label: (requestOnly ? requestLabels : labels)[kind], requestOnly,
     rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active && kind === 'attention'};
 }
+/** Latest persisted statuses for Connections, independent of notification dismissal and age. */
+export function buildHistoryImportItems(sources: readonly HistoryImportSource[]): HistoryImportProgressItem[] {
+  return sources.map(source => item(source)).filter((entry): entry is HistoryImportProgressItem => !!entry)
+    .sort((a, b) => order[a.kind] - order[b.kind]);
+}
 export function buildHistoryImportProgress(sources: readonly HistoryImportSource[], nowMs: number,
   dismissed: readonly HistoryImportResultDismissal[] = []): HistoryImportProgressView {
-  const items = sources.map(source => item(source, nowMs)).filter((entry): entry is HistoryImportProgressItem => !!entry)
+  const items = buildHistoryImportItems(sources)
+    .filter(entry => entry.expiresAtMs === undefined || entry.expiresAtMs > nowMs)
     .filter(entry => !entry.canDismiss || !dismissed.some(result => result.serviceName === entry.serviceName
-      && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs))
-    .sort((a, b) => order[a.kind] - order[b.kind]);
+      && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs));
   const active = items.some(entry => entry.kind === 'active' || entry.kind === 'retrying');
+  const busy = items.some(entry => entry.kind === 'active');
   const requestItem = items.length === 1 && items[0].requestOnly ? items[0] : null;
   const label = requestItem?.kind === 'active' ? 'Requesting Garmin history'
     : requestItem?.kind === 'retrying' ? 'Waiting to retry Garmin requests'
     : requestItem?.kind === 'processed' ? 'History requests finished'
-    : active ? 'Importing history' : items.some(entry => entry.kind === 'attention' && !entry.canDismiss) ? 'History needs attention'
+    : busy ? 'Importing history' : active ? 'Waiting for history retries'
+    : items.some(entry => entry.kind === 'attention' && !entry.canDismiss) ? 'History needs attention'
     : items.some(entry => entry.kind === 'unavailable') ? 'Import status unavailable'
       : items.some(entry => entry.kind === 'attention') ? 'History finished with issues'
       : items.some(entry => entry.kind === 'requested') ? 'History requested' : 'History processed';
   const deadlines = items.flatMap(entry => entry.expiresAtMs === undefined ? [] : [entry.expiresAtMs]);
-  return {items, active, label, nextExpiryAtMs: deadlines.length ? Math.min(...deadlines) : null};
+  return {items, active, busy, label, nextExpiryAtMs: deadlines.length ? Math.min(...deadlines) : null};
 }

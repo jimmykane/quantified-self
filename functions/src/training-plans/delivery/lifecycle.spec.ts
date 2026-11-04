@@ -18,15 +18,25 @@ vi.mock('./contracts', () => ({ DELIVERY_STATE: 'trainingDeliveryState' }));
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { productionDeliveryRuntime } from './runtime';
-import { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './lifecycle';
+import { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged, onTrainingDeliveryOwnerUnitsChanged } from './lifecycle';
+import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { WeightUnits } from '@sports-alliance/sports-lib';
 
 type TestEvent = { id: string; params: { uid: string; service: string }; data?: unknown };
 type TestTrigger = { options: Record<string, unknown>; handler: (event: TestEvent) => Promise<void> };
 const connection = onTrainingDeliveryConnectionChanged as unknown as TestTrigger;
 const entitlement = onTrainingDeliveryEntitlementChanged as unknown as TestTrigger;
+const ownerUnits = onTrainingDeliveryOwnerUnitsChanged as unknown as TestTrigger;
+const guideSettings = onTrainingDeliveryGuideSettingsChanged as unknown as TestTrigger;
 const event: TestEvent = { id: 'private-cloud-event', params: { uid: 'private-user-uid', service: 'suuntoApp' },
   data: { private: 'private-connection-payload' } };
 const eventHash = createHash('sha256').update(event.id).digest('hex');
+const settingsEvent = (before: unknown, after: unknown): TestEvent => ({ ...event, data: {
+  before: { exists: before !== undefined, data: () => before },
+  after: { exists: after !== undefined, data: () => after },
+} });
+const changedSettings = { suuntoSwimmingGuide: { ...defaultSuuntoSwimmingGuideSettings(),
+  restFields: ['interval', 'nextPlannedDistance', 'previousLapPace'] } };
 const stateRef = { path: 'private-document-path' };
 const stateCollection = { doc: vi.fn(() => stateRef) };
 const userRef = { collection: vi.fn(() => stateCollection) };
@@ -67,6 +77,55 @@ describe('Training delivery lifecycle triggers', () => {
       memory: '512MiB',
       retry: true,
     });
+    expect(guideSettings.options).toEqual({ document: 'users/{uid}/config/settings',
+      region: 'europe-west2', memory: '512MiB', retry: true });
+  });
+
+  it('wakes same-identity reconciliation on changed Guide preferences, including their first save', async () => {
+    await guideSettings.handler(settingsEvent(undefined, changedSettings));
+    await guideSettings.handler(settingsEvent(changedSettings, { suuntoSwimmingGuide: defaultSuuntoSwimmingGuideSettings() }));
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledTimes(2);
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenLastCalledWith(tx, db, event.params.uid);
+    expect(logger.info).toHaveBeenLastCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', trigger: 'guide-settings', eventHash, outcome: 'reconciliation_staged',
+    }));
+    expect(JSON.stringify(logFields())).not.toMatch(/private-|suuntoSwimmingGuide|nextPlannedDistance/);
+  });
+
+  it('ignores unrelated, equivalent/default and missing settings events', async () => {
+    for (const input of [{ ...event, data: undefined },
+      settingsEvent({}, { suuntoSwimmingGuide: defaultSuuntoSwimmingGuideSettings(), theme: 'dark' }),
+      settingsEvent(changedSettings, { ...changedSettings, theme: 'dark' }), settingsEvent(undefined, {})]) {
+      await guideSettings.handler(input);
+    }
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+    expect(logFields()).toEqual([]);
+  });
+
+  it('reconciles the effective default after deleting saved Guide settings', async () => {
+    await guideSettings.handler(settingsEvent(changedSettings, undefined));
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledOnce();
+  });
+
+  it('wakes for effective owner unit changes without scanning on other profile writes', async () => {
+    expect(ownerUnits.options).toEqual({ document: 'users/{uid}', region: 'europe-west2', memory: '512MiB', retry: true });
+    await ownerUnits.handler(settingsEvent({}, { displayName: 'Changed' }));
+    await ownerUnits.handler(settingsEvent({}, undefined));
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+    await ownerUnits.handler(settingsEvent({}, { settings: { unitSettings: { weightUnits: WeightUnits.Pounds } } }));
+    await ownerUnits.handler(settingsEvent({ settings: { unitSettings: { weightUnits: WeightUnits.Pounds } } }, {}));
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps settings wake-ups behind account deletion and existing delivery-state guards', async () => {
+    const input = settingsEvent({}, changedSettings);
+    vi.mocked(getUserDeletionGuardStateInTransaction).mockResolvedValueOnce({ userExists: false,
+      deletionInProgress: false, shouldSkip: true });
+    await guideSettings.handler(input);
+    expect(tx.get).not.toHaveBeenCalled();
+    tx.get.mockResolvedValueOnce({ data: () => undefined });
+    await guideSettings.handler(input);
+    expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
   });
 
   it.each([['connection', connection], ['entitlement', entitlement]] as const)(
@@ -96,6 +155,30 @@ describe('Training delivery lifecycle triggers', () => {
     await connection.handler({ ...event, params: { ...event.params, service: 'unrelated' } });
     expect(productionDeliveryRuntime).not.toHaveBeenCalled();
     expect(logFields()).toEqual([]);
+  });
+
+  it('ignores an 830-upload burst and history progress without reading Firestore', async () => {
+    const authority = { connectionState: 'connected', connectionStateGeneration: 3, connectionAccounts: ['one'] };
+    for (let count = 137; count < 967; count++) {
+      await connection.handler(settingsEvent({ ...authority, uploadedActivitiesCount: count,
+        connectionHistoryImport: { processed: count } }, { ...authority, uploadedActivitiesCount: count + 1,
+        connectionHistoryImport: { processed: count + 1 } }));
+    }
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+    expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
+  });
+
+  it.each(['connectionState', 'connectionStateGeneration', 'connectionAccountsRevisionKey', 'permissions', 'futureAuthority'])(
+    'still wakes reconciliation when %s changes alongside an upload counter', async field => {
+      await connection.handler(settingsEvent({ [field]: 'before', uploadedActivitiesCount: 1 },
+        { [field]: 'after', uploadedActivitiesCount: 2 }));
+      expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledOnce();
+    });
+
+  it('keeps connection creation and deletion as wake-ups', async () => {
+    await connection.handler(settingsEvent(undefined, { connectionState: 'connected' }));
+    await connection.handler(settingsEvent({ connectionState: 'connected' }, undefined));
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the deletion guard skip without reading delivery state or staging work', async () => {

@@ -339,26 +339,6 @@ mat-button-toggle:active {
 
 }
 
-.toolbar-controls mat-form-field {
-  --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
-  --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
-  --mat-select-trigger-text-size: var(--qs-table-filter-text-size, 0.95rem);
-  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
-  min-width: 0;
-}
-.toolbar-date-filter { width: 210px; }
-.toolbar-custom-date-field { width: 310px; max-width: 100%; }
-.toolbar-controls app-activity-filter-picker { width: 170px; min-width: 0; }
-@include bp.max-768 {
-  .toolbar-controls mat-form-field, .toolbar-controls app-activity-filter-picker { flex: 1 1 140px; width: auto; }
-  .toolbar-controls .toolbar-custom-date-field { flex-basis: 100%; }
-}
-@include bp.max-480 { .toolbar-calendar-toggle { display: none; } }
-
-:host(.table-toolbar-layout) { width: auto; flex: 1 1 380px; }
-:host(.table-toolbar-layout) .toolbar-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; min-width: 0; width: 100%; }
-
-@include bp.xsmall {
-  // The table stacks filters vertically here; a desktop flex basis becomes height.
-  :host(.table-toolbar-layout) { width: 100%; flex: 0 0 auto; }
-}
+.toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+// Flatten only the table presentation so projected filters retain one native tab order.
+:host(.table-toolbar-layout), :host(.table-toolbar-layout) .toolbar-controls { display: contents; }

@@ -162,6 +162,16 @@ function tokenCredential(accessToken: string, credentialGeneration: string | nul
     };
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((onResolve, onReject) => {
+        resolve = onResolve;
+        reject = onReject;
+    });
+    return { promise, resolve, reject };
+}
+
 describe('health writer', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -311,6 +321,119 @@ describe('health writer', () => {
         expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === tokenRef.path)).toHaveLength(1);
         expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === queueRef.path)).toHaveLength(1);
         expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
+    });
+
+    describe.each(['source record', 'sync state'] as const)('overlapping guards for %s', writeKind => {
+        function guardedWrite(fake: ReturnType<typeof fakeDatabase>) {
+            const firstRef = fake.db.collection('guards').doc('first');
+            const secondRef = fake.db.collection('guards').doc('second');
+            const dependencies = {
+                db: fake.db as never,
+                generateId: fakeId,
+                requiredDocumentFieldValues: {
+                    documentRef: firstRef as never, expectedFields: { generation: 'current' },
+                },
+                additionalRequiredDocumentFieldValues: [
+                    { documentRef: firstRef as never, expectedFields: { generation: 'current' } },
+                    { documentRef: secondRef as never, expectedFields: { generation: 'current' } },
+                ],
+            };
+            return writeKind === 'source record'
+                ? replaceHealthSourceRecord('user-1', validInput(), 10_000, dependencies)
+                : updateHealthSyncState('user-1', HEALTH_PROVIDERS.SuuntoApp, {
+                    status: HEALTH_SYNC_STATUSES.Ready,
+                }, 10_000, dependencies);
+        }
+
+        function controlledReads(fake: ReturnType<typeof fakeDatabase>) {
+            type Snapshot = Awaited<ReturnType<typeof fake.transaction.get>>;
+            const first = deferred<Snapshot>();
+            const second = deferred<Snapshot>();
+            // Cleanup also settles a read that the sequential baseline never starts.
+            void second.promise.catch(() => undefined);
+            const started = deferred<void>();
+            const originalGet = fake.transaction.get.getMockImplementation()!;
+            fake.transaction.get.mockImplementation(reference => {
+                if (reference.path === 'guards/first') {
+                    started.resolve();
+                    return first.promise;
+                }
+                if (reference.path === 'guards/second') return second.promise;
+                return originalGet(reference);
+            });
+            return { first, second, started,
+                current: { exists: true, data: () => ({ generation: 'current' }) },
+                stale: { exists: true, data: () => ({ generation: 'old' }) } };
+        }
+
+        it('starts independent reads together, shares duplicate reads and waits before writing', async () => {
+            const fake = fakeDatabase();
+            const reads = controlledReads(fake);
+            const write = guardedWrite(fake);
+            await reads.started.promise;
+            try {
+                expect(fake.transaction.get.mock.calls.map(([ref]) => ref.path))
+                    .toEqual(['guards/first', 'guards/second']);
+                reads.first.resolve(reads.current);
+                await new Promise<void>(resolve => setImmediate(resolve));
+                expect(fake.sets).not.toHaveBeenCalled();
+            } finally {
+                reads.first.resolve(reads.current);
+                reads.second.resolve(reads.current);
+                await write;
+            }
+            expect(fake.sets).toHaveBeenCalled();
+        });
+
+        it.each([
+            { first: 'mismatch', second: 'failure', rejects: false, finishesFirst: 'first' },
+            { first: 'failure', second: 'mismatch', rejects: true, finishesFirst: 'first' },
+            { first: 'match', second: 'failure', rejects: true, finishesFirst: 'first' },
+            { first: 'mismatch', second: 'failure', rejects: false, finishesFirst: 'second' },
+            { first: 'failure', second: 'mismatch', rejects: true, finishesFirst: 'second' },
+            { first: 'match', second: 'failure', rejects: true, finishesFirst: 'second' },
+        ])('retains ordered $first / $second decisions when $finishesFirst settles first', async ({
+            first, second, rejects, finishesFirst,
+        }) => {
+            const fake = fakeDatabase();
+            const reads = controlledReads(fake);
+            const settled = vi.fn();
+            const write = guardedWrite(fake).then(
+                value => ({ value, error: undefined }),
+                error => ({ value: undefined, error }),
+            ).finally(settled);
+            const settleFirst = () => first === 'failure'
+                ? reads.first.reject(new Error('private-first-provider-token-path'))
+                : reads.first.resolve(first === 'match' ? reads.current : reads.stale);
+            const settleSecond = () => second === 'failure'
+                ? reads.second.reject(new Error('private-second-provider-token-path'))
+                : reads.second.resolve(reads.stale);
+            await reads.started.promise;
+            let result: Awaited<typeof write>;
+            try {
+                expect(fake.transaction.get.mock.calls.map(([ref]) => ref.path))
+                    .toEqual(['guards/first', 'guards/second']);
+                if (finishesFirst === 'first') settleFirst();
+                else settleSecond();
+                await new Promise<void>(resolve => setImmediate(resolve));
+                expect(settled).not.toHaveBeenCalled();
+            } finally {
+                settleFirst();
+                settleSecond();
+                result = await write;
+            }
+            if (rejects) {
+                expect(result.error).toBeInstanceOf(HealthLifecycleGuardReadError);
+                expect(result.error.message).toBe('Health lifecycle guard could not be read.');
+            } else {
+                expect(result.error).toBeUndefined();
+                expect(result.value).toEqual(writeKind === 'source record'
+                    ? expect.objectContaining({ status: 'skipped_lifecycle_guard' }) : false);
+            }
+            expect(fake.sets).not.toHaveBeenCalled();
+            expect(fake.updates).not.toHaveBeenCalled();
+            expect(fake.deletes).not.toHaveBeenCalled();
+        });
     });
 
     it('rejects oversized record batches before starting a transaction', async () => {

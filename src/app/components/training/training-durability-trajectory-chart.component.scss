@@ -17,3 +17,8 @@ footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 
 footer span:last-child { text-align: right; }
 @media (max-width: 640px) { .durability-trajectory { padding: var(--training-durability-padding, 12px); } header, footer { display: grid; } footer span:last-child { text-align: left; } }
 @media (max-width: 599.98px) { .durability-trajectory-week-note { display: block; } }
+
+// Dashboard reuses the renderer inside its shared plot-height and alignment contract.
+.durability-dashboard { display: flex; flex-direction: column; flex: 1 0 auto; margin-top: 0; padding: 0; border: 0; }
+.durability-dashboard .durability-trajectory-scroll { display: flex; flex-direction: column; flex: 1 0 auto; overflow: visible; }
+.durability-dashboard .durability-trajectory-chart { min-width: 0; }

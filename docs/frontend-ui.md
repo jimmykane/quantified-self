@@ -29,6 +29,24 @@ away during preparation. Record whether the actual example is prepared below the
 whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
 snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
 
+## Font and icon caching across releases
+
+Bundled Fontsource fonts and the Material Symbols icon font are emitted under `/media/` with content-hashed
+filenames. Include `/media/**` in the service worker's `assets` group with `installMode: lazy` and
+`updateMode: prefetch`: only requested assets enter the cache, and unchanged hashes can be reused across releases.
+Do not prefetch every language subset and font weight on installation.
+
+Production and beta Hosting apply `Cache-Control: public, max-age=31536000, immutable` only to font/image files
+under `/media/` whose filenames end with the build's eight-character content hash. A changed file gets a new URL.
+Unhashed assets, HTML, `manifest.json`, `ngsw.json` and the worker script retain their existing cache behavior.
+Keep release `outputHashing: all`; do not give the whole `/assets/` directory an immutable policy.
+
+`src/firebase-hosting.config.spec.ts` verifies the Hosting URL boundary and uses Angular's manifest generator to
+check lazy media coverage and stable font hashes when a release changes. After release builds, run
+`npm run verify:service-worker-output` and check that emitted `/media/` fonts appear in `ngsw.json`'s `hashTable`.
+Browser cache eviction, cleared site data and a first visit still require downloads; a network revalidation does
+not necessarily transfer the font body. This changes no user controls or workflows and needs no app-help update.
+
 ## Public hero font loading
 
 The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local
@@ -58,6 +76,13 @@ These controlled measurements isolate font swaps: they do not establish a new Se
 every shift over a real visit. Keep Search Console's dated URL-group data, PageSpeed's URL/origin field data,
 and initial-load lab data separate; see [Google's report guidance](https://support.google.com/webmasters/answer/9205520)
 and [CLS diagnostics](https://web.dev/articles/optimize-cls).
+
+## Homepage feature order
+
+The hero keeps the original provider heading, logos and introduction together in a compact block. Training, Workouts,
+Plans, Health, Assistant, Maps and Comparisons follow; detailed integration rows and their existing actions remain after
+those product sections. Copy and shared previews stay unchanged. `#home-integrations` targets the moved detail section,
+with a local visually hidden heading so jump-link focus and subsequent keyboard navigation remain in that section.
 
 ## Navigation startup rendering
 
@@ -243,36 +268,46 @@ creation dialog. The lazy landing page reuses the owner-scoped paginated note se
 header, without a second CRUD implementation. It keeps the regular row highlight on both the landing and selected-note
 routes; the Health overview link uses exact-path matching.
 
-Health All and the owner Dashboard Today share the surface-free summary from
-`components/shared/health-change-summary/`. Its presentation delegates to
-`components/shared/summary-disclosure/`, shared with the saved-note and public-example
-`components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
-and local scope resets only; its plain variant keeps just the disclosure control and accessible region label without
-visible headings or a surrounding border. Domain adapters retain their existing calculations. Note comparisons keep source-labelled
-differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
-Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
+Health All's `components/shared/health-change-summary/`, Dashboard Today's
+`components/summaries/dashboard-daily-briefing/`, and saved-note/public-example
+`components/shared/note-comparison-summary/` share `components/shared/summary-disclosure/` for presentation.
+The shell owns headings, flat/rail layout, Material disclosure, haptics and local scope resets only; domain adapters
+retain their existing calculations. Its plain variant keeps the disclosure control and accessible region label without
+visible headings or a surrounding border. Rail callers can set `showTitle=false` for one colored headline with an
+accessible region label; no empty heading is left behind. Existing callers retain visible headings by default.
+
+Note comparisons keep source-labelled differences and coverage visible and put the median table under **Show details**,
+without hiding the history chart. Their rail stays neutral regardless of the sign of a difference. Health keeps
+**Your recovery** with comparison counts and outside-range readings visible while source/range evidence is collapsed.
 Health and note comparisons use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls`
-and a mounted hidden region when details are available; Dashboard does not mount a details region.
-do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
-The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
-charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
-Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. On Health,
-comparison counts stay visible alongside the headline and any outside-range readings; Show details contains the
-source and range breakdown. The visible scope names Sleep and nightly HRV. Dashboard uses the component's compact
-**At a glance** mode: a surface-free accent rail, compact stacked label and one sentence using the existing Readiness,
-training state, Sleep, HRV and overnight-HR assessments, wrapping
-naturally on mobile, without extra metadata rows or disclaimer copy. The 3px logical-start rail uses the same dominant
-evidence state as the sentence, without a standalone status icon or an empty icon column. Available/within-range uses the app success token;
-existing caution/outside-range uses the Material accent, unavailable uses the error token, and loading, insufficient or merely recorded
-evidence stays neutral. Pair color with the explicit sentence, never an implied all-metrics all-clear.
-Dashboard is sentence-only in every state, including Mixed/Recover, unavailable, missing and loading evidence. It has
-no disclosure button, extra touch-target row or mounted evidence breakdown: Today already contains the metrics and context.
-Do not add a box, fill, shadow or bottom divider to this compact presentation. Normal days combine
-the existing Ready label, training-state label and recorded sleep in one sentence, without a second score. Sleep has no
-new good/bad threshold, and overnight HR is distinct from daily resting HR. Do not summarize unassessed metrics
-as normal. On Dashboard, the heading's bottom margin and the summary's top padding do not stack. Preserve the reserved
-status line and source/error distinctions; Health retains its disclosure's 44px touch target. This is presentation only; no metric,
-readiness calculation, query, persistence, or MCP/Assistant contract changes.
+and a mounted hidden region when details are available. Preserve 44px button targets and reset disclosures on owner
+change without feedback or persistence. Do not add raised cards or expansion panels.
+
+Dashboard's **At a glance** continues the owner's greeting in one flowing Material text button: the greeting stays
+neutral and each assessment phrase uses its own semantic foreground color. Positive phrases remain green beside
+caution or unavailable phrases; punctuation stays neutral. Keep both inline, with a sentence separator, no status
+dot, chevron, extra row, card or visible heading. Let the sentence wrap naturally on narrow screens. Selecting it
+collapses or reopens the existing Today metrics; details start open and reset to open on owner changes.
+The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.
+The owner’s greeting/status slot reserves the same height while the update banner, loading copy and completed
+assessment replace each other. Its wrapping allowance follows the header container width, so mobile layouts and
+sidebars keep the Today card anchored. Text can still grow naturally for exceptional copy or accessibility settings;
+never truncate the assessment or add loading-driven animations, observers or haptics to stabilize it.
+Disable its ripple and filled interaction state through Material’s public APIs; preserve a neutral keyboard focus outline.
+One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
+Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary
+HRV range result. The sentence and detailed scores/source context are both visible by default; collapsing leaves
+the sentence visible. The sentence wraps at narrow widths without truncation or a forced break between the greeting and assessment. Hiding Today also hides the sentence; saved charts remain
+controlled by their existing settings. See `training-workspace.md#dashboard-daily-briefing` for composition rules.
+
+Headline-only rails use shared semantic foreground tokens `--qs-status-positive` and `--qs-status-caution` from the
+Material green and existing amber tonal palettes (40 in light, 80 in dark), keeping text legible independently of the
+app's blue dark-theme accent. Unavailable uses the Material error token; loading/missing uses on-surface-variant text
+and an outline rail. The text always states the assessment so meaning does not depend on color. A positive sentence
+requires available Training/Ready assessments without missing or attention evidence; recorded sleep alone is not an
+all-clear. Sleep gains no good/bad threshold, and overnight HR remains distinct from daily resting HR. Preserve the
+existing Today status line, metrics, source/error distinctions and refresh behavior. The sentence adds no data readers,
+score, persistence, AI request or MCP/Assistant contract.
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
@@ -339,6 +374,66 @@ behavior. Tests mock this service and cover initialization, no-ops, disabled act
 checks verify control wiring, wrapping, focus and scroll ownership; actual vibration still requires a supported phone.
 These changes affect presentation and local feedback only; event, plan/workout, provider and MCP contracts remain
 unchanged.
+
+## Searchable sport and tag selection
+
+Reuse `ActivityFilterPickerComponent` (`app-activity-filter-picker`) for sport catalogs and searchable tag choices,
+including form fields such as the AI workout sport. It is the same component used by Activities, event search and
+table tag filters. Import the standalone component directly; it owns its narrow Material imports, shared dialog
+surface, search field, sport icons, wrapping option labels, thin scrollbars and keyboard/focus behavior.
+Do not create another searchable sport dialog or embed a search input inside a `mat-select` option.
+
+Table headers opt into `[textButton]="true"` with a `triggerIcon` on the same picker. The compact text button shows
+one selected name or a sport/tag count, keeps sport icons and opens the unchanged searchable dialog. Other form
+fields and icon-only tile triggers keep their existing presentation. The shared `styles/_table-filters.scss` mixin
+owns button density and icon/text alignment; touch targets expand on coarse pointers.
+
+`TableDateFilterComponent` provides the matching preset menu and native Material range-calendar dialog. Each owner
+passes its existing range form and handles preset, Apply, Cancel and Clear outputs; the control never queries or
+persists activities. Draft dates stay in Material's pending selection until Apply. Applied custom dates remain in
+the trigger with a separate clear action. All dates stays last with its warning, and the owner still confirms it
+before loading history. The control owns menu-opening feedback; the owner owns calendar opening and accepted
+filter changes. Closing or clearing returns focus to the visible date button. Dashboard projects its merged toggle
+after Tags so visual and native keyboard order both remain Date, Sports, Tags, Merged activities.
+
+The shared events table uses skeleton cells beneath its existing column headings on the first load. Refreshes retain
+the same rows, selection and paginator until the owner completes its existing request, with one thin Material progress
+bar and a status outside the busy table region. Row actions and paging are disabled while those results are stale.
+The table defers input-driven row rebuilds and filter-context resets during that request; it does not retain a second
+event collection or start a query. Changing the viewer or target owner clears the retained rows immediately and waits
+for the new owner's event input before displaying data. Activities keeps the merged-control position during loading
+and leaves the shared table responsible for the activity-loading indicator.
+Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
+other or leaving a pending input stuck. Search clearing and column choices are disabled while busy, including in an
+already-open column menu; queued text/catalog filters apply
+after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
+Initial skeleton mounting defers the table's automatic tag-catalog lookup until ready input, so Calendar's empty/error
+branches do not add a catalog read. Owner changes clear old catalog choices immediately. Retained row action components
+close their open Material menus and disable their controls while the table is busy, without cancelling in-flight work.
+
+Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
+locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate
+to the same picker. Direct callers provide `{ value, label, activityType? }` options, `selectedValues`, visible and
+accessible labels, and handle `selectionChange`. Keep values canonical and constrain options to the caller's actual
+supported sports; sharing UI must not widen a workout recipe or provider's capabilities.
+
+- Multiple selection is the default. It preserves selections hidden by search, keeps the dialog open, offers family
+  shortcuts and Clear selection, and retains disabled/locked choices. Done returns focus to the trigger.
+- Set `[multiple]="false"` for one required sport and bind a zero/one-element `selectedValues` array. Choosing an
+  enabled option replaces the previous value, closes the picker and returns focus. Bulk shortcuts and clearing are
+  absent; closing without choosing preserves the current value. `allLabel` supplies the initial empty-state text.
+  Single-choice fields inherit normal form density; multi-select filters retain their existing compact field tokens.
+- The caller validates emitted values, commits its local selection, and owns one accepted-change haptic. The picker
+  owns opening, explicit closing and clear-search feedback. Hydration, typing, disabled and unchanged selections
+  must stay silent. Disable the picker while the enclosing workflow is busy or its save outcome is uncertain.
+
+Keep ordinary Material selects for short static choices such as workout purpose or timing, and segmented controls
+for a small set of immediate alternatives. This guideline targets catalogs that benefit from search, icons or
+multiple selection; it does not require migrating unrelated controls in a feature change.
+
+Verify search, selected-state retention, single-choice replacement, disabled choices, keyboard opening/Escape,
+focus return and one haptic owner. For nested usage, closing the sport picker must leave the parent dialog open.
+Check phone-width wrapping and bounded scrolling in light and dark themes with the actual Material overlay.
 
 ## Dashboard unit setup
 
@@ -433,6 +528,25 @@ timing and distance, and rejected timing suppresses pace. Swim lap tooltips use 
 pace in the user's swim units, omitting pace for rest or unavailable timing instead of substituting generic pace/speed.
 Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
 This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
+
+Swim tables expose **Show in charts** for activity-local, positive, unrejected lap/interval windows when event
+charts are available on a duration/time axis. Grouped rest windows must remain contiguous. `event-swim-chart-focus.helper.ts`
+uses each source activity's start for elapsed coordinates, absolute timestamps for Time, and intersects with the chart
+domain. The event card owns the temporary request and invalidates it on event/watch changes; the chart uses existing
+`sharedZoomRange` inputs for every panel and the zoom bar, including cached/asynchronous rebuilds. Manual zoom or reset
+clears the row highlight. **All intervals** resets only zoom, leaving checkbox/brush selections and saved chart settings
+unchanged. The row action scrolls to and focuses the chart region for keyboard users. Invalid/unsupported windows have
+no action. Table-view changes invalidate a request whose row no longer exists. Feedback belongs to accepted table and
+reset actions; hydration, shared-zoom propagation and no-op actions are silent.
+
+`event-swim-coverage.helper.ts` counts usable stroke-count, distance and timing inputs across recorded active lengths.
+It reuses the analytics fallback/rejection rules, preserves explicit zero and counts a multi-field gap once in the
+headline. It also reports a mismatch with an available valid integer session active-length count without inferring
+which unrecorded lengths are absent. Each watch's standalone Swim Lengths view displays one surface-free disclosure,
+with per-field coverage and a bounded, scrollable affected-length list. Original length and lap numbers are retained.
+Nested lap details do not repeat the notice. Independent recorded lap summaries can remain usable; the copy describes
+length-derived requirements rather than asserting every native total is missing. No metric, persistence or MCP contract
+changes are introduced.
 
 The **Show Swim Lengths** setting also controls the swim/rest strip above each metric plot on duration/time axes.
 `buildEventSwimLengthMarkers` supplies an optional recorded start coordinate only for positive, unrejected spans
@@ -835,6 +949,17 @@ For changes, run `src/styles/scrollbars.spec.ts` and the affected component suit
 QA must include genuinely overflowing content in dialogs, sheets and nested panels, horizontal tables, long textareas,
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
+
+Shared `qs-menu-panel` menus keep the Material panel itself as their single scroll owner, bounded by the dynamic
+viewport minus 16px; CDK owns placement relative to the trigger. The inner menu content keeps its natural height; it must not inherit a
+height limit or become another scroller. Form and tile menu minimum widths stay inside narrow viewports too.
+This covers action, configuration, map-layer, chart-overlay, source and range menus without per-menu observers or
+touch handlers. Event chart options use submenus for Line continuity and X axis, retaining their current choices
+in the main menu. Visible charts uses the same panel scrolling instead of adding a nested list scroller.
+Dashboard tile menus no longer inject a temporary global `overflow: visible` style on opening. Material owns
+overlay layout throughout; the menu-open event owns one selection feedback and restores normal focus return.
+Submenu choices must be `mat-menu-item` controls in the same view as their `mat-menu`. Wrapping them in a child
+component hides them from Material's content query, breaking initial focus and arrow-key navigation.
 
 ## Dashboard activity query sharing
 
@@ -1357,6 +1482,14 @@ shadow for in-flow cards or add route-local card shadows.
 
 ## Dashboard calendar popup
 
+Calendar route and Dashboard grids share the same dotted rest-day marker, including compact cells. A rest-only day
+keeps its visible label in dense and phone grids (shortened to **Rest** on phones), with the full rest-day context in
+the accessible date name and selected-day preview. Rest markers remain alongside authored workouts without a second
+overlapping preview label. This presentation fix changes no Training/MCP reads, writes, scopes, contracts or AI allowance.
+Keep the rest label in normal cell flow and boundary-month labels in the date heading, below the date on narrow
+grids so today's corner marker stays clear. Recorded dots, Timeline notes, month names and rest labels must remain
+distinct even on the same date; do not anchor multiple text labels to the bottom of a cell.
+
 Selected-day presentation is shared by the full day page, Dashboard day preview, Calendar day preview, and day
 bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,
 section-heading, entry-row, entry-title, and entry-icon mixins instead of copying presentation rules. The full day retains
@@ -1722,3 +1855,28 @@ and calendar focus return on the stable date field. The notice wraps its action 
 
 MCP impact review: completed-activity presentation only; readers, canonical metrics, stored data, Training plan/workout
 contracts, consent and provider actions are unchanged.
+
+### Performance & Power history tiles
+
+The chart library offers Critical power, W′ capacity, Maximum power and Durability as curated presets, plus the
+existing `health:vo2_max` preset in Performance & Power. Catalog revision 3 announces these choices without
+automatically adding tiles. VO₂ max keeps its Health source/reading identity, privacy and independent date navigation;
+there is no duplicate renderer or preset. Existing saved VO₂ max tiles resolve to the performance section.
+
+`dashboard-performance-trend.helper.ts` adapts the existing Training view models. Three capacity tiles share one
+`training_power_systems` subscription; Durability shares `training_durability`. The manager uses the same read-only
+preview dependencies and deterministic Training examples, with user/example and refresh/error status kept explicit.
+`displaySettings.performanceContext` saves an exact capacity activity type or durability context key, independently
+per tile. Missing saved contexts stay unavailable instead of silently changing sport. Library edits stage that setting
+until Save; card selectors use the existing dashboard configuration persistence and rollback path.
+Account context controls stay available when a selected metric has no ready values, so users can choose another
+sport without being replaced by an example preview. Example data is used only when no account context is available.
+Save-button and theme changes do not restart preview reads; data inputs and owner changes still release subscriptions.
+Card saves distinguish a failed write from a completed write whose chart refresh failed, and late completion feedback
+is suppressed after the owner or save request changes or the dashboard is destroyed.
+
+The dashboard wrapper owns titles, accessible Material context menus and accepted-action haptics. Existing Training
+renderers opt into the shared dashboard plot sizing/alignment contract; their normal Training and public-preview
+layouts retain their defaults. Durability fits the tile width, with compact weekly labels on narrow plots. Full manager
+previews grow with evidence text rather than clipping it. No raw streams, new calculations or per-tile snapshot
+listeners are introduced.

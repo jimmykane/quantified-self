@@ -313,6 +313,20 @@ describe.skipIf(!host)('native account deletion (loopback Firestore emulator)', 
         } finally { interception.mockRestore(); await mail.delete(); }
     }, 30_000);
 
+    it('recursively removes Web Push subscription and rate-state leaves while preserving another owner', async () => {
+        const uid = owner(); const other = owner();
+        await db.doc(`users/${uid}`).set({ synthetic: true });
+        await db.doc(`users/${uid}/pushSubscriptions/device`).set({ synthetic: true });
+        await db.doc(`users/${uid}/pushState/testRateLimit`).set({ synthetic: true });
+        await db.doc(`users/${other}/pushSubscriptions/device`).set({ synthetic: true });
+        await beginAccountDataCleanup(db, uid);
+        await deleteAccountFirestoreRoot(db, uid, 'users');
+        await assertAccountFirestoreRootAbsent(db, uid, 'users');
+        expect((await db.doc(`users/${uid}/pushSubscriptions/device`).get()).exists).toBe(false);
+        expect((await db.doc(`users/${uid}/pushState/testRateLimit`).get()).exists).toBe(false);
+        expect((await db.doc(`users/${other}/pushSubscriptions/device`).get()).exists).toBe(true);
+    }, 30_000);
+
     it('removes 4,955 deep Health/Sleep/reservation descendants, including absent parents, without crossing owners', async () => {
         const uid = owner();
         const other = owner();

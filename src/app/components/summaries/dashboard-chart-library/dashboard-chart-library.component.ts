@@ -160,6 +160,10 @@ export class DashboardChartLibraryComponent {
       IntensityDistribution: 'Training intensity · Weekly distribution',
       EfficiencyTrend: 'Training efficiency · Recent weekly trend',
       PowerCurve: 'Activities with power · Uses this chart’s selected range',
+      CriticalPowerHistory: 'Training power capacity · 42-day rolling evidence · 12-week history',
+      WPrimeHistory: 'Training power capacity · 42-day rolling evidence · 12-week history',
+      MaximumPowerHistory: 'Training power capacity · 42-day rolling evidence · 12-week history',
+      DurabilityTrend: 'Comparable-workout durability · 12-week history',
       ActivityCalendar: 'Activity calendar · Uses the displayed month',
     };
     if (scopes[type]) return scopes[type];

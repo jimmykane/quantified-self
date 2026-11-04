@@ -20,7 +20,7 @@ function fixture(weightUnits?: WeightUnits) {
   const collections: Record<string, Record<string, Record<string, unknown>>> = {
     trainingPlans: { p1: plan('Active'), p2: plan('Paused', 'paused'), p3: plan('Archived', 'archived') },
     scheduledWorkouts: { w1: workout('p1'), w2: workout(null), w3: workout('p2'), w4: workout('p3'), w5: workout('p1', undefined, 'skipped'), w6: workout('p1', undefined, 'deleted') },
-    workoutLibrary: {}, trainingDeliverySettings: {}, trainingDeliveryStatuses: {}, trainingWorkoutCompletions: {},
+    workoutLibrary: {}, trainingDeliverySettings: {}, trainingDeliveryStatuses: {}, trainingWorkoutCompletions: {}, trainingRestDays: {},
   };
   const strengthDocs: Record<string, Record<string, unknown>> = {};
   const structures: Record<string, unknown> = {};
@@ -34,9 +34,13 @@ function fixture(weightUnits?: WeightUnits) {
   const reads: TrainingReads = {
     state: async () => { calls++; if (deleted) throw Error('deleted'); return { revision, activePlanId: 'p1' }; },
     snapshot: async (_uid, read) => read({
+      calendarRestDays: async (startDate, endDate) => Object.entries(collections.trainingRestDays)
+        .filter(([, data]) => String(data.localDate) >= startDate && String(data.localDate) <= endDate)
+        .map(([id, data]) => ({ id, data })),
       getPlanPhases: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
+      getPlanRestDays: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
       get: async (collection, id, detail) => collections[collection][id]
-        ? { id, data: { ...Object.fromEntries(Object.entries(collections[collection][id]).filter(([key]) => key !== 'phases')),
+        ? { id, data: { ...Object.fromEntries(Object.entries(collections[collection][id]).filter(([key]) => !['phases', 'restDays'].includes(key))),
           ...(detail ? { structure: structures[id] ?? collections[collection][id].structure ?? structure } : {}) } } : null,
       getStrengthDetails: async id => strengthDocs[id] ? { id: 'current', data: strengthDocs[id] } : null,
       page: async (collection, after, limit, filter) => Object.entries(collections[collection]).sort(([a], [b]) => a.localeCompare(b))
@@ -58,6 +62,56 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it('reads bounded standalone rest intent without a plan and excludes removal/storage metadata', async () => {
+    const f = fixture(); delete f.collections.trainingPlans.p1;
+    f.collections.trainingRestDays['2026-09-15'] = { schemaVersion: 1, localDate: '2026-09-15', isRestDay: true, revision: 1 };
+    f.collections.trainingRestDays['2026-09-16'] = { schemaVersion: 1, localDate: '2026-09-16', isRestDay: false, revision: 2 };
+    const args = { startDate: '2026-09-15', endDate: '2026-09-16' };
+    expect(await f.run('get_training_calendar_rest_days', args)).toEqual({ ...args, scanComplete: true, restDays: ['2026-09-15'] });
+    await expect(f.run('get_training_calendar_rest_days', args, [])).rejects.toThrow();
+    await expect(f.run('get_training_calendar_rest_days', { ...args, uid: 'other' })).rejects.toThrow();
+    await expect(f.run('get_training_calendar_rest_days', { startDate: '2026-01-01', endDate: '2027-01-02' })).rejects.toThrow();
+    f.collections.trainingRestDays['2026-09-15'].revision = 0;
+    await expect(f.run('get_training_calendar_rest_days', args)).rejects.toThrow();
+  });
+  it('reads explicit rest dates separately, preserves legacy plans and rejects invalid or leaked data', async () => {
+    const f = fixture();
+    const planRef = f.codec.encode({ kind: 'plan', id: 'p1', createdAtMs: 1 }, 'owner', 'connection');
+    const read = () => f.run('get_training_plan_rest_days', { planRef });
+    expect(await read()).toMatchObject({ restDays: [], planRevision: 1, scheduleRevision: 1 });
+    f.collections.trainingPlans.p1.restDays = ['2026-09-16', '2026-09-15'];
+    expect(await read()).toMatchObject({ restDays: ['2026-09-15', '2026-09-16'] });
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [])).rejects.toThrow();
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [TRAINING_PLANS_SCOPE], 'other')).rejects.toThrow();
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [TRAINING_PLANS_SCOPE], 'connection', 'other')).rejects.toThrow();
+    for (const invalid of [['2026-08-31'], ['2026-09-15', '2026-09-15'], ['not-a-date']]) {
+      f.collections.trainingPlans.p1.restDays = invalid;
+      await expect(read()).rejects.toThrow();
+    }
+    f.collections.trainingPlans.p1.restDays = [];
+    f.collections.trainingPlans.p1.providerId = 'private-rest-canary';
+    await expect(read()).rejects.toThrow();
+  });
+  it('keeps seconds and minutes distinct in timed Rest recipes without exposing editor defaults or warnings', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [15, 900, 15.123456789].map((seconds, index) => ({
+      kind: 'step', id: `rest-${index}`, purpose: 'rest', ending: { kind: 'time', seconds }, targets: [],
+    })) };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(result.workout.structure).toEqual(recipe);
+      expect(result.workout.displaySteps[0].text).toContain('15s');
+      expect(result.workout.displaySteps[1].text).toContain('15m 00s');
+      expect(JSON.stringify(result)).not.toMatch(/untouchedDuration|previousRestSeconds|restDurationWarning|private-editor-canary/);
+    }
+    Object.assign(f.collections.scheduledWorkouts.w1, { untouchedDuration: true, previousRestSeconds: 15, restDurationWarning: 'private-editor-canary' });
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      await expect(f.run(tool, { workoutRef })).rejects.toThrow();
+    }
+  });
+
   it.each([ActivityTypes.Yoga, ActivityTypes.Pilates, ActivityTypes.CardioTraining])(
     'reads %s unchanged and exposes its native Garmin compatibility', async sport => {
       const f = fixture();

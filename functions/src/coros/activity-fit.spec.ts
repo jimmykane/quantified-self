@@ -5,7 +5,7 @@ import { ActivityTypes, EventImporterFIT } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { buildActivitySyncOutboundFingerprintIds } from '../activity-sync/outbound-fingerprint';
-import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload } from './activity-fit';
+import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload, readCOROSActivityFITCategory, logCOROSActivityProcessingFailure } from './activity-fit';
 import { createCOROSActivityFITFixture as fixture } from '../../test-utils/coros-activity-fit';
 import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
@@ -14,6 +14,34 @@ function repairCRC(file: Buffer): Buffer {
   file.writeUInt16LE(FitEncoder.calculateCRC(file.subarray(0, -2)), file.length - 2);
   return file;
 }
+
+describe('COROS original sport diagnostics', () => {
+  it('reads original sport codes without converting or exposing any other FIT fields', () => {
+    const input = fixture({ sport: 4, withSubSport: true, subSport: 14 }), original = Buffer.from(input);
+    expect(readCOROSActivityFITCategory(input)).toEqual({ sport: 4, subSport: 14 });
+    expect(readCOROSActivityFITCategory(fixture({ sport: 18 }))).toEqual({ sport: 18, subSport: null });
+    expect(input).toEqual(original);
+  });
+  it('reports unknown for malformed or multi-session classifications', () => {
+    for (const input of [Buffer.from('PRIVATE'), fixture({ sessionCount: 2 }), fixture({ malformedSport: true })]) {
+      expect(readCOROSActivityFITCategory(input)).toEqual({ sport: null, subSport: null });
+    }
+  });
+  it('logs only bounded sport codes, with unknown for missing or untrusted values', () => {
+    vi.mocked(logger.warn).mockClear();
+    logCOROSActivityProcessingFailure({ sport: 4, subSport: 14 });
+    logCOROSActivityProcessingFailure({ sport: 'PRIVATE', subSport: 300, userID: 'PRIVATE' } as never);
+    logCOROSActivityProcessingFailure();
+    expect(vi.mocked(logger.warn).mock.calls).toEqual([
+      ['[COROSActivityUpload] Processing failed.', { telemetryVersion: 1, fit_sport: '4', fit_sub_sport: '14' }],
+      ...Array.from({ length: 2 }, () => ['[COROSActivityUpload] Processing failed.', { telemetryVersion: 1, fit_sport: 'unknown', fit_sub_sport: 'unknown' }]),
+    ]);
+  });
+  it('does not change delivery error handling if logging fails', () => {
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('PRIVATE'); });
+    expect(() => logCOROSActivityProcessingFailure({ sport: 18, subSport: null })).not.toThrow();
+  });
+});
 
 describe('COROS snorkeling FIT copy', () => {
   it.each([12, 14] as const)('adds missing sub_sport using a valid %i-byte header', headerSize => {
@@ -171,6 +199,77 @@ describe('COROS sailing FIT copy', () => {
 });
 
 describe('COROS production FIT preparation', () => {
+  it.each([undefined, 0])('preserves summary-only Multisport with sub-sport %s without inventing records', subSport => {
+    const input = fixture({ sport: 18, subSport, withSubSport: subSport !== undefined, summaryOnly: true });
+    const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+    expect(input).toEqual(original);
+    const before = readFitMessages(input), after = readFitMessages(output);
+    expect(after.issues).toEqual([]);
+    expect(after.messages.map(message => message.globalMessageNumber)).toEqual([0, 18, 34]);
+    const withoutCategory = (messages: typeof before.messages) => messages.map(message => ({ ...message,
+      fields: message.fields.filter(field => message.globalMessageNumber !== 18 || ![5, 6].includes(field.fieldNumber)) }));
+    expect(withoutCategory(after.messages)).toEqual(withoutCategory(before.messages));
+    const session = after.messages[1];
+    expect(session.fields.find(field => field.fieldNumber === 5)!.bytes).toEqual(Buffer.from([0]));
+    expect(session.fields.find(field => field.fieldNumber === 6)!.bytes).toEqual(Buffer.from([0]));
+  });
+
+  it.each([[4, 14], [18, 0], [18, undefined], [33, 0], [33, undefined]] as const)(
+    'maps single-session %i/%s to Generic while preserving every other field', (sport, subSport) => {
+      for (const withGPS of [false, true]) for (const bigEndian of [false, true]) {
+        const input = fixture({ sport, subSport, withSubSport: subSport !== undefined,
+          withGPS, bigEndian, developer: true, compressed: true, compressedLap: true });
+        const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+        expect(input).toEqual(original);
+        expect(output).not.toEqual(input);
+        const before = readFitMessages(input), after = readFitMessages(output);
+        const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+        const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+          fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+        expect(after.issues).toEqual([]);
+        expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+        for (const message of after.messages) for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+          expect(message.fields.find(value => value.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+        }
+        expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+      }
+    },
+  );
+
+  it.each([[4, 14, 'indoor_rowing_to_generic'], [18, 0, 'single_session_multisport_to_generic'],
+    [33, 0, 'ice_skating_to_generic']] as const)(
+    'logs only the fixed new category label for %i/%i', (sport, subSport, mapping) => {
+      vi.mocked(logger.info).mockClear();
+      prepareCOROSActivityFITUpload(fixture({ sport, subSport, withSubSport: true, withGPS: false }));
+      expect(logger.info).toHaveBeenCalledExactlyOnceWith('[COROS] Applied activity FIT category fallback.', { mapping });
+    },
+  );
+
+  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [15, 14], [18, 80], [18, 126], [18, 255],
+    [33, 80], [33, 255]] as const)(
+    'preserves unverified source subtype %i/%s', (sport, subSport) => {
+      const input = fixture({ sport, subSport, withSubSport: subSport !== undefined });
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+    },
+  );
+
+  it.each([[4, 14], [18, 0], [33, 0]] as const)('preserves multi-session, mixed and malformed %i/%i files', (sport, subSport) => {
+    const base = { sport, subSport, withSubSport: true };
+    const corrupt = fixture(base); corrupt[corrupt.length - 1] ^= 1;
+    const conflicting = fixture(base);
+    const lap = readFitMessages(conflicting).messages.find(message => message.globalMessageNumber === 19)!;
+    // The synthetic lap pattern identifies its classification bytes without private file data.
+    const bytes = Buffer.concat(lap.fields.map(field => Buffer.from(field.bytes)));
+    const offset = conflicting.indexOf(bytes);
+    expect(offset).toBeGreaterThan(0);
+    conflicting[offset + bytes.length - 1] = 20; repairCRC(conflicting);
+    for (const input of [fixture({ ...base, sessionCount: 2 }), fixture({ ...base, malformedSport: true }), conflicting, corrupt]) {
+      const before = Buffer.from(input);
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+      expect(input).toEqual(before);
+    }
+  });
+
   it('restores a missing summary without changing the semantic echo identity', async () => {
     const input = sessionlessFixture({ bigEndian: true, developer: true });
     const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
@@ -195,7 +294,9 @@ describe('COROS production FIT preparation', () => {
   });
 
   it.each([[82, ActivityTypes.OpenWaterSwimming, true], [82, ActivityTypes.OpenWaterSwimming, false],
-    [32, ActivityTypes.Generic, true]] as const)(
+    [32, ActivityTypes.Generic, true], [29, ActivityTypes.Generic, true],
+    [53, ActivityTypes.Generic, false], [53, ActivityTypes.Generic, true],
+    [33, ActivityTypes.Generic, false], [33, ActivityTypes.Generic, true]] as const)(
     'sport %i parses as %s with original metrics (GPS=%s)', async (sport, expectedType, withGPS) => {
       const input = fixture({ sport, withGPS });
       const output = prepareCOROSActivityFITUpload(input);
@@ -203,6 +304,7 @@ describe('COROS production FIT preparation', () => {
         file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer, createParsingOptions(),
       );
       const before = await parse(input), after = await parse(output);
+      if (sport === 33) expect(before.getActivityTypesAsArray()).toEqual([ActivityTypes.IceSkating]);
       expect(after.getActivityTypesAsArray()).toEqual([expectedType]);
       expect(after.startDate).toEqual(before.startDate);
       expect(after.endDate).toEqual(before.endDate);
@@ -224,7 +326,62 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(output)).toBe(output);
   });
 
-  it.each([0, 1, 2, 5, 81, 83])('passes unrelated sport %i through byte-for-byte', sport => {
+  it.each([[false, false], [false, true], [true, false], [true, true]])(
+    'converts fishing while preserving all unrelated fields (big endian=%s, sub-sport present=%s)', (bigEndian, withSubSport) => {
+      const input = fixture({ sport: 29, bigEndian, withSubSport, developer: true, compressed: true, compressedLap: true });
+      const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+      expect(input).toEqual(original);
+      expect(output).not.toEqual(input);
+      const before = readFitMessages(input), after = readFitMessages(output);
+      const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+      const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+        fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+      expect(after.issues).toEqual([]);
+      expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+      for (const message of after.messages) {
+        for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+          expect(message.fields.find(value => value.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+        }
+      }
+      expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+    },
+  );
+
+  it.each([[false, false], [false, true], [true, false], [true, true]])(
+    'converts diving to generic while preserving depth and all other data (GPS=%s, big endian=%s)', (withGPS, bigEndian) => {
+      const input = fixture({ sport: 53, withGPS, bigEndian, withDepth: true,
+        withSubSport: bigEndian, developer: true, compressed: true, compressedLap: true });
+      const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+      expect(input).toEqual(original);
+      expect(output).not.toEqual(input);
+      const before = readFitMessages(input), after = readFitMessages(output);
+      const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+      const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+        fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+      expect(after.issues).toEqual([]);
+      expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+      const records = after.messages.filter(message => message.globalMessageNumber === 20);
+      expect(records).toHaveLength(2);
+      expect(records.every(message => message.fields.some(field => field.fieldNumber === 92))).toBe(true);
+      expect(records.every(message => message.fields.some(field => field.fieldNumber === 0))).toBe(withGPS);
+      for (const message of after.messages) {
+        for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+          expect(message.fields.find(value => value.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+        }
+      }
+      expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+    },
+  );
+
+  it.each([[29, 'fishing_to_gps_cardio'], [53, 'diving_to_generic']] as const)('logs only the fixed sport %i mapping label', (sport, mapping) => {
+    vi.mocked(logger.info).mockClear();
+    prepareCOROSActivityFITUpload(fixture({ sport }));
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith('[COROS] Applied activity FIT category fallback.', {
+      mapping,
+    });
+  });
+
+  it.each([0, 1, 2, 5, 81, 83, 85])('passes unrelated sport %i through byte-for-byte', sport => {
     const input = fixture({ sport });
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
@@ -245,12 +402,12 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(output)).toBe(output);
   });
 
-  it('keeps GPS-less sailing unchanged', () => {
-    const input = fixture({ sport: 32, withGPS: false });
+  it.each([32, 29])('keeps GPS-less outdoor sport %i unchanged', sport => {
+    const input = fixture({ sport, withGPS: false });
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
 
-  it.each([82, 32])('leaves multisession and malformed sport %i unchanged', sport => {
+  it.each([82, 32, 29, 53, 33])('leaves multisession and malformed sport %i unchanged', sport => {
     const corrupt = fixture({ sport }); corrupt[corrupt.length - 1] ^= 1;
     for (const input of [fixture({ sport, sessionCount: 2 }),
       fixture({ sport, malformedSport: true }), fixture({ sport, fullSessionDefinition: true }), corrupt]) {
@@ -260,12 +417,12 @@ describe('COROS production FIT preparation', () => {
     }
   });
 
-  it.each([[0x7fffffff, 1234], [1234, 0x7fffffff], [0x50000000, 1234]])(
-    'keeps sailing with invalid coordinates %s/%s unchanged', (latitude, longitude) => {
-      const input = fixture({ sport: 32, coordinates: [latitude, longitude] });
+  it.each([32, 29])('keeps outdoor sport %i with invalid coordinates unchanged', sport => {
+    for (const coordinates of [[0x7fffffff, 1234], [1234, 0x7fffffff], [0x50000000, 1234]] as [number, number][]) {
+      const input = fixture({ sport, coordinates });
       expect(prepareCOROSActivityFITUpload(input)).toBe(input);
-    },
-  );
+    }
+  });
 
   it('converts snorkeling with unavailable GPS without inventing coordinates', () => {
     const input = fixture({ coordinates: [0x7fffffff, 0x7fffffff] });
@@ -284,9 +441,9 @@ describe('COROS production FIT preparation', () => {
       .toEqual(readFitMessages(input, { messageNumbers: [20] }).messages);
   });
 
-  it('leaves a conflicting lap classification on the existing provider path', () => {
-    const input = fixture();
-    const index = input.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, 82, 7]));
+  it.each([82, 32, 29, 53, 33])('leaves sport %i with a conflicting lap on the existing provider path', sport => {
+    const input = fixture({ sport });
+    const index = input.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, sport, 7]));
     expect(index).toBeGreaterThan(0);
     input[index + 5] = 1; repairCRC(input);
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
@@ -396,7 +553,7 @@ describe('COROS empty native field compatibility', () => {
     }
   });
 
-  it.each([82, 32])('repairs before applying the existing sport %i mapping', sport => {
+  it.each([82, 32, 29, 53])('repairs before applying the existing sport %i mapping', sport => {
     const input = fixture({ sport, emptyNativeFields: 'zero' });
     const clean = fixture({ sport, emptyNativeFields: 'omitted' });
     expect(prepareCOROSActivityFITUpload(input)).toEqual(prepareCOROSActivityFITUpload(clean));

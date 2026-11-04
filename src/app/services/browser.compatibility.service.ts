@@ -59,6 +59,14 @@ export class BrowserCompatibilityService {
         return isSupported;
     }
 
+    public checkPushSupport(): boolean {
+        try {
+            const window = this.windowService.windowRef;
+            return window.isSecureContext && 'Notification' in window && 'PushManager' in window
+                && 'serviceWorker' in window.navigator;
+        } catch { return false; }
+    }
+
     public checkVibrationSupport(): boolean {
         try {
             return typeof this.windowService.windowRef.navigator?.vibrate === 'function';

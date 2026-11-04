@@ -471,6 +471,8 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('Provider planned-workout delivery');
+        expect(content).toContain('One included daily workout suggestion');
+        expect(content).toContain('separately from that allowance');
         expect(content).toContain('Cross-device sync');
         expect(content).toContain('Unlimited saved routes');
         expect(content.match(/MCP data access/g)).toHaveLength(2);
@@ -1741,6 +1743,9 @@ describe('PricingComponent', () => {
         const content = fixture.nativeElement.textContent as string;
         const title = fixture.nativeElement.querySelector('.manage-title') as HTMLElement | null;
         expect(content).toContain('Pro Membership');
+        expect(content).toContain('One included daily workout suggestion');
+        expect(content).toContain('Opt in from Dashboard Today');
+        expect(content).toContain('separate from your Assistant allowance');
         expect(content).toContain('Renews on');
         expect(content).toContain('Manage & Change Plan');
         expect(content).toContain('Next renewal');

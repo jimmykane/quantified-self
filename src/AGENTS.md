@@ -6,6 +6,10 @@ Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
 - `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports
+- Reuse `ActivityFilterPickerComponent` for searchable sport/tag choices. Use its single-selection mode for one sport,
+  and `ActivityTypesMultiSelectComponent` / `ActivityTypesFilterMenuComponent` when sport-family filtering is needed.
+  Keep each caller’s supported catalog and validation; do not create another sport-search dialog. See
+  `docs/frontend-ui.md#searchable-sport-and-tag-selection` for applicability, selection, accessibility and haptic rules.
 - When changing lazy ECharts module registration, update the loader spec's explicit module mocks and registration
   expectations together. Run both `echarts-registrations.helper.spec.ts` and `echarts-loader.service.spec.ts`.
 - Non-interactive chart tests must distinguish render lifecycle listeners such as `finished` from input handlers.
@@ -20,8 +24,10 @@ Frontend-only rules:
   exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - When changing public content or sitemap `lastmod` values, update and run `src/firebase-hosting.config.spec.ts` in
   the same change. Retain specific expected dates for each updated page.
-  For public SEO title/heading changes, update route, content and template expectations together; run
-  `src/app/app.routing.module.spec.ts` plus the affected content/component specs to cover lazy route-data resolution.
+  For public SEO title, description or heading changes, update route, content, template, SeoService and production
+  prerender expectations together. Keep `tools/public-prerender-metadata.mjs` aligned with the public route content;
+  its contract spec runs in Node before release builds. Run `src/app/app.routing.module.spec.ts` plus affected
+  content/component and metadata contract specs, then `npm run build-production` to verify actual prerendered output.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
   root. Do not add route-local outer width, margin, or padding rules. Settings intentionally uses a centered 800px
   overview layout with one column on desktop and phones. See `docs/frontend-ui.md` for the shell contract.

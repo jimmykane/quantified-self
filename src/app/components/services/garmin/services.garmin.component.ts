@@ -188,6 +188,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.hasTokenWithPermissions(GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS);
   }
 
+  get hasGarminActivityExportPermission(): boolean {
+    return this.hasTokenWithPermissions(['ACTIVITY_EXPORT']);
+  }
+
   getPermissionLabel(permission: string): string {
     return this.permissionLabels[permission] || permission;
   }

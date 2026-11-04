@@ -1,5 +1,5 @@
 import { Component, computed, DestroyRef, effect, inject, input, output, signal, untracked } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,7 +10,6 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   CONNECTION_HISTORY_DEFAULT_RANGE,
   historyCapabilities,
-  historyRangeLabel,
   historyRangeOptions,
   type ConnectionHistoryRangePreset,
   type ConnectionHistoryStatusProjection,
@@ -20,6 +19,9 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { RecordedHistoryStartService } from '../../../services/recorded-history-start.service';
 import type { SleepProvider } from '@shared/sleep';
+import type { ServiceConnectionState } from '@shared/service-connection';
+import { buildHistoryImportItems } from '../../../helpers/history-import-progress.helper';
+import { HistoryImportSummaryComponent } from '../../history-import-progress/history-import-summary.component';
 
 const providers: Partial<Record<ServiceNames, SleepProvider>> = {
   [ServiceNames.GarminAPI]: 'GarminAPI', [ServiceNames.SuuntoApp]: 'SuuntoApp', [ServiceNames.COROSAPI]: 'COROSAPI',
@@ -54,12 +56,16 @@ export class ConnectionHistoryOptionComponent {
   }
 }
 @Component({ selector: 'app-connection-history-status', standalone: true,
-  imports: [DatePipe, MatExpansionModule, MatButtonModule, MatProgressBarModule],
+  imports: [DatePipe, NgTemplateOutlet, MatExpansionModule, MatButtonModule, MatProgressBarModule, HistoryImportSummaryComponent],
   templateUrl: './connection-history-status.component.html', styleUrl: './connection-history.component.scss' })
 export class ConnectionHistoryStatusComponent {
   readonly service = input<ServiceNames>(ServiceNames.GarminAPI);
   readonly status = input<ConnectionHistoryStatusProjection | null>(null);
   readonly disabled = input(false);
+  readonly inline = input(false);
+  readonly connectionState = input<ServiceConnectionState | null>();
+  readonly progressItem = computed(() => buildHistoryImportItems([{serviceName: this.service(),
+    projection: this.status(), connectionState: this.connectionState()}])[0] ?? null);
   readonly reconnect = output<void>();
   private readonly pendingRetry = signal<HistoryRetryView | null>(null);
   private readonly retryFailure = signal<(HistoryRetryView & { message: string }) | null>(null);
@@ -84,10 +90,6 @@ export class ConnectionHistoryStatusComponent {
     [...new Set(this.status()?.steps.flatMap(step => step.resources) || [])].sort()]));
   private historyVersion = 0;
   private historyController: AbortController | null = null;
-  readonly rangeLabel = computed(() => {
-    const status = this.status();
-    return status ? historyRangeLabel(this.service(), status.rangePreset) : '';
-  });
   // Garmin/Suunto/Wahoo manual pickers submit local day boundaries; COROS uses UTC
   // calendar dates. Automatic connection ranges have always been UTC.
   readonly rangeTimezone = computed(() => this.status()?.rangePreset === 'custom'
@@ -96,23 +98,19 @@ export class ConnectionHistoryStatusComponent {
   readonly isAllAvailableRange = computed(() => this.status()?.rangePreset === 'maximum'
     && (this.service() === ServiceNames.SuuntoApp || this.service() === ServiceNames.WahooAPI));
   readonly summary = computed(() => {
-    const status = this.status();
-    if (status?.active) return 'Your selected history is importing in the background. You can keep using the app or close this page.';
-    if (status?.steps.some(step => step.status === 'failed' || step.status === 'skipped')) return 'Some history needs attention. Expand for details.';
-    if (status?.steps.some(step => step.status === 'requested')) return 'History requested; data may take hours or days to arrive.';
-    return 'Selected history has been processed.';
+    return this.progressItem()?.label ?? 'Import status unavailable';
   });
   readonly steps = computed(() => (this.status()?.steps || []).map(step => ({ ...step,
     label: resourceLabel(step.resources),
-    description: ({ queued: 'Queued for background processing', requesting: 'Requesting history', retrying: 'Waiting to retry',
-      requested: 'History requested; data may take hours or days to arrive.', processed: 'Processed', skipped: 'Skipped', failed: 'Failed' })[step.status],
   })));
-  readonly needsReconnect = computed(() => this.steps().some(step => /reconnect|authorization|permission/i.test(step.message || '')));
+  readonly needsReconnect = computed(() => this.connectionState() === 'reconnect_required'
+    || this.steps().some(step => /reconnect|authorization|permission/i.test(step.message || '')));
   constructor() {
     effect(() => {
-      const owner = this.users.user(), provider = providers[this.service()], expanded = this.expanded();
+      const owner = this.users.user(), provider = providers[this.service()], expanded = this.inline() || this.expanded();
+      this.connectionState();
       this.historyRefresh(); this.historyScope();
-      untracked(() => { const status = this.status();
+      untracked(() => { const status = this.progressItem() ? this.status() : null;
         void this.checkStoredHistory(expanded && owner && status ? owner.uid : null,
           provider, status?.steps.flatMap(step => step.resources) || []); });
     });
@@ -123,7 +121,7 @@ export class ConnectionHistoryStatusComponent {
     this.haptics.selection(); this.expanded.set(expanded);
   }
   refreshStoredHistory(): void {
-    if (!this.expanded() || this.checkingHistory()) return;
+    if (!(this.inline() || this.expanded()) || this.checkingHistory()) return;
     this.haptics.selection(); this.checkingHistory.set(true); this.historyRefresh.update(value => value + 1);
   }
   private async checkStoredHistory(uid: string | null, provider: SleepProvider | undefined, resources: HistoryResource[]): Promise<void> {
@@ -149,7 +147,7 @@ export class ConnectionHistoryStatusComponent {
   }
   reviewReconnect(): void { if (!this.disabled()) { this.haptics.selection(); this.reconnect.emit(); } }
   private matchesCurrentRun(view: HistoryRetryView | null): boolean {
-    return !!view && view.runId === this.status()?.runId && view.service === this.service();
+    return !!view && view.runId === this.progressItem()?.runId && view.service === this.service();
   }
   async retry(): Promise<void> {
     const status = this.status();

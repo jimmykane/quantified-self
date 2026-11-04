@@ -15,6 +15,10 @@ const EXERCISES = {
   BARBELL_SHOULDER_PRESS: 'SHOULDER_PRESS', DUMBBELL_SHOULDER_PRESS: 'SHOULDER_PRESS',
 } as const;
 
+/** The existing transport allowlist, projected for provider-aware authoring; no fuzzy substitutions. */
+export const GARMIN_STRENGTH_EXERCISE_NAMES_V1 = Object.keys(EXERCISES).map(key => key.toLowerCase()
+  .split('_').map(word => word[0].toUpperCase() + word.slice(1)).join(' '));
+
 export function garminStrengthExercise(name: string): { exerciseCategory: string; exerciseName: string } | null {
   const key = name.trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (!Object.prototype.hasOwnProperty.call(EXERCISES, key)) return null;

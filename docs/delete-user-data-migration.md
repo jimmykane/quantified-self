@@ -241,8 +241,10 @@ ever addressed to the user. No backfill or historical-mail deletion is included.
 
 Registration welcome, all four subscription lifecycle writers and deletion
 confirmations now store an inert `uid` field without changing delivery recipients.
-Notifications and subscription gifts already use `toUids`; marketing uses
-`marketing.uid`, and the MCP campaign uses `uid`. The CSV development-update script
+New subscription gift mail also uses inert `uid` ownership, with the Auth email
+addressed once in `to`; retained gift mail with `toUids` remains supported.
+Notifications use `toUids`; marketing uses `marketing.uid`, and the MCP campaign
+uses `uid`. The CSV development-update script
 now resolves the current Auth UID by email and skips deleted/missing accounts.
 The manual template-test script also attaches UID for registered recipients;
 an explicitly selected external test inbox has no app UID and remains email-only.

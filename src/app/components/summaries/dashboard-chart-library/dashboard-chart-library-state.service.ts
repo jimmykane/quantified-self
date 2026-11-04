@@ -1,3 +1,5 @@
+import { isDashboardPerformanceChartType } from '../../../helpers/dashboard-special-chart-types';
+import { normalizeDashboardPerformanceContext } from '../../../helpers/dashboard-chart-display-settings.helper';
 import { dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
 import { isDashboardActivityCalendarTile } from '../../../helpers/dashboard-auto-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
@@ -26,6 +28,7 @@ export class DashboardChartLibraryState implements OnDestroy {
   readonly editor = signal<DashboardTileConfiguration | null>(null);
   readonly configuring = signal(false);
   readonly healthSettings = computed(() => dashboardHealthSettings(this.draft()));
+  readonly performanceSettings = computed(() => isDashboardPerformanceChartType(this.draft()?.['chartType']));
   readonly canConfigure = computed(() => !!this.healthSettings() || hasDashboardTileSettings(this.draft()));
   readonly pinnedFromHealth = signal(false);
   readonly busy = signal(false);
@@ -90,11 +93,11 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.clearSelection();
     this.activeLane.set(resolveDashboardTileLaneKey(tile));
     this.createEditor(user, tile, true);
-    this.configuring.set(this.canConfigure() && !this.healthSettings());
+    this.configuring.set(this.canConfigure() && !this.healthSettings() && !this.performanceSettings());
   }
 
   configure(): void {
-    if (this.busy() || this.configuring() || this.healthSettings() || !this.canConfigure()) return;
+    if (this.busy() || this.configuring() || this.healthSettings() || this.performanceSettings() || !this.canConfigure()) return;
     this.haptics.selection(); this.configuring.set(true);
   }
 
@@ -116,6 +119,14 @@ export class DashboardChartLibraryState implements OnDestroy {
     editor.healthMetric = { ...settings };
     this.refreshDraft();
     if (initial) this.initialDraft = JSON.stringify(this.draft());
+  }
+
+  updatePerformanceContext(value: string): void {
+    const editor = this.editor();
+    const context = normalizeDashboardPerformanceContext(value);
+    if (!editor || this.busy() || !context || !this.performanceSettings()) return;
+    editor.performanceContext = context;
+    this.refreshDraft();
   }
 
   refreshDraft(): void {

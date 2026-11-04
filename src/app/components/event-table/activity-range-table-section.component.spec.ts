@@ -71,6 +71,28 @@ describe('ActivityRangeTableSectionComponent', () => {
     expect(table.showActions).toBe(true);
   });
 
+  it('keeps the same shared table mounted from initial loading through a changed range without duplicate indicators or queries', async () => {
+    const first = new Subject<ReturnType<typeof event>[]>();
+    const second = new Subject<ReturnType<typeof event>[]>();
+    getEventSummariesBy.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('range', { startMs: 1000, endExclusiveMs: 2000 });
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const table = fixture.debugElement.query(By.directive(EventTableStubComponent)).componentInstance as EventTableStubComponent;
+    expect(table.isLoading).toBe(true);
+    expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeNull();
+    first.next([event('first-range')]); await settle();
+    expect(table.isLoading).toBe(false);
+    fixture.componentRef.setInput('range', { startMs: 2000, endExclusiveMs: 3000 }); await settle();
+    expect(fixture.debugElement.query(By.directive(EventTableStubComponent)).componentInstance).toBe(table);
+    expect(table.isLoading).toBe(true);
+    second.next([event('second-range')]); await settle();
+    expect(table.isLoading).toBe(false);
+    expect(table.events.map(item => (item as ReturnType<typeof event>).getID())).toEqual(['second-range']);
+    expect(getEventSummariesBy).toHaveBeenCalledTimes(2);
+  });
+
   it('queries a target user while preserving the viewer for table preferences', async () => {
     const targetUser = new User('target-user');
     getEventSummariesBy.mockReturnValue(of([event('activity-1')]));
@@ -128,7 +150,7 @@ describe('ActivityRangeTableSectionComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.isLoading()).toBe(true);
-    expect(fixture.nativeElement.textContent).toContain('Loading activities');
+    expect(fixture.debugElement.query(By.directive(EventTableStubComponent)).componentInstance.isLoading).toBe(true);
     expect(fixture.nativeElement.textContent).not.toContain('No activities');
 
     response.next([]);

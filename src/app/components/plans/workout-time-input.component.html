@@ -23,6 +23,18 @@
     </mat-form-field>
     @if (error(); as message) { <p class="duration-error" [id]="errorId" role="alert">{{ message }}</p> }
   </fieldset>
+  @if (summaryPrefix(); as prefix) {
+    @if (previousRestSummary(); as previous) {
+      <p class="duration-context">Previous rest: {{ previous }}</p>
+    }
+    <div class="duration-summary" role="status" aria-live="polite" aria-atomic="true">
+      <strong>{{ durationSummary() ? prefix + ' ' + durationSummary() : 'Set a duration' }}</strong>
+      @if (nextStepLabel(); as next) { <span>{{ next }}</span> }
+    </div>
+    @if (longRestWarning(); as warning) {
+      <p class="duration-warning" role="status"><mat-icon aria-hidden="true">info</mat-icon><span>{{ warning }}</span></p>
+    }
+  }
 } @else {
   <mat-form-field subscriptSizing="dynamic">
     <mat-label>{{ label() }}</mat-label>

@@ -1,23 +1,8 @@
 import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes,
-  ChartTypes,
-  DataRecoveryTime,
-  MapThemes,
-  MapTypes,
-  TileChartSettingsInterface,
-  TileSettingsInterface,
-  TileTypes,
-  TimeIntervals,
-} from '@sports-alliance/sports-lib';
-import {
-  AppDashboardAutoTileId,
-  AppDashboardAutoTileState,
-  AppDashboardChartTileSettingsInterface,
-  AppDashboardMapTileSettingsInterface,
-  AppDashboardSettingsInterface,
-} from '../models/app-user.interface';
-import {
+  DASHBOARD_CRITICAL_POWER_CHART_TYPE,
+  DASHBOARD_W_PRIME_CHART_TYPE,
+  DASHBOARD_MAXIMUM_POWER_CHART_TYPE,
+  DASHBOARD_DURABILITY_CHART_TYPE,
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -46,6 +31,26 @@ import {
   type DashboardKpiChartType,
   getDashboardKpiChartDefinitions,
 } from './dashboard-special-chart-types';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  DataRecoveryTime,
+  MapThemes,
+  MapTypes,
+  TileChartSettingsInterface,
+  TileSettingsInterface,
+  TileTypes,
+  TimeIntervals,
+} from '@sports-alliance/sports-lib';
+import {
+  AppDashboardAutoTileId,
+  AppDashboardAutoTileState,
+  AppDashboardChartTileSettingsInterface,
+  AppDashboardMapTileSettingsInterface,
+  AppDashboardSettingsInterface,
+} from '../models/app-user.interface';
+
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
 import {
@@ -88,6 +93,11 @@ export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefau
   [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'curatedFreshnessForecast',
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'curatedIntensityDistribution',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'curatedEfficiencyTrend',
+  [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'curatedCriticalPower',
+  [DASHBOARD_W_PRIME_CHART_TYPE]: 'curatedWPrime',
+  [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'curatedMaximumPower',
+  [DASHBOARD_DURABILITY_CHART_TYPE]: 'curatedDurability',
+
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
 };
 export const DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[DASHBOARD_RECOVERY_NOW_CHART_TYPE];
@@ -173,6 +183,11 @@ export function buildDashboardCuratedAutoTile(
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'Freshness Forecast',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Efficiency Trend',
+    [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'Critical power',
+    [DASHBOARD_W_PRIME_CHART_TYPE]: 'W′ capacity',
+    [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'Maximum power',
+    [DASHBOARD_DURABILITY_CHART_TYPE]: 'Durability',
+
     [DASHBOARD_POWER_CURVE_CHART_TYPE]: getDashboardPowerCurveScopeDefinition('cycling').label,
   };
   const displaySettings = getDefaultDashboardChartTileDisplaySettingsForChartType(chartType);

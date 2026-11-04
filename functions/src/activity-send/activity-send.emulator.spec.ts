@@ -4,16 +4,21 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { runSendCommand } from './commands';
 import { stageSendFile } from './upload';
-import { admitActivitySend, admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
+import { admitActivitySend, admitSendRows, projectActivitySendDelivery, projectSendDelivery, projectFailedSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
 import { Timestamp } from 'firebase-admin/firestore';
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
 import { queueRetiredSendSourceCleanup } from './source-cleanup';
 import { SEND_UPLOAD_CLEANUP_COLLECTION, SEND_UPLOAD_RESERVATION_MS, cleanupSendUploadReservations, sendUploadCleanupRef } from './upload-cleanup';
+import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
+import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
+import { admitDeliveryNotification, sendDeliveryNotification, type DeliveryPushDependencies } from '../web-push/delivery-service';
+import { DELIVERY_PUSH, type DeliveryCandidate } from '../web-push/delivery-policy';
 
 const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, downloadFailure: undefined as undefined | { path: string; code: number }, downloaded: [] as string[], beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
 const cleanupState = vi.hoisted(() => ({ failPrefixOnce: false }));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => state.pro, enqueueActivitySyncTask: state.enqueue }));
+vi.mock('../web-push/history-consent', () => ({ automaticPushConfiguration: async () => ({ enabled: true, publicKey: 'B' + 'A'.repeat(86) }) }));
 vi.mock('../activity-sync/process-queue-item', () => ({ getDestinationConnectionStatus: async () => 'connected' }));
 vi.mock('../coros/account', () => ({ getActiveCOROSTokenSnapshot: async () => ({ id: state.account }) }));
 vi.mock('./store', async original => ({ ...await original<typeof import('./store')>(), describeFIT: async () => ({ name: 'Synthetic.fit', sport: 'Running', startDate: 1000, warnings: [] }) }));
@@ -40,6 +45,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     const queues = await db.collection('activitySyncQueue').get();
     for (const queue of queues.docs) await db.recursiveDelete(queue.ref);
     await db.recursiveDelete(db.collection(SEND_UPLOAD_CLEANUP_COLLECTION));
+    await db.recursiveDelete(db.collection('failed_jobs'));
     await db.doc(`users/${uid}`).set({ stripeRole: 'pro' });
   });
   afterAll(async () => { if (db) await db.terminate(); });
@@ -53,6 +59,161 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await admitSendRows(uid, id);
     return (await db.collection('activitySyncQueue').get()).docs[0];
   }
+  function projectEvent(after: admin.firestore.DocumentSnapshot, before?: admin.firestore.DocumentSnapshot) {
+    return projectActivitySendDelivery.run({
+      data: { before: before ?? { exists: false }, after }, params: { queueId: after.ref.id || 'projection-queue' },
+    } as Parameters<typeof projectActivitySendDelivery.run>[0]);
+  }
+  it('commits explicit device consent privately with confirmation and exposes only a requested flag', async () => {
+    const reviewed = await prepare();
+    const installationId = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
+    const origin = 'https://quantified-self.io', key = 'B' + 'A'.repeat(86);
+    await db.doc(`users/${uid}/meta/${ServiceNames.COROSAPI}`).set({ connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: state.account });
+    await db.doc(`users/${uid}/pushSubscriptions/${installationId}`).set({ schemaVersion: 1, generation, origin, vapidPublicKey: key,
+      endpoint: 'https://web.push.apple.com/synthetic', keys: { p256dh: key, auth: 'A'.repeat(22) } });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision, notification: { installationId, generation } }, { origin });
+    expect((await operationRef(uid, id).get()).data()?.deliveryNotification).toEqual({ installationId, generation, origin, categoryRevision: 0, connectionGeneration: 'connection' });
+    const visible = (await batchRef(uid, id).get()).data();
+    expect(visible?.notificationRequested).toBe(true); expect(visible).not.toHaveProperty('deliveryNotification');
+    expect(JSON.stringify(visible)).not.toMatch(/installationId|categoryRevision|connectionGeneration|endpoint|p256dh/);
+  });
+  it.each([
+    ['retry', 'before admission'], ['retry', 'after admission'],
+    ['check', 'before admission'], ['check', 'after admission'],
+  ] as const)('invalidates a completed notification on %s %s before asynchronous result projection', async (action, phase) => {
+    const reviewed = await prepare();
+    const installationId = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
+    const origin = 'https://quantified-self.io', publicKey = 'B' + 'A'.repeat(86);
+    await db.doc(`users/${uid}/meta/${ServiceNames.COROSAPI}`).set({ connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: state.account });
+    await db.doc(`users/${uid}/pushSubscriptions/${installationId}`).set({ schemaVersion: 1, generation, origin, vapidPublicKey: publicKey,
+      endpoint: 'https://web.push.apple.com/synthetic', keys: { p256dh: publicKey, auth: 'A'.repeat(22) } });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision, notification: { installationId, generation } }, { origin });
+    await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0].ref;
+    await queue.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: action === 'retry', destinationUploadID: 'synthetic-operation', providerOperationStartedAt: 1 });
+    await projectSendDelivery(queue);
+    const completed = (await batchRef(uid, id).get()).data()!;
+    expect(completed.state).toBe('complete');
+    const candidate: DeliveryCandidate = { kind: 'manual', id, createdAt: completed.createdAt, completedAt: completed.updatedAt };
+    let now = completed.updatedAt;
+    const deps: DeliveryPushDependencies = { db, now: () => now, configuration: async () => ({ enabled: true, publicKey }), send: vi.fn(async () => ({})), outcome: vi.fn() };
+    if (phase === 'after admission') await admitDeliveryNotification(uid, candidate, deps);
+    // Even a resume in the same millisecond must invalidate the completed result atomically.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(completed.updatedAt);
+    try { await runSendCommand(uid, { version: 1, action, batchId: id, rowId: 'row-one' }); }
+    finally { clock.mockRestore(); }
+    expect((await queue.get()).data()?.processed).toBe(false);
+    // Deliberately leave the public result unprojected to reproduce the trigger-delay window.
+    expect((await batchRef(uid, id).get()).data()?.state).toBe('complete');
+    if (phase === 'before admission') await admitDeliveryNotification(uid, candidate, deps);
+    now += DELIVERY_PUSH.groupMs; await sendDeliveryNotification(uid, deps);
+    expect(deps.send).not.toHaveBeenCalled();
+    expect((await batchRef(uid, id).get()).data()!.updatedAt).toBeGreaterThan(completed.updatedAt);
+  });
+  it('projects a committed exhausted send as one terminal issue, including concurrent deletion events', async () => {
+    const queue = await confirm(); const expected = queue.data();
+    await db.collection('failed_jobs').doc(queue.id).set({ ...expected, originalCollection: 'activitySyncQueue', failedAt: Date.now() });
+    await queue.ref.delete();
+    await Promise.all([projectFailedSendDelivery(queue.id, expected), projectFailedSendDelivery(queue.id, expected)]);
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ state: 'complete', total: 1, finished: 1 });
+    expect((await batchRef(uid, id).collection('rows').doc('row-one').get()).data()).toMatchObject({ status: 'needs_action', recovery: 'choose_file' });
+    expect((await operationRef(uid, id).get()).data()?.finished).toBe(1);
+    await projectEvent(await queue.ref.get(), queue);
+    expect((await batchRef(uid, id).get()).data()?.finished).toBe(1);
+  }, 30000);
+  it.each(['new queue', 'different revision', 'different owner', 'deletion'])('does not project a stale exhausted send after %s', async reason => {
+    const queue = await confirm(); const expected = queue.data();
+    await db.collection('failed_jobs').doc(queue.id).set({ ...expected, originalCollection: 'activitySyncQueue', failedAt: Date.now(),
+      ...(reason === 'different revision' ? { dateCreated: expected.dateCreated + 1 } : {}), ...(reason === 'different owner' ? { userID: 'other' } : {}) });
+    if (reason !== 'new queue') await queue.ref.delete();
+    if (reason === 'deletion') await db.doc(`userDeletionTombstones/${uid}`).set({});
+    await projectFailedSendDelivery(queue.id, expected);
+    expect((await batchRef(uid, id).get()).data()?.finished).toBe(0);
+  });
+  it.each([
+    undefined, {}, { userID: uid },
+    { userID: uid, sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: id },
+    { sendBatchID: id, sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: '', sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: id, sendRowID: '' },
+    { userID: '', sendBatchID: id, sendRowID: 'row-one' },
+  ])('projection trigger skips unlinked events without a document read: %j', async data => {
+    const get = vi.fn(() => { throw new Error('Unlinked projection must not read Firestore.'); });
+    await projectEvent({ exists: true, data: () => data, ref: { get } } as unknown as admin.firestore.DocumentSnapshot);
+    expect(get).not.toHaveBeenCalled();
+  });
+  it('projection trigger skips deleted documents without reading their contents', async () => {
+    const data = vi.fn(() => { throw new Error('Deleted projection must not read snapshot data.'); });
+    const get = vi.fn();
+    await projectEvent({ exists: false, data, ref: { get } } as unknown as admin.firestore.DocumentSnapshot);
+    expect(data).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled();
+  });
+  it('projection trigger retains retryable reads for linked events', async () => {
+    const error = new Error('Synthetic projection read failure');
+    const get = vi.fn().mockRejectedValue(error);
+    await expect(projectEvent({ exists: true, data: () => ({ userID: uid, sendBatchID: id, sendRowID: 'row-one' }), ref: { get } } as unknown as admin.firestore.DocumentSnapshot))
+      .rejects.toBe(error);
+    expect(get).toHaveBeenCalledOnce();
+  });
+  it.each(['unlinked first', 'linked first'])('projection trigger handles real Send promotion with %s event delivery', async order => {
+    const eventID = 'promoted-send';
+    const path = await savedOriginal(eventID);
+    await runSendCommand(uid, { version: 1, action: 'create', batchId: id, provider: 'coros', source: 'saved' });
+    const reviewed = await runSendCommand(uid, { version: 1, action: 'prepare', batchId: id, eventIds: [eventID], sources: [ServiceNames.GarminAPI] });
+    const source = operationRef(uid, id).collection('rows').doc(eventID);
+    const inserted = await enqueueActivitySyncQueueItem({
+      routeId: getHistoricalActivityRouteId(ServiceNames.GarminAPI, ServiceNames.COROSAPI)!,
+      userID: uid, eventID, sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      originalFile: (await source.get()).data()!.originalFile, manual: false,
+    });
+    const queue = db.collection('activitySyncQueue').doc(inserted.queueItemId);
+    const oldEvent = await queue.get();
+    expect(oldEvent.data()).not.toHaveProperty('sendBatchID');
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision });
+    await admitSendRows(uid, id);
+    const linkedEvent = await queue.get();
+    expect(linkedEvent.data()).toMatchObject({ sendBatchID: id, sendRowID: eventID, deliveryMode: 'historical' });
+    expect(linkedEvent.data()!.dateCreated).toBeGreaterThan(oldEvent.data()!.dateCreated);
+    expect((await source.get()).data()).toMatchObject({ admitted: true, queueId: queue.id });
+    expect((await db.collection('activitySyncQueue').get()).size).toBe(1);
+    await queue.update({ processed: true, resultStatus: 'success' });
+    const batch = batchRef(uid, id);
+    const row = batch.collection('rows').doc(eventID);
+    const operation = operationRef(uid, id);
+    if (order === 'linked first') await projectEvent(linkedEvent, oldEvent);
+    const prior = await db.getAll(row, batch, operation);
+    const get = vi.spyOn(oldEvent.ref, 'get');
+    try {
+      await projectEvent(oldEvent);
+      expect(get).not.toHaveBeenCalled();
+    } finally { get.mockRestore(); }
+    (await db.getAll(row, batch, operation)).forEach((snapshot, index) =>
+      expect(snapshot.updateTime!.isEqual(prior[index].updateTime!)).toBe(true));
+    if (order === 'unlinked first') await projectEvent(linkedEvent, oldEvent);
+    expect((await row.get()).data()).toMatchObject({ status: 'delivered', attempts: 0 });
+    expect((await batch.get()).data()).toMatchObject({ finished: 1, state: 'complete' });
+    expect((await operation.get()).data()?.finished).toBe(1);
+    expect(state.files.has(path)).toBe(true);
+  });
+  it.each(['missing user', 'deletion tombstone'])('projection trigger rechecks %s after a linked event was captured', async deletion => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, resultStatus: 'success' });
+    const completed = await queue.ref.get();
+    const batch = batchRef(uid, id);
+    const prior = await batch.get();
+    if (deletion === 'missing user') await db.recursiveDelete(db.doc(`users/${uid}`));
+    else await db.doc(`userDeletionTombstones/${uid}`).set({ expireAt: Timestamp.fromMillis(Date.now() + 60_000) });
+    await projectEvent(completed);
+    const current = await batch.get();
+    if (deletion === 'missing user') {
+      expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+      expect(current.exists).toBe(false);
+      expect((await operationRef(uid, id).get()).exists).toBe(false);
+    } else expect(current.updateTime!.isEqual(prior.updateTime!)).toBe(true);
+    expect(state.files.size).toBe(1);
+  });
   it('ignores delivery progress events but still admits the original confirmation', async () => {
     const reviewed = await prepare();
     const before = await operationRef(uid, id).get();
@@ -454,13 +615,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
     state.enqueue.mockClear();
     await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true });
+    const failedEvent = await queue.ref.get();
     if (cleanupFails) {
       state.failDeleteOnce = true;
-      await expect(projectSendDelivery(queue.ref)).rejects.toThrow('Synthetic temporary storage failure');
+      await expect(projectEvent(failedEvent)).rejects.toThrow('Synthetic temporary storage failure');
       expect(state.files.size).toBe(1);
       expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
     }
-    await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+    await projectEvent(failedEvent); await projectEvent(failedEvent);
     expect(state.files.size).toBe(0);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
     expect((await batchRef(uid, id).get()).data()).toMatchObject({ stopped: true, state: 'complete', total: 1, finished: 1 });

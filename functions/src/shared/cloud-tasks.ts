@@ -472,10 +472,14 @@ export async function markWorkoutTaskDispatchedWithRetry(
     return true;
 }
 
-/**
- * Enqueue an activity sync processing task to Cloud Tasks.
- * Uses deterministic task names for deduplication.
- */
+/** Shared identity for enqueue deduplication and activity-worker handoffs. */
+export function getActivitySyncTaskId(queueItemId: string, dateCreated: number): string {
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    return `activity-sync-${safeQueueItemId}-${safeDateCreated}`;
+}
+
+/** Enqueue an activity sync processing task with its existing deterministic identity. */
 export async function enqueueActivitySyncTask(
     queueItemId: string,
     dateCreated: number,
@@ -487,9 +491,7 @@ export async function enqueueActivitySyncTask(
         throw new Error('Project ID is not defined in config');
     }
 
-    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskId = `activity-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const taskId = getActivitySyncTaskId(queueItemId, dateCreated);
     const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
@@ -573,15 +575,16 @@ export async function enqueueRouteDeliverySyncTask(
     });
 }
 
-/** A fresh dispatch reservation can recover a lost acknowledgement or an expired task name.
+/** Fresh enqueue IDs recover lost acknowledgements without invalidating a waiting account reservation.
  * The durable ledger/lease, not the task name, enforces operation idempotency. */
-export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string): Promise<boolean> {
+export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string,
+    dispatchId = reservation): Promise<boolean> {
     const { projectId, location, trainingDeliveryQueue } = config.cloudtasks;
     if (!projectId) throw new Error('Project ID is not defined in config');
     return enqueueTaskWithRetry({
         projectId, location, functionName: trainingDeliveryQueue,
-        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(reservation)}`,
-        payload: { queueItemId },
+        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(dispatchId)}`,
+        payload: { queueItemId, reservation },
         alreadyExistsLogMessage: '[TrainingDelivery] Dispatch reservation already exists.',
         failedLogPrefix: '[TrainingDelivery] Dispatch failed:',
     });

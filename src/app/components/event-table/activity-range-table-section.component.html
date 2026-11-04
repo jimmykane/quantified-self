@@ -1,4 +1,4 @@
-<section class="activity-range-table-section" [attr.aria-busy]="isLoading()">
+<section class="activity-range-table-section">
   <header class="activity-range-table-section-header">
     <div>
       <h2>{{ heading() }}</h2>
@@ -8,12 +8,7 @@
     </div>
   </header>
 
-  @if (isLoading()) {
-  <div class="activity-range-table-state activity-range-table-state--loading" role="status">
-    <mat-progress-bar mode="indeterminate" aria-label="Loading activities"></mat-progress-bar>
-    <span>Loading activities</span>
-  </div>
-  } @else if (hasError()) {
+  @if (hasError()) {
   <div class="activity-range-table-state activity-range-table-state--error" role="alert">
     <mat-icon aria-hidden="true">error_outline</mat-icon>
     <span>{{ resolvedErrorMessage() }}</span>
@@ -27,9 +22,9 @@
     <mat-icon aria-hidden="true">table_rows</mat-icon>
     <span>{{ resolvedEmptyMessage() }}</span>
   </div>
-  } @else if (isReady() && user(); as user) {
+  } @else if ((isReady() || isLoading()) && user(); as user) {
   <app-event-table presentation="dashboard" [user]="user" [targetUser]="targetUser() || user"
-    [events]="events()" [showActions]="true" [isLoading]="false">
+    [events]="events()" [showActions]="true" [isLoading]="isLoading()">
   </app-event-table>
   }
 </section>

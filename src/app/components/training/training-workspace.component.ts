@@ -31,6 +31,7 @@ import {
 } from '../../helpers/activity-type-presentation.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
 import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
@@ -399,6 +400,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
   private currentUserUID: string | null = null;
+  get restDayOwnerUid(): string | null { return this.currentUserUID; }
+  restDayLocalDate = localCalendarDate(Date.now());
   private hasReceivedDerivedState = false;
   private readinessSleepSessions: SleepSession[] = [];
   private readinessSleepLoading = true;
@@ -462,6 +465,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.ngZone?.runOutsideAngular(() => {
       const recoveryRefreshTimer = globalThis.setInterval(() => {
         this.ngZone?.run(() => {
+          this.restDayLocalDate = localCalendarDate(Date.now());
           this.refreshTrainingRecoveryEstimate();
           this.refreshDerivedMetricsRouteStatus();
           this.changeDetector.markForCheck();

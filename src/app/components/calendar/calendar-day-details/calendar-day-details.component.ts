@@ -104,7 +104,7 @@ export class CalendarDayDetailsComponent {
   private readonly users = inject(AppUserService);
   readonly hasTrainingPlanningUIAccess = computed(() => {
     const viewerUid = this.users.user()?.uid;
-    return !!viewerUid && viewerUid === this.data.userId;
+    return this.data.planningEnabled !== false && !!viewerUid && viewerUid === this.data.userId;
   });
   readonly canOpenFullDay = computed(() => this.data.privateHealthEnabled !== false
     && this.users.user()?.uid === this.data.userId);

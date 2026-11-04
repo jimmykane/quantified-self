@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
     enforceAppCheck: vi.fn(),
     mutateTrainingScheduleForUser: vi.fn(),
-    loggerError: vi.fn(),
+    loggerError: vi.fn(), createWorkoutWithDeliveryForUser: vi.fn(), runtime: {},
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -20,6 +20,8 @@ vi.mock('../../../shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: { mutateTrainingSchedule: { region: 'europe-west2' } },
 }));
 vi.mock('../utils', () => ({ enforceAppCheck: hoisted.enforceAppCheck }));
+vi.mock('./create-workout-with-delivery', () => ({ createWorkoutWithDeliveryForUser: hoisted.createWorkoutWithDeliveryForUser }));
+vi.mock('./delivery/runtime', () => ({ productionDeliveryRuntime: () => hoisted.runtime }));
 vi.mock('./persistence', () => ({ mutateTrainingScheduleForUser: hoisted.mutateTrainingScheduleForUser }));
 
 import { TrainingScheduleMutationError } from './mutation';
@@ -66,6 +68,37 @@ describe('mutateTrainingSchedule callable', () => {
             removedPlanIds: [],
             permanentlyDeletedWorkoutIds: [],
         });
+    });
+
+    it('routes explicit standalone delivery through one server-owned save and returns its durable outcomes', async () => {
+        const result = { mutationId: 'create-1', deliveryOutcomes: [{ provider: 'garmin', state: 'queued' }] };
+        hoisted.createWorkoutWithDeliveryForUser.mockResolvedValueOnce(result);
+        expect(await (mutateTrainingSchedule as unknown as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'user-1' }, app: {}, data: { ...VALID_DATA, deliveryAfterCreate: { providers: ['suunto', 'garmin'], timeZone: 'UTC' } },
+        })).toEqual(result);
+        expect(hoisted.mutateTrainingScheduleForUser).not.toHaveBeenCalled();
+        expect(hoisted.createWorkoutWithDeliveryForUser).toHaveBeenCalledWith('user-1', VALID_DATA,
+            { providers: ['garmin', 'suunto'], timeZone: 'UTC' }, hoisted.runtime);
+    });
+    it.each([
+        { providers: [], timeZone: 'UTC' }, { providers: ['garmin', 'garmin'], timeZone: 'UTC' },
+        { providers: ['unknown'], timeZone: 'UTC' }, { providers: ['garmin'], timeZone: 'invalid' },
+        { providers: ['garmin'], timeZone: 'UTC', approvalDigest: 'cannot-bypass-review' },
+        { providers: ['garmin'], timeZone: 'UTC', uid: 'another-user' },
+    ])('rejects invalid or widened delivery approval: %j', async deliveryAfterCreate => {
+        await expect((mutateTrainingSchedule as unknown as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'user-1' }, app: {}, data: { ...VALID_DATA, deliveryAfterCreate },
+        })).rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(hoisted.createWorkoutWithDeliveryForUser).not.toHaveBeenCalled();
+        expect(hoisted.mutateTrainingScheduleForUser).not.toHaveBeenCalled();
+    });
+    it.each([
+        { ...VALID_DATA.operation, planId: 'p' }, { kind: 'rename-plan', planId: 'p', name: 'No new consent' },
+    ])('restricts compound approval to standalone creation: %j', async operation => {
+        await expect((mutateTrainingSchedule as unknown as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'user-1' }, app: {}, data: { ...VALID_DATA, operation, deliveryAfterCreate: { providers: ['garmin'], timeZone: 'UTC' } },
+        })).rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(hoisted.createWorkoutWithDeliveryForUser).not.toHaveBeenCalled();
     });
 
     it('requires authentication before App Check or persistence', async () => {

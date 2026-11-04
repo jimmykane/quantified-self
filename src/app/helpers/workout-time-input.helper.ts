@@ -1,4 +1,17 @@
-import { DataDuration } from '@sports-alliance/sports-lib';
+import { DataDuration, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+
+/** Spell out Sports Lib's duration tokens so minutes cannot be mistaken for seconds. */
+export function formatWorkoutEditorDuration(seconds: number, units?: UserUnitSettingsInterface | null): string | null {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const display = resolveUnitAwareDisplayFromValue(DataDuration.type, seconds, units, { durationMilliseconds: true });
+  if (!display) return null;
+  const words = { d: 'day', h: 'hour', m: 'minute', s: 'second' };
+  const parts = [...display.value.matchAll(/(\d+(?:\.\d+)?)([dhms])/g)]
+    .filter(match => Number(match[1]) > 0)
+    .map(match => `${match[1].replace(/^0+(?=\d)/, '')} ${words[match[2]]}${Number(match[1]) === 1 ? '' : 's'}`);
+  return parts.join(' ') || 'less than 1 second';
+}
 
 /** Editable time parts, not a new canonical metric or persistence format. */
 export interface WorkoutDurationParts {

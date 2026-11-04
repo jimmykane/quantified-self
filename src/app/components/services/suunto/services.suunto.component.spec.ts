@@ -25,7 +25,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
-import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, ParamMap, Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -117,7 +117,7 @@ describe('ServicesSuuntoComponent', () => {
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
-                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn(), captureException: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatDialog, useValue: mockDialog },
@@ -132,8 +132,103 @@ describe('ServicesSuuntoComponent', () => {
         fixture.detectChanges();
     });
 
+    it.each(['denied', 'incomplete'])('settles a %s callback in the main view without claiming a connection', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, state: 'synthetic-state',
+            ...(kind === 'denied' ? {error: 'access_denied'} : {})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(undefined);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of(undefined))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = true;
+        await component.ngOnChanges();
+        await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['services'], {
+            queryParams: {serviceName: component.serviceName}, queryParamsHandling: ''}));
+        expect(notice).toHaveBeenCalledWith(expect.stringContaining(kind === 'denied'
+            ? 'authorization was not completed' : 'callback is missing state or code'), undefined, {duration: 10000});
+        expect(TestBed.inject(AppUserService).requestAndSetCurrentUserSuuntoAppAccessToken).not.toHaveBeenCalled();
+        expect(component.forceConnected).toBe(false); expect(component.isConnecting).toBe(false);
+    });
+
+    it.each(['callback', 'connect link'])('keeps a tools-only history dialog from consuming an OAuth %s', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, tool: 'history',
+            ...(kind === 'callback' ? {code: 'synthetic-code', state: 'synthetic-state'} : {connect: '1'})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of({connectionState: 'connected'}))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = false;
+        const exchange = vi.spyOn(component, 'requestAndSetToken').mockResolvedValue({connected: true, outcome: 'connected'});
+        await component.ngOnChanges();
+        expect(exchange).not.toHaveBeenCalled(); expect(component.isConnecting).toBe(false);
+        expect(component.serviceMeta?.connectionState).toBe('connected');
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it.each([
+        [ServiceNames.SuuntoApp, 'functions/failed-precondition', 'suunto_oauth_restart_required', true],
+        [ServiceNames.SuuntoApp, 'failed-precondition', 'suunto_oauth_restart_required', true],
+        [ServiceNames.SuuntoApp, 'functions/internal', 'suunto_oauth_restart_required', false],
+        [ServiceNames.SuuntoApp, 'functions/failed-precondition', 'another_failure', false],
+        [ServiceNames.COROSAPI, 'functions/failed-precondition', 'suunto_oauth_restart_required', false],
+    ] as const)('keeps only a confirmed Suunto sign-in restart at WARNING (%s, %s, %s)', async (service, code, reason, warning) => {
+        component.serviceName = service;
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        const params = { serviceName: service, state: 'synthetic-state', code: 'synthetic-code' };
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get')
+            .mockImplementation(key => params[key] ?? null);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        const error = Object.assign(new Error('Suunto could not complete sign-in. Start the connection again using your Suunto email and password instead of Facebook.'), {
+            code, details: { reason },
+        });
+        vi.spyOn(component, 'requestAndSetToken').mockRejectedValueOnce(error);
+
+        await component.ngOnChanges();
+        await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+
+        const logger = TestBed.inject(LoggerService);
+        if (warning) {
+            expect(logger.captureException).toHaveBeenCalledExactlyOnceWith(error, { level: 'warning' });
+            expect(logger.error).not.toHaveBeenCalled();
+        } else {
+            expect(logger.error).toHaveBeenCalledExactlyOnceWith(error);
+            expect(logger.captureException).not.toHaveBeenCalled();
+        }
+        expect(mockSnackBar.open).toHaveBeenCalledWith(`Could not connect due to ${error.message}`, undefined, { duration: 10000 });
+        expect(navigate).toHaveBeenCalledWith(['services'], { queryParams: { serviceName: service }, queryParamsHandling: '' });
+        expect(component.forceConnected).toBe(false);
+    });
+
+    it.each([
+        { state: 'connect', pro: true, connected: false, reconnect: false, summary: true, visible: true },
+        { state: 'reconnect', pro: true, connected: true, reconnect: true, summary: true, visible: true },
+        { state: 'connected', pro: true, connected: true, reconnect: false, summary: true, visible: false },
+        { state: 'upgrade', pro: false, connected: false, reconnect: false, summary: true, visible: false },
+        { state: 'tools only', pro: true, connected: false, reconnect: false, summary: false, visible: false },
+    ])('shows Suunto sign-in guidance only beside an available connection action: $state', ({ pro, connected, reconnect, summary, visible }) => {
+        component.hasProAccess = pro;
+        component.forceConnected = connected;
+        component.reconnectRequested = reconnect;
+        component.showConnectionSummary = summary;
+        component.showAdvancedTools = false;
+        fixture.detectChanges();
+
+        const hint = fixture.nativeElement.querySelector('#suunto-sign-in-hint') as HTMLElement | null;
+        expect(!!hint).toBe(visible);
+        if (hint) {
+            expect(hint.textContent.replace(/\s+/g, ' ').trim()).toBe(
+                'Sign in to Suunto with email and password. Avoid Facebook sign-in, which can cause connection errors.',
+            );
+            const actions = hint.closest('[connection-actions]');
+            expect(actions).toBeTruthy();
+            expect(actions.querySelector('button')?.getAttribute('aria-describedby')).toBe(hint.id);
+            expect(fixture.nativeElement.querySelector('.service-connection-status--compact')).toBeTruthy();
+        }
     });
 
     it('does not restart secondary listeners after teardown during initialization', async () => {

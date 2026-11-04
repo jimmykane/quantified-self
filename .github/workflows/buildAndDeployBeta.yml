@@ -40,7 +40,7 @@ jobs:
           node-version: '20'
 
       - name: Install Firebase Tools
-        run: npm install -g firebase-tools
+        run: npm run firebase:tools
 
       - name: Get licenses
         run: |
@@ -66,4 +66,4 @@ jobs:
           npm run build-beta
 
       - name: Deploy to Firebase
-        run: firebase deploy --only hosting:beta
+        run: npm run firebase -- deploy --only hosting:beta

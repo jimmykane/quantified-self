@@ -32,3 +32,6 @@ app-event-card-chart-actions {
     --event-chart-panel-height: clamp(300px, 42vh, 380px);
   }
 }
+
+.swim-interval-focus { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.swim-interval-focus span { overflow-wrap: anywhere; }

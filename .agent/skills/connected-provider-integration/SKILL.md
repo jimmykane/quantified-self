@@ -15,6 +15,15 @@ Read `docs/provider-integration-guide.md` completely. Read the closest existing 
 
 Define the supported resources and lifecycle before coding: activities, routes, sleep, history, outbound delivery, entitlement, disconnect behavior, and user-visible limitations. Choose explicitly between direct delivery, webhook delivery, history backfill, or a combination.
 
+## Activity Import Identity
+
+Preserve one canonical QS workout across provider copies and reimports, including its saved activity IDs and user
+edits. Do not propose or implement a second entry or provider-specific event ID as a workaround for same-workout
+identity conflicts, sport-name differences, or provider-normalized metrics. Verify duplicate evidence before skipping
+a copy; unresolved matches stay blocked for investigation. Changing this product policy requires explicit user approval.
+Import/deduplication changes must test that replays and reimports do not create a second entry or overwrite user edits;
+genuinely distinct workouts remain distinct.
+
 ## Implementation Checklist
 
 1. Implement OAuth identity and token lifecycle with callback validation, least-privilege scopes, and no credential logging.

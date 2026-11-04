@@ -1,3 +1,4 @@
+import { AuthSessionCleanupService } from '../services/auth-session-cleanup.service';
 import { inject, Injectable } from '@angular/core';
 import { combineLatest, firstValueFrom, Observable, of } from 'rxjs';
 import { filter, map, shareReplay, startWith, switchMap, take } from 'rxjs/operators';
@@ -8,6 +9,8 @@ import { Firestore, clearIndexedDbPersistence, terminate } from 'app/firebase/fi
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
+import { APP_STORAGE } from '../services/storage/app.storage.token';
+import { HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX, parseHistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
 import {
@@ -17,6 +20,8 @@ import {
   normalizeUrlOrHost
 } from '../shared/adapters/firebase-auth-link.constants';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from './auth-redirect-url';
+import { AppWindowService } from '../services/app.window.service';
+import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -37,8 +42,11 @@ export class AppAuthService {
     'auth/invalid-email',
   ]);
 
+  private readonly sessionCleanup = inject(AuthSessionCleanupService);
+  private readonly storage = inject(APP_STORAGE);
   private firestore = inject(Firestore);
   private auth = inject(Auth);
+  private readonly window = inject(AppWindowService);
 
   get currentUser() {
     return this.auth.currentUser;
@@ -214,6 +222,7 @@ export class AppAuthService {
   }
 
   async loginWithCustomToken(token: string) {
+    await this.sessionCleanup.run();
     try {
       return await signInWithCustomToken(this.auth, token);
     } catch (e: any) {
@@ -237,11 +246,35 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
+    await this.sessionCleanup.run();
     await signOut(this.auth);
+    try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY); }
+    catch { /* Blocked browser storage must not prevent sign-out cleanup. */ }
     await terminate(this.firestore);
-    this.localStorageService.clearAllStorage();
+    this.clearStorageForSignOut();
     await clearIndexedDbPersistence(this.firestore);
     this.redirectToLogin();
+  }
+
+  private clearStorageForSignOut(): void {
+    // Retain only account/provider-scoped dismissal receipts, never cached import or activity data.
+    const dismissed = new Map<string, string>();
+    try {
+      for (let i = 0; i < this.storage.length; i++) {
+        const key = this.storage.key(i);
+        if (!key?.startsWith(HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX)) continue;
+        const receipt = parseHistoryImportResultDismissal(this.storage.getItem(key));
+        const suffix = receipt ? `.${encodeURIComponent(receipt.serviceName)}` : '';
+        if (receipt && key.endsWith(suffix) && key.length > HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX.length + suffix.length) {
+          dismissed.set(key, JSON.stringify(receipt));
+        }
+      }
+    } catch { /* Unreadable preferences must not prevent private-data cleanup. */ }
+    this.localStorageService.clearAllStorage();
+    for (const [key, receipt] of dismissed) {
+      try { this.storage.setItem(key, receipt); }
+      catch { /* Blocked preference writes must not prevent sign-out. */ }
+    }
   }
 
   async fetchSignInMethods(email: string) {

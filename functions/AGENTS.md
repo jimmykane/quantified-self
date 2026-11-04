@@ -9,6 +9,10 @@ Functions-only rules:
 Workflows:
 - `../.agent/workflows/start-emulators.md`
 
+- Local operational scripts use `src/scripts/register-local-env.ts` as their explicit preload. Importing the loader
+  alone must not read a personal profile. Keep hosted-Auth signing on the external key path without replacing the
+  default Admin app's ADC; test local signing, CLI user ADC, missing overrides and deployed/Auth-emulator exclusions.
+
 - In concurrent fan-out specs, bind recipient-specific mock outcomes to the recipient/job ID. Async work such as
   queue-ID hashing can reorder calls; assert exact recipients and canonical IDs without depending on call position.
   Cover partial success for either recipient and both binding orders.

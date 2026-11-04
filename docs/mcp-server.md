@@ -685,6 +685,12 @@ mandatory. `all_connected` includes only providers for which the connection, per
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
 registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
 
+Training reconciliation uses a private account lease, fixed batching deadline, bounded workout targets and explicit
+day/grace/check timers, with a six-hour full repair. These scheduling fields and target descendants never enter MCP
+results. Existing consent, proposal approval, source-freshness checks, bounded sync reads and provider actions remain
+unchanged. The 400-workout/four-provider MCP fixture includes private coordinator canaries and retains the same safe
+output; this change requires no tool schema, scope, plugin or registered-client metadata update.
+
 ### Full recipes with optional early Lap
 
 The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that
@@ -770,6 +776,66 @@ These details enter only the strict app response/conversation contract; no regis
 mutation kind, provider action, digest or bundled guidance changes. MCP clients keep their existing complete v3 recipe,
 prescription-analysis and compatibility reads and their native approval UI. See
 [Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+
+### Explicit plan rest dates
+
+Additive `get_training_plan_rest_days` accepts one exact opaque plan reference with `training-plans:read`.
+The dedicated measured field mask returns schedule/plan revisions, plan range and a complete bounded date list;
+legacy absence returns `[]`. Internal IDs, neighboring provider fields and workout documents remain excluded.
+References remain owner/connection-bound and the normal state/grant/deletion/restore fences apply.
+
+Additive `preview_training_rest_days` also needs independent `training-plans:write`. It accepts exactly one
+`set-plan-rest-days` change with the opaque plan reference, expected plan/schedule revisions and complete replacement
+list (maximum 366 unique valid local dates inside the plan). The required strict `restDayReview` exposes the plan
+name/range and all before/after dates. It is schedule-only, with no provider previews or implicit workout deletion.
+Planned workouts in the same plan/date conflict; skipped/standalone/recorded activities remain independent.
+Normal native-approved idempotent `apply_training_changes` rechecks authority and revisions. The Assistant advertises
+only the focused preview and requires its app-owned complete review/Apply; no apply tool is available to the model.
+
+Rest-day reading guidance is available with `training-plans:read`; editing guidance names the preview only when
+`training-plans:write` is granted. Read-only and provider-delivery-only connections must not recommend the unavailable
+rest-day editing tool. This applies to both external clients and the built-in Assistant; it does not widen consent,
+tool registration, schemas or Apply authority.
+
+Unscheduled dates are not declared rest days. Daily suggestions read explicit intent separately and do not fill
+it automatically; missing reads remain unknown. Markers shift/restore with their plan but never count as workouts,
+change modeled metrics, grant sync consent or produce provider artifacts. No new scope or deployed Function is
+added. Registered plan and batch schemas, registered baseline and transition history remain frozen. The pending
+compatible digest, separately approved backend release, registered-app rescan/catalog refresh and bundled-plugin
+refresh follow the existing lifecycle; local implementation does not establish deployed-client availability.
+
+### Standalone calendar rest dates
+
+`get_training_calendar_rest_days` adds an independent read under `training-plans:read`, even when there is no active
+plan. Its strict input is inclusive `startDate`/`endDate`, at most 366 valid local date labels. Its strict output is
+`{ startDate, endDate, scanComplete: true, restDays: string[] }`, with sorted active dates only. The measured bounded
+query projects exactly the four schema fields from `users/{uid}/trainingRestDays`; false markers, revisions, document
+identifiers and neighboring private data stay internal. Current connection, grant and account-deletion fences are
+rechecked transactionally. Incomplete or malformed evidence is an error, never an empty free training day.
+
+Native Calendar marks/removes these fixed dates independently of plans, without altering existing workouts. Plan
+shifts, deletion and restores do not move them. AI day context checks both calendar and plan intent and returns rest
+before calling the model. Standalone removal invalidates daily coverage while retaining the existing once-per-day
+receipt. Existing plan rest preview/Apply remains plan-only. Additive `preview_training_calendar_rest_day` accepts
+exactly `{ localDate, isRestDay }` under independent `training-plans:write` plus reads. It captures the private current
+marker revision and returns the strict date/boolean `calendarRestDayReview: { localDate, before, after }` with one
+`set-calendar-rest-day` change and no provider previews. No plan or caller-supplied revision is needed. Show the
+complete review, then use separate native-approved `apply_training_changes` with `permissionMode: schedule`.
+
+The marker and durable approved result commit in one authority-checked transaction. Revoked/replaced grants, deleted
+accounts, stale marker revisions, expiry and replaced Assistant conversations/proposals reject. Replay returns the
+original result without touching current intent; removal retains the false marker revision. No-op removal creates
+nothing. Plan rest days, workouts, provider consent, schedule revisions and AI daily receipts remain unchanged. Reads
+use a four-field mask, never a full plan/workout scan. The Assistant exposes prepare only, validates this dedicated
+review and uses existing app-owned confirmation. Unqualified rest edits target Calendar; explicit plan-rest edits keep
+the plan-only full-list preview. Missing write consent never advertises the preview or apply authority.
+The Assistant retains that choice for a short date answer to its immediately preceding rest-date clarification; a new
+request or cancellation cannot inherit it. Client cache verification retires with its day listener and refreshes on
+existing date/session checks and explicit recovery. These lifecycle fixes leave the public contract/digest unchanged.
+
+This additive tool and server instructions require the existing digest-bound pending lifecycle, separately approved
+backend/Rules release and registered-app refresh. Updated bundled Training, Activity and cross-domain guidance needs
+a plugin refresh. No new scope, endpoint, composite index or migration is introduced; baseline/history are unchanged.
 
 ### Authored plan phases (Training 12)
 
@@ -1311,13 +1377,35 @@ base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'
 `X-Frame-Options: DENY` provides legacy clickjacking protection, `X-Content-Type-Options: nosniff` prevents MIME
 sniffing, and `Referrer-Policy: strict-origin-when-cross-origin` prevents the authorization path and request ID from
 leaking to cross-origin services while retaining the site origin needed by URL-restricted Mapbox tokens.
-A fuller source allowlist is present as `Content-Security-Policy-Report-Only`. It covers the same-origin app plus the
-specific Firebase, Google authentication/reCAPTCHA, Mapbox, analytics, and Sentry origins the SPA currently uses. It
-does not use `unsafe-eval` and declares `script-src-attr 'none'`; violations are reported rather than blocked during
-this rollout stage. The source is already compatible: the theme bootstrap is a same-origin asset and Angular template
-bindings implement UI event handlers instead of inline event attributes.
-The narrower `wasm-unsafe-eval` source is present because the app uses Mapbox Standard Style WebAssembly; it does not
-permit JavaScript string evaluation.
+Hosting does not send `Content-Security-Policy-Report-Only` while there is no reporting destination. Safari logs an
+error for a report-only policy without `report-to`, and also warns that `frame-ancestors` is ignored in report-only
+mode. The enforced policy above retains the framing restriction. These warnings do not block authentication; a login
+delay must be investigated separately from the console noise.
+
+The candidate source allowlist below is retained for a future monitored rollout; it is not an active response header.
+It covers the same-origin app plus the specific Firebase, Google authentication/reCAPTCHA, Mapbox, analytics, and Sentry
+origins currently used. Revalidate those origins against the app at rollout time.
+
+```text
+default-src 'self';
+base-uri 'self';
+connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+font-src 'self' data:;
+form-action 'self';
+frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+img-src 'self' data: blob: https:;
+manifest-src 'self';
+media-src 'self' blob:;
+object-src 'none';
+script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+script-src-attr 'none';
+style-src 'self' 'unsafe-inline';
+worker-src 'self' blob:
+```
+
+The candidate does not use `unsafe-eval` and declares `script-src-attr 'none'`. The theme bootstrap is a same-origin
+asset and Angular template bindings implement UI event handlers instead of inline event attributes. The narrower
+`wasm-unsafe-eval` source supports Mapbox Standard Style WebAssembly without permitting JavaScript string evaluation.
 
 Production and beta builds keep Angular's `optimization.styles.inlineCritical` disabled. The optimizer otherwise emits
 an inline stylesheet `onload` handler into `index.csr.html`, which is incompatible with `script-src-attr 'none'`.
@@ -1329,23 +1417,32 @@ runtime component styles and Hosting cannot mint a fresh per-response nonce. Do 
 does not provide the protection of a request-specific nonce. Revisit this only with an architecture that can supply a
 fresh nonce to both the response policy and Angular.
 
-The report-only policy currently reports to browser developer tools; there is no server-side CSP report collector.
-Before moving its source directives into the enforced policy:
+Before sending the candidate source directives as report-only or moving them into the enforced policy:
 
-1. deploy this change to beta in the normal, separately approved release workflow;
-2. start from a real `/oauth/authorize` request and exercise signed-out login, Firebase authentication, consent details,
-   approve, cancel, and the client redirect;
-3. in the same tab, exercise Firestore/callable access, App Check/reCAPTCHA, a Mapbox view, analytics, and error reporting
+1. configure a real CSP reporting destination and the matching `Reporting-Endpoints` / `report-to` headers; verify
+   browser support and receipt of reports before claiming monitoring coverage. Keep `frame-ancestors` in the enforced
+   policy only. Do not add a placeholder endpoint or silently enable source blocking to suppress Safari warnings;
+2. deploy the reporting configuration and candidate policy to beta in the normal, separately approved release workflow;
+3. start from a real `/oauth/authorize` request and exercise signed-out login, Firebase authentication, consent details,
+   approve, cancel, and the client redirect in Safari as well as the other supported browsers;
+4. in the same tab, exercise Firestore/callable access, App Check/reCAPTCHA, a Mapbox view, analytics, and error reporting
    so client-side navigation is covered;
-4. review every `Content-Security-Policy-Report-Only` browser violation and add an origin only when a repository feature
-   and observed request justify the narrowest source;
-5. repeat with no unexplained violations, then enforce the candidate policy on beta first; and
-6. repeat the flow on beta before applying the same enforced policy to production.
+5. review every `Content-Security-Policy-Report-Only` violation and add an origin only when a repository feature and
+   observed request justify the narrowest source;
+6. repeat with no unexplained violations, then enforce the candidate policy on beta first; and
+7. repeat the flow on beta before applying the same enforced policy to production.
 
 Keep the `/mcp/authorize` and `/login` header entries identical across production and beta, and keep both routes out of
-the service worker navigation fallback. When a frontend dependency introduces a new network, frame, worker, image, or
-script origin, update the report-only allowlist and its Hosting regression test in the same change. See the
-[Angular CSP guidance](https://angular.dev/best-practices/security#content-security-policy),
+the service worker navigation fallback. The Hosting regression test guards the enforced headers and the absence of an
+unconfigured report-only policy; update that guard with reporting validation when introducing a real destination.
+When a frontend dependency introduces a new network, frame, worker, image, or script origin, review the candidate
+allowlist here and any active source policy together.
+
+MCP impact: removing the unconfigured report-only header changes browser diagnostics only. The enforced CSP, OAuth
+flow, consent, scopes, tool schemas, and data projections are unchanged; no registered-contract update, app rescan,
+or plugin rebuild is required.
+
+See the [Angular CSP guidance](https://angular.dev/best-practices/security#content-security-policy),
 [Firebase Hosting header configuration](https://firebase.google.com/docs/hosting/full-config#headers), and
 [reCAPTCHA CSP allowlist](https://developers.google.com/recaptcha/docs/faq#im_using_content-security-policy_csp_on_my_website_how_can_i_configure_it_to_work_with_recaptcha).
 The analytics and map entries follow the
@@ -1581,6 +1678,13 @@ plugin sync remain explicit lifecycle actions.
    document whenever the public contract moves.
 
 ## Sports Lib metric discovery
+
+Sports Lib 23.9.0 updates Suunto JSON/SML R–R-derived heart-rate filtering. Normal persisted HR values and bounded
+original-file chart/sample projections can reflect the new parser, without exposing filter state, raw intervals or
+new fields. FIT recorded HR and existing HRV/quality definitions remain unchanged. Numeric catalog membership, units,
+persisted-only availability, scopes, consent, strict outputs, planning/delivery contracts and registered schemas are
+unchanged; no registered-client refresh, contract promotion or plugin rebuild is required. Historical stored values
+change only through the separately authorized source-backed reparse lifecycle described in the runbook.
 
 Sports Lib 23.7.1 accepts 13-digit Unix-millisecond GPX point times and rejects invalid times before stream allocation.
 Existing bounded original-file chart/sample hydration uses this parser without changing metrics, units, output schemas,

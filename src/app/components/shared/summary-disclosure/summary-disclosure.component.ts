@@ -15,6 +15,7 @@ export type SummaryDisclosureTone = 'neutral' | 'positive' | 'caution' | 'error'
 })
 export class SummaryDisclosureComponent {
   readonly title = input.required<string>();
+  readonly showTitle = input(true);
   readonly headingLevel = input<2 | 3 | 4>(2);
   readonly summaryId = input.required<string>();
   readonly scopeKey = input.required<string>();

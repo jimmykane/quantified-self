@@ -1,4 +1,5 @@
 import { withHistoryQueueExecution, type HistoryExecution } from './connection-history/execution';
+import { notifyNewActivityAfterPersistence } from './web-push/activity-admission';
 import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
@@ -189,6 +190,7 @@ type WorkoutQueueDispatchMode = 'immediate' | 'deferred';
 interface WorkoutQueueInsertOptions {
   intent: WorkoutQueueInsertIntent;
   dispatchMode: WorkoutQueueDispatchMode;
+  activityNotificationOrigin?: 'live';
 }
 
 type StoredWorkoutQueueItem = Omit<Partial<QueueItemInterface>, 'processed'> & { processed?: boolean };
@@ -473,11 +475,12 @@ async function readHistoryWorkoutBatch(serviceName: ServiceNames, batch: History
 const TIMEOUT_DEFAULT = 300;
 const MEMORY_DEFAULT = '256MB';
 const TIMEOUT_HIGH = 540;
+const MEMORY_MEDIUM = '512MB';
 const MEMORY_HIGH = '1GB';
 
 export const parseGarminAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
-  memory: MEMORY_HIGH,
+  memory: MEMORY_MEDIUM,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.GarminAPI);
@@ -501,7 +504,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
 
 export const parseWahooAPIWorkoutQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
-  memory: MEMORY_HIGH,
+  memory: MEMORY_MEDIUM,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.WahooAPI);
@@ -517,6 +520,8 @@ export async function addToQueueForSuunto(queueItem: {
   userName: string,
   workoutID: string,
   firebaseUserID?: string,
+  /** Only authenticated webhook callers opt in; recovery uses the same insertion semantics. */
+  activityNotificationOrigin?: 'live',
 }): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
@@ -535,6 +540,7 @@ export async function addToQueueForSuunto(queueItem: {
   }, ServiceNames.SuuntoApp), ServiceNames.SuuntoApp, {
     intent: 'provider_webhook',
     dispatchMode: 'immediate',
+    activityNotificationOrigin: queueItem.activityNotificationOrigin,
   });
 }
 
@@ -542,7 +548,7 @@ export async function addToQueueForSuunto(queueItem: {
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string }): Promise<admin.firestore.DocumentReference> {
+export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string, suppressAutomaticActivitySync?: boolean }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
@@ -559,10 +565,12 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     processed: false,
     userAccessToken: queueItem.userAccessToken,
     callbackURL: queueItem.callbackURL,
+    ...(queueItem.suppressAutomaticActivitySync === true ? { suppressAutomaticActivitySync: true } : {}),
     dispatchedToCloudTask: null,
   }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, {
     intent: 'provider_webhook',
     dispatchMode: queueItem.manual ? 'deferred' : 'immediate',
+    activityNotificationOrigin: 'live',
   });
 }
 
@@ -575,6 +583,7 @@ export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInte
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem(queueItem, ServiceNames.COROSAPI), ServiceNames.COROSAPI, {
     intent: 'provider_webhook',
     dispatchMode: 'immediate',
+    activityNotificationOrigin: 'live',
   });
 }
 
@@ -1417,6 +1426,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
               : {}),
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.COROSAPI, corosWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           if (corosWorkoutQueueItem.planWorkoutId) {
             await retainCOROSTrainingCompletion(
               admin.firestore(),
@@ -1438,6 +1449,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
               eventID: deterministicID,
               sourceServiceName: ServiceNames.COROSAPI,
               sourceActivityID: corosWorkoutQueueItem.workoutID,
+              fromHistory: corosWorkoutQueueItem.fromHistory === true,
               setEventResult,
               sourceFileData: Buffer.from(result),
             });
@@ -1471,6 +1483,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
             providerEventIDField: 'serviceWorkoutID',
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           await retainSuuntoGuideCompletions(admin.firestore(), parentID, deterministicID, suuntoWorkoutQueueItem.userName,
             String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id,
             fitActivityReferencesFromEvent(event));
@@ -1480,6 +1494,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
               eventID: deterministicID,
               sourceServiceName: ServiceNames.SuuntoApp,
               sourceActivityID: suuntoWorkoutQueueItem.workoutID,
+              fromHistory: suuntoWorkoutQueueItem.fromHistory === true,
               setEventResult,
               sourceFileData: Buffer.from(result),
             });
@@ -1495,10 +1510,20 @@ async function parseHistoryGuardedWorkoutQueueItem(
       oneSuccess = true;
       break;
     } catch (e: any) {
-      if (serviceName === ServiceNames.SuuntoApp && e instanceof ProviderImportDuplicateError) {
-        logger.info('Skipping a verified Suunto copy of a saved Garmin activity.', { queueItemId: queueItem.id, eventID: e.eventID });
+      if (e instanceof ProviderImportDuplicateError) {
+        logger.info('Skipping a verified cross-provider recording of an existing activity.', {
+          serviceName, queueItemId: queueItem.id, eventID: e.eventID,
+        });
+        const completionData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        if (serviceName === ServiceNames.COROSAPI) {
+          if (!corosClaimState?.processingOwner) throw new Error('COROS duplicate completion requires its revision claim.');
+          const result = await completeCOROSEventWriteRevision(queueItem as COROSAPIWorkoutQueueItemInterface,
+            parentID, corosClaimState.processingOwner, completionData);
+          corosClaimState.processingOwner = null;
+          return result;
+        }
         oneSuccess = true;
-        processedAdditionalData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        processedAdditionalData = completionData;
         break;
       }
       if (isActivityIdentityConflict(e)) {
@@ -2217,6 +2242,7 @@ async function handleDuplicateProviderWebhookQueueItem(
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, options: WorkoutQueueInsertOptions): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   const queuePayload = Object.assign({}, queueItem, {
+    ...(options.intent === 'provider_webhook' && options.activityNotificationOrigin === 'live' ? { activityNotificationOrigin: 'live' as const } : {}),
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
     dispatchedToCloudTask: null,
   });

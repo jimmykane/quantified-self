@@ -47,6 +47,7 @@
               [matTooltip]="'Phase: ' + phase.name + ' · ' + phase.startLocalDate + ' – ' + phase.endLocalDate">{{ phase.name }}</span>
           }
           @if (day.boundary) { <span class="calendar-boundary">{{ day.boundaryLabel }}</span> }
+          @if (day.isRestDay) { <span class="calendar-boundary">Rest day</span> }
           <div class="calendar-workouts">
             @for (workout of day.visibleEntries; track workout.id) {
               <button mat-button type="button" class="calendar-workout" [disabled]="disabled()"

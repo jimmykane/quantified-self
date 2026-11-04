@@ -18,12 +18,14 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE,
   type DeliveryContext, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { deliveryContentDigest, deliveryIdentity, resolveDeliveryIntent } from './intent';
-import { reconciliationJobId } from './marker';
+import { reconciliationJobId, reconciliationTargets } from './marker';
 import { TRAINING_DELIVERY_VERIFICATIONS, type TrainingVerificationV1 } from '../../../../shared/training-provider-verification';
 import { readVerificationRequest, stageVerification } from './verification-queue';
 import { TrainingScheduleMutationError } from '../mutation';
 import { readPastCleanupAuthorization } from './marker';
 import { ReconciliationReads, type DeliveryDocumentReader } from './reconciliation-reads';
+import { claimTrainingReconciliation, globalReconciliationGeneration, nextTrainingLocalDay,
+  RECONCILIATION_REPAIR_MS, releaseFailedTrainingReconciliation } from './reconciliation-coordinator';
 
 export async function readStrengthDetailsForDelivery(tx: DeliveryDocumentReader,
   user: FirebaseFirestore.DocumentReference, workout: ScheduledWorkoutV1): Promise<StrengthWorkoutDetailsV1 | null> {
@@ -213,40 +215,90 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
 
 /** One resumable page. Current workouts and historical delivery identities are separate scans.
  * No page contains more than 25 recipes / 100 compact delivery records. */
-export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, uid: string): Promise<boolean> {
+export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, uid: string, reservation?: string): Promise<boolean> {
+  const lease = await claimTrainingReconciliation(runtime, uid, reservation);
+  if (!lease) return false;
+  try {
+    return await reconcileClaimedTrainingDeliveryPage(runtime, uid, lease);
+  } catch (error) {
+    // A failed release still has the durable lease deadline and minute dispatcher as recovery.
+    await releaseFailedTrainingReconciliation(runtime, uid, lease).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function reconcileClaimedTrainingDeliveryPage(runtime: DeliveryRuntime, uid: string, lease: string): Promise<boolean> {
   const { db } = runtime;
-  const hasPro = await runtime.hasPro(uid);
+  const entitlement = runtime.entitlement ? await runtime.entitlement(uid) : { hasPro: await runtime.hasPro(uid) };
+  const hasPro = entitlement.hasPro;
   const user = db.collection('users').doc(uid);
   const jobRef = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
   return db.runTransaction(async tx => {
     const reads = new ReconciliationReads(runtime, tx, uid);
     if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
-    const [jobDoc, stateDoc, settingsState, locks] = await Promise.all([
-      tx.get(jobRef), tx.get(user.collection('trainingPlanState').doc('current')),
+    const [jobDoc, settingsState, locks, pendingTargets] = await Promise.all([
+      tx.get(jobRef),
       tx.get(user.collection(DELIVERY_STATE).doc('current')),
       tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
+      tx.get(reconciliationTargets(db, uid).orderBy('requestedAt').limit(2)),
     ]);
     if (!jobDoc.exists) return false;
+    const job = jobDoc.data()!;
+    if (job.reconciliationLease?.token !== lease || job.reconciliationLease.expiresAtMs <= runtime.now()) return false;
     if (!(settingsState.data()?.revision > 0)) {
-      // A never-enrolled author needs no polling. Queue records are leaves by contract.
-      tx.delete(jobRef);
+      // Manual authoring can stage targets before the first provider consent. Retire those
+      // bounded private leaves as well; never leave a growing outbox for an unenrolled author.
+      const unused = pendingTargets.size === 2
+        ? await tx.get(reconciliationTargets(db, uid).orderBy('requestedAt').limit(TRAINING_DELIVERY_PAGE_SIZE + 1)) : pendingTargets;
+      unused.docs.slice(0, TRAINING_DELIVERY_PAGE_SIZE).forEach(doc => tx.delete(doc.ref));
+      const more = unused.size > TRAINING_DELIVERY_PAGE_SIZE;
+      if (more) tx.set(jobRef, { reconciliationLease: null, dueAtMs: 0 }, { merge: true });
+      else tx.delete(jobRef); // Queue records themselves remain leaves.
+      return more;
+    }
+    if (!locks.empty) { tx.set(jobRef, { reconciliationLease: null, dueAtMs: runtime.now() + 60_000 }, { merge: true }); return false; }
+    const globalGeneration = globalReconciliationGeneration(job);
+    const resumeFullScan = typeof job.scanKey === 'string' && job.scanKey.startsWith('coordinated:');
+    // A captured full-scan generation survives concurrent edits; the newer generation follows it.
+    const fullScan = !!job.scanKey || (!job.targetWorkoutId && (job.completedGlobalGeneration !== globalGeneration
+      || !(job.nextRepairAtMs > runtime.now()) || (job.nextTimeWakeAtMs ?? Infinity) <= runtime.now()));
+    const scanKey = fullScan ? resumeFullScan ? job.scanKey : `coordinated:${globalGeneration}` : '';
+    const capturedGeneration = fullScan && resumeFullScan ? job.scanGeneration ?? globalGeneration : globalGeneration;
+    const targetId = fullScan ? '' : job.targetWorkoutId || pendingTargets.docs[0]?.id || '';
+    const targetDoc = targetId ? await reads.get(reconciliationTargets(db, uid).doc(targetId)) : null;
+    const targetGeneration = (job.targetWorkoutId ? job.targetGeneration : targetDoc?.data()?.generation) ?? 0;
+    const nextRepairAtMs = job.nextRepairAtMs ?? runtime.now() + RECONCILIATION_REPAIR_MS;
+    let nextTimeWakeAtMs = fullScan && !resumeFullScan ? Number.MAX_SAFE_INTEGER
+      : job.nextTimeWakeAtMs ?? Number.MAX_SAFE_INTEGER;
+    if (entitlement.nextChangeAtMs && entitlement.nextChangeAtMs > runtime.now()) {
+      nextTimeWakeAtMs = Math.min(nextTimeWakeAtMs, entitlement.nextChangeAtMs);
+    }
+    if (!fullScan && !targetId) {
+      tx.set(jobRef, { reconciliationLease: null, batchNotBeforeMs: 0, settledGeneration: job.generation ?? 0,
+        dueAtMs: Math.min(nextRepairAtMs, nextTimeWakeAtMs) }, { merge: true });
       return false;
     }
-    if (!locks.empty) { tx.set(jobRef, { dueAtMs: runtime.now() + 60_000 }, { merge: true }); return false; }
-    const job = jobDoc.data()!;
-    const scanKey = `${job.generation}:${stateDoc.data()?.revision ?? 0}:${settingsState.data()?.revision ?? 0}`;
-    const fresh = job.scanKey !== scanKey;
-    const phase = fresh ? 'workouts' : job.phase ?? 'workouts';
-    const cursor = fresh ? '' : job.cursor ?? '';
+    const phase = fullScan ? (resumeFullScan ? job.phase ?? 'workouts' : 'workouts') : 'target';
+    const cursor = fullScan ? (resumeFullScan ? job.cursor ?? '' : '') : job.targetCursor ?? '';
     let query = phase === 'workouts'
       ? user.collection('scheduledWorkouts').where('lifecycle', 'in', ['planned', 'skipped']).orderBy(FieldPath.documentId())
-      : user.collection(DELIVERY_LEDGER).orderBy(FieldPath.documentId());
+      : phase === 'target' ? user.collection(DELIVERY_LEDGER).where('workoutId', '==', targetId).orderBy(FieldPath.documentId())
+        : user.collection(DELIVERY_LEDGER).orderBy(FieldPath.documentId());
     if (cursor) query = query.startAfter(cursor);
     const page = await tx.get(query.limit(TRAINING_DELIVERY_PAGE_SIZE));
     const records: { record: DeliveryLedgerV1; previous: DeliveryLedgerV1 | null; context: DeliveryContext;
       requestedAtMs: number; status: FirebaseFirestore.DocumentData | undefined;
       verification: FirebaseFirestore.DocumentData | undefined }[] = [];
+    const dayBoundaries = new Map<string, number>();
     const retain = async (record: DeliveryLedgerV1, previous: DeliveryLedgerV1 | null, context: DeliveryContext) => {
+      if (records.some(item => item.record.id === record.id)) return;
+      // A retained provider copy can still use the zone saved before a settings edit.
+      // Intent protects it at that zone's day boundary as well as the current setting's.
+      for (const zone of [record.timeZone, record.actual?.timeZone, record.repair?.original.timeZone]) {
+        if (!zone) continue;
+        if (!dayBoundaries.has(zone)) dayBoundaries.set(zone, nextTrainingLocalDay(runtime.now(), zone));
+        nextTimeWakeAtMs = Math.min(nextTimeWakeAtMs, dayBoundaries.get(zone)!);
+      }
       const [status, verification, requestedAtMs] = await Promise.all([
         reads.get(user.collection(TRAINING_DELIVERY_STATUSES).doc(record.id)),
         reads.get(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(record.id)),
@@ -254,9 +306,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
       ]);
       records.push({ record, previous, context, requestedAtMs, status: status.data(), verification: verification.data() });
     };
-    for (const doc of page.docs) {
-      if (phase === 'workouts') {
-        const workout = parseScheduledWorkoutV1(doc.data());
+    const reconcileWorkout = async (workout: ScheduledWorkoutV1) => {
         for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
           const context = await readDeliveryContext(runtime, tx, uid, workout, provider, hasPro, undefined, undefined, reads);
           if (!context.setting?.enabled || !context.connection.destinationKey) continue;
@@ -267,7 +317,19 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
           const record = reconcileRecord(runtime, context, uid, provider, workout.id, previous);
           if (record) await retain(record, previous, context);
         }
-      } else {
+    };
+    // A targeted edit visits its current identities and every retained destination, including
+    // deleted recipes, stopped consent and former accounts. Never select only the current account.
+    if (phase === 'target' && !cursor) {
+      const workoutDoc = await reads.get(user.collection('scheduledWorkouts').doc(targetId));
+      if (workoutDoc.exists) {
+        const workout = parseScheduledWorkoutV1(workoutDoc.data());
+        if (['planned', 'skipped'].includes(workout.lifecycle)) await reconcileWorkout(workout);
+      }
+    }
+    for (const doc of page.docs) {
+      if (phase === 'workouts') await reconcileWorkout(parseScheduledWorkoutV1(doc.data()));
+      else {
         const previous = doc.data() as DeliveryLedgerV1;
         const workoutDoc = await reads.get(user.collection('scheduledWorkouts').doc(previous.workoutId));
         const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null,
@@ -300,13 +362,25 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
         tx.set(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(record.id), projectedVerification);
       }
     }
-    const finished = page.size < TRAINING_DELIVERY_PAGE_SIZE && phase === 'ledger';
+    const finished = page.size < TRAINING_DELIVERY_PAGE_SIZE && phase !== 'workouts';
     const nextPhase = page.size < TRAINING_DELIVERY_PAGE_SIZE ? 'ledger' : phase;
-    tx.set(jobRef, { scanKey: finished ? '' : scanKey, phase: nextPhase,
-      cursor: finished || nextPhase !== phase ? '' : page.docs[page.docs.length - 1]?.id ?? '',
-      // Daily/horizon/entitlement recovery also runs without an event; no obsolete revisions are replayed.
-      dueAtMs: finished ? runtime.now() + 30 * 60_000 : 0, dispatchToken: randomUUID(),
+    const targetUnchanged = !targetDoc?.exists || targetDoc.data()?.generation === targetGeneration;
+    const remainingTargets = fullScan ? !pendingTargets.empty
+      : pendingTargets.docs.some(doc => doc.id !== targetId) || !targetUnchanged;
+    const globalPending = globalGeneration !== (fullScan ? capturedGeneration : job.completedGlobalGeneration);
+    const more = !finished || globalPending || remainingTargets;
+    if (finished && !fullScan && targetUnchanged && targetDoc?.exists) tx.delete(targetDoc.ref);
+    const repairedAtMs = finished && fullScan ? runtime.now() + RECONCILIATION_REPAIR_MS : nextRepairAtMs;
+    tx.set(jobRef, { scanKey: finished ? '' : scanKey, scanGeneration: capturedGeneration, phase: nextPhase,
+      cursor: !fullScan || finished || nextPhase !== phase ? '' : page.docs[page.docs.length - 1]?.id ?? '',
+      targetWorkoutId: !fullScan && !finished ? targetId : '',
+      targetGeneration: !fullScan && !finished ? targetGeneration : 0,
+      targetCursor: !fullScan && !finished ? page.docs[page.docs.length - 1]?.id ?? '' : '',
+      ...(finished && fullScan ? { completedGlobalGeneration: capturedGeneration } : {}),
+      nextRepairAtMs: repairedAtMs, nextTimeWakeAtMs, reconciliationLease: null,
+      ...(!more ? { batchNotBeforeMs: 0, settledGeneration: job.generation ?? 0 } : {}),
+      dueAtMs: more ? 0 : Math.min(repairedAtMs, nextTimeWakeAtMs), dispatchToken: randomUUID(),
     }, { merge: true });
-    return !finished;
+    return more;
   });
 }

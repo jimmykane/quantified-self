@@ -47,6 +47,9 @@
           <mat-icon aria-hidden="true">{{ statusIcon }}</mat-icon>
           {{ statusLabel }}
         </span>
+        @if (automaticImports && connected && !loading && statusTone === 'default' && !statusLabelOverride) {
+        <p class="service-connection-status__automatic-imports">{{ providerIcon === 'wahoo' ? 'Eligible Wahoo workouts import automatically.' : 'New activities import automatically.' }}</p>
+        }
         @if (description) {
         <p>{{ description }}</p>
         }

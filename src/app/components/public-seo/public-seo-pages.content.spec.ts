@@ -10,6 +10,110 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('keeps Training FAQ target limits and swim delivery consistent with supported recipes', () => {
+    const page = PUBLIC_SEO_PAGES.trainingPlans;
+    const faq = page.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')!.answer;
+    expect(faq).toContain('up to two different absolute or relative');
+    expect(faq).toContain('cadence target kinds per step');
+    expect(faq).toContain('explicit saved reference snapshot');
+    expect(faq).toContain('provider-specific delivery limits still apply');
+    expect(faq).not.toContain('one absolute');
+    const delivery = page.sections.flatMap(section => section.items)
+      .find(item => item.title === 'Opt in to provider delivery')!.copy;
+    expect(delivery).toContain('connected Pro members');
+    expect(delivery).toContain('Garmin Generic after mapping review, not a native swim profile');
+    expect(delivery).toContain('Wahoo supports timed, untargeted pool and open-water');
+    expect(delivery).toContain('does not send the selected pool length');
+    expect(delivery).toContain('Cloud acceptance does not prove app or watch receipt');
+    expect(delivery).toContain('COROS plan sync and standalone Send actions are coming soon');
+    expect(delivery).not.toContain('Wahoo swim delivery are unavailable');
+  });
+
+  it('distinguishes separately approved manual Health changes from immutable imported readings', () => {
+    const page = PUBLIC_SEO_PAGES.mcpServer;
+    const focusedWrites = page.sections.flatMap(section => section.items)
+      .find(item => item.copy.includes('Separate permissions can replace shared event tags'))!.copy;
+    const faq = page.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')!.answer;
+    for (const copy of [focusedWrites, faq]) {
+      expect(copy).toContain('independent Manage manual Health measurements permission');
+      expect(copy).toContain('permanently delet');
+      expect(copy).toContain('approval controls');
+      expect(copy).toContain('imported Health readings');
+      expect(copy).toContain('recorded activity data');
+      expect(copy).toContain('dashboard settings');
+      expect(copy).not.toContain('routes, Health, measurements');
+    }
+    expect(faq).toContain('released tools, a refreshed tool catalog, and reauthorization');
+  });
+
+  it('links both Training Help actions to the Training Analysis help topic', () => {
+    const page = PUBLIC_SEO_PAGES.trainingAnalysis;
+    const actions = [...page.actions, ...page.closingActions]
+      .filter(action => action.label === 'Training Help');
+    expect(actions).toHaveLength(2);
+    for (const action of actions) {
+      expect(action).toMatchObject({ routerLink: '/help', fragment: 'training-analysis' });
+    }
+  });
+
+  it.each([
+    ['importStravaToSuunto', 'suunto', 'Suunto', 'Suunto app'],
+    ['importStravaToWahoo', 'wahoo', 'Wahoo', 'Wahoo API'],
+    ['importStravaToCoros', 'coros', 'COROS', 'COROS API'],
+  ] as const)('explains the supported Strava export paths to %s', (key, provider, destination, serviceName) => {
+    const page = PUBLIC_SEO_PAGES[key];
+    const copy = JSON.stringify(page);
+    expect(page.h1).toBe(`How to transfer Strava activities to ${destination}`);
+    expect(page.actions[0].queryParams).toEqual({ serviceName });
+    expect(page.closingActions[0].queryParams).toEqual({ serviceName });
+    expect(copy).toContain(`Under ${destination}, choose Send activities`);
+    expect(copy).toContain('Preview sends nothing');
+    expect(copy).toContain('200 MiB');
+    expect(copy).toContain('Check status');
+    expect(copy).toContain('Confirmed sends continue');
+    expect(page.accessNote).toContain('require Pro');
+    expect(page.freeOfferDescription).toContain('sending activities require Pro');
+    expect(copy).toContain('Quantified Self has no Strava connection');
+    expect(copy).toContain('Local files → Choose FIT files');
+    expect(copy).toContain('Saved activities');
+    expect(copy).toContain('Uploaded to QS');
+    expect(copy).toContain('not added to your QS activity archive');
+    expect(copy).toContain('QS does not convert GPX or TCX uploads to FIT for delivery');
+    expect(copy).toContain('Queued and Waiting for provider do not mean Delivered');
+    expect(page.closingActions.some(action => action.routerLink === `/integrations/${provider}`)).toBe(true);
+    expect(page.actions.concat(page.closingActions).some(action => action.routerLink.startsWith('/send-activities'))).toBe(false);
+    expect(page.howToSteps).toHaveLength(5);
+  });
+
+  it('uses Garmin’s native import without promising a QS activity destination', () => {
+    const page = PUBLIC_SEO_PAGES.importStravaToGarmin;
+    const copy = JSON.stringify(page);
+    expect(page.accessNote).toContain('does not send completed activities to Garmin');
+    expect(page.accessNote).toContain('do not need QS Pro');
+    expect(copy).toContain('Garmin advises exporting Strava activities individually');
+    expect(page.howToSteps?.[0]).toContain('Export Original');
+    expect(copy).toContain('upload icon → Import Data');
+    expect(copy).toContain('GPX recordings need timestamps');
+    expect(copy).toContain('QS route/course sending is separate');
+    expect(page.actions.concat(page.closingActions).some(action => action.routerLink.startsWith('/send-activities'))).toBe(false);
+    expect(page.sources?.some(source => source.url.includes('Ht3ZP52Kju075uKvqTqu99'))).toBe(true);
+  });
+
+  it.each(['importStravaToSuunto', 'importStravaToGarmin', 'importStravaToWahoo', 'importStravaToCoros'] as const)(
+    'makes %s discoverable with official export instructions and matching visible/schema steps', key => {
+      const page = PUBLIC_SEO_PAGES[key];
+      expect(PUBLIC_SEO_PAGES.guidesHub.actions.some(action => action.routerLink === `/${page.path}`)).toBe(true);
+      expect(page.sources?.[0].url).toBe('https://support.strava.com/en-us/articles/15401919-how-do-i-export-my-strava-data');
+      const entities = PUBLIC_SEO_ROUTE_DATA[key].jsonLd['mainEntity'] as Record<string, unknown>[];
+      const howTo = entities.find(entity => entity['@type'] === 'HowTo');
+      expect((howTo?.['step'] as Record<string, unknown>[]).map(step => step['text'])).toEqual(page.howToSteps);
+      if (key !== 'importStravaToGarmin') {
+        expect(page.howToSteps?.[0]).toContain('Download your account');
+        expect(page.howToSteps?.[1]).toContain('unzip');
+      }
+    },
+  );
+
   it('keeps Wahoo-to-Suunto access, setup and search offers consistent', () => {
     const page = PUBLIC_SEO_PAGES.syncWahooToSuunto;
     expect(page.actions[0]).toMatchObject({ label: 'Get Started', routerLink: '/services', variant: 'flat' });
@@ -85,6 +189,17 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('planned workouts');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('without duplicating training');
   });
+  it('explains manual and opt-in daily generation on the feature, plan, dashboard and Assistant pages', () => {
+    for (const key of ['featuresHub', 'trainingPlans', 'trainingDashboard', 'assistant'] as const) {
+      const section = PUBLIC_SEO_PAGES[key].sections.find(section => section.preview === 'daily-workout');
+      expect(section?.title).toBe('A workout that fits today');
+      const copy = JSON.stringify(section);
+      expect(copy).toContain('when they open Today');
+      expect(copy).toContain('separately from your Assistant allowance');
+      expect(copy).toContain('rest days');
+      expect(copy).toContain('Nothing is added without your choice');
+    }
+  });
 
   it('advertises lap-ended steps without promising unsupported provider delivery', () => {
     const copy = TRAINING_PLANS_PAGE_SECTIONS.find(section => section.title === 'Build the workout you mean')!.copy;
@@ -130,6 +245,10 @@ describe('public-seo-pages.content', () => {
     });
     expect(PUBLIC_GUIDE_PATHS).toEqual({
       hub: 'guides',
+      importStravaToSuunto: 'guides/strava-to-suunto',
+      importStravaToGarmin: 'guides/strava-to-garmin',
+      importStravaToWahoo: 'guides/strava-to-wahoo',
+      importStravaToCoros: 'guides/strava-to-coros',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
       syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
@@ -407,7 +526,7 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
     expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin to Suunto activity sync');
-    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Wahoo to Suunto activity sync');
+    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Strava history to Suunto, Garmin, Wahoo or COROS');
     expect(PUBLIC_SEO_PAGES.guidesHub.intro).toContain('centralized multi-provider workout archive');
 
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');

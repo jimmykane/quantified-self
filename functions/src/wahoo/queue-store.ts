@@ -188,6 +188,8 @@ export async function upsertWahooWorkoutQueueItem(
     // revision becomes dispatchable.
     transaction.set(ref, {
       ...input,
+      // Later provider revisions must not turn an imported history workout into an automatic send.
+      ...(existing?.fromHistory === true ? { fromHistory: true } : {}),
       ...historyRevision,
       dateCreated: now,
       processed: false,

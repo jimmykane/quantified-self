@@ -522,6 +522,18 @@
 
     @if (editor(); as session) {
       <section class="workout-editor" aria-labelledby="plans-title">
+          @if (canGenerateWorkout()) {
+            <div class="form-actions">
+              <button mat-button type="button" appHapticTap (click)="generateWorkout()"
+                [disabled]="busyAction() !== null || generationOpen()">
+                <span class="button-content">
+                  @if (generationOpen()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">auto_awesome</mat-icon> }
+                  <span>{{ generationOpen() ? 'Opening…' : 'Generate with AI' }}</span>
+                </span>
+              </button>
+            </div>
+          }
           <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
           <div class="workout-editor-basics" [class.workout-editor-basics--library]="libraryView()">
             <mat-form-field subscriptSizing="dynamic">
@@ -827,6 +839,19 @@
               [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
           }
         <div class="form-actions editor-save-actions">
+          @if (!libraryView() && session.mode === 'edit' && session.original && savedEditorWorkout()) {
+            <button appHapticTap mat-button class="editor-delete-action qs-mat-warn" type="button"
+              (click)="deleteWorkout(session.original)" [disabled]="busyAction() !== null">
+              <span class="button-content">
+                @if (busyAction() === 'delete-' + session.original.id) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">delete</mat-icon>
+                }
+                <span>Delete workout</span>
+              </span>
+            </button>
+          }
           @if (!libraryView() && session.mode === 'edit' && savedEditorWorkout()) {
             <button appHapticTap mat-stroked-button class="editor-library-copy-action" type="button"
               (click)="saveEditorCopyToLibrary()"
@@ -882,6 +907,11 @@
         @if (step.endingKind === 'time') {
           <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
             [disabled]="busyAction() !== null"
+            [label]="step.purpose === 'rest' ? 'Rest duration' : 'Duration'"
+            [summaryPrefix]="step.purpose === 'rest' ? 'Rest for' : 'Duration:'"
+            [previousRestSeconds]="step.purpose === 'rest' ? editorTimeContexts()[step.id]?.previousRestSeconds ?? null : null"
+            [nextStepLabel]="editorTimeContexts()[step.id]?.nextStepLabel ?? null"
+            [unitSettings]="editor().unitSettings"
             (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
         } @else if (step.endingKind === 'distance') {
           <mat-form-field subscriptSizing="dynamic">
@@ -937,21 +967,48 @@
               <p>Phase: {{ phase.name }} · {{ phase.startLocalDate }} – {{ phase.endLocalDate }}</p>
               @if (phase.description) { <p>{{ phase.description }}</p> }
             }
-            <p>{{ displayedWorkoutRows().length }} {{ displayedWorkoutRows().length === 1 ? 'workout' : 'workouts' }}</p>
+            <p>{{ selectedDayIsRest() ? 'Planned rest day' : displayedWorkoutRows().length + (displayedWorkoutRows().length === 1 ? ' workout' : ' workouts') }}</p>
           }
         </div>
+        <div class="plans-header-actions">
         <button appHapticTap #addWorkoutButton mat-flat-button type="button"
           (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null, addWorkoutDate())"
-          [disabled]="busyAction() !== null || (view() === 'plans' && !selectedPlanId())">
+          [disabled]="busyAction() !== null || (view() === 'plans' && (!selectedPlanId() || selectedDayIsRest()))">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add workout</span>
         </button>
+        @if (canGenerateWorkout()) {
+          <button mat-button type="button" appHapticTap (click)="generateWorkout()"
+            [disabled]="busyAction() !== null || generationOpen()">
+            <span class="button-content">
+              @if (generationOpen()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+              @else { <mat-icon aria-hidden="true">auto_awesome</mat-icon> }
+              <span>{{ generationOpen() ? 'Opening…' : 'Generate with AI' }}</span>
+            </span>
+          </button>
+        }
+        </div>
       </div>
 
+      @if (view() === 'plans') {
+        <button appHapticTap mat-button type="button" (click)="toggleSelectedRestDay()"
+          [disabled]="busyAction() !== null || (!selectedDayIsRest() && selectedDayHasPlannedWorkout())">
+          <span class="button-content">
+            @if (busyAction() === 'rest-' + selectedPlanId()) { <mat-spinner diameter="18" aria-label="Saving rest day"></mat-spinner> }
+            <span>{{ selectedDayIsRest() ? 'Remove rest day' : 'Mark as rest day' }}</span>
+          </span>
+        </button>
+        @if (!selectedDayIsRest() && selectedDayHasPlannedWorkout()) {
+          <p>Move, skip or remove this day's planned workouts before marking it as rest.</p>
+        }
+      }
+
       @if (displayedWorkoutRows().length === 0) {
+        @if (!selectedDayIsRest()) {
         <div class="workout-empty-state" role="status">
           <mat-icon aria-hidden="true">event_available</mat-icon>
-          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, or add a workout.' }}</span>
+          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, mark it as rest, or add a workout.' }}</span>
         </div>
+        }
       } @else {
         <div class="workout-rows">
           @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {

@@ -5,6 +5,7 @@ import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface'
 import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 
 const hoisted = vi.hoisted(() => ({
+  warn: vi.fn(),
   requestGet: vi.fn(),
   getTokenData: vi.fn(),
   validateCurrentSuuntoWebhookWriteLifecycle: vi.fn(),
@@ -16,6 +17,10 @@ const hoisted = vi.hoisted(() => ({
   tokenRootRef: {
     path: 'suuntoAppAccessTokens/staged-user',
   },
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+  warn: hoisted.warn, info: vi.fn(), error: vi.fn(), debug: vi.fn(), log: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -70,6 +75,7 @@ import {
   SuuntoHealthRequestError,
 } from './health-sync';
 import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS } from './health';
+import { suuntoHistoryWindowDays } from './history-windows';
 import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
@@ -265,6 +271,7 @@ describe('Suunto Health provider sync', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    hoisted.warn.mockReset();
     hoisted.tokenData = tokenProjection('initial-access-token');
     hoisted.tokenRootData = {
       // A Suunto user may retain multiple connected accounts. The root tracks
@@ -298,6 +305,62 @@ describe('Suunto Health provider sync', () => {
       }]);
   });
 
+  it.each([
+    { feed: 'activity', index: 0, payload: null, responseType: 'null' },
+    { feed: 'statistics', index: 1, payload: { message: 'private-health', token: 'private-token' }, responseType: 'object' },
+    { feed: 'recovery', index: 2, payload: 'private-health', responseType: 'string' },
+    { feed: 'activity', index: 0, payload: 42, responseType: 'number' },
+    { feed: 'recovery', index: 2, payload: true, responseType: 'boolean' },
+  ] as const)('logs only response metadata for a $responseType $feed reply and preserves validation', async ({ feed, index, payload, responseType }) => {
+    const path = `/247samples/${feed === 'statistics' ? 'daily-activity-statistics' : feed}`;
+    hoisted.requestGet.mockReset().mockImplementation(async options => {
+      options.onResponseMetadata({ statusCode: 200, responseBytes: 128, contentType: 'private-content-type', token: 'private-token' });
+      return new URL(options.url).pathname === path ? payload : [];
+    });
+    const snapshot = tokenSnapshot();
+    let failure: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(SuuntoHealthValidationError);
+    expect(getSuuntoHealthFailureTelemetry(failure, `${feed}_mapping`, 1))
+      .toMatchObject({ failureCategory: 'validation_error', validationCode: 'expected_array' });
+    expect(hoisted.warn).toHaveBeenCalledExactlyOnceWith('[HealthSync][Suunto] Unexpected response type.', {
+      feed, responseType, providerStatusCode: 200, responseBytes: 128,
+    });
+    expect(JSON.stringify(hoisted.warn.mock.calls)).not.toMatch(/private|staged-user|suunto-account|https/);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(index + 1);
+    expect(hoisted.getTokenData.mock.calls.map(([, , force]) => force)).toEqual([false]);
+  });
+
+  it.each([
+    { statusCode: 'private-status', responseBytes: 'private-body' },
+    { statusCode: 700, responseBytes: 4 * 1024 * 1024 + 1 },
+    { statusCode: 200.5, responseBytes: -1 },
+  ])('omits invalid diagnostic numbers $statusCode/$responseBytes without inspecting a response object', async metadata => {
+    const payload = { toJSON: () => { throw new Error('Must not serialize private Health data'); } };
+    hoisted.requestGet.mockReset().mockImplementation(async options => {
+      options.onResponseMetadata({ ...metadata, contentType: 'private-content-type' });
+      return payload;
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toBeInstanceOf(SuuntoHealthValidationError);
+    expect(hoisted.warn).toHaveBeenCalledExactlyOnceWith('[HealthSync][Suunto] Unexpected response type.', {
+      feed: 'activity', responseType: 'object',
+    });
+  });
+
+  it('preserves the validation error when diagnostic logging throws', async () => {
+    hoisted.warn.mockImplementationOnce(() => { throw new Error('Logging unavailable'); });
+    hoisted.requestGet.mockReset().mockResolvedValue(null);
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toBeInstanceOf(SuuntoHealthValidationError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    expect(hoisted.getTokenData).toHaveBeenCalledTimes(1);
+  });
+
   it('fetches all three bounded feeds and returns separate source records', async () => {
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
@@ -319,6 +382,7 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.warn).not.toHaveBeenCalled();
     expect(onRequest.mock.calls.map(([observation]) => ({
       feed: observation.feed, outcome: observation.outcome,
     }))).toEqual([
@@ -415,6 +479,32 @@ describe('Suunto Health provider sync', () => {
     expect(windows.every(window => (
       window.requestEndMs - window.requestStartMs <= 28 * 24 * 60 * 60 * 1000
     ))).toBe(true);
+  });
+
+  it('processes adjacent history targets without continuations and retains the complete boundary day in both padded pulls', async () => {
+    const day = 86400000;
+    const width = suuntoHistoryWindowDays('health') * day;
+    const start = START_MS + day / 2;
+    const boundary = start + width;
+    const samples = [boundary - day / 4, boundary + day / 4].map((timestamp, index) => ({
+      timestamp: new Date(timestamp).toISOString(), entryData: { HR: 50 + index * 10 },
+    }));
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }) => url.includes('/activity?') ? samples : []);
+    const snapshot = tokenSnapshot();
+    for (const rangeStartMs of [start, boundary]) {
+      const result = await processSuuntoHealthQueueItem({ ...queueItem(), rangeStartMs, rangeEndMs: rangeStartMs + width },
+        snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+      expect(result.continuation).toBeNull();
+      expect(result.healthResults).toHaveLength(1);
+      expect(result.healthResults[0].input.sampleSeries[0].nativeValues).toEqual([50, 60]);
+    }
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(6);
+    for (const [options] of hoisted.requestGet.mock.calls) {
+      const query = new URL(options.url).searchParams;
+      const from = query.has('from') ? Number(query.get('from')) : Date.parse(query.get('startdate')!);
+      const to = query.has('to') ? Number(query.get('to')) : Date.parse(query.get('enddate')!);
+      expect(to - from + 1).toBe(28 * day);
+    }
   });
 
   it('retains a complete local-day record when the target starts mid-day', async () => {

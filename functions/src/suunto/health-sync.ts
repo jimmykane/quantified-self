@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { performance } from 'node:perf_hooks';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -29,7 +30,6 @@ import {
   SUUNTO_HEALTH_MAX_RESPONSE_BYTES,
   SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS,
   SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS,
-  SUUNTO_HEALTH_MAX_WINDOW_DAYS,
   SUUNTO_HEALTH_REQUEST_TIMEOUT_MS,
   SuuntoHealthResult,
   SuuntoHealthResponseLimitError,
@@ -37,10 +37,12 @@ import {
 } from './health';
 import { isValidSuuntoHealthProgress, type SuuntoHealthProgress } from './health-progress';
 
+import { SUUNTO_HEALTH_CONTEXT_PADDING_DAYS, SUUNTO_HEALTH_MAX_TARGET_WINDOW_DAYS } from './health-window';
+
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SUUNTO_HEALTH_CONTEXT_PADDING_MS = DAY_MS;
-const SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS = (SUUNTO_HEALTH_MAX_WINDOW_DAYS - 2) * DAY_MS;
+const SUUNTO_HEALTH_CONTEXT_PADDING_MS = SUUNTO_HEALTH_CONTEXT_PADDING_DAYS * DAY_MS;
+const SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS = SUUNTO_HEALTH_MAX_TARGET_WINDOW_DAYS * DAY_MS;
 const SUUNTO_HEALTH_MAX_PULL_ATTEMPTS = 64;
 const SUUNTO_HEALTH_PULL_BUDGET_MS = 4 * 60 * 1000;
 const SUUNTO_HEALTH_MAX_RESULT_BYTES = 16 * 1024 * 1024;
@@ -286,14 +288,36 @@ function requestHeaders(accessToken: string): Record<string, string> {
   };
 }
 
-async function requestBoundedSuuntoHealthPayload(url: string, accessToken: string): Promise<unknown> {
-  return requestPromise.get({
+async function requestBoundedSuuntoHealthPayload(url: string, accessToken: string, feed: SuuntoHealthFeed): Promise<unknown> {
+  const metadata: { providerStatusCode?: number; responseBytes?: number } = {};
+  const payload = await requestPromise.get({
     headers: requestHeaders(accessToken),
     json: true,
     maxResponseBytes: SUUNTO_HEALTH_MAX_RESPONSE_BYTES,
     timeout: SUUNTO_HEALTH_REQUEST_TIMEOUT_MS,
     url,
+    onResponseMetadata: (response: requestPromise.ResponseMetadata) => {
+      if (Number.isSafeInteger(response.statusCode) && response.statusCode >= 100 && response.statusCode <= 599) {
+        metadata.providerStatusCode = response.statusCode;
+      }
+      if (typeof response.responseBytes === 'number' && Number.isSafeInteger(response.responseBytes)
+        && response.responseBytes >= 0 && response.responseBytes <= SUUNTO_HEALTH_MAX_RESPONSE_BYTES) {
+        metadata.responseBytes = response.responseBytes;
+      }
+    },
   });
+  // Keep the mapper's validation/retry behavior. Observe only the top-level
+  // JSON type and transport metadata; never inspect or serialize Health values.
+  try {
+    if (!Array.isArray(payload)) {
+      logger.warn('[HealthSync][Suunto] Unexpected response type.', {
+        feed,
+        responseType: payload === null ? 'null' : typeof payload,
+        ...metadata,
+      });
+    }
+  } catch { /* Diagnostics must not replace the original validation failure. */ }
+  return payload;
 }
 
 function providerStatusCode(error: unknown): number | null {
@@ -422,7 +446,7 @@ export async function processSuuntoHealthQueueItem(
     const requestWithObservation = async (): Promise<unknown> => {
       const startedAtMs = performance.now();
       try {
-        const payload = await requestBoundedSuuntoHealthPayload(url, accessToken);
+        const payload = await requestBoundedSuuntoHealthPayload(url, accessToken, feed);
         try {
           onRequest?.({ feed, outcome: 'success', durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)) });
         } catch { /* Telemetry must not change provider processing. */ }

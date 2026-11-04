@@ -33,6 +33,171 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Web Push registrations', () => {
+        const id = '00000000-0000-4000-8000-000000000001';
+        const path = `users/push-owner/pushSubscriptions/${id}`;
+        const base = { schemaVersion: 1, origin: 'https://quantified-self.io', generation: id,
+            vapidPublicKey: 'B' + 'A'.repeat(86), endpoint: 'https://web.push.apple.com/test',
+            keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'A'.repeat(22) } };
+        beforeEach(async () => { await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/push-owner').set({}); }); });
+        it.each(['https://quantified-self.io', 'https://beta.quantified-self.io'])('allows explicit private owner leaf CRUD on %s', async origin => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext('push-owner').firestore();
+            await assertSucceeds(owner.doc(path).set({ ...base, origin, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).get());
+            await assertSucceeds(owner.doc(path).update({ generation: '00000000-0000-4000-8000-000000000002', updatedAt: serverTimestamp() }));
+            await assertFails(owner.collection('users/push-owner/pushSubscriptions').get());
+            await assertFails(owner.doc(path + '/child/private').set({}));
+            await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').set({ count: 0 }));
+            await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').get());
+            await assertSucceeds(owner.doc(path).delete());
+        });
+        it('keeps history send receipts server-only for owners, other accounts and impersonation', async () => {
+            const receiptPath = 'users/push-owner/pushState/historyCompletion';
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(receiptPath).set({ attempts: [], providers: {} }); });
+            for (const context of [testEnv.authenticatedContext('push-owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }), testEnv.unauthenticatedContext()]) {
+                const ref = context.firestore().doc(receiptPath);
+                await assertFails(ref.get()); await assertFails(ref.set({ attempts: [] }));
+                await assertFails(ref.update({ providers: {} })); await assertFails(ref.delete());
+            }
+        });
+        it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
+            { endpoint: 'https://fcm.googleapis.com:443/fcm/send/client:token' },
+            { endpoint: 'https://user:password@fcm.googleapis.com/fcm/send/client:token' },
+            { endpoint: 'https://fcm.googleapis.com.evil.example/fcm/send/client:token' },
+            { endpoint: 'https://fcm.googleapis.com/fcm/send/client:token#fragment' },
+            { endpoint: 'https://web.push.apple.com:443/a' }, { endpoint: 'https://web.push.apple.com.evil.example/a' },
+            { endpoint: 'https://wns2-test.notify.windows.com.evil.example/w/?token=synthetic' },
+            { endpoint: 'https://nested.wns2-test.notify.windows.com/w/?token=synthetic' },
+            { endpoint: 'https://user@wns2-test.notify.windows.com/w/?token=synthetic' },
+            { endpoint: 'https://wns2-test.notify.windows.com:443/w/?token=synthetic' },
+            { keys: { p256dh: 'bad', auth: 'bad' } }, { generation: 'bad' }, { schemaVersion: 2 }, { injected: true }, { updatedAt: 0 }])('rejects invalid registration %j', async patch => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base, updatedAt: serverTimestamp(), ...patch }));
+        });
+        it('accepts a private owner registration from the Windows browser push service', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertSucceeds(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base,
+                endpoint: 'https://wns2-test.notify.windows.com/w/?token=synthetic%2Btoken', updatedAt: serverTimestamp() }));
+        });
+        it.each(['fcm/send', 'wp'])('allows Chrome %s registration and rotation with colon-containing tokens', async endpointPath => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const registration = testEnv.authenticatedContext('push-owner').firestore().doc(path);
+            await assertSucceeds(registration.set({ ...base,
+                endpoint: `https://fcm.googleapis.com/${endpointPath}/synthetic-client:synthetic-token`, updatedAt: serverTimestamp() }));
+            await assertSucceeds(registration.update({
+                endpoint: `https://fcm.googleapis.com/${endpointPath}/replacement-client:replacement-token`, updatedAt: serverTimestamp() }));
+        });
+        it('rejects other accounts, unauthenticated clients, impersonation, and deletion resurrection', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const value = { ...base, updatedAt: serverTimestamp() };
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(path).set(base); });
+            for (const context of [testEnv.authenticatedContext('other'), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc(path).get()); await assertFails(context.firestore().doc(path).set(value));
+                await assertFails(context.firestore().doc(path).delete());
+            }
+            await assertFails(testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }).firestore().doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore().doc(`users/missing/pushSubscriptions/${id}`).set(value));
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('userDeletionTombstones/push-owner').set({}); });
+            await assertFails(testEnv.authenticatedContext('push-owner').firestore().doc(path).set(value));
+            await assertSucceeds(testEnv.authenticatedContext('push-owner').firestore().doc(path).delete());
+        });
+    });
+
+    describe.each(['history_import', 'activity_sync', 'activity_delivery'])('Notification category preferences: %s', category => {
+        const path = `users/category-owner/notificationPreferences/${category}`;
+        const base = { schemaVersion: 1, enabled: false, revision: 1 };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/category-owner').set({}); });
+        });
+        it('allows private owner reads and atomic toggles, but no resets, list or descendants', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext('category-owner').firestore();
+            const ref = owner.doc(path);
+            await assertSucceeds(ref.get()); // Absent preference means the new category defaults on.
+            await assertSucceeds(ref.set({ ...base, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 1, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 4, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: true, revision: 3, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: false, revision: 3, updatedAt: serverTimestamp() }));
+            await assertFails(ref.delete());
+            await assertFails(owner.collection('users/category-owner/notificationPreferences').get());
+            await assertFails(owner.doc(path + '/nested/value').set({}));
+            await assertFails(owner.doc('users/category-owner/notificationPreferences/unknown').set({ ...base, updatedAt: serverTimestamp() }));
+        });
+        it.each([{ schemaVersion: 2 }, { enabled: 'false' }, { revision: 0 }, { revision: 2 }, { revision: 1.5 },
+            { revision: 9007199254740992 }, { updatedAt: 0 }, { origin: 'https://quantified-self.io' }])('rejects malformed category preferences %j', async patch => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).set({ ...base, updatedAt: serverTimestamp(), ...patch }));
+        });
+        it('blocks other accounts, impersonation, missing users and deletion resurrection', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const value = { ...base, updatedAt: serverTimestamp() };
+            for (const context of [testEnv.authenticatedContext('other'), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc(path).get());
+                await assertFails(context.firestore().doc(path).set(value));
+            }
+            await assertFails(testEnv.authenticatedContext('category-owner', { impersonatedBy: 'admin' }).firestore().doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore().doc(`users/missing/notificationPreferences/${category}`).set(value));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set(base);
+                await context.firestore().doc('userDeletionTombstones/category-owner').set({});
+            });
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
+        });
+    });
+
+    describe('Standalone calendar rest days', () => {
+        const path = 'users/rest-owner/trainingRestDays/2026-10-31';
+        const value = { schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/rest-owner').set({}); });
+        });
+        it('allows an owner to mark/remove intent with retained revisions and bounded reads only', async () => {
+            const db = testEnv.authenticatedContext('rest-owner').firestore();
+            await assertSucceeds(db.doc(path).set(value));
+            await assertSucceeds(db.doc(path).set({ ...value, isRestDay: false, revision: 2 }));
+            await assertSucceeds(db.doc(path).get());
+            await assertSucceeds(db.collection('users/rest-owner/trainingRestDays').limit(367).get());
+            await assertFails(db.collection('users/rest-owner/trainingRestDays').get());
+            await assertFails(db.collection('users/rest-owner/trainingRestDays').limit(368).get());
+            await assertFails(db.doc(path).delete());
+        });
+        it.each([{ ...value, revision: 2 }, { ...value, revision: 1.5 }, { ...value, isRestDay: 'true' },
+            { ...value, planId: 'plan' }, { ...value, localDate: '2026-11-01' }])('rejects malformed or unrelated writes %j', async input => {
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore().doc(path).set(input));
+        });
+        it.each(['0000-01-01', '0099-12-31', '2026-02-29', '1900-02-29', '2026-04-31', '2026-13-01'])('rejects invalid calendar label %s', async localDate => {
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore()
+                .doc(`users/rest-owner/trainingRestDays/${localDate}`).set({ ...value, localDate }));
+        });
+        it('accepts a leap day and rejects stale revisions and other readers/writers', async () => {
+            const owner = testEnv.authenticatedContext('rest-owner').firestore();
+            await assertSucceeds(owner.doc(path).set(value)); await assertFails(owner.doc(path).set({ ...value, isRestDay: false }));
+            await assertSucceeds(owner.doc('users/rest-owner/trainingRestDays/2000-02-29').set({ ...value, localDate: '2000-02-29' }));
+            for (const db of [testEnv.authenticatedContext('other').firestore(), testEnv.unauthenticatedContext().firestore()]) {
+                await assertFails(db.doc(path).get()); await assertFails(db.doc(path).set(value));
+            }
+        });
+        it('rejects revisions outside the shared safe-integer contract', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...value, revision: Number.MAX_SAFE_INTEGER });
+            });
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore().doc(path)
+                .set({ ...value, isRestDay: false, revision: Number.MAX_SAFE_INTEGER + 1 }));
+        });
+        it('fences missing/deleted accounts, including a retained session after deletion starts', async () => {
+            const owner = testEnv.authenticatedContext('rest-owner').firestore();
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('userDeletionTombstones/rest-owner').set({}); });
+            await assertFails(owner.doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore()
+                .doc('users/missing/trainingRestDays/2026-10-31').set(value));
+        });
+    });
+
     describe('Activity send projections', () => {
         beforeEach(async () => {
             await testEnv.withSecurityRulesDisabled(async context => {
@@ -162,6 +327,25 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc(path).update(await edit(2)));
             await assertFails(owner.doc(path).update({ legacyLegs: {}, revision: 2, updatedAt: serverTimestamp() }));
             await assertSucceeds(owner.doc(path).update({ ...await edit(2), editedLegKey: 'stable', controls: { stable: { override: 0 } } }));
+        });
+        it('accepts private dated CSS only for swimming and protects it from other users and later edits', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (family: string, css: unknown, client = owner) => {
+                const head = client.doc(`users/owner/trainingLoadPolicies/${family}`);
+                const data = { revision: 1, revisionId: 'css', method: 'SWIM_PACE', included: true,
+                    effectiveAt: serverTimestamp(), swimThresholdSpeed: css };
+                const batch = client.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('css'), data);
+                return batch.commit();
+            };
+            for (const css of [0, -1, Infinity, NaN, '1:53']) await assertFails(write('swimming', css));
+            await assertFails(write('cycling', 1));
+            await assertFails(write('swimming', 1, other));
+            await assertSucceeds(write('swimming', 100 / 113));
+            await assertFails(other.doc('users/owner/trainingLoadPolicies/swimming').get());
+            await assertFails(owner.doc('users/owner/trainingLoadPolicies/swimming/revisions/css').update({ swimThresholdSpeed: 1 }));
         });
         it('requires atomic immutable policy revisions with server timestamps', async () => {
             await seed();
@@ -1446,8 +1630,8 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe('Assistant conversations (users/{uid}/assistantConversations/active)', () => {
-            const assistantPath = `users/${userId}/assistantConversations/active`;
+        describe.each(['active', 'day-workout', 'daily-workout-suggestion'])('Private Assistant leaf %s', leaf => {
+            const assistantPath = `users/${userId}/assistantConversations/${leaf}`;
 
             beforeEach(async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -2156,6 +2340,7 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
+                    `users/${userId}/trainingDeliveryState/current/reconciliationTargets/w`,
                     `users/${userId}/trainingDeliveryState/current/pastCleanup/workout_w`,
                     `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
                     'trainingDeliveryCorosIntegerClaims/12345',

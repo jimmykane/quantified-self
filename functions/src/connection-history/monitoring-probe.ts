@@ -9,7 +9,9 @@ import { historyAdmissionQueue, historyCooldownUntil, historySleepProvider, getH
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
-import { CONNECTION_HISTORY_COLLECTION, historyOperationKey, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, MAX_HISTORY_ADMISSION_CHILDREN, MAX_OUTSTANDING_HISTORY_CHILDREN,
+  MAX_ISOLATED_HISTORY_FAILURES, allowsPendingActivityHistory, historyOperationKey, type ConnectionHistoryRun } from './model';
+import { retainedFailureCount } from './advance';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { emitHistoryMonitoring, historyMonitoringProvider, HISTORY_PROVIDERS } from './monitoring';
 
@@ -41,7 +43,8 @@ export function historyProbeCandidate(run: ConnectionHistoryRun, now: number): C
   if (run.nextAttemptAt > now || Number(run.leaseExpiresAt) > now) return 'excluded';
   const step = run.steps.find(step => !step.done);
   if (!step) return 'eligible'; // Due finalization is coordinator work, not provider delivery.
-  if (!step.capability || !Array.isArray(step.childPaths) || step.childPaths.length > 100) return 'unknown';
+  if (!step.capability || !Array.isArray(step.childPaths)
+    || step.childPaths.length > (allowsPendingActivityHistory(step) ? MAX_OUTSTANDING_HISTORY_CHILDREN : MAX_HISTORY_ADMISSION_CHILDREN)) return 'unknown';
   if (!['queued', 'requesting', 'retrying', 'processed', 'requested', 'skipped'].includes(step.status)) return 'unknown';
   return 'eligible';
 }
@@ -54,7 +57,7 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
   queueDepth: (queue: string) => Promise<number>, now = Date.now()): Promise<void> {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let childBudget = 100;
+  let childBudget = MAX_OUTSTANDING_HISTORY_CHILDREN;
   const capacity = new Map<string, Promise<boolean>>();
   const entitlements = new Map<string, Promise<boolean>>();
   const sample = async () => {
@@ -97,19 +100,32 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
             'dispatchedToCloudTask', 'connectionHistoryRunId', 'sourceServiceName', 'firebaseUserID', 'providerUserId', 'providerRouteId'] });
           if (stopped) return 'excluded';
           // Route redispatch is coordinator work even before a child finishes.
-          // Waiting live tasks remain downstream work; no task API is consulted by this probe.
+          // Activity retries only exclude admission when the retained-work cap or
+          // scan boundary requires waiting. No task API is consulted by this probe.
           const pending = children.filter(child => child.exists && child.get('processed') === false);
           if (pending.length) {
             const due = step.resources.includes('routes') ? pending.filter(child => child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
               && isRouteHistoryDispatchDue(child.data()!, now)) : [];
-            if (!due.length) return 'excluded';
-            if (due.some(child => child.get('connectionHistoryRunId') !== doc.id
-              || child.get('sourceServiceName') !== ServiceNames.SuuntoApp || child.get('firebaseUserID') !== run.userID
-              || child.get('providerUserId') !== run.providerUserId || typeof child.get('providerRouteId') !== 'string')) return 'unknown';
-            return 'eligible';
+            if (due.length) {
+              if (due.some(child => child.get('connectionHistoryRunId') !== doc.id
+                || child.get('sourceServiceName') !== ServiceNames.SuuntoApp || child.get('firebaseUserID') !== run.userID
+                || child.get('providerUserId') !== run.providerUserId || typeof child.get('providerRouteId') !== 'string')) return 'unknown';
+              return 'eligible';
+            }
+            if (!allowsPendingActivityHistory(step)) return 'excluded';
+            // Mixed terminal/pending outcomes need the worker's DLQ and stop checks.
+            // Without those reads, neither a normal wait nor receipt recovery is proven.
+            if (children.some(child => !child.exists || typeof child.get('processed') !== 'boolean'
+              || child.get('processed') === true && (child.get('skippedReason')
+                || child.get('resultStatus') && child.get('resultStatus') !== 'success'))) return 'unknown';
+            if (!timestamp(step.nextStartMs) || !timestamp(run.endMs)) return 'unknown';
+            if (run.lastOperation?.key === historyOperationKey(step)) return 'eligible';
+            const failures = retainedFailureCount(run);
+            if (step.nextStartMs > run.endMs || failures >= MAX_ISOLATED_HISTORY_FAILURES
+              || pending.length + failures > MAX_OUTSTANDING_HISTORY_CHILDREN - MAX_HISTORY_ADMISSION_CHILDREN) return 'excluded';
           }
           // Terminal failures or missing children need finalization, not admission.
-          if (children.some(child => child.exists && child.get('processed') !== true)) return 'unknown';
+          if (children.some(child => child.exists && child.get('processed') !== true && child.get('processed') !== false)) return 'unknown';
           if (children.some(child => !child.exists || child.get('skippedReason')
             || child.get('resultStatus') && child.get('resultStatus') !== 'success')) return 'eligible';
         }

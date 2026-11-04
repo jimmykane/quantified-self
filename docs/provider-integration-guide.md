@@ -54,6 +54,22 @@ dispatch/processing failure, new DLQ/reconciliation and unavailable-observation 
 See [activity delivery monitoring](activity-delivery-monitoring.md) and [route monitoring](route-monitoring.md).
 Local tests do not establish provider/device acceptance or activate production configuration.
 
+Activity-history coordination for Suunto, COROS and Wahoo can continue later batches while individual workouts
+retry. It retains the same canonical jobs and backoff, bounds outstanding jobs plus retained failures to 200, and
+keeps the shared queue-capacity and lifecycle guards. Safe progress distinguishes scanning, capacity waits and a
+finished scan awaiting child outcomes. Garmin submission semantics and Sleep/Health/route barriers are unchanged.
+See [independent activity retries](connection-history-import.md#continuing-activity-history-while-workouts-retry)
+for checkpoint recovery, monitoring coverage and the two-function release boundary. No migration or replay is needed.
+
+History child observation also accepts a workout worker's committed `cross_provider_duplicate` or
+`outbound_provider_echo` skip as already handled, restricted to the four recorded-workout queues. A returning QS
+upload must not stop the remaining history scan. Pending jobs, genuine failures and authorization/lifecycle skips
+retain their existing handling; canonical queue rows and saved activity edits are not rewritten. This correction
+requires only `processConnectionHistoryTask` after separate deployment approval. Already stopped runs require a
+separately approved resume. Monitoring is **covered/unchanged** by the existing committed checkpoint, queue-health
+and unknown-observation signals; no resource, label or provider API change is needed. See
+[handled history copies](connection-history-import.md#continuing-activity-history-while-workouts-retry).
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.
@@ -157,6 +173,10 @@ this startup/memory configuration does not change webhook authentication, durabl
 Suunto Health Activity/Recovery webhooks use the existing durable Sleep/Health queue with a five-minute dispatch bucket per UID, provider account, exact local-day window, and captured token/root/connection generations. The ingress still acknowledges only after durable staging and the retryable trigger retains its lifecycle checks. Queue admission schedules one bounded refetch just after the bucket closes; distinct notifications in that bucket reuse the same queued refetch. An ingress that reaches a bucket after dispatch has begun receives a deterministic notification-specific follow-up, so corrections are not lost. Poll and manual bulk-history jobs retain their current schedules; connection-history children use the bounded prompt dispatch described below. The 30-minute dispatcher preserves the earliest dispatch time when recovering an enqueue failure. Monitor `coalescedWindows` (reused bucket admissions, which can include an exact Eventarc retry), `duplicateIngressWindows` (exact late-ingress retries), actual task/worker counts, queue age, and Health freshness during rollout; revert the Functions revision to restore per-notification dispatch without migrating existing queue data. See [Suunto ingestion](suunto-integration.md#ingestion-and-revision-flow).
 
 The Suunto Health worker also emits one safe per-invocation feed summary for Activity, daily statistics, and Recovery request attempts/time and source-record write outcomes. A compact webhook notification mask is unioned when Activity and Recovery share a queue row; a notification that cannot merge before the worker claims the row gets a deterministic follow-up. The mask changes telemetry only, not which feeds are fetched. Compare those summaries with whole-worker telemetry and billed Cloud Run time before considering feed-specific pulls. See [Suunto operations](suunto-integration.md#sleep-and-health) for field meanings and the correction/reconciliation limit.
+
+Shared Health record and sync-state transactions overlap independent lifecycle-field reads, drain all results and
+retain ordered mismatch/read-error decisions. See [Health writer behavior](suunto-integration.md#sleep-and-health);
+provider coverage, transaction fences and existing monitoring remain unchanged.
 
 Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
@@ -836,6 +856,25 @@ or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suu
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
 budgets, new project or setup wizard are added.
 
+Training delivery reconciliation now batches account changes for a fixed 60 seconds, with minute-dispatch recovery,
+and permits one active account page. Enqueue recovery uses a fresh task name while retaining the pending account
+reservation until a worker claims it, so delayed tasks can still progress and duplicates cannot claim a later page.
+Ordinary workout edits and delivery acknowledgements use bounded private
+workout targets; global authority/plan changes retain the full current-workout and historical-ledger scans. Active
+scan cursors survive new edits. Activity upload counters and connection-history progress alone do not invalidate
+Training. Six-hour full repairs supplement explicit saved-zone midnight, grace-expiry, retry and verification timers.
+Owner unit changes have the new `onTrainingDeliveryOwnerUnitsChanged` root-user trigger, so unit-dependent Guides
+no longer depend on a half-hour scan. Provider request admission, exact consent, identities and journals are unchanged.
+These are ordinary scheduling changes, with no allowlist or second implementation stage. Local stress tests use
+synthetic accounts and fake transports; production cost reduction requires post-deployment measurement.
+
+Swimming Guide screen saves wake the existing Training reconciliation queue through
+`onTrainingDeliveryGuideSettingsChanged`; effective preference changes use the same deletion/state guards as other
+lifecycle events. Eligible updates retain the Suunto identity. **Create another Guide** remains an explicit,
+reviewed recovery action with a duplicate warning. See the [v18 allocation and update boundary](training-workspace.md#rest-planned-text-allocation-and-prompt-preference-updates-v18).
+Provider/queue monitoring is retained, with failed lifecycle wake-ups additionally covered by the Training bundle's
+new bounded counter and existing dispatch policy. Local definitions need separately approved activation.
+
 Fixture compatibility is not delivery readiness. Ordinary adapter tests cover create, update, reschedule, delete,
 exact duplicate, ambiguous retry, reconnect and provider-specific horizon behavior. Record actual live results only
 when separately authorized; do not introduce a separate certification process. The
@@ -951,7 +990,64 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Manual activity range selection
+
+The activity picker reuses the provider range registry for recent presets and maximum/all-available choices, plus
+Custom dates. Its defaults remain two calendar years for Garmin/Suunto/Wahoo and three months for COROS. Shared UTC
+calendar policy is translated to local picker dates, including month-end/DST boundaries, then clipped to any supplied
+provider minimum. Unbounded Suunto/Wahoo maximum selections show all available history through the end date;
+the internal scan floor is not presented as actual provider availability. Custom dates restores editable boundaries.
+Submissions keep the existing whole-local-day timestamps and `custom` activity-only request.
+Changing the range clears confirmation; metadata refreshes do not select a new range or start provider work.
+Review copy names activities-only scope, possible shorter availability and the existing new-request cooldown.
+Sleep, Health and route controls remain independent. Help and its sitemap date accompany this frontend-only change.
+Monitoring is **unchanged**: the reviewed #847/#829 bundles still cover the same providers, queues, retries,
+backlog and committed outcomes. No provider API, worker, consent, MCP or Training contract changes. Release only the
+frontend with separate deployment approval; accepted background runs need no migration or replay.
+
+### Optional history completion notification
+
+Manual Suunto/COROS/Wahoo activity imports can attach an unchecked, per-import notification choice for the current
+production device. The account-wide History imports category defaults on; turning it off cancels unsent consent,
+and re-enabling it does not revive earlier imports. The existing callables atomically validate consent and bind the category revision; an isolated terminal observer delivers a
+single best-effort result, subject to a two-attempt rolling daily cap. Garmin request completion, automatic OAuth
+history, Sleep, Health and routes remain excluded. Provider queues and ingestion/dispatch/retry behavior are unchanged.
+The authoritative [Web Push runbook](web-push-notifications.md#manual-history-import-completion) covers privacy,
+anti-spam receipts, truthful partial results, monitoring definitions and backend-first release. New sender monitoring
+is covered in source; live activation/readback is deferred in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+No deployment, switch activation or test send is authorized by implementation or passing offline tests.
+
+### Recent live-activity notifications
+
+The default-on New activities synced category groups genuinely new, fully persisted workouts from all four activity
+providers. Verified first canonical creation and positive webhook provenance are both required; manual/OAuth history,
+unknown legacy work, corrections, reprocessing, cross-provider duplicates and manual uploads are excluded. Workouts
+recovered by Suunto's outage-backfill script remain silent: its shared enqueue helper does not infer live provenance
+from insertion/dispatch intent, and only the authenticated webhook supplies the notification marker. Eligible workouts
+must finish within 48 hours and start after the current connection. Garmin additionally persists a monotonic requested
+history-end cutoff before requesting files because history shares its live callback. This can conservatively suppress
+genuine workouts through an end-of-day history range. Exact queue revision, account/provider/connection, event dates,
+category revision and registration generation are checked before sending. Failure never changes import success/retry.
+
+The [Web Push runbook](web-push-notifications.md#recent-live-activity-sync-notifications) owns batching, private state,
+rate caps, payload, scheduler/index, deployment order and costs. Two-minute grouping yields one summary for a burst;
+at most one batch per 15 minutes and four per rolling day across providers, with capped arrivals discarded. Production
+registrations only; beta remains self-test-only. Both operational sender switches stay off during preparation.
+
+Monitoring: **covered in source** by the existing Web Push bundle extended with admission/send failures, native runtime
+5xx, bounded due-age observation and minute heartbeat. No new telemetry scanner or provider queue/retry changes.
+Existing import monitoring remains authoritative for ingestion. Live activation/readback is **deferred** in
+[#1011](https://github.com/jimmykane/quantified-self/issues/1011), with the existing channel; source tests are not live evidence.
+Release checklist: deploy cutoff/OAuth writers, webhook admission, changed workers, sender and Rules/index; verify
+scheduler and monitoring before an approved production window. Never enable with only the frontend or sender deployed.
+
 ### Shared history progress surfaces
+
+Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.
+Processing time depends on provider delivery and queued work; the next allowed import date is not a finish date.
+The frontend no longer schedules an estimate-expiry refresh. Real cooldown, grace-period and daily-boundary refreshes
+remain intact. Monitoring is **unchanged**: #847/#829 workers, queues, retries and outcome metrics are unaffected.
+Only a separately approved frontend release is needed; MCP/Training and provider contracts are unchanged.
 
 The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
 subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
@@ -960,12 +1056,14 @@ capability counts remain items or requests, with no percentage, ETA or complete-
 **Waiting to retry Garmin requests**. Garmin counters are **requests scheduled**, including planned Health windows,
 not records received or confirmed HTTP submissions. The shared card explicitly says Garmin sends records separately
 and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
-Requested/processed
-context stays prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
+All finished results, including failures/skips,
+stay prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
 counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
-browser and clears it from the shared header/panel/Dashboard. Details and retry controls remain in Connections.
+browser and clears it from the shared header/panel/Dashboard. Logout retains only validated dismissal receipt fields,
+so they survive signing out and back in while other browser data and Firestore persistence are cleared. Details and
+retry controls remain in Connections after notification dismissal or expiry.
 New runs, resumed work and new terminal results appear again. Active work, reconnect guidance and unavailable
-status cannot be dismissed. Undismissed issues remain until superseded. Read failures are unavailable, not zero.
+status do not expire and cannot be dismissed. Undismissed issues remain until expiry or supersession. Read failures are unavailable, not zero.
 Raw account changes clear both surfaces and close owned panels. Viewing progress makes no provider request or write;
 details route to the existing Connections tab. Legacy tools without a coordinator projection retain their existing
 feedback. See [shared progress](connection-history-import.md#shared-header-and-dashboard-progress).
@@ -982,6 +1080,14 @@ remain unchanged. Browser-storage failure falls back to the current app session.
 Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#830 ingestion bundles still cover all
 workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
 Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.
+
+
+Daily workout **Add & send** commits standalone creation and eligible delivery settings with the existing Training
+reconciliation marker in one server transaction. Browser closure requires no follow-up Send request. It uses the
+existing delivery queue, workers, authority/deletion fences and monitoring; it adds no provider transport or queue kind.
+See [Pro daily workout suggestion](training-workspace.md#pro-daily-workout-suggestion) for the approval, replay and Skip
+contract. Deploy `mutateTrainingSchedule` before its frontend client; its only added secret binding is the existing
+Suunto Guide owner metadata, not provider credentials.
 
 ## 2. Choose the right architecture
 
@@ -1017,10 +1123,15 @@ source reservation. Existing provider dead-letter handling commits the terminal 
 revision/lease fences. Strict elevation-correction matches must agree with the selected saved-ID pairing and the
 file's sport eligibility. No automatic reassociation or deletion is performed.
 
-Suunto's single-activity generic `Running`/`Rowing` copies can instead finish as `cross_provider_duplicate` skips
-when the saved Garmin FIT has the corresponding `Treadmill`/`Indoor Rowing` source identity, identical start time,
-positive active duration and identical nonnegative distance. The incoming end must match active duration within
-one second and cannot exceed Garmin's elapsed window. The existing reservation reuses its event/activity/metadata
+Verified single-activity Suunto copies can instead finish as `cross_provider_duplicate` skips when the saved Garmin
+FIT has an explicitly recognized source sport, identical start time, positive active durations and identical
+nonnegative distance. `Treadmill` → `Running` and `Indoor Rowing` → `Rowing` retain exact active-duration matching;
+the incoming end must match active duration within one second and cannot exceed Garmin's elapsed window.
+`Running` → `Trail Running` permits at most one second of active-duration drift with an identical, positive elapsed
+window, including retained pauses. `Virtual Running` → `Running` permits at most one second of active-duration drift,
+an incoming end no more than one second earlier, and an elapsed/active difference of at most one second. These are
+provider-copy checks, not general sport aliases or fuzzy identity matching. Legacy JSON/SML originals remain outside
+this rule and require case-specific review. The existing reservation reuses its event/activity/metadata
 reads; the sole retained original must reference a FIT inside that owner's event storage prefix. Only candidates
 read one additional owner-scoped Garmin metadata document. First/unfinished imports,
 multiple activities/originals, existing Suunto provenance and insufficient evidence retain their normal handling.
@@ -1028,7 +1139,27 @@ This aborts preparation before any source/load/original-file write, preserving t
 The existing queue completion records `processed=true`, `resultStatus=skipped` and the saved `duplicateEventID`,
 without another outbound send. No provider association is added to the retained recording. Monitoring is
 **covered/unchanged** by #829's existing committed `skipped` outcome; no new worker, retry, metric, Help, MCP or
-Training contract is introduced. Existing failed jobs require separately approved targeted replay after deployment.
+Training contract is introduced. Existing Help remains accurate: this changes internal copy recognition, not a user
+workflow or import capability. Existing failed jobs require separately approved targeted replay after deployment.
+
+An otherwise conflicting outdoor-running recording from another provider can use the same duplicate-skip outcome.
+This fallback checks only the already selected event; it does not change the 100 ms time buckets, provider collision
+reservations, Wahoo IDs or manual-upload content IDs, and does not search for or create another event. Normal matched
+writes and same-provider revisions retain their existing behavior. Require one completed saved activity with a valid
+server-owned source identity, one FIT original inside that owner's event prefix, no incoming-provider provenance, and
+exactly one valid other-provider provenance record. Garmin provenance on either side must identify FIT. Both sports
+must be outdoor-running family members (excluding indoor/virtual running), with identical positive start/end windows,
+positive durations within one second and positive distances within 2% of the larger distance. Neither duration may
+exceed elapsed time by more than one second. Only a failed activity binding can enter this fallback; unsafe correction
+carryover remains an identity conflict. Multisport, multiple sources/originals, unfinished imports, missing evidence and
+metadata-read failures are not duplicate acknowledgements. Candidate verification reads at most three additional
+owner/event metadata documents, reusing any legacy Garmin provenance read. The saved event, activities, edits,
+original references and Training controls remain unchanged; workers use their existing guarded queue completions
+and emit an INFO diagnostic, without Training completion linking or outbound fan-out. Existing Help, MCP and Training
+contracts are unchanged; monitoring remains covered by the existing committed `skipped` outcome for all four providers.
+The history coordinator accepts this committed duplicate outcome for those four workout queues so later pages
+continue. Pending children still wait, lifecycle/authorization skips still stop their scope, and the same reason on
+non-workout queues is not accepted as a successful import. Existing history checkpoint monitoring remains covered.
 
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
@@ -1336,6 +1467,20 @@ cannot invalidate admission or interrupt other started enqueues. Monitoring is
 See [coordination and recovery](connection-history-import.md#coordination-persistence-and-retries) for the backend-only
 release/rollback boundary. Help, MCP/Assistant and Training contracts are unchanged.
 
+Shared connection-history coordination isolates verified per-record failures after the active child batch settles,
+then continues later pages and resources. A finished scan with retained failures reports issues and an explicit failed-record
+count; the existing Retry action restores only failed/unfinished records with all ownership, Pro, connection and reservation
+guards. Overlapping activity pages/windows exclude already retained failures using the existing server-only execution
+context and no extra database reads; only explicit recovery reopens those records. A later authorization/lifecycle
+stop retains its active batch alongside earlier failures. Unverifiable missing rows still stop their scope. Private failure references are bounded;
+extensive failures pause admission rather than growing the run or recovery transaction without limit. No provider-copy
+recognition, identity matching, child retry budget or saved content changes. See
+[isolated record failures](connection-history-import.md#isolated-record-failures) for recovery bounds and release scope.
+Monitoring remains **covered/unchanged** by #847's active/terminal checkpoints and #829/#830's committed child outcomes;
+no new monitoring resource, provider scope, MCP or Training contract is introduced.
+
+New Suunto connection-history snapshots can group four aligned 28-day Sleep or 26-day Health targets per bounded admission. The private versioned plan preserves legacy in-flight ranges/receipts, exact selected-date coverage, full-feed Health context, adaptive continuation and partial-admission recovery. Receipt identity uses the planner's same default batch size; incompatible versions or resource/provider snapshots stop before admission. The offline stress model finds lower aggregate work and completion time but slower short imports under saturation. The repository owner explicitly accepted this congestion tradeoff for PR #966 on 2026-10-28; coverage and lifecycle/retry requirements remain in force. See [Suunto batch evidence and release boundaries](connection-history-import.md#batched-suunto-sleephealth-targets). Existing #830/#847 monitoring is covered and unchanged; no manual callable, public/MCP/Training contract or Help behavior changes. Deploy compatible coordinator/recovery consumers before the Suunto callback producer only after separate approval; do not roll back the consumers while batched runs remain.
+
 Connection-history Sleep/Health children dispatch through the existing immediate, revision-bound queue path after
 durable admission. The single-dispatch coordinator retains bounded batches, capacity checks and minute-long child waits;
 manual bulk backfills, Garmin Health pacing and the half-hour recovery scan are unchanged. Existing children are never
@@ -1396,6 +1541,28 @@ already dispatched requests and their retained results.
 - Do not assume a successful bounded range endpoint returns only requested dates. Some providers include a current-day summary with older requests. Keep response byte and item bounds, validate every returned row, and persist only records intersecting the original target; a valid extra day is not a retryable transport failure.
 - Classify provider 429 responses separately and surface reset metadata where available. Do not convert rate limits into rapid retries.
 
+Wahoo's shared JSON API transport checks the existing application/day Training capacity record's `notBeforeMs`
+before provider I/O and extends it transactionally on a quota rejection, preserving its counters. The reset header
+is a relative delay in seconds. Recorded-activity delivery retains that delay as its existing guarded dispatch marker
+and schedules a delayed task with bounded jitter, including before an upload is accepted. Retain accepted IDs and
+type-correction state before scheduling. Future quota waits must not exhaust reconciliation's candidate budget or
+page as processing failures. See [Wahoo application cooldown](wahoo-integration.md#application-api-cooldown) for bounds,
+fallbacks, privacy, unchanged lifecycle/consent and the monitoring coverage decision. This is a cooldown, not a promise
+of proactive request-count reservation across every Wahoo transport.
+
+Recorded-activity delivery checks that same cooldown after lifecycle/Stop and uncertain-operation checks, before
+processing metadata, downloads, fingerprints and provider claims. A known wait persists only a deletion/current-state/
+send-window-guarded dispatch deadline and uses the existing deterministic delayed task; acknowledge only after
+enqueue confirmation or duplicate. It consumes no business retry count or error entry, retains accepted upload/type/
+account identity and rechecks an extended cooldown on wake-up. The final API guard and actual/late 429 retry policy
+remain. Current task identity distinguishes near-due Wahoo redeliveries from their scheduled task; a self-handoff
+fails for transport recovery rather than acknowledging the only active delivery. Task payloads/names stay unchanged.
+Monitoring is **covered/unchanged** by existing `expected_contention`/`deferred`, native queue/latency and
+failure/DLQ/unknown-observation coverage. Existing Help background/status-only guidance remains accurate; no public,
+MCP/Assistant, Training, consent, provider-matrix capability, queue topology, index or migration change is needed.
+Release only `processActivitySyncTask` after separate approval; no replay or retry reset is included. See the Wahoo
+cooldown runbook above for handoff recovery, expiry bounds and post-release measurement.
+
 ### Queue item design
 
 Queue IDs and imported event IDs must be stable across retries. Prefer provider identity plus stable provider activity/workout ID, with a secondary provider-user identity where collisions are possible.
@@ -1417,6 +1584,14 @@ Keep stable identity separate from transport data. A short-lived signed file URL
 
 ### Provider retry budgets
 
+Garmin re-encoded copies of retained Suunto hikes have a conflict-only, generation-pinned FIT comparison before
+queue completion. Exact source identity and timestamped GPS evidence can recognize one/two Hiking legs returned
+as one Trekking leg without changing the saved workout or its edits. Original/source/account/queue versions are
+rechecked in the completion transaction; no network work runs inside it. The read is bounded, owner-scoped and
+limited to this verified case; normal imports and other provider/type conflict guards are unchanged. See
+[verified hike copies](garmin-integration.md#verified-re-encoded-suunto-hike-copies) for evidence limits and worker-only
+deployment scope. Existing recorded-import monitoring is **covered/unchanged**; no Help, MCP or Training behavior changes.
+
 Recorded activity/route imports and delivery, Sleep/Health ingestion, Garmin Health backfill and connection-history
 recovery use `PROVIDER_MAX_RETRY_COUNT = 20` and the matching `PROVIDER_CLOUD_TASK_RETRY_CONFIG`. The seven task
 workers are `processWorkoutTask`, `processActivitySyncTask`, `processSleepSyncTask`, `processRouteSyncTask`,
@@ -1424,6 +1599,12 @@ workers are `processWorkoutTask`, `processActivitySyncTask`, `processSleepSyncTa
 Internal derived calculations, normal/heavy/route reparses and date-sensitive Training delivery retain the default
 ten-attempt policy. Training's application ledger limit remains `MAX_RETRY_COUNT = 10`; it does not inherit the
 recorded-provider budget.
+
+Garmin activity downloads use one application retry per failed request, including HTTP `400`, `429` and `5xx`,
+instead of consuming the whole budget for one response. Initial and GPX-to-FIT fallback downloads share this rule
+and propagate the actual queue transition result. Explicit terminal URL/size/HTTP `410` checks remain unchanged;
+see [Garmin download handling](garmin-integration.md#delivery-and-trust-boundary). This backend correction needs
+only `processWorkoutTask`; existing import monitoring covers it without new metrics or alert configuration.
 
 The existing 15-minute, 30-minute, one-hour, two-hour and then four-hour retry delays, concurrency, schedules, leases,
 revision checks, lifecycle/deletion fences and terminal error classifications are unchanged. Twenty task attempts
@@ -1454,9 +1635,48 @@ limit/backoff after deployment. Live tasks are not reset, and already deleted ta
 resurrected. Roll back the same endpoints to restore the previous limits; retained retries above the old limit may then
 become terminal on their next failure.
 
+### Activity delivery notifications
+
+The Activity delivery category covers explicit per-batch results from Send activities and grouped automatic activity
+send dead letters. The review offers device enablement and an unchecked notification choice; confirmation stores
+owner/origin/device/category/destination-bound consent privately. Results use committed batch state, and exhausted
+unaccepted queue failures now project into Needs action so a batch can finish. No notification claims provider success
+from an HTTP acknowledgement. Automatic successes and intermediate retries remain silent; history imports cannot
+create activity-delivery alerts. Upload authorization, retry budgets and transport are unchanged.
+Explicit Retry and Check status retire any completed notification snapshot atomically with resuming queue work,
+before asynchronous public-result projection. This prevents a stale completion alert during that projection gap.
+The [Web Push runbook](web-push-notifications.md#activity-delivery-notifications) owns the bounded grouping, category
+and device cancellation, shared delivery cap, exact runtime release/rollback commands and cost/limitations.
+Monitoring definitions are covered in the existing Web Push bundle; provider delivery monitoring is unchanged.
+Activation/readback is tracked in #1011. No Training planning or MCP surface change is involved.
+
 ### Outbound activity delivery
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.
+
+Suunto, COROS and Wahoo activity-history jobs already retain `fromHistory: true`, with or without a coordinator run.
+Their shared post-persistence handoff imports them successfully without automatic outbound admission or delivery-metadata
+writes. Ordinary feed imports, including delayed recordings and legacy rows without the marker, retain opt-in automatic
+delivery; no date cutoff is applied. A retained Wahoo history row keeps its origin across newer webhook revisions so an
+update cannot accidentally enable forwarding. Existing Suunto/COROS duplicate callbacks preserve the original row.
+Do not overwrite an existing live admission just because a history scan encounters it. Identity resolution, canonical
+event/original-file writes, user edits, Training completion and import outcomes are unchanged. Garmin uses the separate
+fixed cutoff described below; its `manual` field is not a history marker. Explicit saved/direct sends
+remain independent, including all six outbound directions from these three sources. Already queued outbound jobs are
+not cancelled or migrated. Release requires separate approval for `processWorkoutTask` and `wahooAPIWebhook`; Help is
+a separate frontend release. No Rules, indexes or data migration are needed. Monitoring is **covered/unchanged**:
+history never enters the delivery queue, while existing #829 import, #832 delivery and #847 history observations keep
+their committed-outcome, backlog/failure and unknown-telemetry meanings. See [activity delivery monitoring](activity-delivery-monitoring.md).
+
+Garmin's existing activity-history lease transaction stores a monotonic `activitySyncCutoffMs` before provider requests.
+Coordinator windows/retries reuse their run's original admission time. Ingress snapshots the policy as a queue-owned
+`suppressAutomaticActivitySync` flag for older recordings; lookup errors remain retryable, and duplicate callbacks do
+not replace existing decisions. This is a recording-date policy because Garmin's callback origin is not identified.
+Older delayed ordinary recordings still import but require explicit sending. Existing outbound work and legacy queue
+rows are unaffected; Sleep/Health history never changes this cutoff. See [Garmin history](garmin-integration.md#availability-and-history)
+for the four-function release boundary. No migration, new scheduler, queue, index, permission, MCP or Training change.
+Monitoring is **covered/unchanged**: normal import commits remain #829, actual explicit/live sends remain #832, and
+history request/retry progress remains #847; no labels, metrics or alert resources change.
 
 The callable also accepts a version 2 `preview` or `send` request with destination, selected sources, inclusive ISO date bounds, and an opaque page cursor. It scans owner events in bounded pages and returns per-source eligible/skipped counts, queued count, skip reasons, failures, and the next cursor. The browser supplies filters only; the server selects event IDs, verifies Pro access, destination connection, route gate, source metadata or trusted manual-upload origin, retained original path/generation/size/FIT format, and existing successful or live queue state. Preview does not write. Send uses the same activity-sync queue, metadata, upload adapters, outbound echo receipts, and asynchronous reconciliation as automatic delivery. An unaccepted automatic queue row for the same route and event can be replaced transactionally with a historical row and a new task generation, so a disconnected source does not park the explicit send. Provider claims, accepted upload state, successful sends, existing historical sends, and manual-reconciliation rows cannot be replaced. Repeated sends skip those pending or completed rows. The older callable request remains available for compatibility.
 
@@ -1524,7 +1744,9 @@ After scheduling, a deleted event, changed provenance or file generation, or mis
 - When FIT-file inference is known to lose canonical activity types, correct the provider result only through an explicit, documented mapping. Wahoo activity-sync delivery reads the persisted Sports Lib `Activity Types` value, maps multiple canonical types to Wahoo `MULTISPORT`, and performs an idempotent workout `PUT` containing only the documented type field after Wahoo returns a workout ID; do not overwrite the user-visible workout title. Direct Wahoo FIT delivery derives the same mapping from the server-side initial FIT parse, returns the optional mapped ID beside the provider upload ID, and keeps both only in the browser's in-memory upload row for status-only polling. The status callable must revalidate the echoed ID against the explicit numeric mapping before the type-only `PUT`. The browser can alter that ID, but authenticated Pro access, App Check, the same user's Wahoo credential, and the provider-returned workout association bound the effect to that user's own workout type. An unmapped type deliberately keeps Wahoo's inference; never default it to cycling, `OTHER`, or an approximate type. Retain the asynchronous upload ID and mapped type through every accepted-upload failure so status and the idempotent correction can be retried without repeating the FIT `POST`.
 - Classify destination failures at the provider boundary with `ProviderOperationError`. The adapter owns provider-specific HTTP, job-status, and message interpretation; shared queue workers consume only its disposition (`retryable`, `permanent`, `auth_required`, or `permission_required`) and retry mode (`resume`, `restart`, or `none`). Do not add provider message matching to a shared worker except as an explicitly temporary compatibility rule for already-deployed behavior.
 - COROS recorded-activity status `-1` with a matching upload ID and successful status-query result is a confirmed failed operation: queued delivery uses the existing bounded `restart` path, retaining the original provider account across resends. Do not reset retry counts, resend pending/unknown operations, or retry explicit unsupported-file result `5096`. Preserve the last failed upload identifiers at exhaustion. Direct manual-upload controls remain separate; see [COROS activity delivery](coros-integration.md#activity-delivery).
-- #600's COROS FIT adapter prepares valid single-session Snorkeling copies with or without recorded GPS as swimming/open-water (`5` / `18`); Sailing still requires recorded GPS for generic/generic (`0` / `0`). Separate controlled imports reached terminal success and the owner confirmed Open Water Swim / GPS Cardio with matching data; a later authorized GPS-less Snorkeling test also reached terminal status `2`, without fabricating coordinates or metrics. Direct and fresh/restarted queued uploads fingerprint the actual sent copy; retained originals and QS types remain unchanged. Already accepted uploads keep status-only reconciliation. GPS-less Sailing, mixed/malformed and unrelated files pass through unchanged, with no acceptance guarantee. Never substitute a COROS mode number for a FIT sport enum. See [category fallbacks and evidence limits](coros-integration.md#recorded-activity-category-fallbacks-600). Help discloses the mapping; #832 monitoring covers the unchanged delivery outcomes. Deployment and replay are separate approvals.
+- #600's COROS FIT adapter prepares valid single-session Snorkeling copies with or without recorded GPS as swimming/open-water (`5` / `18`); Sailing and Fishing require recorded GPS for generic/generic (`0` / `0`). A separately authorized Fishing copy also reached terminal status `2` with unchanged non-category data; app category confirmation remains separate. Diving (`53`) maps to generic/generic (`0` / `0`) with or without recorded GPS. Indoor Rowing (`4` / `14`) and single-session Multisport (`18`, sub_sport absent or `0`) also map to generic/generic, with or without GPS, after separately authorized copies reached terminal success. Ice Skating (`33`, sub_sport absent or `0`) also maps to generic/generic without requiring GPS after an authorized owner-account copy reached terminal status `2` on 2 November 2026 with all non-category fields preserved. Other fitness sub-types, conflicting explicit sub-types and genuine multi-session recordings are not converted. The tested fitness-equipment/generic (`4` / `0`) alternative failed and is not used. Controlled copies reached terminal success with depth/sensor fields preserved; COROS app category and depth display remain unverified. Separate controlled imports reached terminal success and the owner confirmed Open Water Swim / GPS Cardio with matching data; a later authorized GPS-less Snorkeling test also reached terminal status `2`, without fabricating coordinates or metrics. Direct and fresh/restarted queued uploads fingerprint the actual sent copy; retained originals and QS types remain unchanged. Already accepted uploads keep status-only reconciliation. GPS-less Sailing or Fishing, mixed/malformed and unrelated files pass through unchanged, with no acceptance guarantee. Never substitute a COROS mode number for a FIT sport enum. See [category fallbacks and evidence limits](coros-integration.md#recorded-activity-category-fallbacks-600). Help discloses the mapping; #832 monitoring covers the unchanged delivery outcomes. Deployment and replay are separate approvals.
+- COROS Send previews disclose eligible GPS Fishing → GPS Cardio and Diving, Ice Skating, Indoor Rowing and single-session Multisport → Generic with optional GPS through the existing row `warnings` field. The single FIT Session's sport/sub_sport selects these notices; original preview labels/files remain unchanged. Diving retains a depth/profile display caveat. Both saved and local-file preview paths use the same helper and current frontend renderer. These descriptions are not delivery outcomes; #832 monitoring is unchanged.
+- COROS confirmed processing status `-1` emits a privacy-safe WARNING with original FIT sport/sub_sport codes only. Fresh queued sends retain those codes in their existing guarded fingerprint write; accepted/legacy operations are never reopened for diagnostics. The recorded-delivery bundle adds one grouped per-category email warning, limited to one notification per pair per 24 hours, plus an attempt counter. The email uses documented log-extracted labels; it does not infer unsupported sports or change mappings/retries. See [sport discovery and activation boundaries](activity-delivery-monitoring.md#coros-sport-discovery-warning--1-november-2026). Help, frontend, MCP and Training contracts are unchanged.
 - COROS additionally repairs only the reproduced zero-byte Event `data` / Lap `total_cycles` definitions in an outgoing single-session activity copy with intact original CRCs and a strictly valid result. All actual native/developer data and retained originals are preserved; unknown defects and missing summaries remain untouched. Direct and fresh/restarted queue uploads fingerprint the sent copy, while accepted operations stay status-only. A synthetic controlled A/B reproduced failed versus successful COROS processing; it does not establish Walking support. See [repair boundaries](coros-integration.md#empty-fit-field-compatibility). Existing #832 metrics/dashboard/policies are covered and unchanged; no retry, lifecycle, scope, credential or new-function change. No new help/category contract is introduced. Deploy/replay still need separate approval.
 - For strictly valid sessionless activity files, COROS's same preparation boundary can separately use the shared `FitActivitySessionRepair` class. It reconstructs one evidenced Session only from contiguous same-sport laps under one complete timer in a manual Activity, with all samples inside the interval; ambiguous/multisport/inconsistent evidence passes through unchanged. Existing Sessions and retained originals are never replaced. Native/developer data stays intact apart from correcting the outgoing footer's session count. The class uses `fit-file-parser` validation/encoding and contains all added binary span work. See [missing-Session boundaries and authorized terminal-success evidence](coros-integration.md#missing-fit-session-compatibility). Other providers are not enabled automatically; Help, MCP/Training, lifecycle, retries and #832 monitoring remain unchanged. Deployment and replay need separate approval.
 - Preserve the provider phase boundary. A typed retry decision applies only while the provider request is in progress. Once the provider confirms success, a later metadata or queue write failure must not be reclassified as a provider failure. Prefer a durable acceptance receipt, DLQ record, or terminal manual-reconciliation marker before acknowledging accepted work. When a direct provider call needs an outbound-echo receipt, write it as an operation-scoped provisional claim, promote it only after the final account/lifecycle guard and immediately before provider I/O, and roll back only that claim if no request starts. Echo detection must require the promoted marker; concurrent rollback must never delete another operation's accepted receipt. Keep the terminal live marker without a TTL when work is copied to DLQ, and reject both automatic and manual re-enqueue until an operator has reconciled and explicitly cleared that marker. The DLQ audit copy may retain its normal TTL. If every Firestore persistence path is unavailable, leave the durable provider-operation claim untouched and fail the Cloud Task. A later delivery must reconcile or DLQ that stale claim without repeating the provider request. Retry exhaustion must retain the provider-specific DLQ context for diagnosis. Side effects derived from provider success, such as per-service upload counters, must use the durable queue item or provider operation ID as an idempotency record so completion retries cannot count the same upload twice. Treat a supposedly completed asynchronous response without its required provider operation ID as a terminal provider-contract failure rather than retrying the original non-idempotent request.
@@ -1717,6 +1939,22 @@ Send activities file-validation rejections are not captured in debug storage. Th
 inspection reason. These diagnostics do not include filenames, identities, headers, file contents, or raw exceptions;
 the existing request trace provides correlation. Validation behavior and client error messages stay unchanged.
 
+Send command failures emit `[ActivitySendCommand] Request rejected.` with only the allowlisted action, stage,
+callable error code, HTTP status and a fixed rejection reason (for example `invalid_date_range`,
+`preview_cursor_stale`, or `destination_account_changed`). Unrecognized messages become `unclassified`;
+unexpected exceptions become `unexpected_error`. Client rejections are WARNING and server failures ERROR.
+Correlate using the existing request trace; request values, identities, filenames, exception text and error details
+are never copied into these diagnostics. Original errors, replies, authorization and retry behavior are unchanged.
+Monitoring coverage is unchanged: the activity-delivery bundle selects `[ActivityDelivery]` events, so these
+request diagnostics do not add queue failure counts, metric labels or alerts.
+
+The shared route picker labels routes/courses separately from recorded workouts. Garmin manual route input
+rejections emit `[importRouteToGarminAPI] File rejected.` at WARNING with only HTTP 400 and the fixed reason
+`fit_not_route_course` or `invalid_route_upload`. Correlate by the platform request trace; filenames, identities,
+file contents, raw errors and error details are excluded. Logging is best effort and preserves the original response.
+Validation and provider requests are unchanged. Monitoring coverage is **unchanged**: these direct input rejections
+are outside `[RouteQueue]` worker/outcome metrics and do not add queue retries, failure pages or monitoring resources.
+
 #### Fourteen-day debug-file expiry
 
 `storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire
@@ -1869,6 +2107,22 @@ structured/native failure coverage; no monitoring resources or activation change
 ## 9. Frontend, help, public pages, and attribution
 
 The frontend should reuse the Services and provider-presentation patterns rather than create a one-off integration page.
+
+Planned-workout post-save and Today actions reuse `TrainingDeliveryButtonComponent` and the existing delivery review.
+An acknowledged AI Add keeps its saved confirmation open; manual creation and single library placements offer a
+short-lived, owner-bound Send/sync shortcut that survives editor navigation. Plan-bound workouts can open their
+parent's Plan sync settings explicitly. Opening these surfaces never grants consent or sends a workout. Failed or
+cancelled delivery leaves the authored workout saved, and provider acceptance remains separate from app/watch receipt.
+See [Training planning](training-workspace.md#generate-a-workout-from-a-calendar-day) for the detailed frontend contract.
+Daily suggestions additionally offer default-off **Send after approval** with explicit services. **Add & send**
+acknowledges the Standalone create before reusing the existing revision-bound preview/Send commands. Only clean exact
+mappings proceed automatically; losses, changed consent/connections or uncertain sends return to the shared sync review.
+Rest days send nothing. Remembered destinations are UI preferences, not provider authority or generation context, and
+add no dashboard connection reads or background generation. See
+[Pro daily suggestions](training-workspace.md#pro-daily-workout-suggestion) for approval, recovery and cache invariants.
+Monitoring review: **unchanged**. These entry points use the existing Training Delivery command, queue and status
+projections. Worker/dispatcher behavior, schedules, leases, retries, terminal states, dashboards and alert labels are
+unchanged; no operational resource activation or new provider/MCP permission is part of this UI change.
 
 ### Required product surfaces
 
@@ -2128,6 +2382,12 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 
 Use structured logs with safe identifiers and error categories. Do not put token values, authorization codes, signed URLs, file query strings, or full raw partner payloads in logs, analytics, or admin responses.
 
+Browser Sentry capture redacts OAuth `code` and `state` URL parameters at breadcrumb capture and before sending
+error or transaction envelopes, including request/query/referrer, frame and trace/span URL copies. Encoded parameter
+names and duplicates are covered. Ordinary URL parameters, application `code`/`state` fields and actual OAuth
+requests are unchanged; the existing App Check diagnostic allowlist remains in force. This applies to new captures
+after the frontend release and does not modify historical Sentry events.
+
 Outbound semantic FIT fingerprint failures and unexpected manual activity-parser failures use the shared
 `activity-parser-diagnostics` allowlist. It records a diagnostic ID (alongside the platform request trace), Sports Lib
 version, format and payload byte length, known error names/codes/literal messages, a bounded-message hash, and package
@@ -2263,6 +2523,11 @@ terminal review remain protected. See the workspace contract above. Monitoring i
 existing native queue charts, committed retry/manual-review observations and trigger error/latency diagnostics;
 the [delivery runbook](activity-delivery-monitoring.md#workspace-contention-and-initialization-retries) records the
 verification/release boundary. No new queue, lease, scheduler, metric, scope, MCP or Training change is introduced.
+
+Workspace delivery projection also skips unlinked queue events before any Firestore read, using only the event's
+ownership fields. Atomically admitted links produce their own retryable event; linked events retain fresh reads,
+deletion guards, current-state projection and cleanup retries. The same native trigger/cleanup diagnostics cover
+this read reduction, with **unchanged** monitoring. See the workspace contract for the Function-only release boundary.
 
 Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
 

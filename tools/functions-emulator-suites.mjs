@@ -4,9 +4,12 @@ import { join, resolve } from 'node:path';
 // Exact emulator files only: the ordinary Functions suite already covers mocks.
 export const EMULATOR_SUITES = {
   delivery: [
+    'src/web-push/delivery.emulator.spec.ts',
+    'src/activity-sync/wahoo-cooldown.emulator.spec.ts',
     'src/activity-send/activity-send.emulator.spec.ts',
     'src/training-plans/delivery/monitoring.emulator.spec.ts',
     'src/training-plans/delivery/delivery.emulator.spec.ts',
+    'src/training-plans/delivery/create-workout-with-delivery.emulator.spec.ts',
     'src/training-plans/delivery/garmin/worker.emulator.spec.ts',
     'src/training-plans/delivery/coros/batch-worker.emulator.spec.ts',
     'src/training-plans/delivery/coros/strength.emulator.spec.ts',
@@ -28,11 +31,13 @@ export const EMULATOR_SUITES = {
     'src/admin/handlers/training-delivery-queue.stats.emulator.spec.ts',
   ],
   'mcp-data': [
+    'src/assistant/day-workout.emulator.spec.ts',
     'src/reparse/monitoring.emulator.spec.ts',
     'src/derived-metrics/monitoring.emulator.spec.ts',
     'src/email/monitoring.emulator.spec.ts',
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
+    'src/web-push/activity.emulator.spec.ts',
     'src/coros/history-import-lease.emulator.spec.ts',
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',

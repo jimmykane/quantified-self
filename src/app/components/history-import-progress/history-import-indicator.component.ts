@@ -7,12 +7,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatBadgeModule } from '@angular/material/badge';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportPanelComponent } from './history-import-panel.component';
 
 @Component({selector: 'app-history-import-indicator', standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatDialogModule, MatBottomSheetModule, MatTooltipModule],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatDialogModule, MatBottomSheetModule, MatTooltipModule, MatBadgeModule],
   templateUrl: './history-import-indicator.component.html', styleUrl: './history-import-indicator.component.scss',
   host: {'[style.display]': 'view().items.length ? null : "none"'}})
 export class HistoryImportIndicatorComponent {
@@ -30,7 +31,7 @@ export class HistoryImportIndicatorComponent {
     const count = this.view().items.length;
     return `${this.view().label}. View history import status for ${count} ${count === 1 ? 'provider' : 'providers'}`;
   });
-  readonly icon = computed(() => this.view().items.some(item => item.kind === 'attention' || item.kind === 'unavailable') ? 'info' : this.view().items.some(item => item.kind === 'requested') ? 'schedule' : 'check_circle');
+  readonly icon = computed(() => this.view().items.some(item => item.kind === 'attention' || item.kind === 'unavailable') ? 'info' : this.view().items.some(item => item.kind === 'retrying' || item.kind === 'requested') ? 'schedule' : 'check_circle');
   constructor() { this.destroyRef.onDestroy(() => this.dismissPanel?.()); }
   open(): void {
     const owner = this.progress.owner();
@@ -39,7 +40,7 @@ export class HistoryImportIndicatorComponent {
     const data = {owner};
     const closed = () => { this.panelOpen.set(false); this.dismissPanel = null; };
     if (this.breakpoint.isMatched('(max-width: 720px)')) {
-      const ref = this.sheet.open(HistoryImportPanelComponent, {data, ariaLabel: 'History imports'});
+      const ref = this.sheet.open(HistoryImportPanelComponent, {data, ariaLabel: 'History imports', panelClass: 'qs-bottom-sheet-container'});
       this.dismissPanel = () => ref.dismiss();
       ref.afterDismissed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(closed);
       return;

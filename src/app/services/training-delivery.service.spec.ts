@@ -103,9 +103,10 @@ describe('TrainingDeliveryService boundary', () => {
   function configure() {
     const user = signal<{ uid: string } | null>({ uid: 'owner' });
     const call = vi.fn(async (_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => ({ data: {} }));
+    let mutationCounter = 0;
     TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
       { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call } },
-      { provide: BrowserCompatibilityService, useValue: {} }, { provide: AppUserService, useValue: { user } },
+      { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => `approved-send-${++mutationCounter}` } }, { provide: AppUserService, useValue: { user } },
     ] });
     return { service: TestBed.inject(TrainingDeliveryService), user, call };
   }

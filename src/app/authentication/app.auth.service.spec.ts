@@ -93,10 +93,15 @@ import { Firestore } from 'app/firebase/firestore';
 import { Analytics } from 'app/firebase/analytics';
 import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
-import { Privacy } from '@sports-alliance/sports-lib';
+import { Privacy, ServiceNames } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
 import { environment } from '../../environments/environment';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from './auth-redirect-url';
+import { AppWindowService } from '../services/app.window.service';
+import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
+import { HistoryImportProgressService } from '../services/history-import-progress.service';
+import { HISTORY_IMPORT_PROVIDERS } from '../helpers/history-import-progress.helper';
+import { MemoryStorage } from '../services/storage/memory.storage';
 
 import { signal } from '@angular/core';
 
@@ -113,6 +118,7 @@ const mockUserService = {
     profileReadState$: new BehaviorSubject<any>({ status: 'signed-out' }),
     fillMissingAppSettings: (settings: any) => settings,
     getUserByID: vi.fn(),
+    getUserMetaForService: vi.fn(),
     isPro: vi.fn(),
     hasIncompleteProfileReads: vi.fn().mockReturnValue(false),
     hasPaidAccessSignal: signal(true)
@@ -128,12 +134,14 @@ const mockLocalStorageService = {
     removeItem: vi.fn(),
     clearAllStorage: vi.fn()
 };
+const mockSessionStorage = { removeItem: vi.fn() };
 
 
 describe('AppAuthService', () => {
     let service: AppAuthService;
     let userSubject: BehaviorSubject<any>;
     let authStateSubject: BehaviorSubject<any>;
+    let storage: MemoryStorage;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -146,6 +154,8 @@ describe('AppAuthService', () => {
         mockUserService.profileReadState$.next({ status: 'signed-out' });
         mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
         mockUserService.hasPaidAccessSignal.set(true); // Default to pro for these tests unless specified
+        mockUserService.getUserMetaForService.mockReset().mockReturnValue(of(undefined));
+        storage = new MemoryStorage();
 
         TestBed.configureTestingModule({
             providers: [
@@ -156,7 +166,8 @@ describe('AppAuthService', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LocalStorageService, useValue: mockLocalStorageService },
-                { provide: APP_STORAGE, useValue: localStorage },
+                { provide: APP_STORAGE, useValue: storage },
+                { provide: AppWindowService, useValue: { windowRef: { sessionStorage: mockSessionStorage } } },
             ]
         });
         service = TestBed.inject(AppAuthService);
@@ -219,10 +230,84 @@ describe('AppAuthService', () => {
         await service.signOut();
 
         expect(signOut).toHaveBeenCalledWith(mockAuth);
+        expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY);
         expect(terminate).toHaveBeenCalledWith(mockFirestore);
         expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
         expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);
         expect(redirectSpy).toHaveBeenCalled();
+    });
+
+    it('finishes sign-out even if private session cache cleanup is blocked', async () => {
+        const redirectSpy = vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => { });
+        const { clearIndexedDbPersistence } = await import('app/firebase/firestore');
+        mockSessionStorage.removeItem.mockImplementationOnce(() => { throw Error('Storage blocked'); });
+        await service.signOut();
+        expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
+        expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);
+        expect(redirectSpy).toHaveBeenCalled();
+    });
+
+    it.each(HISTORY_IMPORT_PROVIDERS)('keeps dismissed %s results hidden after actual logout, service recreation and login', async serviceName => {
+        const projection = {runId: 'finished-run', rangePreset: '30_days', active: false, updatedAtMs: Date.now(),
+            steps: [{id: 'activities', resources: ['activities'], status: 'failed', count: 7}]};
+        const metadata = new BehaviorSubject({connectionState: 'connected', connectionHistoryImport: projection});
+        mockUserService.getUserMetaForService.mockImplementation((_user, provider) => provider === serviceName ? metadata : of(undefined));
+        const login = (uid: string) => {
+            mockAuth.currentUser = {uid}; authStateSubject.next(mockAuth.currentUser); mockUserService.user$.next({uid});
+        };
+        login('account-a');
+        const progress = TestBed.inject(HistoryImportProgressService);
+        expect(progress.dismissResult(progress.view().items[0], progress.owner())).toBe(true);
+        storage.setItem('private-activity-cache', 'private-data');
+        vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => {});
+        mockLocalStorageService.clearAllStorage.mockImplementationOnce(() => storage.clear());
+        const {signOut} = await import('app/firebase/auth');
+        vi.mocked(signOut).mockImplementationOnce(async () => {
+            mockAuth.currentUser = null; authStateSubject.next(null); mockUserService.user$.next(null);
+        });
+
+        await service.signOut();
+        expect(storage.getItem('private-activity-cache')).toBeNull();
+        expect(progress.view().items).toEqual([]);
+        // Drop the in-memory dismissal, as redirecting to Login and reloading does.
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({providers: [
+            {provide: Auth, useValue: mockAuth}, {provide: AppUserService, useValue: mockUserService},
+            {provide: APP_STORAGE, useValue: storage},
+        ]});
+        const restored = TestBed.inject(HistoryImportProgressService);
+        login('account-b'); expect(restored.view().items).toHaveLength(1);
+        login('account-a'); expect(restored.view().items).toEqual([]);
+        expect(restored.latestImports()).toHaveLength(1);
+        metadata.next({connectionState: 'connected', connectionHistoryImport: {...projection, runId: 'new-run'}});
+        expect(restored.view().items[0].runId).toBe('new-run');
+    });
+
+    it('preserves only valid history dismissal fields while purging unrelated browser data on logout', async () => {
+        const receipt = {serviceName: ServiceNames.SuuntoApp, runId: 'run', updatedAtMs: Date.now()};
+        const key = 'history-import.dismissed-result.v1.other-account.Suunto%20app';
+        storage.setItem(key, JSON.stringify({...receipt, privateData: 'must-be-purged'}));
+        storage.setItem('history-import.dismissed-result.v1.broken.Suunto%20app', '{invalid');
+        storage.setItem('history-import.dismissed-result.v1.mismatch.COROS%20API', JSON.stringify(receipt));
+        storage.setItem('private-cache', 'must-be-purged');
+        vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => {});
+        mockLocalStorageService.clearAllStorage.mockImplementationOnce(() => storage.clear());
+        await service.signOut();
+        expect(storage.length).toBe(1);
+        expect(JSON.parse(storage.getItem(key)!)).toEqual(receipt);
+    });
+
+    it.each(['getItem', 'setItem'] as const)('still clears private data and finishes logout when preference %s is blocked', async operation => {
+        const key = 'history-import.dismissed-result.v1.account-a.Suunto%20app';
+        storage.setItem(key, JSON.stringify({serviceName: ServiceNames.SuuntoApp, runId: 'run', updatedAtMs: Date.now()}));
+        storage.setItem('private-cache', 'private-data');
+        vi.spyOn(storage, operation).mockImplementation(() => { throw Error('Storage blocked'); });
+        const redirect = vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => {});
+        mockLocalStorageService.clearAllStorage.mockImplementationOnce(() => storage.clear());
+        await expect(service.signOut()).resolves.toBeUndefined();
+        expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalledOnce();
+        expect(storage.keys()).not.toContain('private-cache');
+        expect(redirect).toHaveBeenCalledOnce();
     });
 
     it('githubLogin should call signInWithProvider with GithubAuthProvider', async () => {

@@ -1,4 +1,5 @@
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from './training-plan-appearance.helper';
 
 export interface PlannedWorkoutCalendarEntry {
@@ -16,6 +17,7 @@ export interface PlannedWorkoutCalendarDayOverlay {
   overflowCount: number;
   hasSkipped: boolean;
   ariaLabel: string;
+  restDay?: { planId: string | null; planName: string; color: string };
 }
 
 export type PlannedWorkoutCalendarOverlay = Readonly<Record<string, PlannedWorkoutCalendarDayOverlay>>;
@@ -26,6 +28,7 @@ export function buildPlannedWorkoutCalendarOverlay(
   activePlanId?: string | null,
   completedWorkoutIds: readonly string[] = [],
   completionCoverageComplete = true,
+  calendarRestDays: readonly TrainingRestDayV1[] = [],
 ): PlannedWorkoutCalendarOverlay {
   const plansById = new Map(plans.map(plan => [plan.id, plan]));
   const completedWorkoutIdSet = new Set(completedWorkoutIds);
@@ -33,6 +36,19 @@ export function buildPlannedWorkoutCalendarOverlay(
     ? new Set(plans.filter(plan => plan.lifecycle === 'active').map(plan => plan.id))
     : new Set(activePlanId ? [activePlanId] : []);
   const grouped = new Map<string, PlannedWorkoutCalendarEntry[]>();
+  const restDays = new Map<string, { planId: string | null; planName: string; color: string }>();
+  for (const plan of plans) {
+    if (!activePlanIds.has(plan.id)) continue;
+    for (const date of plan.restDays ?? []) {
+      restDays.set(date, { planId: plan.id, planName: plan.name, color: trainingPlanAppearance(plan).color });
+      grouped.set(date, []);
+    }
+  }
+  for (const record of calendarRestDays) {
+    if (!record.isRestDay) continue;
+    restDays.set(record.localDate, { planId: null, planName: 'Calendar', color: STANDALONE_WORKOUT_COLOR });
+    if (!grouped.has(record.localDate)) grouped.set(record.localDate, []);
+  }
   workouts
     .filter(workout => (
       workout.lifecycle !== 'deleted'
@@ -67,6 +83,7 @@ export function buildPlannedWorkoutCalendarOverlay(
       visibleEntries[1] = otherScope;
     }
     const parts = [
+      restDays.has(date) ? restDays.get(date)!.planId ? `Planned rest day, ${restDays.get(date)!.planName}` : 'Rest day, Calendar' : '',
       plannedCount ? `${plannedCount} planned workout${plannedCount === 1 ? '' : 's'}` : '',
       skippedCount ? `${skippedCount} skipped workout${skippedCount === 1 ? '' : 's'}` : '',
       completedCount ? `${completedCount} completed workout${completedCount === 1 ? '' : 's'}, activity linked` : '',
@@ -78,6 +95,7 @@ export function buildPlannedWorkoutCalendarOverlay(
       overflowCount: Math.max(0, sorted.length - 2),
       hasSkipped: skippedCount > 0,
       ariaLabel: parts.join(', '),
+      ...(restDays.has(date) ? { restDay: restDays.get(date)! } : {}),
     } satisfies PlannedWorkoutCalendarDayOverlay];
   }));
 }

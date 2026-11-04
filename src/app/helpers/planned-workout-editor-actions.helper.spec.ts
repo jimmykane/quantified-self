@@ -5,7 +5,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { createManualWorkoutEditorStep, manualWorkoutEditorToStructure, workoutStructureToManualEditor,
   type ManualWorkoutEditorRepeat, type ManualWorkoutEditorValue } from './planned-workout-editor.helper';
 import { canDuplicateManualWorkoutEditorNode, duplicateManualWorkoutEditorNode, manualWorkoutEditorNodeCount,
-  moveManualWorkoutEditorNode } from './planned-workout-editor-actions.helper';
+  moveManualWorkoutEditorNode, changeManualWorkoutEditorStepPurpose, manualWorkoutEditorTimeContexts } from './planned-workout-editor-actions.helper';
 
 const draft = (): ManualWorkoutEditorValue => ({ title: 'Intervals', localDate: '2026-10-05', sport: ActivityTypes.Running,
   nodes: [createManualWorkoutEditorStep('warmup'), { kind: 'repeat', id: 'block', count: 4,
@@ -113,7 +113,7 @@ describe('manual workout draft ordering and duplication', () => {
       targets: [{ ...createManualWorkoutEditorTarget('power'), minimum: null, maximum: 250 }], note: 'Finish this draft',
       sourceDuration: { editorValue: 1.25, seconds: 75 } };
     const copy = duplicateManualWorkoutEditorNode(original, 'partial', ids());
-    expect(copy.nodes[1]).toEqual({ ...original.nodes[0], id: 'step-copy-1' });
+    expect(copy.nodes[1]).toEqual({ ...original.nodes[0], id: 'step-copy-1', untouchedDuration: undefined });
     if (copy.nodes[1].kind !== 'step' || original.nodes[0].kind !== 'step') throw new Error('Expected steps');
     expect(copy.nodes[1].sourceDuration).not.toBe(original.nodes[0].sourceDuration);
     expect(() => manualWorkoutEditorToStructure(copy)).toThrow();
@@ -127,5 +127,72 @@ describe('manual workout draft ordering and duplication', () => {
     expect(() => duplicateManualWorkoutEditorNode(original, 'block', () => 'work')).toThrow('unique workout step ID');
     expect(original).toEqual(draft());
     expect(duplicateManualWorkoutEditorNode(original, 'missing', ids())).toBe(original);
+  });
+});
+
+describe('Rest duration defaults and context', () => {
+  it('reuses exact previous seconds only for an untouched new timed step', () => {
+    const fresh = createManualWorkoutEditorStep('new');
+    const rest = changeManualWorkoutEditorStepPurpose(fresh, 'rest', 15.123456789);
+    expect(rest.endingValue).toBe(15.123456789 / 60);
+    expect(rest.sourceDuration?.seconds).toBe(15.123456789);
+    expect(rest.untouchedDuration).toBeUndefined();
+    expect(manualWorkoutEditorToStructure({ ...draft(), nodes: [rest] }).nodes[0])
+      .toMatchObject({ purpose: 'rest', ending: { seconds: 15.123456789 } });
+    expect(JSON.stringify(manualWorkoutEditorToStructure({ ...draft(), nodes: [rest] })))
+      .not.toMatch(/untouchedDuration|sourceDuration/);
+    expect(fresh.endingValue).toBe(10);
+  });
+
+  it.each([null, 0, NaN, Infinity])('requires an explicit first Rest duration for reference %s', reference => {
+    const rest = changeManualWorkoutEditorStepPurpose(createManualWorkoutEditorStep('new'), 'rest', reference);
+    expect(rest.endingValue).toBe(0);
+    expect(() => manualWorkoutEditorToStructure({ ...draft(), nodes: [rest] })).toThrow('positive duration');
+  });
+
+  it('does not overwrite saved, typed, duplicated, manual, distance or already selected prescriptions', () => {
+    const saved = workoutStructureToManualEditor('Saved', '2026-11-01', { version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ kind: 'step', id: 'saved', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] });
+    const duplicated = duplicateManualWorkoutEditorNode(draft(), 'warmup', ids()).nodes[1];
+    const candidates = [saved.nodes[0], duplicated,
+      { ...createManualWorkoutEditorStep('typed'), untouchedDuration: undefined },
+      { ...createManualWorkoutEditorStep('manual'), endingKind: 'manual' as const },
+      { ...createManualWorkoutEditorStep('distance'), endingKind: 'distance' as const },
+      { ...createManualWorkoutEditorStep('rest'), purpose: 'rest' as const },
+    ];
+    for (const step of candidates) {
+      if (step.kind !== 'step') throw Error('Expected step');
+      expect(changeManualWorkoutEditorStepPurpose(step, 'rest', 15).endingValue).toBe(10);
+    }
+  });
+
+  it('finds the preceding Rest across repeats, respects manual rests and omits ambiguous loop exits', () => {
+    const value = workoutStructureToManualEditor('Synthetic pyramid', '2026-11-01', { version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ kind: 'step', id: 'first', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+        { kind: 'repeat', id: 'block', count: 3, steps: [
+          { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 }, targets: [] },
+          { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 31 }, targets: [] },
+        ] },
+        { kind: 'step', id: 'manual', purpose: 'rest', ending: { kind: 'manual' }, targets: [] },
+        { kind: 'step', id: 'last', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] }] });
+    const context = manualWorkoutEditorTimeContexts(value);
+    expect(context.first.previousRestSeconds).toBeNull();
+    expect(context.first.nextStepLabel).toContain('100 m');
+    expect(context.rest).toEqual({ previousRestSeconds: 15, nextStepLabel: null });
+    expect(context.manual.previousRestSeconds).toBe(31);
+    expect(context.last.previousRestSeconds).toBeNull();
+    expect(value.nodes).toHaveLength(4);
+  });
+
+  it('formats the next step with the athlete units and keeps invalid drafts out of the summary', () => {
+    const value = workoutStructureToManualEditor('Units', '2026-11-01', { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+        { kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'distance', meters: 1609.344 }, targets: [] }] });
+    expect(manualWorkoutEditorTimeContexts(value).rest.nextStepLabel).toContain('Km');
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect(manualWorkoutEditorTimeContexts(value, units).rest.nextStepLabel).toContain('mi');
+    if (value.nodes[1].kind !== 'step') throw Error('Expected step');
+    value.nodes[1].endingValue = NaN;
+    expect(manualWorkoutEditorTimeContexts(value).rest.nextStepLabel).toBeNull();
   });
 });

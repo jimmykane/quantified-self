@@ -81,6 +81,20 @@
   </section>
   }
 
+  @if (page.sources?.length) {
+  <section class="content-section" aria-labelledby="public-seo-sources-title">
+    <div class="section-heading">
+      <p class="eyebrow">Official instructions</p>
+      <h2 id="public-seo-sources-title">Export and import help</h2>
+    </div>
+    <div class="action-row">
+      @for (source of page.sources; track source.url) {
+      <a mat-button appHapticTap [href]="source.url" target="_blank" rel="noopener noreferrer">{{ source.label }}<mat-icon iconPositionEnd>open_in_new</mat-icon></a>
+      }
+    </div>
+  </section>
+  }
+
   <section class="content-section faq-section" aria-labelledby="public-seo-faq-title">
     <div class="section-heading">
       <p class="eyebrow">FAQ</p>

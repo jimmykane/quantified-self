@@ -676,6 +676,8 @@ describe('OnboardingComponent', () => {
         { serviceName: 'Wahoo API', onboardingCompleted: true },
         { serviceName: 'COROS API', onboardingCompleted: false },
         { serviceName: 'COROS API', onboardingCompleted: true },
+        { serviceName: 'Suunto app', onboardingCompleted: false },
+        { serviceName: 'Suunto app', onboardingCompleted: true },
     ])('keeps $serviceName setup after required onboarding (previously complete: $onboardingCompleted)', async ({ serviceName, onboardingCompleted }) => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: `/services?serviceName=${encodeURIComponent(serviceName)}` });
         const returnFixture = TestBed.createComponent(OnboardingComponent);

@@ -31,6 +31,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 import equal from 'fast-deep-equal';
 import {
   SERVICE_OAUTH_COMPLETION_OUTCOMES,
+  SUUNTO_OAUTH_RESTART_REQUIRED_REASON,
   ServiceConnectionAccountProjection,
   ServiceOAuthCompletionResult,
 } from '@shared/service-connection';
@@ -144,18 +145,23 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       }),
     ).subscribe(async () => {
       if (!isCurrentView()) return;
+      // Only the main connection view owns OAuth completion. A tools dialog is
+      // a second instance of this provider and must only observe its metadata.
+      if (!this.showConnectionSummary) {
+        this.isLoading = false;
+        return;
+      }
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
-      const authorizationCode = this.route.snapshot.queryParamMap.get('code');
-      const authorizationState = this.route.snapshot.queryParamMap.get('state');
-      const hasOAuthCallback = Boolean(authorizationCode && authorizationState);
+      const hasOAuthCallback = ['code', 'state', 'error'].some(key => this.route.snapshot.queryParamMap.get(key) != null);
       if (!serviceName || serviceName !== this.serviceName) {
         this.isLoading = false;
         return;
       }
       // Some providers drop static redirect-uri query parameters after an
       // external identity-provider sign-in. A returned OAuth code and state
-      // are sufficient evidence that this is the connection callback.
+      // identify the callback. Denied/incomplete returns still need the existing
+      // validation and clean-URL failure path without a token exchange.
       if (!shouldConnect && !hasOAuthCallback) {
         this.isLoading = false;
         return;
@@ -163,9 +169,12 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       if (this.isConnecting) {
         return;
       }
+      const callbackParams = this.route.snapshot.queryParamMap;
+      const isCurrentCallback = () => ['serviceName', 'connect', 'code', 'state', 'error']
+        .every(key => this.route.snapshot.queryParamMap.get(key) === callbackParams.get(key));
       this.isConnecting = true;
       try {
-        const completion = await this.requestAndSetToken(this.route.snapshot.queryParamMap);
+        const completion = await this.requestAndSetToken(callbackParams);
         if (!isCurrentView()) return;
         if (
           completion?.connected !== true
@@ -206,9 +215,15 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
         this.hapticsService.success();
       } catch (e: any) {
         if (!isCurrentView()) return;
-        this.logger.error(e);
         const status = e?.status;
         const code = `${e?.code || ''}`;
+        if (this.serviceName === ServiceNames.SuuntoApp
+          && (code === 'functions/failed-precondition' || code === 'failed-precondition')
+          && e?.details?.reason === SUUNTO_OAUTH_RESTART_REQUIRED_REASON) {
+          this.logger.captureException(e, { level: 'warning' });
+        } else {
+          this.logger.error(e);
+        }
         const errorText = [e?.error, e?.message, e?.details]
           .filter(value => typeof value === 'string')
           .join(' ');
@@ -233,10 +248,19 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       } finally {
         if (isCurrentView()) {
           this.isLoading = false;
-          this.isConnecting = false;
-          await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
-          // Metadata may already have arrived while the OAuth action was locked.
-          if (isCurrentView()) this.onServiceDataChanged();
+          try {
+            // Live metadata must not consume this callback again before its URL is cleared.
+            // A completed callback must not replace navigation the user made in the meantime.
+            if (isCurrentCallback()) {
+              await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+            }
+          } finally {
+            if (isCurrentView()) {
+              this.isConnecting = false;
+              // Metadata may already have arrived while the OAuth action was locked.
+              this.onServiceDataChanged();
+            }
+          }
         }
       }
     });
@@ -250,6 +274,13 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   }
 
   protected onServiceDataChanged(): void {
+  }
+
+  public reviewHistoryReconnect(): void {
+    this.reconnectRequested = true;
+    if (!this.showConnectionSummary) {
+      void this.router.navigate(['/services'], {queryParams: {serviceName: this.serviceName, reconnect: '1'}});
+    }
   }
 
   protected get canConnectWithoutProAccess(): boolean {

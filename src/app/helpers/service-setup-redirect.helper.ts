@@ -1,7 +1,9 @@
+export const SUUNTO_SETUP_QUERY_PARAMS = { serviceName: 'Suunto app' } as const;
 export const WAHOO_SETUP_QUERY_PARAMS = { serviceName: 'Wahoo API' } as const;
 export const COROS_SETUP_QUERY_PARAMS = { serviceName: 'COROS API' } as const;
 
 const GUIDE_SETUP_SERVICE_NAMES: readonly string[] = [
+  SUUNTO_SETUP_QUERY_PARAMS.serviceName,
   WAHOO_SETUP_QUERY_PARAMS.serviceName,
   COROS_SETUP_QUERY_PARAMS.serviceName,
 ];

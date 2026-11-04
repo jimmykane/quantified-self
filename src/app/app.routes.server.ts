@@ -38,6 +38,10 @@ export const PUBLIC_REDIRECT_ROUTES = [
 
 export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.hub,
+  PUBLIC_GUIDE_PATHS.importStravaToSuunto,
+  PUBLIC_GUIDE_PATHS.importStravaToGarmin,
+  PUBLIC_GUIDE_PATHS.importStravaToWahoo,
+  PUBLIC_GUIDE_PATHS.importStravaToCoros,
   PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
   PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
   PUBLIC_GUIDE_PATHS.syncCorosToSuunto,

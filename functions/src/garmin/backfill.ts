@@ -70,6 +70,8 @@ class GarminHistoryImportInProgressError extends Error {
 }
 
 interface GarminHistoryServiceMeta extends UserServiceMetaInterface {
+  activitySyncCutoffMs?: number;
+  activityNotificationHistoryEndMs?: number;
   historyImportLeaseOwner?: string;
   historyImportLeaseExpiresAt?: number;
 }
@@ -237,7 +239,7 @@ async function assertGarminHistoryImportUserActive(userID: string): Promise<void
   }
 }
 
-async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string, execution?: HistoryExecution): Promise<void> {
+async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string, endMs: number, execution?: HistoryExecution): Promise<void> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
   const nowMs = Date.now();
@@ -269,9 +271,18 @@ async function acquireGarminHistoryImportLease(userID: string, leaseOwner: strin
       throw new GarminHistoryImportInProgressError();
     }
 
+    const previousCutoffMs = meta?.activitySyncCutoffMs;
     transaction.set(metaRef, {
       historyImportLeaseOwner: leaseOwner,
       historyImportLeaseExpiresAt: nowMs + HISTORY_IMPORT_LEASE_MS,
+      // Freeze coordinator retries/windows to their original run start, before any Garmin request.
+      activitySyncCutoffMs: Math.max(
+        typeof previousCutoffMs === 'number' && Number.isFinite(previousCutoffMs) ? previousCutoffMs : 0,
+        execution?.cooldownStartedAtMs ?? nowMs,
+      ),
+      // Persist before requesting files: asynchronous history callbacks share the live endpoint.
+      // Keep the bound even on partial provider failure and include future end-of-day ranges.
+      activityNotificationHistoryEndMs: Math.max(meta?.activityNotificationHistoryEndMs ?? 0, endMs),
     }, { merge: true });
   });
 }
@@ -418,7 +429,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date, execution?: HistoryExecution) {
   const leaseOwner = crypto.randomUUID();
-  await acquireGarminHistoryImportLease(userID, leaseOwner, execution);
+  await acquireGarminHistoryImportLease(userID, leaseOwner, endDate.getTime(), execution);
   let leaseCompleted = false;
   try {
     const coverage = await requestGarminBackfill(userID, startDate, endDate, execution);

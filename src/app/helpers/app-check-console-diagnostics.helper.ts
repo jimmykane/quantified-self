@@ -1,4 +1,5 @@
 import { AppCheckFailureDetails, initialAppCheckRejectionFromLog } from './app-check-error.helper';
+import { scrubSentryOAuthBreadcrumb } from './sentry-oauth-url.helper';
 
 const observers = new Set<(details: AppCheckFailureDetails) => void>();
 const APP_CHECK_CONSOLE_PREFIX = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] {2}@firebase\/app-check:$/;
@@ -9,10 +10,11 @@ export function observeInitialAppCheckRejections(observer: (details: AppCheckFai
 }
 
 /** Inspect warnings Sentry already observes; never install a global Firebase log handler. */
-export function appCheckBeforeBreadcrumb<T extends { category?: string; level?: string }>(
+export function appCheckBeforeBreadcrumb<T extends { category?: string; level?: string; data?: Record<string, unknown> }>(
   breadcrumb: T,
   hint?: { input?: unknown },
 ): T {
+  breadcrumb = scrubSentryOAuthBreadcrumb(breadcrumb);
   if (breadcrumb.category !== 'console' || breadcrumb.level !== 'warning') return breadcrumb;
   const input = hint?.input;
   if (!Array.isArray(input) || input.length !== 2

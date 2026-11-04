@@ -318,17 +318,17 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'FIT, GPX, TCX, JSON & SML Benchmark Tool Trusted by Device Reviewers',
+      title: 'Compare GPX & FIT Files',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings side by side with a benchmark tool trusted by device reviewers for repeatable GNSS, heart-rate, altitude, power, and all other device metrics.',
+      description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',
-        name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',
+        name: 'GPX & FIT File Comparison Tool',
         applicationCategory: 'HealthApplication',
         operatingSystem: 'Web',
-        description: 'Create saved benchmark comparisons from FIT, GPX, TCX, JSON, and SML workout files with GNSS, heart-rate, and altitude error metrics.',
+        description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
         url: 'https://quantified-self.io/tools/compare',
         inLanguage: 'en',
         featureList: [
@@ -484,6 +484,30 @@ const topLevelRoutes: Routes = [
       animation: 'PublicSeo',
     },
     pathMatch: 'full'
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToSuunto'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToGarmin,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToGarmin'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToWahoo,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToWahoo'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToCoros,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToCoros'),
+    data: { preload: true, animation: 'PublicSeo' },
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,

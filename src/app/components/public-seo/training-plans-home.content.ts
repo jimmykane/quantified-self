@@ -13,10 +13,10 @@ interface TrainingPlansHomeRow {
 /** Compact Training Plans discovery content rendered on the public homepage. */
 export const TRAINING_PLANS_HOME_CONTENT = {
   title: 'Plan What Comes Next',
-  intro: 'Build your next workout, save your favorites, and organize your plan into named phases. Plan for running, cycling, swimming, walking, hiking, rowing, or strength.',
+  intro: 'Build or generate your next workout, save your favorites, and organize your plan into named phases. Plan for running, cycling, swimming, walking, hiking, rowing, or strength.',
   accessNote: TRAINING_PLANS_ACCESS_NOTE,
   mcpExample: {
-    title: 'Create Today\'s Workout with Your Training Data and Notes',
+    title: 'MCP example: Create Today\'s Workout with Your Training Data and Notes',
     prompt: 'Propose one standalone workout for today using my available HRV, sleep, overnight heart rate, readiness, and recent training load. Check my Timeline notes for illness, injury, stress, travel, or vacation. Consider my usual training pattern for this day of the week, alongside recent completed activities and planned workouts, so the session fits my routine without duplicating training. Explain why it suits today, flag missing information, and show me the duration, intensity, and workout steps before adding anything. If recovery or rest is more appropriate, say so.',
   },
   preview: 'training-plans' satisfies PublicFeaturePreviewKey,

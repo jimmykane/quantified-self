@@ -1,0 +1,16 @@
+:host { display: block; min-width: 0; }
+.daily-workout-preview {
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-low);
+}
+header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+h3, header p { margin: 0; }
+h3 { font: var(--mat-sys-title-large); }
+header p, .context, small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.context { margin: 1rem 0; }
+app-compact-row p { margin: 0; }
+.review { margin-top: 1rem; }
+.review p { font: var(--mat-sys-body-medium); }
+p, small { overflow-wrap: anywhere; }

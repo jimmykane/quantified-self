@@ -68,8 +68,9 @@ import {
 } from '../../../shared/wahoo-activity-types';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
+import { getWahooRateLimitCooldownSeconds, WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
-import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
+import { prepareCOROSActivityFITUpload, readCOROSActivityFITCategory } from '../coros/activity-fit';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
@@ -131,6 +132,22 @@ function asErrorLike(error: unknown): ErrorLike {
     }
 
     return error as ErrorLike;
+}
+
+function getWahooRateLimitRetryAtMs(error: unknown): number | null {
+    const errorLike = asErrorLike(error);
+    if (errorLike.code !== 'resource-exhausted' && errorLike.statusCode !== 429) return null;
+    const details = errorLike.details as { retryAfterSeconds?: unknown } | undefined;
+    const delay = Number(isProviderOperationError(error) ? error.retryAfterSeconds : details?.retryAfterSeconds);
+    return getWahooCooldownRetryAtMs(delay);
+}
+
+function getWahooCooldownRetryAtMs(delay: number): number {
+    const delaySeconds = Number.isFinite(delay) && delay > 0
+        ? Math.min(delay, WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 5)
+        : 300;
+    // Spread the release of waiting jobs without resending accepted uploads.
+    return Date.now() + (Math.ceil(delaySeconds) + 1 + Math.floor(Math.random() * 30)) * 1000;
 }
 
 const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
@@ -578,7 +595,7 @@ async function uploadToDestination(
                     queueItem.userID,
                     queueItem.destinationUploadID,
                     queueItem.destinationProviderUserID,
-                    { queueItemRef: queueItem.ref },
+                    { queueItemRef: queueItem.ref, ...(queueItem.corosSourceFIT ? { sourceFIT: queueItem.corosSourceFIT } : {}) },
                 );
             }
             if (!fileBuffer) {
@@ -824,6 +841,7 @@ async function handlePreUploadGuardFailure(
 async function updatePreUploadQueueItemIfUserActive(
     queueItem: ActivitySyncQueueItemInterface,
     params: Pick<UpdateQueueItemIfUserActiveParams, 'phase' | 'updateData' | 'actionDescription'>,
+    options: { preserveFutureDispatchMarkers?: boolean } = {},
 ): Promise<QueueItemUserGuardedUpdateResult> {
     const updateIfCurrent = () => {
         const expectedQueueItem = { ...queueItem };
@@ -861,6 +879,10 @@ async function updatePreUploadQueueItemIfUserActive(
         || dispatchedAtMs <= 0
         || dispatchedAtMs < queueItem.dateCreated
         || dispatchedAtMs > Date.now() + 5_000
+        // Cooldown contenders must reuse even very short scheduled waits.
+        // The original task's own timestamp still permits initial dispatch
+        // recovery with the existing bounded clock-skew tolerance.
+        || (options.preserveFutureDispatchMarkers && dispatchedAtMs > Date.now() && dispatchedAtMs !== queueItem.dateCreated)
         || !isSameActivitySyncProviderState(
             { ...currentQueueItem, dispatchedToCloudTask: queueItem.dispatchedToCloudTask },
             queueItem,
@@ -877,6 +899,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer: Buffer | undefined,
     fileChanged = false,
+    corosSourceFIT?: ActivitySyncQueueItemInterface['corosSourceFIT'],
 ): Promise<boolean> {
     if (queueItem.outboundFingerprintID && !fileChanged) {
         return true;
@@ -897,6 +920,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         phase: 'before_activity_sync_outbound_fingerprint_marker',
         updateData: {
             outboundFingerprintID: fingerprints.exactFingerprintId,
+            ...(corosSourceFIT ? { corosSourceFIT } : {}),
         },
         actionDescription: 'outbound provider-echo fingerprint marker',
     });
@@ -905,6 +929,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         return false;
     }
     queueItem.outboundFingerprintID = fingerprints.exactFingerprintId;
+    if (corosSourceFIT) queueItem.corosSourceFIT = corosSourceFIT;
     return true;
 }
 
@@ -1039,8 +1064,10 @@ async function increaseActivitySyncRetryCountIfCurrent(
         recordActivityDeliveryCommit(queueItem, 'dead_lettered');
         if (manualReconciliation) recordActivityDeliveryCommit(queueItem, 'manual_reconciliation');
     } else if (result === QueueResult.RetryIncremented) {
+        const quotaWait = queueItem.destinationServiceName === ServiceNames.WahooAPI && !!retryDispatchMarkerAtMs
+            && (asErrorLike(error).code === 'resource-exhausted' || asErrorLike(error).statusCode === 429);
         recordActivityDeliveryCommit(queueItem, observedProviderPending || error instanceof ProviderOperationError && isExpectedActivityUploadPending(error) ? 'provider_pending'
-            : activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
+            : quotaWait || activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
     }
     return result;
 }
@@ -1592,6 +1619,8 @@ export async function processActivitySyncQueueItem(
     };
 
     let duringDestinationUpload = false;
+    let checkingWahooCooldown = false;
+    let sendWindowExpiresAtMs: number | undefined;
     // Observation only: Suunto retains its existing task-retry flow. Only an
     // explicit recognized provider status can suppress a failure observation;
     // unknown/malformed status and transport deadlines remain actual retries.
@@ -1632,6 +1661,7 @@ export async function processActivitySyncQueueItem(
             if (!isSendWindowOpen(operation)) return finalizeActivitySyncQueueItemIfCurrent(queueItem, {
                 resultStatus: 'skipped', skippedReason: operation?.stopped ? 'send_stopped' : 'send_source_expired',
             });
+            sendWindowExpiresAtMs = Number(operation!.expiresAt);
         }
         if (hasPersistedDestinationUpload(queueItem) && isProviderOperationInFlightLeaseActive(queueItem)) {
             throw new ProviderOperationStillInFlightError(
@@ -1679,7 +1709,9 @@ export async function processActivitySyncQueueItem(
             }
         }
 
-        await setActivitySyncProcessingMetadata(routeMeta);
+        if (queueItem.destinationServiceName !== ServiceNames.WahooAPI) {
+            await setActivitySyncProcessingMetadata(routeMeta);
+        }
 
         if (!shouldResumePersistedDestinationUpload && !(await hasProAccess(queueItem.userID))) {
             await setActivitySyncSkippedMetadata({
@@ -1834,6 +1866,47 @@ export async function processActivitySyncQueueItem(
             );
         }
 
+        if (queueItem.destinationServiceName === ServiceNames.WahooAPI) {
+            // Preserve lifecycle/uncertain-operation decisions above, but avoid
+            // source I/O, fingerprints, processing writes and provider claims
+            // when the shared application quota already prohibits the request.
+            checkingWahooCooldown = true;
+            const cooldownSeconds = await getWahooRateLimitCooldownSeconds();
+            if (cooldownSeconds > 0) {
+                if (!queueItem.ref) throw new Error('Wahoo cooldown deferral requires a queue document reference.');
+                const scheduledAtMs = Math.min(getWahooCooldownRetryAtMs(cooldownSeconds), sendWindowExpiresAtMs ?? Infinity);
+                const result = await updatePreUploadQueueItemIfUserActive(queueItem, {
+                    phase: 'before_activity_sync_wahoo_cooldown_deferral',
+                    updateData: { dispatchedToCloudTask: scheduledAtMs },
+                    actionDescription: 'Wahoo cooldown deferral',
+                }, { preserveFutureDispatchMarkers: true });
+                if (result !== QueueItemUserGuardedUpdateResult.Updated) {
+                    if (result === QueueItemUserGuardedUpdateResult.NotCurrent) {
+                        const current = (await queueItem.ref.get()).data();
+                        const savedDeadline = current?.dispatchedToCloudTask;
+                        if (typeof savedDeadline === 'number' && Number.isSafeInteger(savedDeadline)
+                            && savedDeadline > Date.now()
+                            && savedDeadline !== queueItem.dateCreated
+                            && savedDeadline <= Date.now() + (WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60) * 1000
+                            && isSameActivitySyncProviderState({ ...current, dispatchedToCloudTask: queueItem.dispatchedToCloudTask }, queueItem)) {
+                            // A concurrent waiter won. Confirm its exact task
+                            // instead of overwriting the deadline or failing an
+                            // expected duplicate; all other state fences remain.
+                            queueItem.dispatchedToCloudTask = savedDeadline;
+                            return QueueResult.ProviderQuotaDeferred;
+                        }
+                    }
+                    await handlePreUploadGuardFailure(queueItem, result);
+                    return QueueResult.AcknowledgedStale;
+                }
+                queueItem.dispatchedToCloudTask = scheduledAtMs;
+                recordActivityDeliveryCommit(queueItem, 'expected_contention');
+                return QueueResult.ProviderQuotaDeferred;
+            }
+            checkingWahooCooldown = false;
+            await setActivitySyncProcessingMetadata(routeMeta);
+        }
+
         const originalFileBuffer = shouldDownloadOriginalFileForDestination(queueItem)
             ? await downloadOriginalFile(queueItem)
             : undefined;
@@ -1852,7 +1925,9 @@ export async function processActivitySyncQueueItem(
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
         }
 
-        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer, fileBuffer !== originalFileBuffer))) {
+        const corosSourceFIT = originalFileBuffer && queueItem.destinationServiceName === ServiceNames.COROSAPI
+            && !hasPersistedDestinationUpload(queueItem) ? readCOROSActivityFITCategory(originalFileBuffer) : undefined;
+        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer, fileBuffer !== originalFileBuffer, corosSourceFIT))) {
             return QueueResult.AcknowledgedStale;
         }
 
@@ -1991,6 +2066,10 @@ export async function processActivitySyncQueueItem(
         if (error instanceof UnclaimedActivitySyncQueueItemError) {
             throw error;
         }
+
+        // A failed cooldown read/marker write is a task transport failure, not
+        // a failed upload. Leave the business retry budget and receipts intact.
+        if (checkingWahooCooldown) throw error;
 
         if (error instanceof ProviderOperationStillInFlightError) {
             logger.warn('[ActivitySync] Provider operation claim is still active; retrying without changing queue state.', {
@@ -2230,6 +2309,9 @@ export async function processActivitySyncQueueItem(
         const actionableError = providerOperationError || error;
         const normalizedError = toError(actionableError);
         const metadataError = toActivitySyncMetadataError(normalizedError);
+        const wahooRateLimitRetryAtMs = duringDestinationUpload && queueItem.destinationServiceName === ServiceNames.WahooAPI
+            ? getWahooRateLimitRetryAtMs(actionableError) : null;
+        const retryDispatchMarkerAtMs = wahooRateLimitRetryAtMs !== null ? () => wahooRateLimitRetryAtMs : undefined;
 
         if (duringDestinationUpload && isProviderOperationError(actionableError) && actionableError.disposition === 'retryable') {
             if (actionableError.retryMode === 'resume') {
@@ -2339,7 +2421,7 @@ export async function processActivitySyncQueueItem(
                 normalizedError,
                 bulkWriter,
                 actionableError.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
-                undefined,
+                retryDispatchMarkerAtMs,
                 observedProviderPending,
             );
             if (retryResult === QueueResult.MovedToDLQ) {
@@ -2348,7 +2430,7 @@ export async function processActivitySyncQueueItem(
                     error: metadataError,
                 }));
                 logProviderFailureDecision(queueItem, actionableError, 'dlq');
-            } else {
+            } else if (wahooRateLimitRetryAtMs === null) {
                 logProviderFailureDecision(queueItem, actionableError, 'retry');
             }
             return retryResult;
@@ -2365,6 +2447,8 @@ export async function processActivitySyncQueueItem(
                 queueItem,
                 normalizedError,
                 bulkWriter,
+                undefined,
+                retryDispatchMarkerAtMs,
             );
         }
 

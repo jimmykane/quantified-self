@@ -33,3 +33,6 @@
     height: 132px;
   }
 }
+
+// Full dashboard/library rendering opts in without changing Training mini-charts.
+.training-power-systems-trend-chart[data-dashboard-chart-plot] { height: 252px; }

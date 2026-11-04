@@ -1,10 +1,8 @@
-import { dashboardHealthMetric } from './dashboard-health-tile.helper';
 import {
-  TileChartSettingsInterface,
-  TileSettingsInterface,
-  TileTypes,
-} from '@sports-alliance/sports-lib';
-import {
+  DASHBOARD_CRITICAL_POWER_CHART_TYPE,
+  DASHBOARD_W_PRIME_CHART_TYPE,
+  DASHBOARD_MAXIMUM_POWER_CHART_TYPE,
+  DASHBOARD_DURABILITY_CHART_TYPE,
   DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
@@ -16,6 +14,13 @@ import {
   DASHBOARD_HRV_TREND_CHART_TYPE,
   isDashboardKpiChartType,
 } from './dashboard-special-chart-types';
+import { dashboardHealthMetric } from './dashboard-health-tile.helper';
+import {
+  TileChartSettingsInterface,
+  TileSettingsInterface,
+  TileTypes,
+} from '@sports-alliance/sports-lib';
+
 
 export type DashboardTileSectionId =
   | 'calendar'
@@ -46,6 +51,11 @@ export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
   DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id);
 
 const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
+  [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'performancePower',
+  [DASHBOARD_W_PRIME_CHART_TYPE]: 'performancePower',
+  [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'performancePower',
+  [DASHBOARD_DURABILITY_CHART_TYPE]: 'performancePower',
+
   [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'calendar',
   [DASHBOARD_FORM_CHART_TYPE]: 'trainingState',
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'performancePower',
@@ -80,6 +90,7 @@ export function resolveDashboardTileSection(tile: TileSettingsInterface | null |
   const chartTile = tile as TileChartSettingsInterface;
   const healthMetric = dashboardHealthMetric(tile);
   if (healthMetric) {
+    if (healthMetric === 'vo2_max') return 'performancePower';
     return ['sleep', 'heart_rate_variability'].includes(healthMetric)
       ? tile['healthSection'] === 'health' ? 'health' : 'trainingState'
       : 'health';

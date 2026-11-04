@@ -16,6 +16,10 @@ const SUUNTO_API = [...SUUNTO, 'SUUNTOAPP_SUBSCRIPTION_KEY'];
 const WAHOO = ['WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET'];
 
 const EXPECTED_BINDINGS: Record<string, string[]> = {
+  sendTestPushNotification: ['WEB_PUSH_VAPID_KEYPAIR'],
+  sendHistoryImportNotification: ['WEB_PUSH_VAPID_KEYPAIR'],
+  sendActivitySyncNotifications: ['WEB_PUSH_VAPID_KEYPAIR'],
+  sendActivityDeliveryNotifications: ['WEB_PUSH_VAPID_KEYPAIR'],
   createStripePortalLink: ['STRIPE_BILLING_KEY'],
   'ext-firestore-stripe-payments-createPortalLink': ['STRIPE_BILLING_KEY'],
   processStripeBillingTask: ['STRIPE_BILLING_KEY'],
@@ -25,6 +29,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   addSuuntoAppRoutesToQueue: SUUNTO_API,
   addWahooAPIHistoryToQueue: WAHOO,
   assistantChat: ['GEMINI_API_KEY', 'SUUNTOAPP_GUIDE_OWNER'],
+  generateDayWorkout: ['GEMINI_API_KEY'],
   applyAssistantTrainingProposal: ['SUUNTOAPP_GUIDE_OWNER'],
   backfillCorosAPISleep: COROS,
   backfillGarminAPIActivities: GARMIN,
@@ -74,6 +79,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   processConnectionHistoryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO],
   processWorkoutTask: [...COROS, ...GARMIN, ...SUUNTO_API, 'WAHOOAPI_ALLOWED_FILE_HOSTS'],
   previewAdminSubscriptionGift: ['STRIPE_ADMIN_BILLING_KEY'],
+  mutateTrainingSchedule: ['SUUNTOAPP_GUIDE_OWNER'],
   previewTrainingProviderDelivery: ['SUUNTOAPP_GUIDE_OWNER'],
   receiveSuunto247Data: ['SUUNTOAPP_NOTIFICATION_SECRET'],
   receiveGarminAPIHealthData: ['GARMINAPI_WEBHOOK_SECRET'],
@@ -116,6 +122,7 @@ describe('Function Secret Manager policy', () => {
       'WAHOOAPI_CLIENT_ID',
       'WAHOOAPI_CLIENT_SECRET',
       'WAHOOAPI_WEBHOOK_TOKEN',
+      'WEB_PUSH_VAPID_KEYPAIR',
     ]);
   });
 

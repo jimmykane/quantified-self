@@ -132,7 +132,7 @@ function mockPagedReads(
     sourceRecords: readonly HealthSourceRecord[],
     chunks: readonly HealthSampleChunk[] = [],
 ): void {
-    vi.mocked(getDocs).mockImplementation(async (target: unknown) => {
+    vi.mocked(getDocsFromServer).mockImplementation(async (target: unknown) => {
         const queryTarget = target as {
             collectionRef?: { path?: string[] };
             constraints?: Array<{ type?: string; value?: unknown; values?: unknown[]; field?: string; operator?: string }>;
@@ -166,9 +166,11 @@ describe('AppHealthService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(getDocsFromServer).mockReset();
+        vi.mocked(getDocs).mockResolvedValue({ docs: [] } as never);
         vi.mocked(collectionData).mockReturnValue(of([]));
         vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 0 }) } as never);
-        vi.mocked(getDocs).mockResolvedValue({ docs: [] } as never);
+        vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [] } as never);
         functions = { call: vi.fn() };
         TestBed.configureTestingModule({
             providers: [
@@ -289,6 +291,44 @@ describe('AppHealthService', () => {
         }));
 
         expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.HeartRate);
+        expect(collectionData).toHaveBeenCalledOnce();
+        expect(getDocsFromServer).not.toHaveBeenCalled();
+    });
+
+    it('waits for server-confirmed source and sample pages in a one-shot enrichment read', async () => {
+        const record = { ...healthSourceRecord(), metrics: [], metricIds: [HEALTH_METRIC_IDS.HeartRate], sampleChunkIds: ['chunk-0'] };
+        const chunk = healthSampleChunk('chunk-0', 3);
+        let finishSamples!: () => void;
+        vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [{ id: record.id, data: () => record }] } as never)
+            .mockImplementationOnce(() => new Promise(resolve => {
+                finishSamples = () => resolve({ docs: [{ id: chunk.id, data: () => chunk }] } as never);
+            }));
+        const resolved = vi.fn();
+        const read = firstValueFrom(service.watchRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-01-01', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true,
+        }, { serverRead: true })).then(value => { resolved(); return value; });
+        await Promise.resolve();
+        expect(resolved).not.toHaveBeenCalled();
+        expect(getDocsFromServer).toHaveBeenCalledTimes(2);
+        expect(collectionData).not.toHaveBeenCalled();
+        finishSamples();
+        const loaded = await read;
+        expect(loaded.sampleChunks.map(value => value.id)).toEqual(['chunk-0']);
+        expect(loaded.pageInfo.sampleAggregateComplete).toBe(true);
+        expect(getDocs).not.toHaveBeenCalled();
+    });
+
+    it.each(['source', 'samples'])('rejects a failed %s page instead of caching offline data as complete', async failedPage => {
+        if (failedPage === 'samples') {
+            const record = { ...healthSourceRecord(), metrics: [], metricIds: [HEALTH_METRIC_IDS.HeartRate], sampleChunkIds: ['chunk-0'] };
+            vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [{ id: record.id, data: () => record }] } as never);
+        }
+        vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'));
+        await expect(service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-01-01', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: true,
+        })).rejects.toThrow('offline');
+        expect(getDocs).not.toHaveBeenCalled();
+        expect(getDocsFromServer).toHaveBeenCalledTimes(failedPage === 'source' ? 1 : 2);
     });
 
     it('strictly rehydrates new-format Health scalars before projection', async () => {
@@ -412,7 +452,7 @@ describe('AppHealthService', () => {
         expect(loaded.result.conflicts).toHaveLength(1);
         expect(loaded.providers).toEqual([HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.GarminAPI]);
         expect(loaded.sampleBackedProviders).toEqual([]);
-        expect(getDocs).toHaveBeenCalledTimes(2);
+        expect(getDocsFromServer).toHaveBeenCalledTimes(2);
         expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.Steps);
         expect(where).not.toHaveBeenCalledWith('source.provider', '==', expect.anything());
     });
@@ -505,7 +545,7 @@ describe('AppHealthService', () => {
         expect(loaded.limitReached).toBe(days > 256 ? 'sample_chunks' : null);
         expect(new Set(loaded.result.observations.map(o => o.calendarDate)).size).toBe(days > 256 ? 255 : days);
         expect(loaded.result.observations).toHaveLength((days > 256 ? 255 : days) * 3);
-        const calls = vi.mocked(getDocs).mock.calls.map(([target]) => target as unknown as {
+        const calls = vi.mocked(getDocsFromServer).mock.calls.map(([target]) => target as unknown as {
             collectionRef: { path: string[] }; constraints: Array<{ type: string; field?: string; operator?: string; value: unknown }>;
         }).filter(target => target.collectionRef.path.at(-1) === 'healthSampleChunks');
         for (const call of calls) {
@@ -539,7 +579,7 @@ describe('AppHealthService', () => {
             startDate: '2026-01-01', endDate: '2026-01-14', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
         });
         expect(loaded.sampleChunkCount).toBe(0);
-        expect(getDocs).toHaveBeenCalledTimes(1);
+        expect(getDocsFromServer).toHaveBeenCalledTimes(1);
     });
 
     it('loads a 90-day app sample window through shared 31-day Firestore pages', async () => {
@@ -567,7 +607,7 @@ describe('AppHealthService', () => {
             startDate: '2026-01-01', endDate: '2026-03-31', includeSamples: true,
         });
         expect(loaded.result.sampleChunks).toHaveLength(1);
-        const chunkCalls = vi.mocked(getDocs).mock.calls.map(([target]) => target as unknown as {
+        const chunkCalls = vi.mocked(getDocsFromServer).mock.calls.map(([target]) => target as unknown as {
             collectionRef: { path: string[] };
             constraints: Array<{ field?: string; operator?: string; value: unknown }>;
         }).filter(target => target.collectionRef.path.at(-1) === 'healthSampleChunks');
@@ -700,6 +740,6 @@ describe('AppHealthService', () => {
         });
 
         expect(loaded.result.observations).toEqual([]);
-        expect(getDocs).not.toHaveBeenCalled();
+        expect(getDocsFromServer).not.toHaveBeenCalled();
     });
 });

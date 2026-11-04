@@ -16,6 +16,8 @@ import {
   parseTrainingPlanStateV1,
   parseTrainingPlanV1,
   parseTrainingPlanPhasesV1,
+  parseTrainingPlanRestDays,
+  isTrainingPlanRestDay,
   shouldCheckpointTrainingPlanRevision,
   validateTrainingPlanDateRange,
   type TrainingPlanV1,
@@ -80,6 +82,21 @@ describe('training-plan date contracts', () => {
 });
 
 describe('training-plan persisted contracts', () => {
+  it('retains explicit rest dates independently of workout counts and preserves legacy absence', () => {
+    const parsed = parseTrainingPlanV1({ ...PLAN, restDays: ['2026-09-30', '2026-09-01'] });
+    expect(parsed.restDays).toEqual(['2026-09-01', '2026-09-30']);
+    expect(parsed.workoutCount).toBe(PLAN.workoutCount);
+    expect(isTrainingPlanRestDay(parsed, '2026-09-01')).toBe(true);
+    expect(isTrainingPlanRestDay(parsed, '2026-09-02')).toBe(false);
+    expect(parseTrainingPlanV1(PLAN)).not.toHaveProperty('restDays');
+    for (const restDays of [null, ['2026-02-30'], ['2026-09-01', '2026-09-01'], ['2026-08-31'], ['2026-10-01']]) {
+      expect(() => parseTrainingPlanV1({ ...PLAN, restDays })).toThrow();
+    }
+    expect(() => parseTrainingPlanRestDays(Array(367).fill('2026-09-01'))).toThrow();
+    expect(parseMutateTrainingScheduleRequestV1({ mutationId: 'rest-days', expectedRevisions: [],
+      operation: { kind: 'set-plan-rest-days', planId: PLAN.id, restDays: [] } }).operation)
+      .toEqual({ kind: 'set-plan-rest-days', planId: PLAN.id, restDays: [] });
+  });
   it('normalizes bounded phase metadata and preserves legacy plans', () => {
     const phase = { id: 'base', name: ' Base ', startLocalDate: '2026-09-01', endLocalDate: '2026-09-10', color: 'green' };
     const phases = parseTrainingPlanPhasesV1({ version: 1, items: [

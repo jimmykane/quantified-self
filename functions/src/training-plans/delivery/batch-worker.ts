@@ -355,7 +355,7 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
     tx.set(batchRef(runtime, uid, claim.batchId), { state: batchState,
       acceptedDeliveryIds: accepted, rejectedDeliveryIds: rejected, unresolvedDeliveryIds: unresolved,
       completedAtMs: runtime.now(), updatedAtMs: runtime.now() }, { merge: true });
-    stageTrainingDeliveryReconciliation(tx, db, uid);
+    stageTrainingDeliveryReconciliation(tx, db, uid, documents.filter(doc => doc.exists).map(doc => (doc.data() as DeliveryLedgerV1).workoutId));
   });
 }
 
@@ -417,7 +417,7 @@ async function rejectBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
     }
     tx.set(batchRef(runtime, uid, claim.batchId), { state: admissionChanged ? 'superseded' : rejected ? 'rejected' : 'needs_attention',
       failureKind: failure.kind, completedAtMs: runtime.now(), updatedAtMs: runtime.now() }, { merge: true });
-    if (admissionChanged) stageTrainingDeliveryReconciliation(tx, db, uid);
+    if (admissionChanged) stageTrainingDeliveryReconciliation(tx, db, uid, documents.filter(doc => doc.exists).map(doc => (doc.data() as DeliveryLedgerV1).workoutId));
   });
   logger.warn('[TrainingDelivery]', { event: 'batch_failure', provider: claim.provider,
     category: failure.kind, batchSize: claim.operations.length, ...failure.diagnostics });

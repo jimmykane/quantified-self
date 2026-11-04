@@ -70,6 +70,23 @@ describe('Training provider delivery controls', () => {
       }] }), watchWorkoutCompletions: () => of([]) } },
     ] }).compileComponents();
   });
+  it('opens the parent plan sync settings without enabling or sending anything', async () => {
+    const plans = TestBed.inject(TrainingPlansService);
+    const schedule = { state: { revision: 3 }, plans: [{ id: 'parent', name: 'Build plan', lifecycle: 'active' }], workouts: [{
+      schemaVersion: 1, id: 'w', planId: 'parent', title: 'Morning run', revision: 2, localDate: '2026-09-10', lifecycle: 'planned',
+      createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running, nodes: [] },
+    }] };
+    vi.spyOn(plans, 'watchSchedule').mockReturnValue(of(schedule) as never);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent);
+    const open = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open').mockReturnValue({} as never);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent.includes('Plan sync settings')) as HTMLButtonElement;
+    expect(button).toBeTruthy(); button.click();
+    expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({ data: { scope: 'plan', id: 'parent', title: 'Build plan' } }));
+    expect(close).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+
   it.each(['plan', 'workout', 'history'])('renders a provider overview with destination logos in %s sync without extra reads or actions', scope => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Example' } });
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'];
@@ -127,7 +144,7 @@ describe('Training provider delivery controls', () => {
       eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: 'b'.repeat(64) });
     service.mutate.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({});
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Send a fresh Guide') as HTMLButtonElement;
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.trim() === 'Create another Guide') as HTMLButtonElement;
     expect(button).toBeDefined(); expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); await fixture.whenStable(); fixture.detectChanges();
     expect(service.mutate).not.toHaveBeenCalled();
@@ -152,7 +169,7 @@ describe('Training provider delivery controls', () => {
     TestBed.overrideProvider(TrainingWorkoutDuplicateService, { useValue: { duplicate } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send a fresh Guide')).toBe(false);
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Create another Guide')).toBe(false);
     expect(Array.from(fixture.nativeElement.querySelectorAll('button')).some((item: HTMLButtonElement) => item.textContent.trim() === 'Send to Suunto')).toBe(false);
     await fixture.componentInstance.begin(provider, 'send'); expect(service.preview).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).not.toContain('Repeat on another date');
@@ -1620,7 +1637,7 @@ describe('Training provider delivery controls', () => {
     await TestBed.inject(ApplicationRef).whenStable(); render('suunto-fresh-action'); render('suunto-fresh-action-dark');
     await ref.componentInstance.begin('suunto', 'fresh-guide');
     TestBed.inject(ApplicationRef).tick(); render('suunto-fresh-review'); render('suunto-fresh-review-dark');
-    expect(ref.componentInstance.confirmLabel()).toBe('Send a fresh Guide');
+    expect(ref.componentInstance.confirmLabel()).toBe('Create another Guide');
     expect(ref.componentInstance.canConfirm()).toBe(true);
     ref.componentInstance.phase.set('saving'); render('suunto-fresh-saving'); render('suunto-fresh-saving-dark');
     ref.componentInstance.phase.set(null); ref.close();
@@ -1630,7 +1647,7 @@ describe('Training provider delivery controls', () => {
     });
     await TestBed.inject(ApplicationRef).whenStable(); render('suunto-completed-duplicate'); render('suunto-completed-duplicate-dark');
     expect(document.body.textContent).toContain('Duplicate to…');
-    expect(Array.from(document.querySelectorAll('button')).some(item => item.textContent.trim() === 'Send a fresh Guide')).toBe(false); ref.close();
+    expect(Array.from(document.querySelectorAll('button')).some(item => item.textContent.trim() === 'Create another Guide')).toBe(false); ref.close();
     vi.mocked(TestBed.inject(TrainingPlansService).watchSchedule).mockImplementation(previousSchedule);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
       status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval',

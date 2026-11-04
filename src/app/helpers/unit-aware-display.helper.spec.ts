@@ -13,6 +13,10 @@ import {
   DataRRHeartRateAvg,
   DataRRDFAAlpha1Median,
   DataSpeedAvg,
+  DataSwimPace,
+  convertSpeedToSwimPace,
+  convertSwimPaceToSpeed,
+  convertSwimPaceToSwimPacePer100Yard,
   DataTrainingStressScore,
   DataWeight,
   DaysOfTheWeek,
@@ -28,9 +32,29 @@ import {
   getDefaultUserUnitSettings,
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayFromValue,
+  resolveUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('rounds configured CSS only after unit conversion without changing the canonical stat or ordinary pace display', () => {
+    for (const unit of [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard]) {
+      const settings = normalizeUserUnitSettings({ swimPaceUnits: [unit] });
+      const metersPace = unit === SwimPaceUnits.MinutesPer100Yard ? 114 / convertSwimPaceToSwimPacePer100Yard(1) : 114;
+      const stat = new DataSwimPace(convertSpeedToSwimPace(convertSwimPaceToSpeed(metersPace)));
+      const before = stat.getValue();
+      const ordinary = resolveUnitAwareDisplayStat(stat, settings);
+      expect(resolveUnitAwareDisplayStat(stat, settings, { roundSwimPaceSeconds: true })).toMatchObject({
+        value: '01:54', unit: unit === SwimPaceUnits.MinutesPer100Yard ? 'min/100yd' : 'min/100m',
+      });
+      expect(stat.getValue()).toBe(before);
+      expect(resolveUnitAwareDisplayStat(stat, settings)).toEqual(ordinary);
+    }
+    expect(resolveUnitAwareDisplayFromValue(DataSwimPace.type, 113.9)?.value).toBe('01:53');
+    expect(resolveUnitAwareDisplayFromValue(DataSwimPace.type, 113.9, null,
+      { roundSwimPaceSeconds: true })?.value).toBe('01:54');
+    expect(resolveUnitAwareDisplayFromValue(DataPaceAvg.type, 113.9, null,
+      { roundSwimPaceSeconds: true })?.value).toBe('01:53');
+  });
   it('renders R-R summaries through canonical classes under default and imperial preferences', () => {
     const settings = [getDefaultUserUnitSettings(), normalizeUserUnitSettings({
       distanceUnits: DistanceUnits.Miles, speedUnits: [SpeedUnits.MilesPerHour], weightUnits: WeightUnits.Pounds,

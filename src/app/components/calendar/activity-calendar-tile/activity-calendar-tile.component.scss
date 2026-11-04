@@ -147,3 +147,77 @@ app-activity-calendar-grid {
   padding-inline-end: 40px;
   margin-bottom: 4px;
 }
+
+.calendar-period-totals-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 5px 0 12px;
+  padding: 10px 0;
+  border-block: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface);
+}
+
+.calendar-period-totals-strip > div {
+  min-width: 0;
+  text-align: center;
+}
+
+.calendar-period-totals-strip dt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+}
+
+.calendar-period-totals-strip dt mat-icon {
+  flex: none;
+  font-size: 16px;
+  height: 16px;
+  width: 16px;
+}
+
+.calendar-period-totals-strip dd {
+  margin: 3px 0 0;
+  font: 600 20px/23px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.calendar-period-totals-strip small {
+  display: block;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+}
+
+@container (max-width: 480px) {
+  .calendar-period-totals-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+
+  .calendar-period-totals-strip dt {
+    gap: 3px;
+    font-size: 10px;
+  }
+
+  .calendar-period-totals-strip dt mat-icon {
+    font-size: 14px;
+    height: 14px;
+    width: 14px;
+  }
+
+  .calendar-period-totals-strip dd {
+    font-size: 19px;
+  }
+}
+
+@container (max-width: 360px) {
+  .calendar-period-totals-strip dt mat-icon {
+    display: none;
+  }
+}

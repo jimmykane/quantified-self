@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
+import { TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -387,6 +388,9 @@ function assertPrerenderedDocuments() {
     if (route === TRAINING_PLANS_ROUTE) {
       assertTrainingPlansDocument(documentRef);
     }
+    if (route === '/tools/compare') {
+      assertToolsCompareDocument(documentRef);
+    }
 
     dom.window.close();
   }
@@ -396,9 +400,33 @@ function assertPrerenderedDocuments() {
   );
 }
 
+function assertToolsCompareDocument(documentRef) {
+  const expectedTitle = `${TOOLS_COMPARE_PRERENDER_METADATA.title} - Quantified Self`;
+  for (const [label, actual, expected] of [
+    ['title', documentRef.title, expectedTitle],
+    ['H1', documentRef.querySelector('h1')?.textContent?.trim(), TOOLS_COMPARE_PRERENDER_METADATA.h1],
+    ['canonical', documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href'), 'https://quantified-self.io/tools/compare'],
+    ['description', documentRef.querySelector('meta[name="description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+    ['Open Graph title', documentRef.querySelector('meta[property="og:title"]')?.getAttribute('content'), expectedTitle],
+    ['Twitter title', documentRef.querySelector('meta[name="twitter:title"]')?.getAttribute('content'), expectedTitle],
+    ['Open Graph description', documentRef.querySelector('meta[property="og:description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+    ['Twitter description', documentRef.querySelector('meta[name="twitter:description"]')?.getAttribute('content'), TOOLS_COMPARE_PRERENDER_METADATA.description],
+  ]) {
+    if (actual !== expected) {
+      throw new Error(`Prerendered /tools/compare has unexpected ${label}.`);
+    }
+  }
+  const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  for (const copy of TOOLS_COMPARE_PRERENDER_METADATA.visibleCopy) {
+    if (!pageText.includes(copy)) {
+      throw new Error(`Prerendered /tools/compare is missing guest copy: ${copy}`);
+    }
+  }
+}
+
 function assertTrainingPlansDocument(documentRef) {
-  const expectedTitle = 'Training Plans for Running, Cycling & More - Quantified Self';
-  const expectedDescription = 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.';
+  const expectedTitle = `${TRAINING_PLANS_PRERENDER_METADATA.title} - Quantified Self`;
+  const expectedDescription = TRAINING_PLANS_PRERENDER_METADATA.description;
   const expectedCanonical = `https://quantified-self.io${TRAINING_PLANS_ROUTE}`;
   const expectedSocialImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
 
@@ -408,7 +436,7 @@ function assertTrainingPlansDocument(documentRef) {
   if (documentRef.querySelector('meta[name="description"]')?.getAttribute('content') !== expectedDescription) {
     throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected description.`);
   }
-  if (documentRef.querySelector('h1')?.textContent?.trim() !== 'Plan workouts for running, cycling, swimming and more') {
+  if (documentRef.querySelector('h1')?.textContent?.trim() !== TRAINING_PLANS_PRERENDER_METADATA.h1) {
     throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected H1.`);
   }
   if (documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href') !== expectedCanonical) {

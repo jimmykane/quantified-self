@@ -114,6 +114,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS strength / producti
       },
     };
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
+      entitlement: async () => ({ hasPro: pro }),
       transport: provider => provider === 'coros' ? syntheticTransport : null };
     await user().set({ fixture: true });
     await user().collection('trainingPlanState').doc('current').set({ schemaVersion: 1, revision: 1, activePlanId: null,

@@ -87,6 +87,7 @@ describe('Function secret deployment safety', () => {
       '.env.production',
       '.env.quantified-self-io',
       '.runtimeconfig.json',
+      '.secret.local',
       'nested/firebase_service_account.json',
       'nested/serviceAccount-production.json',
       'quantified-self-firebase-adminsdk-key.json',

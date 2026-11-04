@@ -1,6 +1,7 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { signal } from '@angular/core';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { ActivityTypes, AppThemes, DistanceUnits, type EventInterface } from '@sports-alliance/sports-lib';
 import { buildTrainingLoadPoints } from '@shared/training-load';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -22,20 +23,171 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 import { CalendarDayContextComponent } from './calendar-day-context.component';
+import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 
 function data(dateKey: string): CalendarDayDetailsData {
   const model = buildActivityCalendarViewModel([], { view: 'month', anchorDate: new Date(`${dateKey}T12:00:00`), locale: 'en-US' });
   return { day: model.months[0].days.find(day => day.dateKey === dateKey)!, userId: 'owner', locale: 'en-US' };
 }
 
+const restDayProviders = () => [
+  { provide: TrainingPlansService, useValue: { setCalendarRestDay: vi.fn() } },
+  { provide: MatSnackBar, useValue: { open: vi.fn() } },
+];
+
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
-  it.each(['preview', 'dashboard', 'day'])('opens the saved-workout library for an owned empty %s day with its calendar date and return context', async surface => {
+  async function restDaySetup() {
+    const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
+    const schedule = signal<CurrentTrainingScheduleV1>({
+      state: { schemaVersion: 1, revision: 7, activePlanId: null, currentWorkoutCount: 0, updatedAtMs: 1 },
+      plans: [], workouts: [], restDays: [],
+    });
+    const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+    const write = vi.fn(async (_uid: string, localDate: string, isRestDay: boolean, revision: number, _current: () => boolean) => {
+      const record: TrainingRestDayV1 = { schemaVersion: 1, localDate, isRestDay, revision: revision + 1 };
+      schedule.update(value => ({ ...value, restDays: [...value.restDays!.filter(item => item.localDate !== localDate), record] }));
+      return record;
+    });
+    const open = vi.fn();
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, isOwner: (uid: string) => viewer()?.uid === uid } },
+      { provide: TrainingPlansService, useValue: { setCalendarRestDay: write } },
+      { provide: MatSnackBar, useValue: { open } },
+      { provide: ViewportScroller, useValue: {} }, { provide: AppUserService, useValue: { user: viewer } },
+      { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
+      { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+      { provide: LoggerService, useValue: { error: vi.fn() } }, { provide: TrainingWorkoutDuplicateService, useValue: {} },
+      { provide: AppEventColorService, useValue: {} }, { provide: AppHapticsService, useValue: haptics },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarDayContextComponent);
+    const notice = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open').mockImplementation(open);
+    fixture.componentRef.setInput('data', { ...data('2026-10-25'), scheduleSource: schedule });
+    fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges(); await fixture.whenStable();
+    return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, write, open: notice };
+  }
+
+  it('marks and removes calendar rest without a plan, without changing schedule revisions or workouts', async () => {
+    const { fixture, component, write, haptics, schedule } = await restDaySetup();
+    const add = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
+    expect(haptics.success).not.toHaveBeenCalled(); add.click(); fixture.detectChanges(); await fixture.whenStable();
+    const mark = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Mark as rest day'))!;
+    // Optional test-data-only export of the real Material menu for light/dark, phone/desktop layout QA.
+    if (process.env.TRAINING_DELIVERY_QA_DIR) {
+      const overlay = document.querySelector('.cdk-overlay-container')!.cloneNode(true) as HTMLElement;
+      overlay.querySelectorAll('.cdk-overlay-backdrop').forEach(element => element.remove());
+      overlay.querySelectorAll('mat-icon').forEach(element => element.classList.replace('material-icons', 'material-symbols-rounded'));
+      overlay.querySelectorAll<HTMLElement>('.cdk-overlay-pane, .cdk-overlay-connected-position-bounding-box')
+        .forEach(element => { element.style.cssText = 'position:relative;inset:auto;transform:none;'; });
+      const html = '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
+        + '<link rel="stylesheet" href="styles.css">' + [...document.head.querySelectorAll('style')].map(style => style.outerHTML).join('')
+        + '<style>body{padding:16px}.cdk-overlay-container{position:relative;height:auto;width:100%}</style>'
+        + '</head><body class="app-hydrated">' + overlay.outerHTML + '</body></html>';
+      for (const dark of [false, true]) writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `calendar-rest-day${dark ? '-dark' : ''}.html`),
+        dark ? html.replace('class="app-hydrated"', 'class="app-hydrated dark-theme"') : html);
+    }
+    expect(mark).toBeDefined(); mark.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(write).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-25', true, 0, expect.any(Function));
+    expect(component.plannedRestDay()?.planId).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeTruthy();
+    expect(haptics.success).toHaveBeenCalledOnce(); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
+    await component.markRestDay(false); fixture.detectChanges();
+    expect(write).toHaveBeenLastCalledWith('owner', '2026-10-25', false, 1, expect.any(Function));
+    expect(component.plannedRestDay()).toBeNull(); expect(schedule().state.revision).toBe(7); expect(schedule().plans).toEqual([]);
+  });
+
+  it('keeps unavailable reads and other accounts from writing, while allowing dates outside any plan', async () => {
+    const { fixture, component, schedule, write, viewer } = await restDaySetup();
+    const original = schedule();
+    for (const value of [{ ...original, restDays: undefined }, { ...original, restoreUnavailable: true as const }]) {
+      schedule.set(value); fixture.detectChanges(); await component.markRestDay(); expect(write).not.toHaveBeenCalled();
+    }
+    schedule.set(original); viewer.set({ uid: 'other' }); fixture.detectChanges();
+    await component.markRestDay(); expect(write).not.toHaveBeenCalled();
+    viewer.set({ uid: 'owner' }); fixture.detectChanges(); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
+  });
+
+  it('does not remove plan rest intent when removing an overlapping calendar marker', async () => {
+    const { fixture, component, schedule, open } = await restDaySetup();
+    schedule.update(value => ({ ...value, state: { ...value.state, activePlanId: 'plan' },
+      plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-01', endLocalDate: '2026-10-31',
+        revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1, restDays: ['2026-10-25'] }],
+      restDays: [{ schemaVersion: 1, localDate: '2026-10-25', isRestDay: true, revision: 1 }] }));
+    fixture.detectChanges(); await component.markRestDay(false); fixture.detectChanges();
+    expect(component.plannedRestDay()?.planId).toBe('plan'); expect(schedule().plans[0].restDays).toEqual(['2026-10-25']);
+    expect(open).toHaveBeenCalledWith(expect.stringContaining('Your plan still marks'), 'Dismiss', { duration: 4000 });
+  });
+
+  it('retains existing workouts and reports failed writes without an optimistic marker', async () => {
+    const { fixture, component, schedule, write, haptics } = await restDaySetup();
+    const workout = { schemaVersion: 1 as const, id: 'standalone', planId: null, localDate: '2026-10-25', lifecycle: 'planned' as const,
+      title: 'Workout', structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [] }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.update(value => ({ ...value, workouts: [workout] })); fixture.detectChanges();
+    write.mockRejectedValueOnce(new Error('offline')); await component.markRestDay(); fixture.detectChanges();
+    expect(component.plannedRestDay()).toBeNull(); expect(haptics.error).toHaveBeenCalledOnce();
+    await component.markRestDay(); fixture.detectChanges(); expect(schedule().workouts).toEqual([workout]);
+    expect(component.plannedRestDay()).toBeTruthy();
+  });
+
+  it.each(['account', 'day', 'restore', 'destroy'] as const)('fences pending calendar-rest dispatch and feedback after %s changes', async change => {
+    const { fixture, component, viewer, write, haptics, open, schedule } = await restDaySetup();
+    let finish!: (value: TrainingRestDayV1) => void;
+    write.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = component.markRestDay(); fixture.detectChanges();
+    expect(component.restDaySaving()).toBe(true); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
+    const guard = write.mock.calls[0][4];
+    if (change === 'account') {
+      viewer.set({ uid: 'other' }); fixture.detectChanges(); viewer.set({ uid: 'owner' }); fixture.detectChanges();
+    } else if (change === 'day') {
+      fixture.componentRef.setInput('data', { ...data('2026-10-26'), scheduleSource: schedule }); fixture.detectChanges();
+    } else if (change === 'restore') {
+      schedule.update(value => ({ ...value, restoreUnavailable: true })); fixture.detectChanges();
+    } else fixture.destroy();
+    expect(guard()).toBe(false);
+    finish({ schemaVersion: 1, localDate: '2026-10-25', isRestDay: true, revision: 1 }); await pending;
+    if (change !== 'destroy') expect(component.restDaySaving()).toBe(false);
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled();
+  });
+
+  it('shows a rest-only day and navigates to its exact plan/date without changing the plan', async () => {
+    const viewer = signal<{ uid: string } | null>({ uid: 'owner' }); const haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]),
+      ...restDayProviders(),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false } },
+      { provide: ViewportScroller, useValue: {} }, { provide: AppUserService, useValue: { user: viewer } },
+      { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
+      { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+      { provide: LoggerService, useValue: { error: vi.fn() } },
+      { provide: TrainingWorkoutDuplicateService, useValue: {} },
+      { provide: AppEventColorService, useValue: {} }, { provide: AppHapticsService, useValue: haptics },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarDayContextComponent);
+    fixture.componentRef.setInput('data', { ...data('2026-10-25'), scheduleSource: () => ({ state: { activePlanId: 'plan' },
+      plans: [{ id: 'plan', name: 'Autumn', lifecycle: 'active', restDays: ['2026-10-25'] }] }) as never });
+    fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Rest day'); expect(haptics.selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const button = fixture.nativeElement.querySelector('[aria-label="Manage this rest day in Plans"]') as HTMLButtonElement;
+    button.click(); expect(navigate).toHaveBeenCalledWith(['/training/plans/plan', 'plan'], { queryParams: { date: '2026-10-25' } });
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    viewer.set({ uid: 'other' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeNull();
+  });
+  it.each(['preview', 'dashboard', 'calendar', 'day'].flatMap(surface =>
+    [false, true].map(hasPhase => ({ surface, hasPhase }))))(
+    'opens AI generation and the library from the $surface day menu (phase: $hasPhase)', async ({ surface, hasPhase }) => {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const haptics = { selection: vi.fn() };
+    const generationAllowed = signal(true);
+    const dayWorkouts = { canGenerate: vi.fn(() => generationAllowed()), open: vi.fn() };
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      ...restDayProviders(),
+      { provide: DayWorkoutService, useValue: dayWorkouts },
       { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
@@ -49,20 +201,29 @@ describe('CalendarDayContextComponent', () => {
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     const calendarReturn = { view: 'month' as const, anchor: '2026-10-01' };
     fixture.componentRef.setInput('data', { ...data('2026-10-25'), calendarReturn, scheduleSource: () => ({
-      state: { activePlanId: 'plan' }, plans: [{ id: 'plan', name: 'Autumn', lifecycle: 'active',
-        phases: { version: 1, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25', description: 'Phase-only day' }] } }],
+      state: { activePlanId: hasPhase ? 'plan' : null }, plans: hasPhase ? [{ id: 'plan', name: 'Autumn', lifecycle: 'active',
+        phases: { version: 1, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25', description: 'Phase-only day' }] } }] : [],
     }) as never });
     if (surface === 'dashboard') fixture.componentRef.setInput('dashboardTile', true);
     if (surface === 'day') fixture.componentRef.setInput('standaloneDayPage', true);
+    if (surface === 'calendar') fixture.componentRef.setInput('calmMonth', true);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(haptics.selection).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.textContent).toContain('Phase-only day');
-    expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(false);
-    if (surface !== 'preview') {
-      const add = [...fixture.nativeElement.querySelectorAll('button')]
-        .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
-      add.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.textContent.includes('Phase-only day')).toBe(hasPhase);
+    if (surface === 'dashboard' || surface === 'calendar') {
+      expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(!hasPhase);
     }
+    const addButton = () => [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement | undefined;
+    const openMenu = async () => {
+      expect(addButton()).toBeDefined();
+      addButton()!.click(); fixture.detectChanges(); await fixture.whenStable();
+    };
+    const generateButton = () => [...document.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('Generate with AI'));
+    await openMenu();
+    expect(dayWorkouts.canGenerate).toHaveBeenCalledWith('2026-10-25');
+    expect(generateButton()).toBeDefined();
     const library = document.querySelector('a[href="/training/plans/library?date=2026-10-25"]') as HTMLAnchorElement;
     expect(library?.textContent).toContain('Add from library');
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
@@ -71,10 +232,27 @@ describe('CalendarDayContextComponent', () => {
     library.click(); await fixture.whenStable();
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-10-25', undefined, calendarReturn);
     expect(haptics.selection).toHaveBeenCalledOnce();
+    await openMenu();
+    haptics.selection.mockClear();
+    generateButton()!.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(dayWorkouts.open).toHaveBeenCalledWith('owner', '2026-10-25', undefined);
+    expect(prepareReturn).toHaveBeenLastCalledWith('/', '2026-10-25', undefined, calendarReturn);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    generationAllowed.set(false);
+    fixture.detectChanges(); await openMenu();
+    expect(generateButton()).toBeUndefined();
+    expect(document.querySelector('a[href="/training/plans/library?date=2026-10-25"]')).not.toBeNull();
+    generationAllowed.set(true);
+    fixture.detectChanges();
+    expect(generateButton()).toBeDefined();
     viewer.set({ uid: 'other' }); fixture.detectChanges();
     expect(fixture.componentInstance.canPlan()).toBe(false);
+    expect(addButton()).toBeUndefined();
+    expect(generateButton()).toBeUndefined();
     expect(fixture.nativeElement.textContent).not.toContain('Phase-only day');
     expect(fixture.nativeElement.querySelector('a[href*="/training/plans/library"]')).toBeNull();
+    fixture.componentInstance.generateWorkout();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledOnce();
   });
   it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {
     const styles = readFileSync(resolve(process.cwd(),
@@ -95,6 +273,8 @@ describe('CalendarDayContextComponent', () => {
     const haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      ...restDayProviders(),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: AppUserService, useValue: { user: signal(null) } },
       { provide: CalendarDayHealthService, useValue: { watch: healthWatch } },
       { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
@@ -189,6 +369,8 @@ describe('CalendarDayContextComponent', () => {
     });
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      ...restDayProviders(),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch } },
@@ -337,7 +519,7 @@ describe('CalendarDayContextComponent', () => {
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.textContent).toContain('Full day');
     fixture.componentRef.setInput('calmMonth', false);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-section button')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button')).toHaveLength(3);
     fixture.componentRef.setInput('calmMonth', true);
     const emptyDay = data('2026-09-13');
     fixture.componentRef.setInput('data', {

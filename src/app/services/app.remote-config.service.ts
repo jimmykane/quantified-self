@@ -70,6 +70,11 @@ export class AppRemoteConfigService {
         return true;
     });
 
+    readonly webPushEnabled = signal(false);
+    readonly webPushHistoryEnabled = signal(false);
+    readonly webPushDeliveryEnabled = signal(false);
+    readonly webPushPublicKey = signal('');
+
     readonly isLoading = computed(() => !this._configLoaded());
 
     constructor() {
@@ -113,6 +118,17 @@ export class AppRemoteConfigService {
             // recoverable condition rather than reporting it as an application error.
             this.logger.warn('[RemoteConfig] Failed to fetch remote config; using cached/default values', err);
         } finally {
+            try {
+                this.webPushEnabled.set(getString(this.remoteConfig, 'web_push_enabled') === 'true');
+                this.webPushHistoryEnabled.set(getString(this.remoteConfig, 'web_push_history_import_enabled') === 'true');
+                this.webPushDeliveryEnabled.set(getString(this.remoteConfig, 'web_push_activity_delivery_enabled') === 'true');
+                this.webPushPublicKey.set(getString(this.remoteConfig, 'web_push_vapid_public_key') || '');
+            } catch {
+                this.webPushEnabled.set(false);
+                this.webPushHistoryEnabled.set(false);
+                this.webPushDeliveryEnabled.set(false);
+                this.webPushPublicKey.set('');
+            }
             this.updateMaintenanceState();
             this._configLoaded.set(true);
         }

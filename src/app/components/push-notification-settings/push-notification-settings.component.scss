@@ -1,0 +1,4 @@
+.notification-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.notification-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.notification-button-content mat-icon, .notification-button-content mat-spinner { width: 20px; height: 20px; flex: 0 0 20px; }
+.notification-categories { margin-top: 24px; }

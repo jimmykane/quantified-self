@@ -7,7 +7,7 @@ import {
     PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     getCloudTaskRetryBackoffSeconds,
 } from '../shared/queue-config';
-import { enqueueActivitySyncTask } from '../shared/cloud-tasks';
+import { enqueueActivitySyncTask, getActivitySyncTaskId } from '../shared/cloud-tasks';
 import { QueueResult } from '../queue-utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -16,6 +16,7 @@ import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { activityDeliveryFailureOutcome, recordActivityDeliveryAttempt, type ActivityDeliveryAttempt } from '../activity-sync/monitoring';
+import { WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
 
 interface ActivitySyncTaskPayload {
     queueItemId: string;
@@ -25,8 +26,10 @@ const MAX_RETRY_REASON_LENGTH = 300;
 const PENDING_STATUS_POLL_SCHEDULING_GRACE_MS = 5 * 1000;
 
 interface PendingProviderStatusPollOptions {
+    currentTaskId?: string;
     reschedulingExistingPoll?: boolean;
     scheduledAtMs?: number;
+    rateLimited?: boolean;
 }
 
 function hasExpectedProviderStatusPollResumeState(
@@ -65,18 +68,27 @@ function getScheduledProviderStatusPollAtMs(
     return (
         Number.isFinite(scheduledAtMs)
         && remainingDelayMs > 0
-        && remainingDelayMs <= (PROVIDER_CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1000)
+        && remainingDelayMs <= (queueItem.destinationServiceName === ServiceNames.WahooAPI
+            ? WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60
+            : PROVIDER_CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds) * 1000
     ) ? Math.floor(scheduledAtMs) : null;
 }
 
 function getScheduledExpectedProviderStatusPollAtMs(
     queueItem: ActivitySyncQueueItemInterface,
     nowMs = Date.now(),
+    currentTaskId?: string,
 ): number | null {
-    if (!hasExpectedProviderStatusPollResumeState(queueItem)) {
+    if (!hasExpectedProviderStatusPollResumeState(queueItem) && queueItem.destinationServiceName !== ServiceNames.WahooAPI) {
         return null;
     }
     const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
+    if (scheduledAtMs !== null && currentTaskId && queueItem.destinationServiceName === ServiceNames.WahooAPI) {
+        // A different delivery can safely restore even a near-due quota task.
+        // The scheduled task itself must process, never deduplicate against
+        // its own active name and acknowledge away its only remaining work.
+        return currentTaskId === getActivitySyncTaskId(queueItem.id, scheduledAtMs) ? null : scheduledAtMs;
+    }
     // A Cloud Task that is at (or very close to) its due time must perform the
     // poll. Re-enqueueing its own deterministic task name would be deduped
     // while the current task is still running.
@@ -124,12 +136,20 @@ async function enqueuePendingProviderStatusPoll(
     const pollDelaySeconds = scheduledAtMs !== null
         ? Math.max(1, Math.ceil((scheduledAtMs - nowMs) / 1000))
         : getProviderStatusPollDelaySeconds(queueItem, nowMs);
+    if (queueItem.destinationServiceName === ServiceNames.WahooAPI
+        && options.currentTaskId === getActivitySyncTaskId(queueItemId, scheduledAtMs ?? nowMs)) {
+        // A duplicate of this active task is not a durable follow-up. Retain
+        // transport recovery, including when expiry clamps the next deadline.
+        throw new Error('Wahoo activity handoff cannot acknowledge its own active task.');
+    }
     const taskEnqueued = await enqueueActivitySyncTask(
         queueItemId,
         scheduledAtMs ?? nowMs,
         pollDelaySeconds,
     );
-    logger.info(`[ActivitySyncTaskWorker] ${providerLabel} activity upload is still processing; status poll is scheduled.`, {
+    logger.info(queueItem.destinationServiceName === ServiceNames.WahooAPI
+        ? '[ActivitySyncTaskWorker] Wahoo activity work is deferred; retry is scheduled.'
+        : `[ActivitySyncTaskWorker] ${providerLabel} activity upload is still processing; status poll is scheduled.`, {
         queueItemId,
         destinationServiceName: queueItem.destinationServiceName,
         providerState: 'pending',
@@ -137,6 +157,7 @@ async function enqueuePendingProviderStatusPoll(
         pollDelaySeconds,
         retryCount: queueItem.retryCount,
         taskEnqueued,
+        ...(options.rateLimited ? { retryReason: 'rate_limit' } : {}),
         ...(options.reschedulingExistingPoll ? { reschedulingExistingPoll: true } : {}),
     });
 }
@@ -210,17 +231,18 @@ export const processActivitySyncTask = onTaskDispatched({
                 id: queueDoc.id,
                 ref: queueDoc.ref,
             }, queueItem) as ActivitySyncQueueItemInterface;
-            const scheduledProviderStatusPollAtMs = getScheduledExpectedProviderStatusPollAtMs(processingQueueItem);
+            const scheduledProviderStatusPollAtMs = getScheduledExpectedProviderStatusPollAtMs(processingQueueItem, Date.now(), request.id);
             if (scheduledProviderStatusPollAtMs !== null) {
                 // The prior worker committed the retry transition but its response
                 // may have been retried before the planned poll is due. Re-enqueue
                 // the same deterministic delayed task rather than polling the provider
                 // early and consuming another polling budget entry.
                 await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, {
+                    currentTaskId: request.id,
                     scheduledAtMs: scheduledProviderStatusPollAtMs,
                     reschedulingExistingPoll: true,
                 });
-                outcome = 'provider_pending';
+                outcome = hasExpectedProviderStatusPollResumeState(processingQueueItem) ? 'provider_pending' : 'deferred';
                 return;
             }
             const result = await processActivitySyncQueueItem(processingQueueItem);
@@ -243,8 +265,19 @@ export const processActivitySyncTask = onTaskDispatched({
                     logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                     break;
                 case QueueResult.ProviderStatusPending: {
-                    await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId);
+                    await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, { currentTaskId: request.id });
                     outcome = 'provider_pending';
+                    break;
+                }
+                case QueueResult.ProviderQuotaDeferred: {
+                    const scheduledAtMs = processingQueueItem.dispatchedToCloudTask;
+                    if (typeof scheduledAtMs !== 'number' || !Number.isSafeInteger(scheduledAtMs)
+                        || scheduledAtMs <= 0 || scheduledAtMs > Date.now() + (WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60) * 1000
+                        || processingQueueItem.destinationServiceName !== ServiceNames.WahooAPI) {
+                        throw new Error('Wahoo cooldown deferral is missing a valid delayed-task deadline.');
+                    }
+                    await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, { currentTaskId: request.id, scheduledAtMs, rateLimited: true });
+                    outcome = 'deferred';
                     break;
                 }
                 case QueueResult.MovedToDLQ:
@@ -252,6 +285,16 @@ export const processActivitySyncTask = onTaskDispatched({
                     logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                     break;
                 case QueueResult.RetryIncremented: {
+                    // A quota rejection committed a future dispatch marker. Ack
+                    // only after its delayed task is present; transport retries
+                    // will reuse that marker and deterministic task name.
+                    const scheduledAtMs = processingQueueItem.destinationServiceName === ServiceNames.WahooAPI
+                        ? getScheduledProviderStatusPollAtMs(processingQueueItem) : null;
+                    if (scheduledAtMs !== null) {
+                        await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, { currentTaskId: request.id, scheduledAtMs, rateLimited: true });
+                        outcome = 'deferred';
+                        break;
+                    }
                     outcome = 'retry';
                     committedRetry = true;
                     const retryReason = getSafeRetryReason(processingQueueItem);

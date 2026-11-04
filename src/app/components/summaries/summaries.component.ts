@@ -1,3 +1,37 @@
+import {
+  isDashboardPowerCapacityChartType,
+  isDashboardPerformanceChartType,
+  DASHBOARD_DURABILITY_CHART_TYPE,
+  isDashboardAcwrKpiChartType,
+  isDashboardActivityCalendarChartType,
+  isDashboardAerobicCapacityKpiChartType,
+  isDashboardAerobicDurabilityKpiChartType,
+  isDashboardEasyPercentKpiChartType,
+  isDashboardEfficiencyDelta4wKpiChartType,
+  isDashboardEfficiencyTrendChartType,
+  isDashboardFatigueAtlKpiChartType,
+  isDashboardFitnessCtlKpiChartType,
+  isDashboardFreshnessForecastChartType,
+  isDashboardFormChartType,
+  isDashboardFormNowKpiChartType,
+  isDashboardFormPlus7dKpiChartType,
+  isDashboardHardPercentKpiChartType,
+  isDashboardIntensityDistributionChartType,
+  isDashboardKpiChartType,
+  isDashboardMonotonyStrainKpiChartType,
+  isDashboardPowerCurveChartType,
+  isDashboardRampRateKpiChartType,
+  isDashboardRecoveryNowChartType,
+  isDashboardEventBackedSpecialChartType,
+  isDashboardSpecialChartType,
+} from '../../helpers/dashboard-special-chart-types';
+import {
+  normalizeDashboardPerformanceContext,
+  cloneDashboardChartTileDisplaySettingsForChartType,
+  normalizeDashboardChartTileDisplaySettingsForChartType,
+  normalizeDashboardFormTimelineWindow,
+} from '../../helpers/dashboard-chart-display-settings.helper';
+import type { DerivedTrainingPowerSystemsMetricPayload } from '@shared/derived-metrics';
 import type { EventRead } from '@shared/event-read';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
@@ -8,9 +42,15 @@ import type { AppDashboardHealthMetricSettings } from '../../models/app-user.int
 import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
 import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
-import { dashboardAcwrComparison } from '../../helpers/dashboard-derived-metrics.helper';
-import { dashboardBriefingSleepDuration, type DashboardBriefingLoadComparison } from '../../helpers/dashboard-daily-briefing.helper';
-import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
+import {
+  resolveDashboardFormNowContextFromPoints,
+  resolveDashboardRampRateContextFromPoints,
+} from '../../helpers/dashboard-derived-metrics.helper';
+import {
+  isDerivedMetricPendingStatus,
+  type DashboardDerivedMetricStatus,
+  resolveDerivedMetricsRefreshPhase,
+} from '../../helpers/derived-metric-status.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -40,22 +80,25 @@ import {
   OnDestroy,
   OnInit,
   SimpleChanges,
+  signal,
   viewChild,
 } from '@angular/core';
 import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
 
-import { User } from '@sports-alliance/sports-lib';
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
-import { AppThemeService } from '../../services/app.theme.service';
-import { AppThemes } from '@sports-alliance/sports-lib';
-import { LoggerService } from '../../services/logger.service';
 import {
+  User,
+  AppThemes,
   TileChartSettingsInterface,
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
   ActivityTypes,
 } from '@sports-alliance/sports-lib';
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { AppThemeService } from '../../services/app.theme.service';
+
+import { LoggerService } from '../../services/logger.service';
+
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import equal from 'fast-deep-equal';
 import type { EventStatAggregationPreferences } from '@shared/event-stat-aggregation.types';
@@ -113,38 +156,9 @@ import type {
   DashboardRampRateContext,
   DashboardTrainingCapacityContext,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import {
-  resolveDashboardFormNowContextFromPoints,
-  resolveDashboardRampRateContextFromPoints,
-} from '../../helpers/dashboard-derived-metrics.helper';
-import {
-  type DashboardDerivedMetricStatus,
-  resolveDerivedMetricsRefreshPhase,
-} from '../../helpers/derived-metric-status.helper';
-import {
-  isDashboardAcwrKpiChartType,
-  isDashboardActivityCalendarChartType,
-  isDashboardAerobicCapacityKpiChartType,
-  isDashboardAerobicDurabilityKpiChartType,
-  isDashboardEasyPercentKpiChartType,
-  isDashboardEfficiencyDelta4wKpiChartType,
-  isDashboardEfficiencyTrendChartType,
-  isDashboardFatigueAtlKpiChartType,
-  isDashboardFitnessCtlKpiChartType,
-  isDashboardFreshnessForecastChartType,
-  isDashboardFormChartType,
-  isDashboardFormNowKpiChartType,
-  isDashboardFormPlus7dKpiChartType,
-  isDashboardHardPercentKpiChartType,
-  isDashboardIntensityDistributionChartType,
-  isDashboardKpiChartType,
-  isDashboardMonotonyStrainKpiChartType,
-  isDashboardPowerCurveChartType,
-  isDashboardRampRateKpiChartType,
-  isDashboardRecoveryNowChartType,
-  isDashboardEventBackedSpecialChartType,
-  isDashboardSpecialChartType,
-} from '../../helpers/dashboard-special-chart-types';
+
+
+
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
@@ -188,11 +202,7 @@ import {
   resolveDashboardTileEventWindow,
   type DashboardTileEventNavigationDirection,
 } from '../../helpers/dashboard-tile-event-filters.helper';
-import {
-  cloneDashboardChartTileDisplaySettingsForChartType,
-  normalizeDashboardChartTileDisplaySettingsForChartType,
-  normalizeDashboardFormTimelineWindow,
-} from '../../helpers/dashboard-chart-display-settings.helper';
+
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
 import {
   formatDashboardGreeting,
@@ -396,6 +406,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly calendarSaveRequests = new Map<number, object>();
   public calendarNavigationState: { view: 'month' | '30d'; anchor: string; date: string } | null = null;
   readonly healthSavingOrders = new Set<number>();
+  readonly performanceSavingOrders = new Set<number>();
+  private readonly performanceSaveRequests = new Map<number, object>();
   readonly library = inject(DashboardChartLibraryState);
   readonly dashboardPicker = viewChild(DashboardChartLibraryComponent);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
@@ -411,8 +423,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private libraryRefresh = Promise.resolve();
   private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
-  // Temporarily unmount At a glance, including its additional data listeners.
-  public showDailyBriefing = false;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendCanNavigateNewer = false;
@@ -422,7 +432,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
+  public todayRestDate = '';
+  public dailyWorkoutSuggestionSleepRevision = 0;
+  public dailyWorkoutSuggestionSleepKey: string | null = null;
   public todayGreeting = '';
+  readonly todayDetailsExpanded = signal(true);
+  private todayDetailsOwnerUID: string | null = null;
   public isOwnerDashboard = false;
   public calendarSelectedDateKey: string | null = null;
 
@@ -479,6 +494,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedEfficiencyTrendContext: DashboardEfficiencyTrendContext | null = null;
   private derivedPowerCurvePayload: DerivedPowerCurveMetricPayload | null = null;
   private derivedTrainingCapacityContext: DashboardTrainingCapacityContext | null = null;
+  private derivedTrainingPowerSystemsPayload: DerivedTrainingPowerSystemsMetricPayload | null = null;
+  private derivedTrainingPowerSystemsStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedTrainingDurabilityPayload: DerivedTrainingDurabilityMetricPayload | null = null;
   private derivedFormStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedRecoveryNowStatus: DashboardDerivedMetricStatus = 'missing';
@@ -503,8 +520,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
   public dashboardGlanceSignals = buildDashboardGlanceSignals(
     createEmptyDashboardTodayReadinessViewModel(true), createEmptyDashboardTodayTrainingStateViewModel(), 'loading');
-  public dashboardBriefingSleepText = '';
-  public dashboardBriefingLoadComparison: DashboardBriefingLoadComparison | null = null;
   public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
@@ -569,6 +584,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.calendarSelectedDateKey = null;
       this.calendarNavigationState = null;
       this.calendarSavingOrders.clear();
+      this.performanceSavingOrders.clear();
+      this.performanceSaveRequests.clear();
       this.calendarSaveRequests.clear();
     }
     if (simpleChanges.user || simpleChanges.eventUser) {
@@ -637,6 +654,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.performanceSaveRequests.clear();
+    this.performanceSavingOrders.clear();
     this.calendarReturnSubscription?.unsubscribe();
     this.tileRebuild.dispose();
     this.librarySubscription?.unsubscribe();
@@ -680,8 +699,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private refreshTodayHeader(date: Date): void {
-    this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
+    const ownerUID = this.resolveDashboardOwnerUID();
+    if (ownerUID !== this.todayDetailsOwnerUID) {
+      this.todayDetailsOwnerUID = ownerUID;
+      this.todayDetailsExpanded.set(true);
+    }
+    this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
+    this.todayRestDate = localCalendarDate(date.getTime());
     this.todayGreeting = formatDashboardGreeting(
       date,
       (this.user as AppUserInterface | null | undefined)?.displayName,
@@ -823,6 +848,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepSessions: this.sleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
+      unitSettings: this.user?.settings?.unitSettings,
       logger: this.logger,
       startOfWeek: this.user?.settings?.unitSettings?.startOfTheWeek ?? null,
       previewMetricStatuses: {
@@ -842,6 +868,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         power_curve: this.derivedPowerCurveStatus,
         training_capacity: this.derivedTrainingCapacityStatus,
         training_durability: this.derivedTrainingDurabilityStatus,
+        training_power_systems: this.derivedTrainingPowerSystemsStatus,
       },
       derivedMetrics: {
         formPoints: this.derivedFormPoints,
@@ -860,6 +887,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         powerCurve: this.derivedPowerCurvePayload,
         trainingCapacity: this.derivedTrainingCapacityContext,
         trainingDurability: this.derivedTrainingDurabilityPayload,
+        trainingPowerSystems: this.derivedTrainingPowerSystemsPayload,
       },
     };
     this.library.invalidateUndo(this.user?.settings?.dashboardSettings);
@@ -958,6 +986,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasEfficiencyTrendChanged = !equal(this.derivedEfficiencyTrendContext, state.efficiencyTrend);
       const hasPowerCurveChanged = !equal(this.derivedPowerCurvePayload, state.powerCurve);
       const hasTrainingCapacityChanged = !equal(this.derivedTrainingCapacityContext, state.trainingCapacity);
+      const hasTrainingPowerSystemsChanged = !equal(this.derivedTrainingPowerSystemsPayload, state.trainingPowerSystems);
+      const hasTrainingPowerSystemsStatusChanged = this.derivedTrainingPowerSystemsStatus !== state.trainingPowerSystemsStatus;
       const hasTrainingDurabilityChanged = !equal(this.derivedTrainingDurabilityPayload, state.trainingDurability);
       const hasFormStatusChanged = this.derivedFormStatus !== state.formStatus;
       const hasRecoveryStatusChanged = this.derivedRecoveryNowStatus !== state.recoveryNowStatus;
@@ -990,7 +1020,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasEfficiencyTrendStatusChanged
         || hasPowerCurveStatusChanged
         || hasTrainingCapacityStatusChanged
-        || hasTrainingDurabilityStatusChanged;
+        || hasTrainingDurabilityStatusChanged
+        || hasTrainingPowerSystemsStatusChanged;
       const hasTileDataChanged = hasFormPointsChanged
         || hasRecoveryContextChanged
         || hasAcwrChanged
@@ -1006,7 +1037,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasEfficiencyTrendChanged
         || hasPowerCurveChanged
         || hasTrainingCapacityChanged
-        || hasTrainingDurabilityChanged;
+        || hasTrainingDurabilityChanged
+        || hasTrainingPowerSystemsChanged;
       if (!hasTileDataChanged && !hasBannerStateChanged && wasHydrated) {
         return;
       }
@@ -1034,6 +1066,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedPowerCurvePayload = state.powerCurve;
       this.derivedTrainingCapacityContext = state.trainingCapacity;
       this.derivedTrainingDurabilityPayload = state.trainingDurability;
+      this.derivedTrainingPowerSystemsPayload = state.trainingPowerSystems;
+      this.derivedTrainingPowerSystemsStatus = state.trainingPowerSystemsStatus;
       this.derivedFormStatus = state.formStatus;
       this.derivedRecoveryNowStatus = state.recoveryNowStatus;
       this.derivedAcwrStatus = state.acwrStatus;
@@ -1072,7 +1106,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (chartTypes.some(isDashboardAerobicCapacityKpiChartType)) {
       metricKinds.push(DERIVED_METRIC_KINDS.TrainingCapacity);
     }
-    if (chartTypes.some(isDashboardAerobicDurabilityKpiChartType)) {
+    if (chartTypes.some(isDashboardPowerCapacityChartType)) metricKinds.push(DERIVED_METRIC_KINDS.TrainingPowerSystems);
+    if (chartTypes.some(type => isDashboardAerobicDurabilityKpiChartType(type) || `${type}` === DASHBOARD_DURABILITY_CHART_TYPE)) {
       metricKinds.push(DERIVED_METRIC_KINDS.TrainingDurability);
     }
     return [...new Set(metricKinds)];
@@ -1207,6 +1242,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           return;
         }
         this.readinessSleepSessions = sessions;
+        // Stable across listener reattachment; no metric hydration or raw provider/sample data in the key.
+        this.dailyWorkoutSuggestionSleepKey = JSON.stringify(sessions.map(session =>
+          [session.id ?? null, session.source?.provider ?? null, session.startTimeMs, session.endTimeMs, session.updatedAtMs, session.isNap]).sort());
+        this.dailyWorkoutSuggestionSleepRevision++;
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
       },
@@ -1214,6 +1253,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         // A failed current read invalidates the in-memory Today evidence. Never
         // carry a previously loaded night forward as if it were still current.
         this.readinessSleepSessions = [];
+        this.dailyWorkoutSuggestionSleepKey = 'unavailable';
+        this.dailyWorkoutSuggestionSleepRevision++;
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
@@ -1229,6 +1270,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.readinessSleepListenerKey = null;
     this.readinessSleepSessions = [];
     this.readinessSleepStatus = 'loading';
+    this.dailyWorkoutSuggestionSleepKey = null;
     this.clearReadinessSleepRefreshTimer();
   }
 
@@ -1580,6 +1622,43 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.updateTileDisplaySettings(order, {
       formTimelineWindow: normalizeDashboardFormTimelineWindow(timelineWindow),
     });
+  }
+
+  public async onTilePerformanceContextChange(order: number, value: string): Promise<void> {
+    const uid = this.resolveOwnDashboardUID();
+    const context = normalizeDashboardPerformanceContext(value);
+    if (!uid || !context || this.performanceSavingOrders.has(order)) return;
+    const baseline = cloneDashboardSettings(this.user.settings.dashboardSettings);
+    const tiles = cloneDashboardSettings(baseline).tiles;
+    const tile = tiles.find(item => item.order === order) as AppDashboardChartTileSettingsInterface;
+    if (!tile || !isDashboardPerformanceChartType(tile.chartType) || tile.displaySettings?.performanceContext === context) return;
+    tile.displaySettings = { ...tile.displaySettings, performanceContext: context };
+    const request = {};
+    this.performanceSavingOrders.add(order);
+    this.performanceSaveRequests.set(order, request);
+    this.changeDetector.markForCheck();
+    let saved = false;
+    try {
+      await this.configuration.save(uid, baseline, { tiles });
+      saved = true;
+      if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
+      this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
+      await this.rebuildTilesFromCurrentState();
+      if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
+      this.healthHaptics.success();
+    } catch (error) {
+      if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
+      if (saved) this.logger.error('[SummariesComponent] Could not refresh the saved performance chart context.', error);
+      this.healthHaptics.error();
+      this.healthSnack.open(saved ? 'Chart context saved, but the chart could not refresh. Reload the dashboard to see it.'
+        : error instanceof Error ? error.message : 'Could not save chart context.', 'Dismiss', { duration: 6000 });
+    } finally {
+      if (this.performanceSaveRequests.get(order) === request) {
+        this.performanceSaveRequests.delete(order);
+        this.performanceSavingOrders.delete(order);
+        this.changeDetector.markForCheck();
+      }
+    }
   }
 
   public async onTilePowerCurveCompareModeChange(
@@ -1950,7 +2029,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return isDashboardFormChartType(chartType)
       || isDashboardIntensityDistributionChartType(chartType)
       || isDashboardEfficiencyTrendChartType(chartType)
-      || isDashboardPowerCurveChartType(chartType);
+      || isDashboardPowerCurveChartType(chartType)
+      || isDashboardPerformanceChartType(chartType);
   }
 
   private cloneDashboardTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {
@@ -2048,6 +2128,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedPowerCurvePayload = null;
     this.derivedTrainingCapacityContext = null;
     this.derivedTrainingDurabilityPayload = null;
+    this.derivedTrainingPowerSystemsPayload = null;
+    this.derivedTrainingPowerSystemsStatus = 'missing';
     this.derivedFormStatus = 'missing';
     this.derivedRecoveryNowStatus = 'missing';
     this.derivedAcwrStatus = 'missing';
@@ -2065,8 +2147,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedTrainingCapacityStatus = 'missing';
     this.derivedTrainingDurabilityStatus = 'missing';
     this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
-    this.dashboardBriefingSleepText = '';
-    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
     this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, 'loading');
     this.refreshDerivedMetricsBannerState();
@@ -2105,9 +2185,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     const sleepStatus = buildDashboardTodaySleepStatus(context?.latestSleepAtMs, { nowMs, locale: this.locale });
     const awaitingSleep = !warningText && sleepStatus.awaitingSleep;
-    if (!awaitingSleep && !warningText) {
-      this.dashboardBriefingSleepText = dashboardBriefingSleepDuration(sleepTrend.points, context?.latestSleepAtMs, this.user?.settings?.unitSettings);
-    }
     const recovery = buildDashboardRecoveryPresentation(
       this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
       locale: this.locale,
@@ -2233,8 +2310,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private refreshDashboardTodaySignals(): void {
-    this.dashboardBriefingSleepText = '';
-    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
     this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
     const uid = `${this.user?.uid || ''}`.trim();
@@ -2243,12 +2318,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const loadAvailability = !loadHydrated ? 'loading' : this.dashboardTodayTrainingState.scalePosition !== null ? 'available'
       : loadStatuses.includes('failed') ? 'unavailable' : loadStatuses.some(isDerivedMetricPendingStatus) ? 'loading' : 'insufficient';
     this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, loadAvailability);
-    const now = new Date();
-    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    if (loadHydrated && this.derivedAcwrStatus === 'ready' && this.derivedAcwrContext?.latestDayMs === todayUtc) {
-      const direction = dashboardAcwrComparison(this.derivedAcwrContext.ratio);
-      this.dashboardBriefingLoadComparison = direction ? { direction, utcDayMs: this.derivedAcwrContext.latestDayMs } : null;
-    }
   }
 
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {
@@ -2876,7 +2945,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingSummary: null,
       trainingBuildComparison: null,
       trainingCapacity: this.derivedTrainingCapacityContext,
-      trainingPowerSystems: null,
+      trainingPowerSystems: this.derivedTrainingPowerSystemsPayload,
       trainingExplanation: null,
       trainingDurability: this.derivedTrainingDurabilityPayload,
       trainingReadiness: null,
@@ -2899,7 +2968,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingSummaryStatus: 'missing',
       trainingBuildComparisonStatus: 'missing',
       trainingCapacityStatus: this.derivedTrainingCapacityStatus,
-      trainingPowerSystemsStatus: 'missing',
+      trainingPowerSystemsStatus: this.derivedTrainingPowerSystemsStatus,
       trainingExplanationStatus: 'missing',
       trainingDurabilityStatus: this.derivedTrainingDurabilityStatus,
       trainingReadinessStatus: 'missing',
@@ -3180,7 +3249,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       : null;
   }
 
+  getPerformanceStatusForTile(tile: DashboardTileViewModel): DashboardDerivedMetricStatus | null {
+    return this.resolveDerivedStatusForChartType(tile['chartType']);
+  }
+
   private resolveDerivedStatusForChartType(chartType: unknown): DashboardDerivedMetricStatus | null {
+    if (isDashboardPowerCapacityChartType(chartType)) return this.derivedTrainingPowerSystemsStatus;
+    if (chartType === DASHBOARD_DURABILITY_CHART_TYPE) return this.derivedTrainingDurabilityStatus;
     if (isDashboardFormChartType(chartType)) {
       return this.derivedFormStatus;
     }

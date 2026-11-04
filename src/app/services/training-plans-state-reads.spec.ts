@@ -1,3 +1,5 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { TrainingRestDaysService } from './training-rest-days.service';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { Firestore, collectionData, docData, getDoc as getCachedDoc } from 'app/firebase/firestore';
@@ -34,26 +36,48 @@ describe('current Training schedule-state reads', () => {
     vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? availability : stateSignals);
     vi.mocked(collectionData).mockReturnValue(of([]));
     vi.mocked(getDoc).mockImplementation(async () => ({ data: () => serverState }) as Awaited<ReturnType<typeof getDoc>>);
-    TestBed.configureTestingModule({ providers: [TrainingPlansService,
-      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: {} },
+    TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: TrainingRestDaysService, useValue: { watchRange: () => of([]), changes$: of() } },
+      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call: vi.fn().mockResolvedValue({ data: { deliveryOutcomes: [] } }) } },
       { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);
   });
 
+  it('sends approved destinations with creation in one existing callable, leaving the base request untouched', async () => {
+    const request = { mutationId: 'approval', expectedRevisions: [{ scope: 'state' as const, id: 'current' as const, revision: 0 }],
+      operation: { kind: 'create-workout' as const, workoutId: 'w', planId: null, localDate: '2026-11-02', title: 'Easy run',
+        confirmPlanRangeExtension: false, structure: { version: 1 as const, sport: ActivityTypes.Running,
+          nodes: [{ kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 600 }, targets: [] }] } } };
+    const delivery = { providers: ['garmin' as const], timeZone: 'UTC' }, current = () => true;
+    expect(await service.mutateWithDelivery(request, delivery, current)).toEqual({ deliveryOutcomes: [] });
+    expect(TestBed.inject(AppFunctionsService).call).toHaveBeenCalledExactlyOnceWith('mutateTrainingSchedule',
+      { ...request, deliveryAfterCreate: delivery }, { canExecute: current });
+    expect(request).not.toHaveProperty('deliveryAfterCreate');
+  });
+
   it('verifies an incorrect missing watch through the same app before publishing any revision', async () => {
+    const revisions: unknown[] = [];
+    const revisionSubscription = service.stateRevisionChanges$.subscribe(value => revisions.push(value));
+    expect(service.lastVerifiedStateRevision('owner')).toBeUndefined();
+    expect(getDoc).not.toHaveBeenCalled();
     const observed: CurrentTrainingScheduleV1[] = [];
     const subscription = service.watchSchedule('owner').subscribe(value => observed.push(value));
     availability.next(undefined); stateSignals.next(undefined);
     expect(observed).toEqual([]);
     await vi.waitFor(() => expect(observed).toHaveLength(1));
     expect(observed[0].state).toEqual(state);
+    expect(revisions).toEqual([{ uid: 'owner', revision: 253 }]);
     expect(getFirestore).toHaveBeenCalledWith(app);
     expect(getDoc).toHaveBeenCalledWith({ path: 'users/owner/trainingPlanState/current' });
     expect(docData).toHaveBeenCalledWith({ path: 'users/owner/trainingPlanState/current' }, { waitForServer: true });
     serverState = { ...state, revision: 254 }; stateSignals.next(undefined);
     await vi.waitFor(() => expect(observed[1]?.state.revision).toBe(254));
     expect(getCachedDoc).not.toHaveBeenCalled();
-    subscription.unsubscribe();
+    expect(revisions).toEqual([{ uid: 'owner', revision: 253 }, { uid: 'owner', revision: 254 }]);
+    subscription.unsubscribe(); revisionSubscription.unsubscribe();
+    const reads = vi.mocked(getDoc).mock.calls.length;
+    expect(service.lastVerifiedStateRevision('owner')).toBe(254);
+    expect(service.lastVerifiedStateRevision('other')).toBeUndefined();
+    expect(getDoc).toHaveBeenCalledTimes(reads);
   });
 
   it('shares the live owner stream instead of adding one server verification per consumer', async () => {

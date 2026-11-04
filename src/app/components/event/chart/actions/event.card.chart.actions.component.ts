@@ -39,6 +39,9 @@ export class EventCardChartActionsComponent {
     this.gapLimitInvalid.set(false);
   }
   get lineContinuity(): EventLineContinuitySettings { return this.lineSettings; }
+  get lineContinuityLabel(): string {
+    return EVENT_LINE_CONTINUITY_OPTIONS.find(option => option.value === this.lineSettings.mode)!.label;
+  }
   @Input() canChangeLineContinuity = false;
   @Input() isSavingLineContinuity = false;
   @Output() lineContinuityChange = new EventEmitter<EventLineContinuitySettings>();

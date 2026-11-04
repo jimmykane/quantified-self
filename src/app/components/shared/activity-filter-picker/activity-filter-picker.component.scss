@@ -1,10 +1,15 @@
-:host { display: block; min-width: 0; }
+@use '../../../../styles/table-filters' as filters;
 
-.activity-picker-field {
+:host { display: block; min-width: 0; }
+:host(.is-text-button) { max-width: 100%; }
+.activity-picker-text-trigger { @include filters.text-button; }
+
+.activity-picker-field { width: 100%; }
+
+.activity-picker-field--filter {
   --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
   --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
   --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
-  width: 100%;
 }
 
 .activity-picker-field input { cursor: pointer; }

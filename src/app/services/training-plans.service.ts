@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError, timeout } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, pairwise, retry, Subject, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -39,6 +39,7 @@ import {
   type TrainingScheduleHistoryResponseV1,
   type TrainingScheduleRestorePreviewV1,
 } from '@shared/training-plans';
+import type { CreatedWorkoutDeliveryRequestV1, TrainingScheduleSaveRequestV1, TrainingScheduleSaveResponseV1 } from '@shared/training-workout-delivery-save';
 import { AppFunctionsService } from './app.functions.service';
 import {
   STRENGTH_DETAILS_COLLECTION_ID,
@@ -47,6 +48,8 @@ import {
   type StrengthWorkoutDetailsV1,
 } from '@shared/strength-workout';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { TrainingRestDaysService } from './training-rest-days.service';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import {
   TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
   parseTrainingWorkoutCompletionV1,
@@ -61,6 +64,8 @@ export interface CurrentTrainingScheduleV1 {
   restoreUnavailable?: true;
   /** Calendar-only bounded-read coverage; never persisted or exposed through MCP. */
   workoutsComplete?: boolean;
+  /** Complete bounded Calendar intent, including retained false revisions. Never part of plan history. */
+  restDays?: TrainingRestDayV1[];
 }
 
 export interface DeletedTrainingWorkoutsPageV1 {
@@ -102,11 +107,65 @@ export function selectCalendarVisibleScheduledWorkouts(
 
 @Injectable({ providedIn: 'root' })
 export class TrainingPlansService {
+  private readonly stateRevisionChanges = new Subject<{ uid: string; revision: number | null }>();
+  readonly stateRevisionChanges$ = this.stateRevisionChanges.asObservable();
+  private readonly verifiedStateRevisions = new Map<string, number | null>();
+  /** Last independently verified revision only; this never starts a read or supplies mutation authority. */
+  lastVerifiedStateRevision(uid: string): number | null | undefined { return this.verifiedStateRevisions.get(uid); }
   private readonly firestore = inject(Firestore);
+  private readonly restDays = inject(TrainingRestDaysService);
+  readonly calendarRestDayChanges$ = this.restDays.changes$;
+  watchCalendarRestDay(uid: string, localDate: string): Observable<TrainingRestDayV1 | null> { return this.restDays.watchDay(uid, localDate); }
+  lastCalendarRestDayRevision(uid: string, localDate: string): number | undefined { return this.restDays.lastRevision(uid, localDate); }
+  setCalendarRestDay(uid: string, localDate: string, isRestDay: boolean, expectedRevision: number, current: () => boolean): Promise<TrainingRestDayV1 | null> {
+    return this.restDays.setDay(uid, localDate, isRestDay, expectedRevision, current);
+  }
   private readonly functions = inject(AppFunctionsService);
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
   private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
+  private readonly activePlanStreams = new Map<string, Observable<TrainingPlanV1 | null>>();
+
+  /** Small shared Today context: no workout collection, history or provider reads. */
+  watchActivePlan(userId: string): Observable<TrainingPlanV1 | null> {
+    if (!userId) return of(null);
+    const existing = this.activePlanStreams.get(userId);
+    if (existing) return existing;
+    const availability = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const stream = docData(availability, { waitForServer: true }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      switchMap(lock => lock !== undefined ? of(null) : this.watchVerifiedCurrentState(userId, { withholdReadFailures: true }).pipe(
+        map(value => {
+          if (value === undefined || value === null) return null;
+          try { return parseTrainingPlanStateV1(value).activePlanId; }
+          catch { return null; } // Invalid state cannot establish rest intent, but a later revision can recover.
+        }),
+        startWith(null),
+        pairwise(),
+        switchMap(([previousId, id]) => {
+          if (!id) return of(null);
+          const plan$ = docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            map(data => {
+              if (data === undefined) return null;
+              const plan = parseTrainingPlanV1(data);
+              if (plan.id !== id) throw new Error('The active plan identity is inconsistent.');
+              // Plan and state snapshots can arrive in either order during pause/activation.
+              return plan.lifecycle === 'active' ? plan : null;
+            }),
+            // A failed plan read withholds context, but must not end the state listener.
+            catchError(() => of(null)),
+          );
+          // Clear a replaced plan, not unchanged rest intent on routine schedule revisions.
+          return previousId === id ? plan$ : plan$.pipe(startWith(null));
+        }),
+      )),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    this.activePlanStreams.set(userId, stream);
+    return stream;
+  }
 
   watchCalendarSchedule(userId: string, startLocalDate: string, endLocalDate: string): Observable<CurrentTrainingScheduleV1> {
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(startLocalDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate)
@@ -114,7 +173,7 @@ export class TrainingPlansService {
     const availabilityRef = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
       TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
     const workoutsRef = collection(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID);
-    return docData(availabilityRef, { waitForServer: true }).pipe(
+    const schedule$ = docData(availabilityRef, { waitForServer: true }).pipe(
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(availability => {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
@@ -148,6 +207,9 @@ export class TrainingPlansService {
           )),
         );
       }),
+    );
+    return combineLatest([schedule$, this.restDays.watchRange(userId, startLocalDate, endLocalDate)]).pipe(
+      map(([schedule, restDays]) => ({ ...schedule, restDays })),
     );
   }
 
@@ -218,7 +280,7 @@ export class TrainingPlansService {
   }
 
   /** Share state freshness and readiness bounds across full and bounded Calendar schedules. */
-  private watchVerifiedCurrentState(uid: string): Observable<unknown> {
+  private watchVerifiedCurrentState(uid: string, options: { withholdReadFailures?: boolean } = {}): Observable<unknown> {
     const stateRef = doc(this.firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
     // A server-acknowledged watch can still repeat stale state. Its emissions
     // invalidate the independently verified exact state, including absence.
@@ -226,6 +288,9 @@ export class TrainingPlansService {
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(() => from(this.readCurrentState(uid)).pipe(
         timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+        // Nullable rest context can await the next SDK invalidation. Full schedules still fail/retry;
+        // an unavailable verification must never be published there as a confirmed empty schedule.
+        catchError(error => options.withholdReadFailures ? of(null) : throwError(() => error)),
       )),
     );
   }
@@ -233,7 +298,14 @@ export class TrainingPlansService {
   private async readCurrentState(uid: string): Promise<unknown> {
     const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
     const firestore = getFirestore(this.firestore.app);
-    return (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
+    const value = (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
+    let revision: number | null = null;
+    try { revision = value === undefined ? 0 : parseTrainingPlanStateV1(value).revision; } catch { /* Invalid state stays unknown. */ }
+    this.verifiedStateRevisions.delete(uid);
+    this.verifiedStateRevisions.set(uid, revision);
+    if (this.verifiedStateRevisions.size > 8) this.verifiedStateRevisions.delete(this.verifiedStateRevisions.keys().next().value!);
+    this.stateRevisionChanges.next({ uid, revision });
+    return value;
   }
 
   async getDeletedWorkoutsPage(
@@ -315,9 +387,17 @@ export class TrainingPlansService {
     return `${normalizedPrefix}-${unique}`.slice(0, 128);
   }
 
-  async mutate(request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> {
+  async mutate(request: MutateTrainingScheduleRequestV1, canExecute?: () => boolean): Promise<MutateTrainingScheduleResponseV1> {
     return (await this.functions.call<MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1>(
-      'mutateTrainingSchedule', request,
+      'mutateTrainingSchedule', request, ...(canExecute ? [{ canExecute }] : []),
+    )).data;
+  }
+
+  /** Explicit Add & send: the server commits the workout and delivery approval together. */
+  async mutateWithDelivery(request: MutateTrainingScheduleRequestV1, deliveryAfterCreate: CreatedWorkoutDeliveryRequestV1,
+    canExecute: () => boolean): Promise<TrainingScheduleSaveResponseV1> {
+    return (await this.functions.call<TrainingScheduleSaveRequestV1, TrainingScheduleSaveResponseV1>(
+      'mutateTrainingSchedule', { ...request, deliveryAfterCreate }, { canExecute },
     )).data;
   }
 

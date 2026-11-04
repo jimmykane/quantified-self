@@ -193,6 +193,7 @@
   </nav>
 
   <app-active-sickness-note #sicknessContext [context]="timelineNotes.context()" />
+  <app-current-plan-rest-day #restContext [ownerUid]="restDayOwnerUid" [localDate]="restDayLocalDate" />
 
   @if (isLoading) {
     <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>
@@ -207,7 +208,7 @@
         <span class="training-section-note">All training</span>
       </div>
       <app-training-summary-cards [cards]="trainingSummaryCards" ariaLabel="Current Training comparison"
-        [stateCaptionOverride]="sicknessContext.hasActiveSickness() && trainingStatus.stateLabel === 'Fresh' ? 'Low training load' : null">
+        [stateCaptionOverride]="(sicknessContext.hasActiveSickness() || restContext.isRestDay()) && trainingStatus.stateLabel === 'Fresh' ? 'Low training load' : null">
         @if (useTrainingStateDetailsDialog()) {
           <button
             trainingSummaryStateAction

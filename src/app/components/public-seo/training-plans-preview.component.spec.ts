@@ -29,6 +29,8 @@ describe('TrainingPlansPreviewComponent', () => {
     }).compileComponents();
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it('opens the real profile locally with canonical totals, target ranges and keyboard step selection', async () => {
     const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
     const original = JSON.stringify(fixture.componentInstance.workouts);
@@ -134,10 +136,24 @@ describe('TrainingPlansPreviewComponent', () => {
     expect(selection).not.toHaveBeenCalled();
   });
 
-  it('selects an empty date locally and exposes an accessible add-without-a-plan explanation', async () => {
+  it.each([
+    { label: 'mid-month', referenceDate: new Date(2026, 9, 15, 12) },
+    { label: 'month end', referenceDate: new Date(2026, 9, 31, 12) },
+    { label: 'year end', referenceDate: new Date(2026, 11, 31, 12) },
+  ])('selects an empty date locally and exposes an accessible add-without-a-plan explanation at $label', async ({ referenceDate }) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(referenceDate);
     const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+
+    const changesMonth = fixture.componentInstance.preview.emptyDate.slice(0, 7)
+      !== fixture.componentInstance.today.slice(0, 7);
+    if (changesMonth) {
+      (fixture.nativeElement.querySelector('[aria-label="Next plan month"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+    }
 
     const emptyDate = fixture.nativeElement.querySelector(
       `[data-plan-date="${fixture.componentInstance.preview.emptyDate}"]`,
@@ -153,7 +169,7 @@ describe('TrainingPlansPreviewComponent', () => {
     expect(fixture.componentInstance.selectedDate()).toBe(fixture.componentInstance.preview.emptyDate);
     expect(fixture.nativeElement.textContent).toContain('This date is open');
     expect(fixture.nativeElement.textContent).toContain('without creating another plan');
-    expect(selection).toHaveBeenCalledOnce();
+    expect(selection).toHaveBeenCalledTimes(changesMonth ? 2 : 1);
   });
 
   it('lets the calendar navigate across the multi-month fixture and preview a skipped workout', async () => {

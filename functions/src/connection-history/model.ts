@@ -1,7 +1,19 @@
+import type { HistoryNotificationConsent } from '../../../shared/history-import-notifications';
 import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryImportRange, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 
+import { suuntoHistoryBatchDays } from '../suunto/history-windows';
+
+// Bound the private failure checkpoint and explicit retry transaction (one active batch is at most 100).
+export const MAX_ISOLATED_HISTORY_FAILURES = 100;
+export const MAX_HISTORY_ADMISSION_CHILDREN = 100;
+// Includes retained failures: explicit recovery remains below Firestore's write limit.
+export const MAX_OUTSTANDING_HISTORY_CHILDREN = 200;
+export function allowsPendingActivityHistory(step: HistoryStep): boolean {
+  return step.id === 'activities' && step.resources?.length === 1 && step.resources[0] === 'activities'
+    && step.capability.completion === 'queued';
+}
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
 export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';
@@ -13,11 +25,17 @@ export interface HistoryStep extends ConnectionHistoryStepStatus {
   routeAfterId?: string;
   hadUnavailableRoutes?: boolean;
   windowDays?: number;
+  // Snapshot only on new runs: legacy partial admissions must retain their IDs.
+  suuntoWindowBatchVersion?: 1;
   retryCount: number;
   done: boolean;
   childPaths: string[];
+  // Settled failures from earlier pages, never observed again while scanning later pages.
+  failedChildPaths?: string[];
 }
 export interface ConnectionHistoryRun {
+  /** Explicit consent for one manual import, never included in the public projection. */
+  notification?: HistoryNotificationConsent;
   id: string;
   userID: string;
   serviceName: ServiceNames;
@@ -56,8 +74,12 @@ export interface HistoryConnectionContext {
 }
 /** Exact identity of the committed provider operation, shared with read-only recovery monitoring. */
 export function historyOperationKey(step: HistoryStep): string {
-  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, step.windowDays || 30, step.page,
-    ...(step.routeAfterId === undefined ? [] : [step.routeAfterId])]);
+  const defaultWindowDays = step.suuntoWindowBatchVersion === 1 && (step.id === 'sleep' || step.id === 'health')
+    ? suuntoHistoryBatchDays(step.id) : 30;
+  const windowDays = step.suuntoWindowBatchVersion === 1 ? step.windowDays ?? defaultWindowDays : step.windowDays || 30;
+  return JSON.stringify([step.id, step.capability.version, step.nextStartMs, windowDays, step.page,
+    ...(step.routeAfterId === undefined ? [] : [step.routeAfterId]),
+    ...(step.suuntoWindowBatchVersion === undefined ? [] : [{ suuntoWindowBatchVersion: step.suuntoWindowBatchVersion }])]);
 }
 export function isConnectionHistoryRunId(value: unknown): value is string {
   return typeof value === 'string'
@@ -76,6 +98,8 @@ export function createHistoryRun(userID: string, serviceName: ServiceNames, cont
       .filter(capability => !capability.resources.includes('routes') || (context.requested && context.importRouteHistory === true))
       .map(capability => ({
         id: capability.id, resources: [...capability.resources], capability: { ...capability, resources: [...capability.resources] },
+        ...(serviceName === ServiceNames.SuuntoApp && (capability.id === 'sleep' || capability.id === 'health')
+          ? { suuntoWindowBatchVersion: 1 as const, windowDays: suuntoHistoryBatchDays(capability.id) } : {}),
         status: 'queued', count: 0, nextStartMs: range.startMs, page: 1, retryCount: 0, done: false, childPaths: [],
       })),
   };

@@ -113,7 +113,7 @@ describe('authGuard', () => {
         });
     });
 
-    it.each(['Wahoo%20API', 'COROS%20API'])('preserves the %s setup tab through sign-in', async service => {
+    it.each(['Wahoo%20API', 'COROS%20API', 'Suunto%20app'])('preserves the %s setup tab through sign-in', async service => {
         vi.mocked(router.getCurrentNavigation).mockReturnValue({
             extractedUrl: { toString: () => `/services?serviceName=${service}` },
         } as any);

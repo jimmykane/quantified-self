@@ -212,6 +212,7 @@ export interface DeliveryRuntime {
   db: Firestore;
   now(): number;
   hasPro(uid: string): Promise<boolean>;
+  entitlement?(uid: string): Promise<{ hasPro: boolean; nextChangeAtMs?: number }>;
   connection(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId): Promise<DeliveryConnection>;
   /** Bind a future real adapter to the authenticated owner on the server, never in browser configuration. */
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;

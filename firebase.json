@@ -9,6 +9,10 @@
         "**/node_modules/**"
       ],
       "headers": [
+        {
+          "regex": "^/media/[^/]+-[A-Z0-9]{8}\\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|cur|ani)$",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
         { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
@@ -16,10 +20,6 @@
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
-            },
-            {
-              "key": "Content-Security-Policy-Report-Only",
-              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
             },
             {
               "key": "Referrer-Policy",
@@ -45,10 +45,6 @@
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
-            },
-            {
-              "key": "Content-Security-Policy-Report-Only",
-              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
             },
             {
               "key": "Referrer-Policy",
@@ -470,6 +466,10 @@
         "**/node_modules/**"
       ],
       "headers": [
+        {
+          "regex": "^/media/[^/]+-[A-Z0-9]{8}\\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|cur|ani)$",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
         { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
@@ -477,10 +477,6 @@
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
-            },
-            {
-              "key": "Content-Security-Policy-Report-Only",
-              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
             },
             {
               "key": "Referrer-Policy",
@@ -502,10 +498,6 @@
             {
               "key": "Content-Security-Policy",
               "value": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'"
-            },
-            {
-              "key": "Content-Security-Policy-Report-Only",
-              "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://*.g.doubleclick.net https://*.ingest.sentry.io https://api.mapbox.com https://events.mapbox.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; img-src 'self' data: blob: https:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.recaptcha.net/recaptcha/; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
             },
             {
               "key": "Referrer-Policy",

@@ -401,7 +401,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'coros',
     label: 'COROS',
     serviceName: ServiceNames.COROSAPI,
-    h1: 'COROS Training Plans, Activity Sync, and Routes',
+    h1: 'COROS Activity Sync, History Import, and Routes',
     heroCopy: 'Connect COROS to Quantified Self to import recent history, deliver activities and routes, and analyze connected training together. COROS planned-workout delivery is coming soon in the app.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Use the Pro COROS connection for recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis. Planned-workout delivery is coming soon in the app.',
@@ -470,7 +470,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'upload_file',
         title: 'FIT activity upload to COROS',
-        copy: 'Use asynchronous FIT activity uploads for corrections, migrations, or missing sessions. Valid single-session Snorkeling FITs with or without recorded GPS are sent as Open Water Swim; Sailing FITs with recorded GPS as GPS Cardio. Missing GPS is not added. Direct uploads and activity sync change only the outgoing copy, keeping your QS activity type and retained original unchanged. Other files keep their original classification. Per-file status and retry controls resume the same COROS upload instead of blindly sending it again.',
+        copy: 'Use asynchronous FIT activity uploads for corrections, migrations, or missing sessions. Valid single-session Snorkeling FITs with or without recorded GPS are sent as Open Water Swim; Sailing FITs with recorded GPS as GPS Cardio; Fishing FITs with recorded GPS as GPS Cardio; Diving FITs with or without recorded GPS are sent as Generic. Indoor Rowing and single-session Multisport FITs are also sent as Generic, with or without GPS; other fitness sub-types and true multi-session recordings are not converted. Ice Skating FITs are also sent as Generic, with or without GPS, when their single session has no sub-type or the Generic sub-type. Recorded depth stays in the file, but COROS may not display it or a dive profile. Missing GPS is not added. Direct uploads and activity sync change only the outgoing copy, keeping your QS activity type and retained original unchanged. Other files keep their original classification. Per-file status and retry controls resume the same COROS upload instead of blindly sending it again.',
       },
       {
         icon: 'route',
@@ -860,7 +860,7 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     ),
   },
   coros: {
-    title: 'COROS Training Plans, Activity Sync, and Routes',
+    title: 'COROS Activity Sync, History Import, and Routes',
     preload: true,
     animation: 'Integrations',
     description: 'COROS planned-workout delivery is coming soon; use recent history, activity sync, route delivery, and training analysis now.',

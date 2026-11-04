@@ -3,7 +3,7 @@ import { collection, collectionData, doc, docData, Firestore, runTransaction, se
   query, where, limit } from 'app/firebase/firestore';
 import type { EventRead } from '@shared/event-read';
 import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
-import { DEFAULT_TRAINING_LOAD_POLICY, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
+import { DEFAULT_TRAINING_LOAD_POLICY, validTrainingLoadPolicy, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
@@ -108,7 +108,9 @@ export class TrainingLoadService {
         else transaction.set(ref, patch);
       }
       if (future && policyRef) {
-        const policy = { ...future.policy, revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
+        const swimThresholdSpeed = policySnapshot?.data()?.['swimThresholdSpeed'];
+        const policy = { method: future.policy.method, included: future.policy.included,
+          ...(future.family === 'swimming' && swimThresholdSpeed !== undefined ? { swimThresholdSpeed } : {}), revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
         transaction.set(policyRef, policy);
         transaction.set(doc(policyRef, 'revisions', revisionId), policy);
       }
@@ -135,7 +137,7 @@ export class TrainingLoadService {
   }
 
   private validatePolicy(family: unknown, policy: TrainingLoadPolicy): void {
-    if (!isTrainingDiscipline(family) || !isTrainingLoadMethod(policy.method) || typeof policy.included !== 'boolean')
+    if (!isTrainingDiscipline(family) || !validTrainingLoadPolicy(family, policy))
       throw new Error('Choose a valid sport preference.');
   }
   private validateControl(control: TrainingLoadControl): void {

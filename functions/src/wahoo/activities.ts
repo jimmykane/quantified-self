@@ -313,6 +313,7 @@ function toWahooHttpsError(error: unknown): never {
 }
 
 function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperationError | null {
+  if (error instanceof WahooAPITransportError && error.requestStarted === false) return null;
   const statusCode = error instanceof WahooAPIRequestError ? error.statusCode : undefined;
   if (
     !(error instanceof WahooAPITransportError)
@@ -537,7 +538,9 @@ function toWahooActivityTypeCorrectionError(
         : 'Wahoo is temporarily unable to update the workout type. Please retry.',
       retryAfterSeconds: isWahooRefreshBackoffError(error)
         ? Math.max(0, Math.ceil((error.retryAt - Date.now()) / 1000))
-        : undefined,
+        : error instanceof HttpsError && callableCode === 'resource-exhausted'
+          ? (error.details as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds
+          : undefined,
       providerOperationId: uploadId,
       dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
     }, expectedWorkoutTypeId);

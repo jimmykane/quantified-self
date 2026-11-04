@@ -67,7 +67,7 @@ import {
   normalizeAppFormatLocalePreference,
 } from '../../shared/adapters/app-locale';
 
-type SettingsSectionId = 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account' | 'data-management';
+type SettingsSectionId = 'notifications' | 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account' | 'data-management';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -107,6 +107,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     'training',
     'charts',
     'map',
+    'notifications',
     'privacy',
     'account',
     'data-management',
@@ -142,6 +143,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       description: 'Route rendering defaults',
       icon: 'map',
     },
+    { id: 'notifications', label: 'Notifications', description: 'Categories, device permissions and test notifications', icon: 'notifications' },
     {
       id: 'privacy',
       label: 'Privacy & emails',

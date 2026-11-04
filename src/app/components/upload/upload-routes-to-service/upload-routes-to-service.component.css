@@ -9,6 +9,8 @@ section {
   border-radius: 8px;
   background: var(--mat-sys-surface-container-lowest);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s, border-color 0.2s;
@@ -28,7 +30,13 @@ button {
 }
 .upload-routes-to-service__button-content {
   align-items: center;
-  display: inline-flex;
+  display: flex;
   gap: 8px;
   justify-content: center;
+}
+
+.upload-routes-to-service__hint {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
 }

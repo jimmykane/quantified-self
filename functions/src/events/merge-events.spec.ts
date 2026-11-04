@@ -437,7 +437,7 @@ describe('mergeEvents', () => {
 
   it('should register with activity processing runtime limits', () => {
     expect(hoisted.getOnCallOptions()).toMatchObject({
-      memory: '4GiB',
+      memory: '2GiB',
       cpu: 2,
       concurrency: 1,
       timeoutSeconds: 3600,

@@ -1,8 +1,13 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { hasDerivedMetricSourceChange, type DerivedMetricSource } from './derived-metrics-source-change';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { hasDerivedMetricSourceChange, hasDerivedMetricsHealthSource, type DerivedMetricSource } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
+// Share warm instances across I/O waits without lowering the existing burst instance ceiling.
+// Calculation workers retain their own concurrency and memory limits.
+const DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY = 5;
 
 async function dispatchSourceWrite(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
@@ -13,21 +18,38 @@ async function dispatchSourceWrite(
         return;
     }
 
-    const before = event.data?.before?.data?.();
-    const after = event.data?.after?.data?.();
-    // Preparation only reserves the import. Owner edits made during it are projected below.
-    if (source === 'training-load' && after?.sourceWritePending &&
-        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
-    // Creates, updates, and deletes can all change the derived comparison.
     const beforeExists = !!event.data?.before?.exists;
     const afterExists = !!event.data?.after?.exists;
     if (!beforeExists && !afterExists) {
         return;
     }
+    const isDeletion = beforeExists && !afterExists;
+    // Only Health needs deleted data before the guard, to ignore irrelevant records without a lookup.
+    const before = isDeletion && source !== 'health' ? undefined : event.data?.before?.data?.();
+    const after = afterExists ? event.data?.after?.data?.() : undefined;
+    // Preparation only reserves the import. Owner edits made during it are projected below.
+    if (source === 'training-load' && after?.sourceWritePending &&
+        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
+    // Creates, updates, and deletes can all change the derived comparison.
     if (beforeExists && afterExists && !hasDerivedMetricSourceChange(
-        source, event.data?.before?.data?.(), event.data?.after?.data?.(),
+        source, before, after,
     )) {
         return;
+    }
+    if (source === 'health' && !hasDerivedMetricsHealthSource(before, after)) return;
+    if (isDeletion) {
+        // Account cleanup emits one delivery per deleted document. Avoid loading cache/calculation code for it.
+        const { firestore } = await import('firebase-admin');
+        const deletionGuard = await getUserDeletionGuardState(firestore(), uid);
+        if (deletionGuard.shouldSkip) {
+            logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
+                uid, source,
+                sourceId: event.params?.eventId ?? event.params?.activityId ?? event.params?.sleepSessionId ?? event.params?.sourceRecordId,
+                userExists: deletionGuard.userExists,
+                deletionInProgress: deletionGuard.deletionInProgress,
+            });
+            return;
+        }
     }
     // No-op deliveries must not load Sports Lib, cache builders or Cloud Tasks.
     // Import failures propagate to the trigger's existing retry policy.
@@ -40,7 +62,7 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     document: 'users/{uid}/events/{eventId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'event'));
 
@@ -49,7 +71,7 @@ export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
     document: 'users/{uid}/activities/{activityId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'activity'));
 
@@ -58,7 +80,7 @@ export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     document: 'users/{uid}/sleepSessions/{sleepSessionId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'sleep'));
 
@@ -67,7 +89,7 @@ export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
     document: 'users/{uid}/healthSourceRecords/{sourceRecordId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'health'));
 
@@ -76,6 +98,6 @@ export const onTrainingLoadMetadataWrite = onDocumentWritten({
     document: 'users/{uid}/events/{eventId}/metaData/trainingLoad',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'training-load'));

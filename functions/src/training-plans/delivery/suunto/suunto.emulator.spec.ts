@@ -60,8 +60,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     { sport: ActivityTypes.Running, manual: true, version: 'v16' },
     { sport: ActivityTypes.Walking, manual: true, version: 'v16' },
     { sport: ActivityTypes.Cycling, manual: true, version: 'v16' },
-    { sport: ActivityTypes.Swimming, manual: true, version: 'v16' },
-    { sport: ActivityTypes.OpenWaterSwimming, manual: true, version: 'v16' },
+    { sport: ActivityTypes.Swimming, manual: true, version: 'v18' },
+    { sport: ActivityTypes.OpenWaterSwimming, manual: true, version: 'v18' },
     { sport: ActivityTypes.Rowing, manual: true, version: 'v16' },
   ] as const;
   const useManualRecipe = async (sport: ActivityTypes) => user().collection('scheduledWorkouts').doc('w').update({
@@ -788,7 +788,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await user().collection('config').doc('settings').update({ suuntoSwimmingGuide: defaults });
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'recovered_acceptance', guideMappingVersion: 'suunto-guides-v17', deliveryPhase: 'recover',
+      event: 'recovered_acceptance', guideMappingVersion: 'suunto-guides-v18', deliveryPhase: 'recover',
     }));
     await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids: { guide: id } }, attempt: null });
@@ -868,7 +868,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(retriedConsent);
     const queued = (await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).docs.map(doc => doc.data());
     // Sending is complete; only the existing periodic reconciliation job remains.
-    expect(queued).toEqual([expect.objectContaining({ kind: 'reconcile', dueAtMs: now + 30 * 60_000 })]);
+    expect(queued).toEqual([expect.objectContaining({ kind: 'reconcile', dueAtMs: now + 6 * 60 * 60_000 })]);
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.size).toBe(1);
@@ -1034,7 +1034,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     const original = await send(); expect(original.status).toBe('retrying');
     expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
       event: 'failure', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v16'
-        : sport === 'swimming' ? 'suunto-guides-v15' : 'suunto-guides-v13', deliveryPhase: 'execute',
+        : sport === 'swimming' ? 'suunto-guides-v18' : 'suunto-guides-v13', deliveryPhase: 'execute',
     }));
     const legacy = await startedLegacy(version);
     expect(JSON.stringify(legacy.payload).includes('notification')).toBe(version !== 'v2');
@@ -1075,7 +1075,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     }
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
       event: 'accepted', guideMappingVersion: sport === 'strength' ? 'suunto-guides-v16'
-        : sport === 'swimming' ? 'suunto-guides-v15' : 'suunto-guides-v13', deliveryPhase: 'execute',
+        : sport === 'swimming' ? 'suunto-guides-v18' : 'suunto-guides-v13', deliveryPhase: 'execute',
     }));
     const logs = JSON.stringify([...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]);
     for (const value of [uid, legacy.id, legacy.operation.digest, legacy.operation.destinationKey, 'notification', 'Squat']) {
@@ -1597,7 +1597,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       { type: 'stepDurationCountdown', value: 15, title: 'Rest rem' }, { type: 'heartRate', title: 'HR' },
     ], alerts: [{ type: 'default', condition: { type: 'stepDuration', value: 15 }, countdown: { type: 'standard' } }] });
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({
-      event: 'accepted', guideMappingVersion: 'suunto-guides-v16', deliveryPhase: 'execute',
+      event: 'accepted', guideMappingVersion: 'suunto-guides-v18', deliveryPhase: 'execute',
     }));
     expect((await user().collection('scheduledWorkouts').doc('w').get()).get('structure')).toEqual(structure);
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(consent);

@@ -56,6 +56,28 @@ describe('enqueueActivitySyncAfterEventPersistence', () => {
     mockEnqueueActivitySyncJobsForImportedEvent.mockResolvedValue({ queued: 1, skippedByReason: {} });
   });
 
+  const providers = [ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI];
+
+  it.each(providers)('imports %s history without automatic delivery, including repeated processing', async sourceServiceName => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(enqueueActivitySyncAfterEventPersistence({
+        ...params, sourceServiceName, fromHistory: true, sourceFileData: Buffer.from('history-fit'),
+      })).resolves.toBe(false);
+    }
+    expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+    expect(mockIsActivitySyncOutboundEcho).not.toHaveBeenCalled();
+  });
+
+  it.each(providers.flatMap(sourceServiceName => [undefined, false].map(fromHistory => ({ sourceServiceName, fromHistory }))))(
+    'still automatically sends delayed ordinary $sourceServiceName imports (fromHistory=$fromHistory)', async ({ sourceServiceName, fromHistory }) => {
+      await expect(enqueueActivitySyncAfterEventPersistence({ ...params, sourceServiceName, fromHistory })).resolves.toBe(false);
+      expect(mockEnqueueActivitySyncJobsForImportedEvent).toHaveBeenCalledExactlyOnceWith({
+        userID: params.userID, eventID: params.setEventResult.eventID, sourceServiceName,
+        sourceActivityID: params.sourceActivityID, originalFiles: params.setEventResult.savedOriginalFiles,
+      });
+    },
+  );
+
   it('suppresses an imported provider echo before it can fan out again', async () => {
     const sourceFileData = Buffer.from('provider-echo');
     mockIsActivitySyncOutboundEcho.mockResolvedValueOnce(true);
@@ -96,10 +118,10 @@ describe('enqueueActivitySyncAfterEventPersistence', () => {
     });
   });
 
-  it('does not enqueue activity delivery after account deletion starts', async () => {
+  it.each([undefined, true])('preserves account deletion handling for history=%s', async fromHistory => {
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
 
-    await expect(enqueueActivitySyncAfterEventPersistence(params)).resolves.toBe(true);
+    await expect(enqueueActivitySyncAfterEventPersistence({ ...params, fromHistory })).resolves.toBe(true);
     expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
   });
 

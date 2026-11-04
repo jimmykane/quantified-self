@@ -39,6 +39,7 @@ export class TrainingDeliveryButtonComponent {
   readonly summaryNowMs = input<number | null>(null);
   readonly context = computed<TrainingDeliveryDialogData>(() => ({ scope: this.scope(), id: this.entityId(), title: this.title() }));
   readonly disabled = input(false);
+  readonly prominent = input(false);
   private readonly users = inject(AppUserService);
   private readonly delivery = inject(TrainingDeliveryService);
   private readonly dialog = inject(MatDialog);

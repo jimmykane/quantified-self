@@ -1,5 +1,5 @@
 <button mat-icon-button [attr.aria-label]="isSharing ? 'Updating sharing' : 'Activity actions'"
-  [disabled]="isSharing" [attr.aria-busy]="isSharing" [matMenuTriggerFor]="menu"
+  [disabled]="disabled || isSharing" [attr.aria-busy]="isSharing" [matMenuTriggerFor]="menu"
   (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
   @if (isSharing) {
   <mat-spinner diameter="24" aria-label="Updating sharing"></mat-spinner>
@@ -9,26 +9,26 @@
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel">
   @if (canEditAscent) {
-    <button mat-menu-item (click)="editAscent()" [disabled]="isReprocessing"><mat-icon>edit</mat-icon><span>Edit ascent / descent</span></button>
+    <button mat-menu-item (click)="editAscent()" [disabled]="disabled || isReprocessing"><mat-icon>edit</mat-icon><span>Edit ascent / descent</span></button>
   }
-  @if (canSendOwnedActivities) { <button mat-menu-item (click)="sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
+  @if (canSendOwnedActivities) { <button mat-menu-item [disabled]="disabled" (click)="sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
   @if (!isPubliclyShared) {
-  <button mat-menu-item (click)="shareEventLink()" [disabled]="isSharing">
+  <button mat-menu-item (click)="shareEventLink()" [disabled]="disabled || isSharing">
     <mat-icon>share</mat-icon>
     <span>Share link</span>
   </button>
   } @else {
-  <button mat-menu-item (click)="copyPublicEventLink()" [disabled]="isSharing">
+  <button mat-menu-item (click)="copyPublicEventLink()" [disabled]="disabled || isSharing">
     <mat-icon>link</mat-icon>
     <span>Copy public link</span>
   </button>
-  <button mat-menu-item (click)="stopSharingEvent()" [disabled]="isSharing">
+  <button mat-menu-item (click)="stopSharingEvent()" [disabled]="disabled || isSharing">
     <mat-icon>link_off</mat-icon>
     <span>Stop sharing</span>
   </button>
   }
 
-  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()" [disabled]="isReprocessing">
+  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()" [disabled]="disabled || isReprocessing">
     <mat-icon>autorenew</mat-icon>
     <span class="menu-item-with-tooltip">Regenerate activity statistics using Sports-Lib <mat-icon class="toolTip"
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
@@ -37,13 +37,13 @@
   <div class="menu-item-tooltip-wrapper" [matTooltip]="getReimportDisabledReason()"
     [matTooltipDisabled]="canReimportFromOriginalFile()">
     <button mat-menu-item class="reimport-stat-item" (click)="reImportActivityFromFile()"
-      [disabled]="isReprocessing || !canReimportFromOriginalFile()">
+      [disabled]="disabled || isReprocessing || !canReimportFromOriginalFile()">
       <mat-icon>upload_file</mat-icon>
       <span>Reimport activity from file</span>
     </button>
   </div>
   @if (hasPositionalData()) {
-  <button mat-menu-item (click)="downloadGPX()">
+  <button mat-menu-item [disabled]="disabled" (click)="downloadGPX()">
     <mat-icon>file_download</mat-icon>
     <span>Download as GPX</span>
   </button>
@@ -55,13 +55,13 @@
 
   @if ((event['originalFiles'] && event['originalFiles'].length > 0) || (event['originalFile'] &&
   event['originalFile'].path)) {
-  <button mat-menu-item (click)="downloadOriginals()">
+  <button mat-menu-item [disabled]="disabled" (click)="downloadOriginals()">
     <mat-icon>cloud_download</mat-icon>
     <span>Download original(s)</span>
   </button>
   }
 
-  <button mat-menu-item (click)="delete()">
+  <button mat-menu-item [disabled]="disabled" (click)="delete()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>
   </button>

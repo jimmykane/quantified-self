@@ -8,7 +8,11 @@ import type { GarminSupportedSummaryType } from '../garmin/health-summary-types'
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
+  /** Server-owned positive webhook provenance; absent on history and legacy work. */
+  activityNotificationOrigin?: 'live';
   connectionHistoryRunId?: string;
+  /** History imports do not opt in to automatic recorded-activity delivery. */
+  fromHistory?: boolean;
   id: string,
   ref?: DocumentReference
   dateCreated: number,
@@ -70,10 +74,11 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   manual?: boolean;
   edited?: boolean;
   fitnessAppID?: number;
-  fromHistory?: boolean;
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {
+  /** Admission-time decision; later history requests cannot change queued work. */
+  suppressAutomaticActivitySync?: boolean;
   userID: string
   startTimeInSeconds: number,
   manual: boolean,
@@ -128,6 +133,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
   /** Durable marker proving provider-echo fingerprints were written before upload. */
   outboundFingerprintID?: string | null;
+  /** Original COROS FIT category retained with the echo receipt for asynchronous failure diagnostics. */
+  corosSourceFIT?: { sport: number | null; subSport: number | null };
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {

@@ -9,6 +9,10 @@ export const DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE = 'IntensityDistributio
 export const DASHBOARD_EFFICIENCY_TREND_CHART_TYPE = 'EfficiencyTrend' as const;
 export const DASHBOARD_SLEEP_TREND_CHART_TYPE = 'SleepTrend' as const;
 export const DASHBOARD_HRV_TREND_CHART_TYPE = 'HrvTrend' as const;
+export const DASHBOARD_CRITICAL_POWER_CHART_TYPE = 'CriticalPowerHistory' as const;
+export const DASHBOARD_W_PRIME_CHART_TYPE = 'WPrimeHistory' as const;
+export const DASHBOARD_MAXIMUM_POWER_CHART_TYPE = 'MaximumPowerHistory' as const;
+export const DASHBOARD_DURABILITY_CHART_TYPE = 'DurabilityTrend' as const;
 export const DASHBOARD_POWER_CURVE_CHART_TYPE = 'PowerCurve' as const;
 export const DASHBOARD_ACWR_KPI_CHART_TYPE = 'KpiAcwr' as const;
 export const DASHBOARD_RAMP_RATE_KPI_CHART_TYPE = 'KpiRampRate' as const;
@@ -58,7 +62,18 @@ export type DashboardKpiEfficiencyDelta4wChartType = typeof DASHBOARD_EFFICIENCY
 export type DashboardKpiAerobicCapacityChartType = typeof DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE;
 export type DashboardKpiAerobicDurabilityChartType = typeof DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE;
 
+export type DashboardPerformanceChartType = typeof DASHBOARD_CRITICAL_POWER_CHART_TYPE | typeof DASHBOARD_W_PRIME_CHART_TYPE | typeof DASHBOARD_MAXIMUM_POWER_CHART_TYPE | typeof DASHBOARD_DURABILITY_CHART_TYPE;
+
+export function isDashboardPerformanceChartType(value: unknown): value is DashboardPerformanceChartType {
+  return value === DASHBOARD_CRITICAL_POWER_CHART_TYPE || value === DASHBOARD_W_PRIME_CHART_TYPE || value === DASHBOARD_MAXIMUM_POWER_CHART_TYPE || value === DASHBOARD_DURABILITY_CHART_TYPE;
+}
+
+export function isDashboardPowerCapacityChartType(value: unknown): boolean {
+  return isDashboardPerformanceChartType(value) && value !== DASHBOARD_DURABILITY_CHART_TYPE;
+}
+
 export type DashboardCuratedChartType =
+  | DashboardPerformanceChartType
   | DashboardRecoveryNowChartType
   | DashboardActivityCalendarChartType
   | DashboardFormChartType
@@ -113,6 +128,11 @@ export interface DashboardKpiChartDefinition {
 }
 
 const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
+  { chartType: DASHBOARD_CRITICAL_POWER_CHART_TYPE, label: 'Critical power' },
+  { chartType: DASHBOARD_W_PRIME_CHART_TYPE, label: 'W′ capacity' },
+  { chartType: DASHBOARD_MAXIMUM_POWER_CHART_TYPE, label: 'Maximum power' },
+  { chartType: DASHBOARD_DURABILITY_CHART_TYPE, label: 'Durability' },
+
   {
     chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     label: 'Recovery',
@@ -307,7 +327,8 @@ export function isRetiredDashboardReadinessConfidenceKpiChartType(
 }
 
 export function isDashboardCuratedChartType(chartType: unknown): chartType is DashboardCuratedChartType {
-  return isDashboardRecoveryNowChartType(chartType)
+  return isDashboardPerformanceChartType(chartType)
+    || isDashboardRecoveryNowChartType(chartType)
     || isDashboardActivityCalendarChartType(chartType)
     || isDashboardFormChartType(chartType)
     || isDashboardFreshnessForecastChartType(chartType)

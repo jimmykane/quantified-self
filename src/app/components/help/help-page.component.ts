@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -119,6 +119,13 @@ export class HelpPageComponent implements OnInit, OnDestroy {
     if (this.selectedSectionId() !== sectionId) this.haptics.selection();
     this.searchQuery.set('');
     this.selectSection(sectionId, true);
+  }
+
+  // Native markdown links retain keyboard navigation; observe their bubbled clicks.
+  @HostListener('click', ['$event'])
+  onArticleLinkClick(event: MouseEvent): void {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (event.target instanceof Element && event.target.closest('.section-copy a[href]')) this.haptics.selection();
   }
 
   returnToHelpCenter(): void {

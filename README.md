@@ -48,7 +48,7 @@ For frontend tests and the repository's full development workflow, install:
 
 For Firebase emulators and Rules tests, also install:
 
-- [Firebase CLI](https://firebase.google.com/docs/cli).
+- [Firebase CLI](https://firebase.google.com/docs/cli), installed at the repository's pinned version below.
 - Java 21, matching the CI environment.
 
 > [!NOTE]
@@ -65,6 +65,7 @@ nvm install 22
 nvm use 22
 npm ci
 npm --prefix functions ci
+npm run firebase:tools
 ```
 
 The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
@@ -84,7 +85,7 @@ Do not copy a maintainer token or commit this file. A valid token is required fo
 > [!WARNING]
 > The current development configuration is **hybrid, not fully isolated**. Callable Functions are routed to the Functions emulator, but browser Auth, Firestore, Storage, Analytics, App Check, and Remote Config still use the configured hosted Firebase project. Starting additional emulators does not connect those browser SDKs automatically.
 
-Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials placed in `functions/.secret.local` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
+Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials in the external local profile can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
 
 The Functions emulator does not require a service-account JSON or Google Application Default Credentials when Admin SDK traffic stays on the Auth, Firestore, and Storage emulators. The shared Admin bootstrap uses the emulator hosts locally and the assigned runtime identity in Cloud Functions. Do not add a service-account key to the Functions source tree.
 
@@ -94,18 +95,32 @@ In the first terminal:
 
 ```bash
 npm --prefix functions run build
-firebase emulators:start --only auth,functions,firestore,storage
+npm run emulators:local -- emulators:start --only auth,functions,firestore,storage
 ```
 
 The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
+Keep the TypeScript compiler running in another terminal while editing Functions or shared backend code:
+
+```bash
+npm --prefix functions run build:watch
+```
+
+The emulator reloads the emitted JavaScript; it does not compile TypeScript source changes itself. After switching
+branches or changing templates, rerun the full build. A new callable missing from a stale build can appear as a browser
+CORS/preflight failure while existing callables still work. Check the emulator's initialized endpoint list and rebuild
+before changing CORS policy. Angular's hot reload does not refresh the Functions build.
 
 For the default browser configuration, which keeps hosted Auth, Firestore, and Storage, run just the Functions emulator:
 
 ```bash
-firebase emulators:start --only functions
+npm run emulators:local -- emulators:start --only functions
 ```
 
-Admin impersonation in this mode signs tokens with an existing, Git-ignored `quantified-self-io-firebase-adminsdk.json` at the repository root, outside `functions/`. The key must match the emulator's project and is used only for custom-token signing; the default Admin app keeps ADC. Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS` to an external service-account JSON file before starting the emulator. See [Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth) for credential precedence and isolation.
+Admin impersonation in this mode uses the external `~/.config/quantified-self/firebase-adminsdk.json` signing key.
+The key must match the emulator project and is used only for custom-token signing; the default Admin app retains ADC.
+Use `QS_LOCAL_SIGNING_KEY_FILE` for a different external key. See
+[Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth)
+for credential precedence and isolation. Never copy or symlink the key into a checkout.
 
 ### 5. Start Angular
 
@@ -120,13 +135,15 @@ Open:
 - Application: [http://localhost:4200](http://localhost:4200)
 - Firebase Emulator UI: [http://localhost:4000](http://localhost:4000)
 
-The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material. The `certs/` directory is ignored and must never be committed:
+The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material. The local launcher reads TLS files from the external configuration directory:
 
 ```bash
-mkdir -p certs
+mkdir -p "$HOME/.config/quantified-self/tls"
+chmod 700 "$HOME/.config/quantified-self/tls"
 umask 077
 openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
-  -keyout certs/localhost.key -out certs/localhost.crt \
+  -keyout "$HOME/.config/quantified-self/tls/localhost.key" \
+  -out "$HOME/.config/quantified-self/tls/localhost.crt" \
   -subj '/CN=localhost' \
   -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1'
 ```
@@ -137,7 +154,7 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 
 ## Optional backend and provider configuration
 
-Copy `functions/.secret.local.example` to the ignored `functions/.secret.local` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
+Copy `functions/.secret.local.example` to external `~/.config/quantified-self/functions.env` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
 
 Operational scripts that intentionally access managed Google Cloud or Firebase resources use Application Default Credentials. Authenticate your local user with `gcloud auth application-default login`, or use an approved least-privilege service-account impersonation flow, and pass the target project explicitly to any write-capable script. Emulator-only development does not require this login.
 
@@ -145,7 +162,7 @@ Operational scripts that intentionally access managed Google Cloud or Firebase r
 | --- | --- |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
-| Suunto Training Guides | Reuses the existing Suunto OAuth credentials and `SUUNTOAPP_SUBSCRIPTION_KEY` with Guides access; `SUUNTOAPP_GUIDE_OWNER` stores the exact existing OAuth application name through Secret Manager (or `.secret.local` for emulators). See [Training delivery](docs/training-workspace.md#suuntoplus-guide-delivery-650). |
+| Suunto Training Guides | Reuses the existing Suunto OAuth credentials and `SUUNTOAPP_SUBSCRIPTION_KEY` with Guides access; `SUUNTOAPP_GUIDE_OWNER` stores the exact existing OAuth application name through Secret Manager (or the external profile for emulators). See [Training delivery](docs/training-workspace.md#suuntoplus-guide-delivery-650). |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
@@ -247,6 +264,8 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [Standard and Declarative Web Push, activity sync/delivery alerts, history-import results and activation](docs/web-push-notifications.md)
+
 - [Analytics collection, attribution boundaries, and rollout checks](docs/analytics-attribution.md)
 - [Firestore stats index allowlist, query audit and two-phase rollout](docs/firestore-stats-indexes.md)
 - [Benchmark comparison generation and reparse preservation](docs/benchmark-comparisons.md)
@@ -286,6 +305,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [MCP server](docs/mcp-server.md)
 - [Firebase Function secret management](docs/function-secret-management.md)
+- [Pinned Firebase CLI and deployment commands](docs/firebase-tooling.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
 - [Email lifecycle](docs/email-lifecycle.md)

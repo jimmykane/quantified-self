@@ -11,6 +11,11 @@ still require separate approval; this documentation update changes no secret bin
 
 `processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
 
+The Calendar `generateDayWorkout` callable binds only the existing `GEMINI_API_KEY`, using the same Assistant
+model. It receives no fitness-provider, delivery, OAuth, signing or billing credentials. Its direct target loader
+and resource/secret metadata are checked with the existing entrypoint and secret checks. No new secret value is
+required; deploying this additional binding/endpoint still requires separate deployment approval.
+
 ## Managed inventory
 
 | Area | Secret Manager names |
@@ -22,6 +27,7 @@ still require separate approval; this documentation update changes no secret bin
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
+| Browser Web Push | `WEB_PUSH_VAPID_KEYPAIR` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
 | Marketing unsubscribe | `MARKETING_UNSUBSCRIBE_SIGNING_KEY` |
 
@@ -42,21 +48,21 @@ secret workflow, then Retry; do not ask the user to reconnect to fix an applicat
 `SUUNTOAPP_GUIDE_OWNER` holds the **exact existing OAuth application name** from Suunto API Zone's profile → OAuth
 application settings → App name. It is public application metadata, but is managed through the same Secret Manager
 workflow as the other Suunto settings, not hardcoded. `config.suuntoapp.application_name` reads it lazily. Only
-`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
+`mutateTrainingSchedule`, `previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
 preview/mutation do not gain access to OAuth credentials or subscription keys. Dispatch and lifecycle triggers do not
-read the owner. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
+read the owner. The schedule save uses it only for pure Add & send admission; it gains no provider HTTP authority. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
 
 For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
-`functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
+the external local profile and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
 For deployment, an authorized operator sets it interactively with
-`firebase functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
+`npm run firebase -- functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those four
 Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
 change is needed to configure the name. This implementation does not set a local/cloud value, provision a secret,
 deploy, or change existing rollout/consent gates.
 
-Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
+Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `npm run firebase -- functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 
-For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `firebase functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
+For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `npm run firebase -- functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
 
 ## Garmin callback credential and migration
 
@@ -76,7 +82,7 @@ It has no timed cutoff; #800 removes its compatibility fallback. Each cleanup re
 or compatibility switch. Preparing or merging the PR does not change the currently deployed receivers.
 
 An authorized operator provisions the value interactively with
-`firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
+`npm run firebase -- functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
 receivers together. Changing an injected secret version requires redeployment; editing Secret Manager alone does
 not immediately change running functions. Follow the [Garmin deployment cutover](garmin-integration.md#production-configuration).
 Do not put credential values or complete protected URLs in commits, tickets, commands, or application logs.
@@ -91,15 +97,51 @@ CI scans the commits introduced by each push or pull request with a pinned Gitle
 
 ## Local emulators and scripts
 
-Copy `functions/.secret.local.example` to `functions/.secret.local` and add development-only values. The destination is ignored by Git and excluded from Function deployment archives.
+Keep local credentials outside every checkout and worktree. `shared/local-secret-paths.js` defines the common
+per-user paths; no personal file is loaded merely by importing this module or the operational environment loader.
+Production continues to use Secret Manager and its existing endpoint bindings.
+
+| Material | Default external path | Explicit absolute-path override |
+| --- | --- | --- |
+| Local provider/script profile | `~/.config/quantified-self/functions.env` | `QS_LOCAL_SECRETS_FILE` |
+| Stripe sandbox profile | `~/.config/quantified-self/billing-test.env` | `QS_BILLING_TEST_SECRETS_FILE` |
+| Hosted-Auth signing key | `~/.config/quantified-self/firebase-adminsdk.json` | `QS_LOCAL_SIGNING_KEY_FILE` |
+| Optional separate mail identity | `~/.config/quantified-self/mail-service-account.json` | `GOOGLE_APPLICATION_CREDENTIALS` |
+| Local HTTPS key/certificate | `~/.config/quantified-self/tls/localhost.key` and `localhost.crt` | `QS_LOCAL_TLS_KEY_FILE`, `QS_LOCAL_TLS_CERT_FILE` |
+
+`QS_LOCAL_CONFIG_DIR` selects a different absolute base directory. Keep directories permission 700 and credential
+files permission 600. Do not put values in shell startup files or create credential symlinks inside a checkout.
+The browser Mapbox token is public client configuration and still uses its existing ignored frontend file.
+
+For a fresh development profile:
 
 ```bash
-cp functions/.secret.local.example functions/.secret.local
+mkdir -p "$HOME/.config/quantified-self"
+chmod 700 "$HOME/.config/quantified-self"
+cp functions/.secret.local.example "$HOME/.config/quantified-self/functions.env"
+chmod 600 "$HOME/.config/quantified-self/functions.env"
+# Fill the external file privately with credentials for the intended development project.
 npm --prefix functions run build
-firebase emulators:start --only auth,functions,firestore,storage
+npm run emulators:local -- emulators:start --only auth,functions,firestore,storage
 ```
 
-Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
+The wrapper creates a permission-700 per-session runtime under the external configuration directory, writes its
+Firebase-required `.secret.local` with permission 600, and links compiled `lib` and dependencies so normal rebuilds
+remain visible. It removes the session runtime when the child exits, including failures and handled interrupts.
+An uncatchable process kill can leave a private session directory behind. The wrapper accepts emulator and shell
+commands only; it cannot deploy. Its generated config also retains credential exclusions and a rejecting predeploy
+hook, so selecting that config directly cannot upload a local runtime. Existing deployment preflight rejects credential files and symlinks in Functions
+source, including local secret profiles; the value-free template is the sole exception.
+
+A missing explicit profile fails rather than selecting another file. Firebase's own behavior for secrets absent
+from an emulator override is unchanged: it can attempt Secret Manager access using its credentials. Use explicit
+development projects and values; moving files does not isolate the existing hybrid browser configuration or provider APIs.
+CI uses the dedicated scrubbed demo runners and never invokes a personal-profile launcher.
+
+Emulator imports/exports use persistent external directories. An argument-free `--export-on-exit` selects
+`~/.config/quantified-self/emulator-state/<checkout-id>`; explicit relative paths resolve against the checkout and
+must point outside it. These exports are outside the disposable session runtime and survive cleanup. Existing
+billing sandbox state retains its separate path and is not migrated or deleted by this change.
 
 ### Stripe key separation
 
@@ -118,41 +160,43 @@ The default browser configuration keeps hosted Firebase Auth and sends callable 
 When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, custom-token creation can sign locally using a service-account JSON file. The default Admin app always retains ADC and explicitly selects the emulator's `GCLOUD_PROJECT`; loading a local signing key never changes the identity used for user lookups, Firestore, Storage, or other backend operations.
 
 1. A service-account key at an explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. An unavailable or malformed explicit file fails signing without silently switching keys. Impersonated and external-account ADC retain their normal SDK signer.
-2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory. User ADC remains on the default app.
+2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the optional `firebase-adminsdk.json` in the external local configuration directory. User ADC remains on the default app.
 3. A local key's `project_id` must match the default Admin app's selected project. A mismatch fails token creation before activating the signing credential or changing the default app. The matching key initializes a separate, cached Admin app used only for token signing.
 4. Without a local key, token creation uses the default Admin SDK signer. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
 
-From the repository root, an existing root-level key needs only:
+From the repository root, an existing external signing key needs only:
 
 ```bash
 npm --prefix functions run build
-firebase emulators:start --only functions
+npm run emulators:local -- emulators:start --only functions
 ```
 
 For a key stored outside the checkout:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.json \
-  firebase emulators:start --only functions
+  npm run emulators:local -- emulators:start --only functions
 ```
 
 Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
 
 The signing app uses the modular `firebase-admin/app` initializer and `firebase-admin/auth` service accessor. Do not pass its credential to the namespaced `admin.initializeApp`: Firebase CLI's emulator wrapper serializes those options into debug logs, including private key material. The SDK regression tests reproduce that logging wrapper with synthetic credentials and assert that no private key reaches it.
 
-### Local script environment precedence
+### Explicit local script environment
 
-Repository operational scripts load local values in this order without overriding an existing shell variable:
+Operational npm commands preload `src/scripts/register-local-env.ts`, which loads only the selected external
+`functions.env` profile without overriding variables already supplied by the invoking shell. A direct script can
+explicitly import that registration module. There is no repository `.secret.local`, `.env.local` or `.env` fallback.
+Importing `load-local-env.ts` for tests has no side effect; an explicit missing file fails with a value-free error.
+CI and deployed runtime indicators prevent personal profile loading even when an override is present.
 
-1. `functions/.secret.local`
-2. `functions/.env.local`
-3. legacy `functions/.env`
-
-The legacy file remains a local-script compatibility fallback only. Deployed runtime code does not load dotenv, and every local environment or secret file is excluded from upload archives. Deployment preflight deliberately fails while any `.env*`, `.runtimeconfig.json`, or service-account file is present in the Functions source, because Firebase can otherwise convert dotenv files back into ordinary runtime environment variables even when the archive ignore list excludes them.
+The mail operator reads an explicitly configured external Google credential first, then the optional external mail
+identity, then the external signing identity. It never searches the checkout. This changes credential location only;
+it does not authorize running a mail, cleanup, migration, backfill or provider operation.
 
 ## Adding or changing a secret
 
-1. Create the Secret Manager entry in the target project through the Cloud console or `firebase functions:secrets:set NAME`.
+1. Create the Secret Manager entry in the target project through the Cloud console or `npm run firebase -- functions:secrets:set NAME`.
 2. Add its `defineSecret()` registration to `SECRET_PARAMS` in `functions/src/secrets.ts`.
 3. Add it only to the endpoints that directly or transitively require it in `FUNCTION_SECRET_BINDINGS`.
 4. Add an empty entry to `functions/.secret.local.example` and update this inventory.
@@ -181,6 +225,8 @@ The command accepts only project and region selectors. It has no apply mode, no 
 
 ## Complete production deployment
 
+Use the [pinned Firebase CLI](firebase-tooling.md) for local commands and CI. Run `npm run firebase:tools` after selecting the intended Node version.
+
 Confirm all managed names have an enabled version, run the complete local verification suite, and deploy every repository-defined Function in one command:
 
 ```bash
@@ -188,8 +234,8 @@ npm --prefix functions test
 npm --prefix functions run build
 npm --prefix functions run secrets:check:compiled
 npm --prefix functions run mcp:contract:check:compiled
-firebase deploy --only functions --dry-run --project quantified-self-io
-firebase deploy --only functions --project quantified-self-io
+npm run firebase -- deploy --only functions --dry-run --project quantified-self-io
+npm run firebase -- deploy --only functions --project quantified-self-io
 npm --prefix functions run secrets:audit-deployed -- \
   --project=quantified-self-io \
   --regions=europe-west2,europe-west3
@@ -208,3 +254,7 @@ For the subscription-time gift path, use Stripe sandbox subscriptions and test c
 Do not redeploy a pre-migration revision unchanged: it does not declare Secret Manager bindings and would lose access to credentials once `.env` packaging is removed. Roll back application behavior while retaining `functions/src/secrets.ts`, the endpoint bindings, and the upload exclusions, then redeploy all Functions.
 
 To rotate a credential, add a new enabled Secret Manager version, deploy every Function listed for that name in `FUNCTION_SECRET_BINDINGS`, verify the provider path, and only then disable the previous version. Never delete the currently deployed version before replacement Functions are healthy.
+
+## Web Push senders
+
+`WEB_PUSH_VAPID_KEYPAIR` is a JSON object containing matching `publicKey` and `privateKey` values, shared by production and beta. `sendTestPushNotification`, `sendHistoryImportNotification`, `sendActivitySyncNotifications` and `sendActivityDeliveryNotifications` bind it; history admission callables and activity import workers do not need the private key. Keep the private key outside all checkouts; the value-free local template lists the name. The public key is distributed through the disabled-by-default `web_push_vapid_public_key` Remote Config parameter. Follow [Web Push activation and rotation](web-push-notifications.md#configuration-and-release). Secret provisioning, redeployment and Remote Config activation require separate authorization; tests use generated synthetic keys and do not provision a cloud secret.

@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
@@ -61,6 +62,7 @@ describe('ActivityCalendarTileComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
       providers: [
+        { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
@@ -69,13 +71,65 @@ describe('ActivityCalendarTileComponent', () => {
           getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
         } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchCalendarSchedule: vi.fn(uid => watchSchedule(uid)), watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },
         { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
+  });
+
+  it('opts into period totals without replacing the selected-day panel or adding reads, and follows the existing view control', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 30, 12));
+    watchEvents.mockReturnValue(of([
+      createEvent(new Date(2026, 8, 30), 'context'),
+      createEvent(new Date(2026, 9, 1), 'first'),
+      createEvent(new Date(2026, 9, 31), 'last'),
+    ]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-period-totals-strip')).toBeNull();
+    expect(fixture.componentInstance.periodTotals()).toEqual([]);
+    const selectedDayPanel = fixture.nativeElement.querySelector('app-calendar-day-context');
+    const readCount = watchEvents.mock.calls.length;
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges();
+    const values = () => Array.from(fixture.nativeElement.querySelectorAll('.calendar-period-totals-strip dd'))
+      .map((element: Element) => element.textContent?.trim());
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBe(selectedDayPanel);
+    expect(watchEvents).toHaveBeenCalledTimes(readCount);
+    fixture.componentInstance.selectView('30d');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    fixture.componentInstance.navigateMonth(-1);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    expect(fixture.componentInstance.calendarModel().periodLabel).not.toContain('30 Oct');
+    vi.useRealTimers();
+  });
+
+  it('does not present unloaded or failed period totals as zero', async () => {
+    const events = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(events.asObservable());
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const strip = fixture.nativeElement.querySelector('.calendar-period-totals-strip') as HTMLElement;
+    expect(strip.getAttribute('aria-busy')).toBe('true');
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    events.next([]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals()[0].value).toBe('0');
+    expect(strip.getAttribute('aria-busy')).toBe('false');
+    events.error(new Error('offline'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Calendar unavailable');
   });
 
   it('switches the visible Month / 30 days buttons once and disables them during a preference save', async () => {
@@ -653,6 +707,36 @@ describe('ActivityCalendarTileComponent', () => {
     expect(reportRange.mock.calls.at(-1)?.[1].startDate < firstRange.startDate).toBe(true);
     fixture.destroy();
     expect(reportRange).toHaveBeenLastCalledWith(fixture.componentInstance, null);
+  });
+
+  it.each(['month', '30d'] as const)('updates calendar-only rest days live in the dashboard %s grid and day preview', async view => {
+    const localDate = currentLocalDate(new Date().getDate());
+    const schedule = new BehaviorSubject<CurrentTrainingScheduleV1>({ ...emptySchedule(), restDays: [] });
+    watchSchedule.mockReturnValue(schedule);
+    watchEvents.mockReturnValue(of([]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('view', view);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.planned-rest-day-marker')).toBeNull();
+
+    schedule.next({ ...emptySchedule(), restDays: [{ schemaVersion: 1, localDate, isRestDay: true, revision: 1 }] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const cell = fixture.nativeElement.querySelector('[aria-label*="Rest day, Calendar"]') as HTMLElement;
+    expect(cell.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(cell.querySelector('.activity-calendar-workout-preview--rest')?.textContent).toBe('Rest day');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')?.textContent).toContain('Rest day');
+
+    schedule.next({ ...emptySchedule(), restDays: [{ schemaVersion: 1, localDate, isRestDay: false, revision: 2 }] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.planned-rest-day-marker')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeNull();
+    expect(watchSchedule).toHaveBeenCalledOnce();
+    expect(watchEvents).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   it('shows active-plan and standalone workouts and passes them to empty-day details', async () => {

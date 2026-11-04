@@ -155,8 +155,40 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
     await cleanupSendSourceRow(operationRef(initial.userID, initial.sendBatchID).collection('rows').doc(initial.sendRowID));
   }
 }
+/** A terminal unaccepted failure moves the queue row to failed_jobs. Project that committed result too. */
+export async function projectFailedSendDelivery(queueId: string, expected: Record<string, unknown>): Promise<void> {
+  if (typeof expected.userID !== 'string' || typeof expected.sendBatchID !== 'string' || typeof expected.sendRowID !== 'string') return;
+  const uid = expected.userID, id = expected.sendBatchID, rowId = expected.sendRowID;
+  await guardedBackgroundSendTransaction(uid, async tx => {
+    const db = admin.firestore();
+    const batch = batchRef(uid, id), operation = operationRef(uid, id);
+    const [live, failed, parent, row, source, privateParent] = await Promise.all([
+      tx.get(db.doc(`activitySyncQueue/${queueId}`)), tx.get(db.doc(`failed_jobs/${queueId}`)),
+      tx.get(batch), tx.get(batch.collection('rows').doc(rowId)), tx.get(operation.collection('rows').doc(rowId)), tx.get(operation),
+    ]);
+    const failure = failed.data();
+    if (live.exists || failure?.originalCollection !== 'activitySyncQueue' || failure.userID !== uid
+      || failure.sendBatchID !== id || failure.sendRowID !== rowId || failure.dateCreated !== expected.dateCreated
+      || !parent.exists || !row.exists || !privateParent.exists || source.data()?.queueId !== queueId) return;
+    const projection = { status: 'needs_action' as const, recovery: 'choose_file' as const,
+      message: 'This activity could not be sent after retries. Review a new send before trying again.' };
+    const finished = Number(parent.data()?.finished || 0) + Number(!activitySendTerminal(row.data()!.status));
+    if (Object.entries(projection).some(([key, value]) => row.data()![key] !== value)) tx.update(row.ref, projection);
+    const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
+    if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, state, updatedAt: Date.now() });
+    if (privateParent.data()?.finished !== finished) tx.update(operation, { finished, updatedAt: Date.now() });
+  });
+}
 export const projectActivitySendDelivery = onDocumentWritten({ document: 'activitySyncQueue/{queueId}', region: 'europe-west2', memory: '256MiB', timeoutSeconds: 60, retry: true }, async event => {
-  if (!event.data?.after.exists) return;
+  if (!event.data?.after.exists) {
+    const before = event.data?.before.exists ? event.data.before.data() : undefined;
+    if (before) await projectFailedSendDelivery(event.params.queueId, before);
+    return;
+  }
+  // Admission commits ownership atomically; a later linked write has its own retryable event.
+  const data = event.data.after.data();
+  if (!data?.sendBatchID || !data.sendRowID || !data.userID) return;
+  // Linked events still read current state, including when delivered out of order.
   await projectSendDelivery(event.data.after.ref);
 });
 

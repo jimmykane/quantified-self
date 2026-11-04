@@ -1,3 +1,5 @@
+import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
+import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { signal } from '@angular/core';
@@ -36,6 +38,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { PlansWorkspaceComponent } from './plans-workspace.component';
+import { TrainingDeliveryDialogComponent } from './training-delivery-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import { createManualWorkoutEditorStep, manualWorkoutEditorToStructure, workoutStructureToManualEditor,
@@ -118,7 +121,7 @@ describe('PlansWorkspaceComponent', () => {
     restoreSchedule = vi.fn();
     deleteTrainingPlan = vi.fn();
     dialogOpen = vi.fn();
-    snackBarOpen = vi.fn();
+    snackBarOpen = vi.fn().mockReturnValue({ onAction: () => of(), dismiss: vi.fn() });
     savePreferences = vi.fn().mockResolvedValue(undefined);
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     await TestBed.configureTestingModule({
@@ -127,6 +130,8 @@ describe('PlansWorkspaceComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
+        { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true,
+          canGenerate: vi.fn(() => true), open: vi.fn().mockResolvedValue(undefined) } },
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
@@ -167,6 +172,103 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('opens AI generation from New Workout and replaces the reviewed draft without same-route navigation or a save', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.Cycling); fixture.detectChanges();
+    const generator = TestBed.inject(DayWorkoutService), router = TestBed.inject(Router);
+    const controls = defaultDayWorkoutControls('2026-09-09', Intl.DateTimeFormat().resolvedOptions().timeZone, ActivityTypes.Cycling);
+    const draft: DayWorkoutEditorDraft = { ownerUid: user.uid, controls,
+      draft: { title: 'Generated cycling', structure: schedule.workouts[0].structure },
+      saveRequest: { mutationId: 'ai-save', expectedRevisions: [{ scope: 'state', id: 'current', revision: 4 }],
+        operation: { kind: 'create-workout', workoutId: 'ai-workout', planId: null, localDate: controls.localDate,
+          title: 'Generated cycling', structure: schedule.workouts[0].structure, confirmPlanRangeExtension: false } } };
+    vi.mocked(generator.open).mockImplementationOnce(async (_uid, _date, _sport, options) => { options?.onEditorDraft?.(draft); });
+    vi.mocked(router.navigate).mockClear(); haptics.selection.mockClear();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Generate with AI')) as HTMLButtonElement;
+    expect(button).toBeTruthy(); button.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, controls.localDate, ActivityTypes.Cycling, expect.objectContaining({
+      initialControls: expect.objectContaining({ destinationPlanId: null, sport: ActivityTypes.Cycling, timelineContext: true }),
+    }));
+    expect(component.editor()?.value.title).toBe('Generated cycling');
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(component.generationOpen()).toBe(false);
+  });
+  it.each(['account', 'route'] as const)('discards a late AI handoff after the %s changes', async change => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    let finish!: () => void, options!: Parameters<DayWorkoutService['open']>[3];
+    const generator = TestBed.inject(DayWorkoutService);
+    vi.mocked(generator.open).mockImplementationOnce(async (_uid, _date, _sport, value) => {
+      options = value; await new Promise<void>(resolve => { finish = resolve; });
+    });
+    const pending = component.generateWorkout();
+    expect(options?.canExecute?.()).toBe(true);
+    if (change === 'account') { userSignal.set(null); userSubject.next(null); }
+    else setRouteState({ scope: 'standalone' }, true);
+    fixture.detectChanges();
+    expect(options?.canExecute?.()).toBe(false);
+    options?.onEditorDraft?.({ ownerUid: user.uid, controls: defaultDayWorkoutControls('2026-09-09', 'Europe/Helsinki'),
+      draft: { title: 'Late draft', structure: schedule.workouts[0].structure }, saveRequest: {} as DayWorkoutEditorDraft['saveRequest'] });
+    finish(); await pending; fixture.detectChanges();
+    expect(component.editor()?.value.title).not.toBe('Late draft');
+    expect(mutate).not.toHaveBeenCalled(); expect(component.generationOpen()).toBe(false);
+  });
+  it('reuses the selected plan and date for generation, and hides it from library and existing-workout editors', async () => {
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const generator = TestBed.inject(DayWorkoutService);
+    await component.generateWorkout();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, component.generationDate(), ActivityTypes.Running,
+      expect.objectContaining({ initialControls: expect.objectContaining({ destinationPlanId: component.selectedPlanId() }) }));
+    setRouteState({ mode: 'library-create' }, true); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(false);
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' }, true); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(false);
+  });
+  it('keeps an unsaved form on cancellation and prevents duplicate opens or generation for an unsupported date', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    component.updateEditorField('title', 'My unsaved workout');
+    const original = component.editor(), generator = TestBed.inject(DayWorkoutService);
+    let finish!: () => void;
+    vi.mocked(generator.open).mockImplementationOnce(async () => { await new Promise<void>(resolve => { finish = resolve; }); });
+    const pending = component.generateWorkout(); await component.generateWorkout();
+    fixture.detectChanges();
+    const openingButton = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Opening…')) as HTMLButtonElement;
+    expect(openingButton?.disabled).toBe(true);
+    expect(openingButton.querySelector('.button-content mat-spinner')).toBeTruthy();
+    expect(generator.open).toHaveBeenCalledOnce();
+    finish(); await pending;
+    fixture.detectChanges(); expect(fixture.nativeElement.textContent).not.toContain('Opening…');
+    expect(component.editor()).toBe(original); expect(component.editor()?.value.title).toBe('My unsaved workout');
+    vi.mocked(generator.canGenerate).mockReturnValue(false);
+    await component.generateWorkout(); expect(generator.open).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('uses the click-time local date for standalone generation before the day clock refreshes', async () => {
+    setRouteState({ scope: 'standalone' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 1));
+    await component.generateWorkout();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith(user.uid, '2026-09-10', expect.anything(), expect.anything());
+  });
+  it.each([
+    { date: '2026-09-09', before: true, after: false },
+    { date: '2027-09-10', before: false, after: true },
+  ])('refreshes explicit-date generation eligibility across midnight ($date)', async ({ date, before, after }) => {
+    vi.mocked(TestBed.inject(DayWorkoutService).canGenerate).mockImplementation(DayWorkoutService.prototype.canGenerate);
+    setRouteState({ mode: 'create', scope: 'standalone', date });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    expect(component.canGenerateWorkout()).toBe(before);
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 1)); component.refreshToday(); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(after);
+    const labels = [...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) => button.textContent);
+    expect(labels.some(label => label?.includes('Generate with AI'))).toBe(after);
+    expect(TestBed.inject(DayWorkoutService).open).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
 
   it.each(['plans', 'standalone', 'library'] as const)('shows live unsaved timed totals and repeat changes in the %s editor', async scope => {
     setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
@@ -801,6 +903,56 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it.each(['plans', 'standalone', 'library'] as const)('defaults only untouched new Rest steps and saves explicit durations in %s', async scope => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Rest duration review');
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateStep(0, null, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Set a duration');
+    const seconds: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="seconds"]');
+    haptics.selection.mockClear();
+    seconds.value = '15'; seconds.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(component.editorProfile().nodes[0]).toMatchObject({ ending: { seconds: 15 } });
+
+    component.addEditorStep();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const purposes = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).filter(select => select.options.some(option => option.value === 'rest'));
+    purposes[1].selectionChange.emit({ source: purposes[1], value: 'rest' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editorProfile().nodes[1]).toMatchObject({ ending: { seconds: 15 } });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.updateStep(1, null, 'purpose', 'rest');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.addEditorRepeat(); component.updateStep(2, 1, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editorProfile().nodes[2]).toMatchObject({ steps: [{}, { ending: { seconds: 15 } }] });
+    if (scope === 'standalone') exportLibraryQa(fixture, 'rest-seconds-editor', '.workout-editor');
+
+    const inputs: HTMLElement = fixture.nativeElement.querySelectorAll('app-workout-time-input')[1];
+    for (const [part, value] of [['minutes', '15'], ['seconds', '0']]) {
+      const input: HTMLInputElement = inputs.querySelector(`[data-duration-part="${part}"]`)!;
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    component.updateStep(1, null, 'purpose', 'work'); component.updateStep(1, null, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(inputs.querySelector('.duration-warning')?.textContent).toContain('previous rest is 15 seconds');
+    expect(inputs.querySelector('.duration-summary')?.textContent).toContain('Rest for 15 minutes');
+    if (scope === 'standalone') exportLibraryQa(fixture, 'rest-minutes-editor', '.workout-editor');
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes[1].ending.seconds).toBe(900);
+    expect(operation.structure.nodes[2].steps[1].ending.seconds).toBe(15);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/untouchedDuration|sourceDuration|previousRestSeconds/);
+  });
+
   it('exports the real timing editor for optional isolated visual QA', async () => {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
     TestBed.overrideProvider(MAT_FORM_FIELD_DEFAULT_OPTIONS, { useValue: { appearance: 'outline' } });
@@ -919,6 +1071,27 @@ describe('PlansWorkspaceComponent', () => {
     component.updateEditorField('sport', ActivityTypes.Swimming);
     component.updateEditorField('title', 'Undated swim recipe');
     await exportEditor('library-editor');
+  });
+
+  it('opens an unsaved AI strength draft and retries a lost save with the same complete prescription and identities', async () => {
+    const controls = defaultDayWorkoutControls('2026-09-09', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [
+      { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, externalLoadKg: 12.5, restAfterSeconds: 90 },
+    ] }] };
+    const draft = { title: 'Generated strength', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }) };
+    vi.mocked(TestBed.inject(DayWorkoutService).takeEditorDraft).mockReturnValueOnce({ ownerUid: user.uid, controls, draft,
+      saveRequest: { mutationId: 'generated-save', expectedRevisions: [{ scope: 'state', id: 'current', revision: 4 }],
+        operation: { kind: 'create-workout', workoutId: 'generated-workout', planId: null, localDate: controls.localDate,
+          title: draft.title, structure: draft.structure, strength, confirmPlanRangeExtension: false } } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: controls.localDate });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    expect(component.editor()?.strength).toEqual(strength); expect(mutate).not.toHaveBeenCalled();
+    mutate.mockRejectedValueOnce({ code: 'functions/unavailable', message: 'Lost response' });
+    await component.saveWorkout(); expect(component.editor()?.strength).toEqual(strength);
+    await component.saveWorkout();
+    expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
+    expect(mutate.mock.calls[0][0].operation).toMatchObject({ workoutId: 'generated-workout', strength });
+    expect(mutate.mock.calls[0][1]).toEqual(expect.any(Function));
   });
 
   function setRouteState(options: {
@@ -2294,6 +2467,167 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
 
+  it('marks and removes an explicit rest day with revision checks, no fake workout, and no hydration haptics', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const plan = component.selectedPlan()!;
+    expect(component.selectedDayIsRest()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((element: HTMLButtonElement) => element.textContent?.includes('Mark as rest day')) as HTMLButtonElement;
+    expect(button.disabled).toBe(false); button.click(); await fixture.whenStable(); fixture.detectChanges();
+    const date = component.planScheduleDate()!;
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [date] },
+      expectedRevisions: expect.arrayContaining([{ scope: 'plan', id: plan.id, revision: plan.revision }]),
+    }), expect.any(Function));
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+    live.next({ ...schedule, plans: [{ ...plan, revision: plan.revision + 1, restDays: [date] }] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Planned rest day');
+    const add = Array.from(fixture.nativeElement.querySelectorAll('button')).find((element: HTMLButtonElement) => element.textContent?.includes('Add workout')) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    exportLibraryQa(fixture, 'plan-rest-day', '.workout-list');
+    await component.toggleSelectedRestDay();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({ operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] } }), expect.any(Function));
+    expect(mutate.mock.calls.every(([request]) => request.operation.kind === 'set-plan-rest-days')).toBe(true);
+  });
+
+  it('blocks rest-day creation when the same plan date has a planned workout', async () => {
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const workout = schedule.workouts.find(item => item.planId === component.selectedPlanId())!;
+    component.selectScheduleDate(workout.localDate); fixture.detectChanges();
+    expect(component.selectedDayHasPlannedWorkout()).toBe(true);
+    await component.toggleSelectedRestDay(); expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('reflects confirmed rest-day edits immediately without waiting for the live schedule', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const plan = component.selectedPlan()!, date = component.planScheduleDate()!;
+    const addedPlan = { ...plan, restDays: [date], revision: plan.revision + 1 };
+    const addedState = { ...schedule.state, revision: schedule.state.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: addedState, plans: [addedPlan], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Remove rest day');
+    expect(component.schedule().plans[0]).toEqual(plan); // The live stream is deliberately still old.
+    live.next({ ...schedule }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true); // Repeated older snapshots cannot undo the confirmed edit.
+    const removedPlan = { ...plan, revision: addedPlan.revision + 1 };
+    const removedState = { ...addedState, revision: addedState.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: removedState, plans: [removedPlan], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] },
+      expectedRevisions: expect.arrayContaining([
+        { scope: 'state', id: 'current', revision: addedState.revision },
+        { scope: 'plan', id: plan.id, revision: addedPlan.revision },
+      ]),
+    }), expect.any(Function));
+    expect(component.selectedDayIsRest()).toBe(false); expect(component.busyAction()).toBeNull();
+    live.next({ ...schedule, state: addedState, plans: [addedPlan] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(false);
+    live.next({ ...schedule, state: removedState, plans: [removedPlan] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(false); expect(component.selectedPlan()).toEqual(removedPlan);
+    expect(component.schedule().workouts).toEqual([]); expect(haptics.success).toHaveBeenCalledTimes(2);
+  });
+
+  it('never reinserts a removed plan from a rest-day save acknowledgement', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const plan = component.selectedPlan()!, date = component.planScheduleDate()!;
+    const updatedState = { ...schedule.state, revision: schedule.state.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: updatedState,
+      plans: [{ ...plan, restDays: [date], revision: plan.revision + 1 }], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    live.next({ ...schedule, state: { ...updatedState, revision: updatedState.revision + 1, activePlanId: null }, plans: [] });
+    fixture.detectChanges();
+    expect(component.planOptions()).toEqual([]); expect(component.selectedPlan()).toBeNull();
+    expect(component.selectedDayIsRest()).toBe(false);
+  });
+
+  it.each([false, true])('does not change rest intent when a save fails (already rest=%s)', async alreadyRest => {
+    schedule.workouts = [];
+    if (alreadyRest) schedule.plans[0].restDays = ['2026-09-09'];
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const before = component.selectedPlan();
+    mutate.mockRejectedValueOnce(new Error('Offline'));
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(alreadyRest); expect(component.selectedPlan()).toEqual(before);
+    expect(component.busyAction()).toBeNull(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(snackBarOpen).toHaveBeenCalledOnce();
+    expect(snackBarOpen.mock.calls[0][0]).toBe('Offline');
+  });
+
+  it('cancels a rest-day save awaiting callable readiness even after returning to the same account', async () => {
+    schedule.workouts = [];
+    let ready!: () => void;
+    const readiness = new Promise<void>(resolve => { ready = resolve; }), dispatch = vi.fn();
+    mutate.mockImplementationOnce(async (request, canExecute) => {
+      expect(canExecute).toEqual(expect.any(Function)); expect(canExecute()).toBe(true);
+      await readiness;
+      if (!canExecute()) throw new Error('Request cancelled before dispatch.');
+      return dispatch(request);
+    });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const pending = component.toggleSelectedRestDay();
+    userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+    expect(component.busyAction()).toBeNull();
+    userSignal.set(user); userSubject.next(user); fixture.detectChanges();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    ready(); await pending;
+    expect(dispatch).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it.each(['owner', 'view', 'destroy'] as const)('suppresses late rest-day save outcomes after %s changes', async change => {
+    schedule.workouts = [];
+    let finish!: (value: unknown) => void, fail!: (error: Error) => void;
+    mutate.mockImplementation(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const leave = () => {
+      if (change === 'owner') {
+        userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+        userSignal.set(user); userSubject.next(user); fixture.detectChanges();
+      } else if (change === 'view') {
+        setRouteState({ scope: 'standalone' }, true); fixture.detectChanges();
+        setRouteState({}, true); fixture.detectChanges();
+      } else fixture.destroy();
+    };
+    const pending = component.toggleSelectedRestDay();
+    expect(mutate.mock.calls[0][1]()).toBe(true); leave();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    finish({ state: schedule.state, plans: [], workouts: [] }); await pending;
+    expect(haptics.success).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+    if (change === 'destroy') { expect(haptics.error).not.toHaveBeenCalled(); return; }
+    expect(component.busyAction()).toBeNull();
+    const failed = component.toggleSelectedRestDay(); leave();
+    fail(new Error('Offline')); await failed;
+    expect(haptics.error).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old rest-day save clear the next owner’s pending save for the same plan', async () => {
+    schedule.workouts = [];
+    let finishOld!: (value: unknown) => void, finishNew!: (value: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve; }));
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const oldSave = component.toggleSelectedRestDay();
+    userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+    expect(component.busyAction()).toBeNull();
+    const newSave = component.toggleSelectedRestDay();
+    const currentAction = component.busyAction(); expect(currentAction).toMatch(/^rest-/);
+    finishOld({ state: schedule.state, plans: [], workouts: [] }); await oldSave;
+    expect(component.busyAction()).toBe(currentAction); expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    finishNew({ state: schedule.state, plans: [], workouts: [] }); await newSave;
+    expect(component.busyAction()).toBeNull(); expect(haptics.success).toHaveBeenCalledOnce();
+    expect(snackBarOpen).toHaveBeenCalledExactlyOnceWith('Rest day added.', 'Dismiss', { duration: 3000 });
+  });
+
   it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {
     const live = new BehaviorSubject(schedule);
     watchSchedule.mockReturnValue(live);
@@ -3471,6 +3805,39 @@ describe('PlansWorkspaceComponent', () => {
     expect(deleteTrainingPlan).toHaveBeenCalledWith(expect.objectContaining({ removePastProviderCopies: true }));
   });
 
+  it.each(['manual', 'library'] as const)('offers the existing delivery review after adding a %s workout', async source => {
+    setRouteState({ mode: source === 'manual' ? 'create' : 'library-browse', scope: 'standalone' });
+    const action = new Subject<void>();
+    snackBarOpen.mockReturnValue({ onAction: () => action, dismiss: vi.fn() });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    const open = dialogOpen;
+    if (source === 'manual') {
+      component.updateEditorField('title', 'Quick run'); await component.saveWorkout();
+    } else {
+      libraryPlace.mockResolvedValue({ workoutIds: ['placed-workout'] });
+      component.beginLibraryPlacement(savedItem()); await component.placeLibraryItem();
+    }
+    expect(snackBarOpen).toHaveBeenLastCalledWith(expect.any(String), 'Send / sync', { duration: 8000 });
+    expect(open).not.toHaveBeenCalled();
+    action.next(); action.next();
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({
+      data: { scope: 'workout', id: source === 'manual' ? 'workout-new' : 'placed-workout', title: source === 'manual' ? 'Quick run' : savedItem().title },
+    }));
+    expect(mutate).toHaveBeenCalledTimes(source === 'manual' ? 1 : 0);
+    expect(libraryPlace).toHaveBeenCalledTimes(source === 'library' ? 1 : 0);
+  });
+
+  it('discards a saved-workout Send shortcut after sign-out', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone' });
+    const action = new Subject<void>(); snackBarOpen.mockReturnValue({ onAction: () => action, dismiss: vi.fn() });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    const open = dialogOpen;
+    component.updateEditorField('title', 'Quick run'); await component.saveWorkout();
+    userSignal.set(null); userSubject.next(null);
+    action.next(); expect(open).not.toHaveBeenCalled();
+  });
+
   it('passes the explicit single-workout cleanup choice and leaves cancellation inert', async () => {
     const fixture = await renderPlans();
     const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
@@ -3480,9 +3847,127 @@ describe('PlansWorkspaceComponent', () => {
     await fixture.componentInstance.deleteWorkout(schedule.workouts[0]);
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       operation: { kind: 'delete-workout', workoutId: 'plan-workout', removePastProviderCopies: true },
-    }));
+    }), expect.any(Function));
     await fixture.componentInstance.permanentlyDeleteWorkout(schedule.workouts[0]);
     expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['plan-workout', 'standalone-workout'])('deletes %s from the editor and returns to its saved day', async workoutId => {
+    const workout = schedule.workouts.find(item => item.id === workoutId)!;
+    workout.localDate = '2026-09-20';
+    setRouteState({ mode: 'edit', workoutId });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', ''); // Invalid unsaved edits must not prevent deleting the saved workout.
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.editor-delete-action') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.classList.contains('qs-mat-warn')).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    exportLibraryQa(fixture, `delete-${workoutId}`, '.workout-editor');
+    const confirmation = mockWorkoutDeleteConfirmation(component, of({ confirmed: true, removePastProviderCopies: false }));
+
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(confirmation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({
+      title: 'Delete workout?', message: 'The workout will remain in history and can be restored.',
+      pastProviderCleanupOption: true,
+    }) }));
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'delete-workout', workoutId },
+      expectedRevisions: expect.arrayContaining([{ scope: 'workout', id: workoutId, revision: workout.revision }]),
+    }), expect.any(Function));
+    expect(component.editor()).toBeNull();
+    expect(component.view()).toBe(workout.planId ? 'plans' : 'standalone');
+    if (workout.planId) expect(component.planScheduleDate()).toBe('2026-09-20');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it.each(['create', 'library-create', 'library-edit'] as const)('hides scheduled-workout deletion in %s', async mode => {
+    if (mode === 'library-edit') libraryGet.mockResolvedValue(savedItem());
+    setRouteState({ mode, ...(mode === 'library-edit' ? { libraryItemId: 'library-1' } : {}) });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.editor-delete-action')).toBeNull();
+  });
+
+  it.each(['cancel', 'failure'] as const)('keeps the editor draft after deletion %s', async outcome => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Unsaved workout title');
+    mockWorkoutDeleteConfirmation(component, of(outcome === 'cancel' ? false : { confirmed: true }));
+    if (outcome === 'failure') mutate.mockRejectedValue(new Error('Delete failed'));
+    await component.deleteWorkout(component.editor()!.original!);
+    fixture.detectChanges();
+    expect(component.editor()?.value.title).toBe('Unsaved workout title');
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(mutate).toHaveBeenCalledTimes(outcome === 'cancel' ? 0 : 1);
+    expect(haptics.error).toHaveBeenCalledTimes(outcome === 'failure' ? 1 : 0);
+  });
+
+  it('locks editor deletion while pending and keeps its original revision precondition', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    mockWorkoutDeleteConfirmation(component, of({ confirmed: true }));
+    let finish!: (value: unknown) => void;
+    mutate.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    schedule.workouts[0] = { ...schedule.workouts[0], revision: 2 };
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.editor-delete-action') as HTMLButtonElement;
+    button.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('mat-spinner')).toBeTruthy();
+    exportLibraryQa(fixture, 'delete-pending', '.workout-editor');
+    expect(mutate.mock.calls[0][0].expectedRevisions).toContainEqual({ scope: 'workout', id: 'plan-workout', revision: 1 });
+    expect(mutate.mock.calls[0][1]()).toBe(true);
+    finish({});
+    await fixture.whenStable();
+    expect(component.editor()).toBeNull();
+  });
+
+  it.each(['sign-out', 'navigate', 'destroy'] as const)('ignores an editor delete confirmation after %s', async change => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    const confirmation = new Subject<{ confirmed: boolean }>();
+    mockWorkoutDeleteConfirmation(component, confirmation);
+    const deletion = component.deleteWorkout(component.editor()!.original!);
+    if (change === 'sign-out') { userSignal.set(null); userSubject.next(null); }
+    else if (change === 'destroy') fixture.destroy();
+    else { setRouteState({ mode: 'create' }, true); fixture.detectChanges(); }
+    confirmation.next({ confirmed: true });
+    confirmation.complete();
+    await deletion;
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('ignores a completed editor deletion after navigation and releases its busy state', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    mockWorkoutDeleteConfirmation(component, of({ confirmed: true }));
+    let finish!: (value: unknown) => void;
+    mutate.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const deletion = component.deleteWorkout(component.editor()!.original!);
+    await Promise.resolve();
+    setRouteState({ mode: 'create' }, true); fixture.detectChanges();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    finish({});
+    await deletion;
+    expect(component.editor()?.mode).toBe('create');
+    expect(component.busyAction()).toBeNull();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
   });
 
   it('keeps plan mutations visibly pending beside the triggering controls', async () => {
@@ -3841,13 +4326,21 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  function mockWorkoutDeleteConfirmation(component: PlansWorkspaceComponent, result: Observable<unknown>) {
+    const dialog = (component as unknown as { dialog: MatDialog }).dialog;
+    return vi.spyOn(dialog, 'open').mockReturnValue({ afterClosed: () => result } as never);
+  }
+
   function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string, selector = '.workout-library'): void {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
     const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
     const css = [
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-plan-schedule-calendar', 'src/app/components/plans/plan-schedule-calendar.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-training-delivery-button', 'src/app/components/plans/training-delivery-button.component.scss'],
+      ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
     const source = fixture.nativeElement.querySelector(selector) as HTMLElement;

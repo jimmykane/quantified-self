@@ -1,6 +1,7 @@
 import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { Auth } from 'app/firebase/auth';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -42,7 +43,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class EventActionsComponent implements OnInit, OnDestroy {
+export class EventActionsComponent implements OnChanges, OnInit, OnDestroy {
   private readonly sendAuth = inject(Auth, { optional: true });
   private readonly destroyRef = inject(DestroyRef);
   private ascentEditorOpen = false;
@@ -92,6 +93,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
+  @Input() disabled = false;
+  @ViewChild(MatMenuTrigger) private menuTrigger?: MatMenuTrigger;
   @Output() eventDeleted = new EventEmitter<string>();
   @Output() ascentChanged = new EventEmitter<EventRead>();
 
@@ -122,6 +125,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private dialog: MatDialog) {
   }
 
+  ngOnChanges(): void {
+    if (this.disabled) this.menuTrigger?.closeMenu();
+  }
+
   async ngOnInit() {
     if (!this.user) {
       throw new Error('User is required')
@@ -130,7 +137,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async menuOpen(_event: unknown) {
-    if (this.isSharing) {
+    if (this.disabled || this.isSharing) {
       return;
     }
     this.hapticsService.selection();

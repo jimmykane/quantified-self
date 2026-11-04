@@ -325,6 +325,32 @@ describe('AssistantPageComponent', () => {
   });
 
 
+  it('shows calendar rest before/after without a plan and does not apply on hydration', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-calendar-rest-day', summary: 'Mark rest date' }],
+      calendarRestDayReview: { localDate: '2026-10-31', before: false, after: true } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review calendar rest day"]') as HTMLElement;
+    expect(review.textContent).toContain('Oct 31, 2026');
+    expect(review.textContent).toContain('Current: No calendar rest marker');
+    expect(review.textContent).toContain('Proposed: Rest day');
+    expect(review.textContent).toContain('Plan rest days and existing workouts stay unchanged');
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+  });
+
+  it('shows complete human-readable rest-day before/after dates without applying during hydration', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Replace rest dates' }], restDayReview: {
+        planName: '<script>Autumn</script>', startDate: '2026-10-01', endDate: '2026-10-31', before: ['2026-10-02'], after: ['2026-10-03', '2026-10-04'] } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review plan rest days"]') as HTMLElement;
+    expect(review.textContent).toContain('Current rest days'); expect(review.textContent).toContain('Proposed rest days');
+    expect(review.textContent).toContain('Oct 2, 2026'); expect(review.textContent).toContain('Oct 3, 2026'); expect(review.textContent).toContain('Oct 4, 2026');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+  });
+
   it('shows full phase before/after metadata and range changes without applying during hydration', async () => {
     const phases = { version: 1 as const, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10',
       description: 'Existing description', color: 'blue' as const }] };
@@ -721,9 +747,11 @@ describe('AssistantPageComponent', () => {
     expect(sendButton).toBeTruthy();
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute('aria-label')).toBe('Sending message');
-    const spinner = sendButton.querySelector('mat-spinner') as HTMLElement;
+    const spinner = sendButton.parentElement!.querySelector('mat-spinner') as HTMLElement;
     expect(spinner).toBeTruthy();
     expect(spinner.getAttribute('diameter')).toBe('20');
+    expect(spinner.closest('button')).toBeNull();
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
     expect(sendButton.querySelector('mat-icon')).toBeNull();
     expect(composer.classList.contains('composer-sending')).toBe(false);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
@@ -734,7 +762,31 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
     expect(styles).not.toMatch(/\.composer-sending\s*{/s);
-    expect(styles).toMatch(/\.composer-submit-spinner\s*{[^}]*display:\s*block;/s);
+    expect(styles).toMatch(/\.assistant-icon-action\s*>\s*mat-spinner\s*{[^}]*pointer-events:\s*none;/s);
+  });
+
+  it('keeps the new chat spinner outside the disabled icon button while resetting', () => {
+    const selector = 'button[aria-label="Start a new chat with all optional data access off"]';
+    let button = fixture.nativeElement.querySelector(selector) as HTMLButtonElement;
+    expect(button.querySelector('mat-icon')?.textContent).toContain('add_comment');
+    expect(button.parentElement!.querySelector('mat-spinner')).toBeNull();
+
+    component.resetting.set(true);
+    fixture.detectChanges();
+    button = fixture.nativeElement.querySelector(selector) as HTMLButtonElement;
+    const spinner = button.parentElement!.querySelector('mat-spinner') as HTMLElement;
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('mat-icon')).toBeNull();
+    expect(spinner).toBeTruthy();
+    expect(spinner.getAttribute('diameter')).toBe('20');
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
+    expect(spinner.closest('button')).toBeNull();
+
+    component.resetting.set(false);
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    expect(button.querySelector('mat-icon')?.textContent).toContain('add_comment');
+    expect(button.parentElement!.querySelector('mat-spinner')).toBeNull();
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {

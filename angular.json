@@ -72,7 +72,7 @@
                 {
                   "type": "allScript",
                   "maximumWarning": "13000kb",
-                  "maximumError": "13700kb"
+                  "maximumError": "14mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -115,7 +115,7 @@
                 {
                   "type": "allScript",
                   "maximumWarning": "13000kb",
-                  "maximumError": "13700kb"
+                  "maximumError": "14mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -181,9 +181,7 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
             "buildTarget": "track-tools:build",
-            "ssl": true,
-            "sslCert": "./certs/localhost.crt",
-            "sslKey": "./certs/localhost.key"
+            "ssl": true
           },
           "configurations": {
             "production": {

@@ -504,6 +504,28 @@ describe('history', () => {
             }));
         });
 
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('does not readmit a retained %s failure from an overlapping history window', async serviceName => {
+            const execution = automaticExecution(serviceName);
+            const id = serviceName === ServiceNames.SuuntoApp ? 'mockID' : 'coros-testUser-0';
+            const collection = serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'COROSAPIWorkoutQueue';
+            execution.retainedFailedChildPaths = new Set([`${collection}/${id}`]);
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 'test', userName: 'testUser', openId: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify(serviceName === ServiceNames.SuuntoApp
+                ? { payload: [{ workoutKey: 'w1' }] }
+                : { result: '0000', data: [{ workoutId: 'w1' }] }));
+            const startDate = new Date('2026-09-01'), endDate = new Date('2026-09-02');
+            const result = await history.addHistoryToQueue('uid', serviceName, startDate, endDate, {
+                execution, maxItems: 100,
+                cumulativeMetadata: { startDate, endDate, processedActivitiesCountOffset: 5 },
+            });
+            expect(result).toMatchObject({ successCount: 0, failureCount: 0 });
+            expect(execution.onQueued).not.toHaveBeenCalled();
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => data.fromHistory)).toHaveLength(0);
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ processedActivitiesFromLastHistoryImportCount: 5 }), { merge: true });
+        });
+
         it('leaves failed automatic dispatch durably admitted for scheduled recovery', async () => {
             const execution = automaticExecution();
             hoisted.getMock.mockResolvedValue({ id: 'testUser' });

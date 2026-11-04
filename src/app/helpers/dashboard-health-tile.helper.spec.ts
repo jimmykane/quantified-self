@@ -48,7 +48,7 @@ describe('dashboard Health tiles', () => {
     expect(empty.dashboardSettings.tiles).toEqual([]);
   });
   it('marks only added chart types as new', () => {
-    expect(catalog.filter(entry => entry.definition.category === 'health').every(entry => entry.definition.introducedIn === 2)).toBe(true);
+    expect(catalog.filter(entry => entry.definition.category === 'health').every(entry => entry.definition.introducedIn === (entry.definition.id === 'health:vo2_max' ? 3 : 2))).toBe(true);
     expect(catalog.find(entry => entry.definition.id === 'curated-hrv')!.definition.introducedIn).toBe(1);
   });
 });

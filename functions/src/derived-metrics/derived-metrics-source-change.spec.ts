@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { hasDerivedMetricSourceChange } from './derived-metrics-source-change';
+import { hasDerivedMetricSourceChange, hasDerivedMetricsHealthSource } from './derived-metrics-source-change';
 import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
 
 describe('derived source invalidation', () => {
+    it('keeps Health eligibility identical for both sides and Garmin sleep HR sources', () => {
+        for (const metric of ['body_weight', 'heart_rate_variability', 'vo2_max']) {
+            expect(hasDerivedMetricsHealthSource({ metricIds: [metric] }, undefined)).toBe(true);
+            expect(hasDerivedMetricsHealthSource(undefined, { metricIds: [metric] })).toBe(true);
+        }
+        const dailyHr = { metricIds: ['heart_rate'], sampleChunkIds: ['chunk'],
+            source: { provider: 'GarminAPI', sourceRecordType: 'garmin_daily' } };
+        expect(hasDerivedMetricsHealthSource(dailyHr, undefined)).toBe(true);
+        expect(hasDerivedMetricsHealthSource(undefined, dailyHr)).toBe(true);
+        expect(hasDerivedMetricsHealthSource({ ...dailyHr, sampleChunkIds: [] }, undefined)).toBe(false);
+        expect(hasDerivedMetricsHealthSource({ metricIds: ['steps'] }, undefined)).toBe(false);
+        expect(hasDerivedMetricsHealthSource(undefined, { metricIds: 'body_weight' })).toBe(false);
+    });
+
     it.each(['event', 'activity', 'sleep', 'health'] as const)('ignores metadata-only %s updates and preserves create/delete', source => {
         const data = { startDate: 1, stats: { TSS: 50 }, metricIds: ['heart_rate_variability'] };
         expect(hasDerivedMetricSourceChange(source, data, { ...data, updatedAtMs: 2, processing: true })).toBe(false);

@@ -29,6 +29,8 @@ export interface ManualWorkoutEditorStep {
   allowEarlyLap?: boolean;
   targets: ManualWorkoutEditorTarget[];
   note?: string;
+  /** Only an untouched, newly added duration may adopt a previous Rest's duration. Never persisted. */
+  untouchedDuration?: true;
   /** Editor-only: preserve exact saved seconds through display and temporary lap endings. */
   sourceDuration?: { editorValue: number; seconds: number };
   /** Editor-only: preserve exact metres through rounded display and temporary lap endings. */
@@ -61,6 +63,7 @@ export function createManualWorkoutEditorStep(id: string): ManualWorkoutEditorSt
     purpose: 'work',
     endingKind: 'time',
     endingValue: 10,
+    untouchedDuration: true,
     targets: [],
   };
 }
@@ -119,7 +122,7 @@ export function changeManualWorkoutEditorStepEnding(
   } else if (step.endingKind === 'manual' && endingKind === 'time') {
     sourceDuration = step.sourceDuration;
   }
-  return { ...step, endingKind, sourceDistance, sourceDuration };
+  return { ...step, endingKind, sourceDistance, sourceDuration, untouchedDuration: undefined };
 }
 
 function endingFromEditor(

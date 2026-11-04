@@ -14,6 +14,31 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('requires reparse when explicit reassociation changes CSS, while still honoring zero overrides', () => {
+    const data = metadata();
+    data.legs!.old = { ...data.legs!.walk, activityId: null,
+      policy: { ...data.legs!.walk.policy, family: 'swimming', swimThresholdSpeed: 1 } };
+    data.controls.old = { activityId: 'walk' };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    data.controls.old.override = 0;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+  });
+  it('selects stored swim pace, retains old-evaluation compatibility and keeps overrides/exclusion/reset precedence', () => {
+    const data = metadata(); const leg = data.legs!.walk;
+    const automatic = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 30, estimated: false,
+      provenance: 'calculated' as const, reasons: [] };
+    leg.evaluations = { version: 1, automatic, hr: { ...automatic, preference: 'HR' }, met: { ...automatic, preference: 'MET' } };
+    leg.policy.method = 'SWIM_PACE';
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    leg.evaluations.swimPace = { ...automatic, preference: 'SWIM_PACE', method: 'SWIM_PACE', score: 100 };
+    expect(resolveEffectiveTrainingLoad(source, JSON.parse(JSON.stringify(data)), activities, 'walk').score).toBe(100);
+    data.controls.walk = { override: 0 };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+    data.controls.walk = { included: false };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').status).toBe('excluded');
+    data.controls = {};
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(100);
+  });
   it('carries the selected HR algorithm through private load resolution without labelling overrides or multisport totals', () => {
     const data = metadata();
     const candidate = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 70,

@@ -620,6 +620,7 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
 export const mergeEvents = onCall({
   region: FUNCTIONS_MANIFEST.mergeEvents.region,
   ...ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
+  memory: '2GiB',
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request) => {
   if (!request.auth) {

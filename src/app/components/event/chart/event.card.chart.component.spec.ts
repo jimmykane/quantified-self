@@ -42,6 +42,7 @@ import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
 import { MaterialModule } from '../../../modules/material.module';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../../authentication/app.auth.service';
+import { createSwimIntervalFixture } from '../../../helpers/event-swim-interval.test-fixtures';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 vi.mock('../../../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../../../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
@@ -2296,6 +2297,64 @@ describe('EventCardChartComponent', () => {
 
     expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
+  });
+
+  it('applies a swim focus after rebuilding, propagates shared zoom, and clears it on manual zoom without changing preferences', async () => {
+    const activity = createSwimIntervalFixture();
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataHeartRate.type]);
+    component.selectedActivities = [activity];
+    component.event = { ...component.event, getActivities: () => [activity] };
+    vi.mocked(eventDataHelper.buildEventChartPanels).mockReturnValue([{ dataType: DataHeartRate.type, unit: 'bpm',
+      minX: 0, maxX: 300, series: [{ activityID: 'swim', dataType: DataHeartRate.type, color: '#123456',
+        points: [{ x: 0, y: 120, time: 0 }, { x: 300, y: 130, time: 300000 }] }] }] as any);
+    const focus = { key: 'interval-2', label: 'Watch · Interval 2 · Rest', activity, startTime: 120000, endTime: 180000 };
+    fixture.componentRef.setInput('swimIntervalFocus', focus);
+    fixture.detectChanges(); await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.zoomRange).toEqual({ start: 120, end: 180 });
+    expect(component.swimIntervalFocusLabel()).toBe(focus.label);
+    const panels = fixture.nativeElement.querySelectorAll('app-event-card-chart-panel');
+    expect(panels.length).toBeGreaterThan(0);
+    expect([...panels].every((panel: any) => panel.sharedZoomRange === component.zoomRange)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.swim-interval-focus').textContent).toContain('All intervals');
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    const cleared = vi.spyOn(component.swimIntervalFocusCleared, 'emit');
+    component.onZoomRangeChange({ start: 120, end: 180 });
+    expect(cleared).not.toHaveBeenCalled();
+    component.onZoomRangeChange({ start: 130, end: 160 });
+    expect(cleared).toHaveBeenCalledWith(focus);
+    expect(component.swimIntervalFocusLabel()).toBe('');
+    fixture.componentRef.setInput('swimIntervalFocus', null);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.zoomRange).toEqual({ start: 130, end: 160 });
+    // Reapplying via a new action works, even after a cached panel rebuild.
+    fixture.componentRef.setInput('swimIntervalFocus', { ...focus });
+    fixture.detectChanges(); await fixture.whenStable();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.swim-interval-focus button').click();
+    fixture.detectChanges();
+    expect(component.zoomRange).toBeNull();
+    expect(component.swimIntervalFocusLabel()).toBe('');
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+    component.resetSwimIntervalFocus();
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retain a focused window when its activity or axis is unavailable', () => {
+    const activity = createSwimIntervalFixture();
+    const focus = { key: '1', label: 'Interval 1', activity, startTime: 0, endTime: 120000 };
+    component.swimIntervalFocus = focus;
+    component.xDomain = { start: 0, end: 300 };
+    const cleared = vi.spyOn(component.swimIntervalFocusCleared, 'emit');
+    component['applySwimIntervalFocus']();
+    expect(cleared).toHaveBeenCalledWith(focus);
+    expect(component.zoomRange).toBeNull();
+    component.selectedActivities = [activity]; component.swimIntervalFocus = { ...focus };
+    component.renderedXAxisType = XAxisTypes.Distance;
+    component['applySwimIntervalFocus']();
+    expect(component.swimIntervalFocusLabel()).toBe('');
+    expect(cleared).toHaveBeenCalledTimes(2);
   });
 
   it('normalizes full-domain zoom updates to null', () => {

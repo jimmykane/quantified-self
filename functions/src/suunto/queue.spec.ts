@@ -117,6 +117,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
       userName: 'johndoe123',
       workoutID: '67604889401b942184624cb8',
       firebaseUserID: 'firebase-user-1',
+      activityNotificationOrigin: 'live',
     });
   });
 
@@ -137,11 +138,13 @@ describe('insertSuuntoAppActivityToQueue', () => {
       userName: 'shared-suunto-user',
       workoutID: 'shared-workout',
       firebaseUserID: 'firebase-user-1',
+      activityNotificationOrigin: 'live',
     });
     expect(hoisted.addToQueueForSuunto).toHaveBeenNthCalledWith(2, {
       userName: 'shared-suunto-user',
       workoutID: 'shared-workout',
       firebaseUserID: 'firebase-user-2',
+      activityNotificationOrigin: 'live',
     });
   });
 
@@ -236,6 +239,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
       userName: 'legacy-user',
       workoutID: 'legacy-workout',
       firebaseUserID: 'firebase-user-1',
+      activityNotificationOrigin: 'live',
     });
   });
 
@@ -260,6 +264,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
       userName: 'legacy-user',
       workoutID: 'legacy-workout',
       firebaseUserID: 'firebase-user-1',
+      activityNotificationOrigin: 'live',
     });
   });
 

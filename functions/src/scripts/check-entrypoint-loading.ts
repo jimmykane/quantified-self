@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 188;
+const EXPECTED_FULL_EXPORT_COUNT = 197;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
@@ -128,10 +128,10 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   dispatchSleepSyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   dispatchActivitySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   dispatchRouteDeliverySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
-  parseGarminAPIActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseGarminAPIActivityQueue: { memoryMb: 512, timeoutSeconds: 540 },
   parseSuuntoAppActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },
-  parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseWahooAPIWorkoutQueue: { memoryMb: 512, timeoutSeconds: 540 },
 };
 // Every runtime target is compared against a separate fresh discovery process,
 // including all trigger, resource, retry, scaling, IAM and secret metadata.
@@ -158,7 +158,7 @@ const REMAINING_GEN1_TARGETS = new Set([
   'wahooAPIWebhook',
 ]);
 const ASSISTANT_TARGETS = new Set([
-  'applyAssistantTrainingProposal', 'assistantChat', 'getAssistantConversation',
+  'generateDayWorkout', 'applyAssistantTrainingProposal', 'assistantChat', 'getAssistantConversation',
   'getAssistantQuotaStatus', 'resetAssistantConversation',
 ]);
 const MCP_AUTHORIZATION_TARGETS = new Set([
@@ -207,7 +207,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
       'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
     ],
   },
-  processRouteSyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processRouteSyncTask: { maxAttempts: 20, memoryMb: 512, timeoutSeconds: 540, trigger: 'task', secrets: [
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
   processRouteDeliverySyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
@@ -219,7 +219,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     eventDocument: 'routeOriginalFileCleanup/{cleanupID}', eventType: 'google.cloud.firestore.document.v1.updated', eventRetry: true,
   },
   cleanupEventFile: {
-    memoryMb: 1024, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
+    memoryMb: 512, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
     eventDocument: 'users/{userId}/events/{eventId}',
     eventType: 'google.cloud.firestore.document.v1.deleted', eventRetry: false,
   },
@@ -229,6 +229,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   projectActivitySendDelivery: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'activitySyncQueue/{queueId}', eventType: 'google.cloud.firestore.document.v1.written' },
   cleanupActivitySendOnDelete: { memoryMb: 256, timeoutSeconds: 300, trigger: 'event', eventDocument: 'users/{uid}', eventType: 'google.cloud.firestore.document.v1.deleted' },
   uploadActivity: { memoryMb: 4096, timeoutSeconds: 3600, trigger: 'http', cpu: 2, concurrency: 1, maxInstances: 20 },
+  mergeEvents: { memoryMb: 2048, timeoutSeconds: 3600, trigger: 'callable', cpu: 2, concurrency: 1, maxInstances: 20 },
   fanOutSuuntoHealthWebhookIngress: {
     memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
     eventDocument: 'suuntoHealthWebhookIngress/{ingressID}',
@@ -270,14 +271,23 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   secrets?: readonly string[];
   eventDocument?: string;
   schedule?: string;
+  timeZone?: string;
+  retryCount?: number;
   concurrency?: number | null;
   maxInstances?: number | null;
   minInstances?: number | null;
 }>> = {
+  sendHistoryImportNotification: { memoryMb: 256, timeoutSeconds: 30, trigger: 'event', eventDocument: 'connectionHistoryImports/{runId}', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 20, maxInstances: 2, minInstances: 0 },
+  sendActivitySyncNotifications: { memoryMb: 256, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *', timeZone: 'UTC', retryCount: 0, secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 1, maxInstances: 1, minInstances: 0 },
+  sendActivityDeliveryNotifications: { memoryMb: 256, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *', timeZone: 'UTC', retryCount: 0, secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 1, maxInstances: 1, minInstances: 0 },
+  queueActivitySendNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'users/{uid}/activitySends/{batchId}', concurrency: 10, maxInstances: 2, minInstances: 0 },
+  queueAutomaticDeliveryNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'failed_jobs/{jobId}', concurrency: 10, maxInstances: 2, minInstances: 0 },
+  sendTestPushNotification: { memoryMb: 256, timeoutSeconds: 15, trigger: 'callable', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 20, maxInstances: 2, minInstances: 0 },
+  generateDayWorkout: { memoryMb: 2048, timeoutSeconds: 180, trigger: 'callable', secrets: ['GEMINI_API_KEY'], concurrency: 10, maxInstances: 10 },
   applyAssistantTrainingProposal: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['SUUNTOAPP_GUIDE_OWNER'] },
   ensureDerivedMetrics: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', maxInstances: 100 },
   setTrainingBuildBenchmark: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
-  mutateTrainingSchedule: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
+  mutateTrainingSchedule: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable', secrets: ['SUUNTOAPP_GUIDE_OWNER'] },
   mutateWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable' },
   placeWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
   getTrainingScheduleHistory: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
@@ -295,11 +305,13 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   dispatchTrainingDelivery: { memoryMb: 512, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *' },
   onTrainingDeliveryConnectionChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/meta/{service}' },
   onTrainingDeliveryEntitlementChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/system/status' },
-  onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 1, maxInstances: 50 },
-  onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 1, maxInstances: 50 },
-  onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 1, maxInstances: 50 },
-  onTrainingLoadMetadataWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}/metaData/trainingLoad', concurrency: 1, maxInstances: 50 },
-  onDashboardDerivedMetricsHealthWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/healthSourceRecords/{sourceRecordId}', concurrency: 1, maxInstances: 50 },
+  onTrainingDeliveryGuideSettingsChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/config/settings' },
+  onTrainingDeliveryOwnerUnitsChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}' },
+  onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 5, maxInstances: 50 },
+  onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 5, maxInstances: 50 },
+  onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 5, maxInstances: 50 },
+  onTrainingLoadMetadataWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}/metaData/trainingLoad', concurrency: 5, maxInstances: 50 },
+  onDashboardDerivedMetricsHealthWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/healthSourceRecords/{sourceRecordId}', concurrency: 5, maxInstances: 50 },
   processDerivedMetricsTask: { memoryMb: 2048, timeoutSeconds: 540, trigger: 'task', concurrency: 1 },
   processDerivedMetricsIngressTask: { memoryMb: 512, timeoutSeconds: 120, trigger: 'task' },
 };
@@ -598,7 +610,7 @@ async function check(): Promise<void> {
   }
   for (const target of [
     canaryTarget,
-    'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
+    'generateDayWorkout', 'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
     'sendRegistrationWelcomeEmail', 'saveTimelineNote', 'deleteTimelineNote',
     'saveManualHealthMeasurement', 'deleteManualHealthMeasurement',
     ...Object.keys(BILLING_SUPPORT_TARGET_METADATA),
@@ -644,7 +656,7 @@ async function check(): Promise<void> {
   }
 
   for (const target of [
-    'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
+    'generateDayWorkout', 'assistantChat', 'getMcpAuthorizationRequest', 'deleteSelf', 'wahooAPIWebhook',
     'sendRegistrationWelcomeEmail', 'saveTimelineNote', 'deleteTimelineNote',
     'saveManualHealthMeasurement', 'deleteManualHealthMeasurement',
     'linkExistingStripeCustomer',
@@ -787,7 +799,7 @@ async function check(): Promise<void> {
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
     } else if (target === 'receiveGarminAPIHealthData') {
-      assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
+      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
       assert(endpoint.cpu === undefined
         && JSON.stringify(endpoint.minInstances) === 'null'
@@ -944,8 +956,8 @@ async function check(): Promise<void> {
         );
       } else if (expected.trigger === 'schedule') {
         assert(endpoint.scheduleTrigger?.schedule === expected.schedule
-          && endpoint.scheduleTrigger?.timeZone === undefined
-          && JSON.stringify(endpoint.scheduleTrigger?.retryConfig) === '{}',
+          && endpoint.scheduleTrigger?.timeZone === expected.timeZone
+          && JSON.stringify(endpoint.scheduleTrigger?.retryConfig) === JSON.stringify(expected.retryCount === undefined ? {} : { retryCount: expected.retryCount }),
         `${target} schedule changed.`);
       } else {
         assert(endpoint.taskQueueTrigger?.retryConfig?.maxAttempts === 10

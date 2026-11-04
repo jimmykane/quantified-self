@@ -1,5 +1,6 @@
 @if (trajectory; as view) {
-  <section class="durability-trajectory">
+  <section class="durability-trajectory" [class.durability-dashboard]="dashboardMode">
+    @if (!dashboardMode) {
     <header>
       <div>
         <h4>{{ view.title }}</h4>
@@ -21,6 +22,7 @@
         <span>{{ view.exclusionSummary }}</span>
       }
     </div>
+    }
     @if (leadingNoActivityText) {
       <p class="durability-trajectory-leading-gap">{{ leadingNoActivityText }}</p>
     }
@@ -28,6 +30,7 @@
       <div
         #chartDiv
         class="durability-trajectory-chart"
+        [attr.data-dashboard-chart-plot]="dashboardMode ? '' : null"
         role="img"
         [attr.aria-label]="chartAriaLabel"
       ></div>

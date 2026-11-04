@@ -83,6 +83,31 @@ repeated identical downloads; normal files retain their original bytes. Review a
 changing the limit and worker memory. Fetch failures retain only a fixed error message and status category, never
 provider bodies or signed URL text. Parser work limits are a separate concern.
 
+Activity download failures, including HTTP `400`, `429` and `5xx`, consume one application retry per failed
+attempt through the shared provider budget/backoff. Both initial and GPX-to-FIT fallback downloads return the
+actual guarded retry transition, including exhausted-DLQ or failed writes. HTTP `410`, unsafe callbacks and oversized
+responses retain their explicit terminal handling. Only `processWorkoutTask` needs deployment for this correction;
+existing failed jobs require a separately authorized replay. Monitoring is **covered/unchanged** by the existing
+Garmin retry/failure, committed-DLQ and backlog signals in [recorded-import monitoring](activity-import-monitoring.md).
+
+### Verified re-encoded Suunto hike copies
+
+Only after an activity identity conflict, the shared FIT-copy helper can acknowledge a Garmin FIT as
+`cross_provider_duplicate` of an existing Suunto recording. It supports one or two retained Hiking sessions
+combined into one incoming Trekking session, with the same file identity/start, at most one second of end/timer
+rounding, at most five metres of summary-distance change where declared on both sides, and exact timestamped GPS agreement (at most one
+retained GPS point omitted). Distinct, incomplete, GPS-less or ambiguous recordings remain conflicts.
+
+Verification reads one generation-pinned original from the same bucket and owner/event prefix, bounded to 8 MiB;
+strict `fit-file-parser` decoding verifies both CRCs. No provider request or Storage read occurs on normal matching.
+The final queue-only completion uses the existing deletion guard and atomically rechecks queue identity, parent,
+activities, source/provider metadata and Garmin connection/root versions, including the existing history-import
+lifecycle guard when present. Source/account changes remain retryable; superseded history follows its existing skip path.
+No saved event, original, activity ID, edit, elevation correction, Training control or outbound delivery is rewritten.
+Only `processWorkoutTask` needs approved deployment; replay/failed-job removal remain separate operational actions.
+Monitoring is **covered/unchanged** by the existing committed skip and worker-attempt signals; no new resource or label.
+The existing Help and already-imported outcome remain applicable; no frontend or MCP contract change is needed.
+
 ### Health worker diagnostics
 
 Daily heart-rate normalization keeps the inclusive sample interval from zero through the declared
@@ -181,6 +206,20 @@ Stress Details accepts numeric zero samples (the API 1.2.4 table describes rest 
 
 ## Availability and history
 
+Recorded-activity history uses a fixed automatic-send cutoff. Before requesting Garmin, the existing guarded lease
+transaction monotonically advances `users/{uid}/meta/GarminAPI.activitySyncCutoffMs` to the coordinator's original
+admission time, or the legacy request's start time. Later windows/retries cannot move that run's cutoff forward.
+Activity-file ingress reads it once per distinct Garmin user in a callback batch and stamps newly created queue rows
+with `suppressAutomaticActivitySync: true` for earlier recording times, including missing/invalid recording timestamps
+while a cutoff is active. Duplicate callbacks preserve their first queue decision. The workout worker imports normally
+but omits automatic outbound admission for suppressed rows; explicit saved sends remain independent. A delayed ordinary
+workout before the cutoff also needs an explicit send. Existing queue rows, already admitted outbound deliveries and
+retries retain their decisions; Sleep/Health requests do not advance the cutoff. This is a sending policy, not proof of
+provider history origin. No old-request reconstruction or migration is performed. Release needs separate approval for
+`backfillGarminAPIActivities`, `processConnectionHistoryTask`, `insertGarminAPIActivityFileToQueue` and
+`processWorkoutTask`, with Help in a separate frontend release. Monitoring remains **covered/unchanged** under #829,
+#832 and #847: suppressed fan-out is a successful inbound import, not a delivery failure or a skipped import.
+
 Garmin Health is available to every valid connected Garmin account while the independent operational switch in `functions/src/garmin/health-flags.ts` is enabled. There is no Garmin Health UID allowlist. Sleep remains governed by the existing Sleep provider/user controls.
 
 Garmin activity history remains a separate user-selected flow. Its picker defaults to the latest two calendar years through today; users can expand the selection up to the available rolling five-year limit or choose a shorter range before submitting. Updated clients send `background: true` to `backfillGarminAPIActivities`. For a versioned connection, it atomically admits an activity-only coordinator run and returns its safe progress without contacting Garmin. The existing adapter submits one bounded 30-day window per step, respects a stricter provider-reported minimum and resumes a failed window using the existing retry policy. The first successful/already-requested window records the fixed 30-day cooldown anchored to run admission; activity counts never determine Garmin's cooldown. Final **History requested** confirms submission, not that callbacks or activities arrived. The exact selected dates remain in the coordinator projection. Omitted/false `background` and unversioned connections retain the legacy synchronous implementation, 89-day batching and void response.
@@ -235,6 +274,12 @@ OAuth-start and disconnect dispatch/retries also check the original Firebase aut
 unsent work when the account or view changes instead of letting a delayed retry use a replacement account.
 
 ## Refined route sport profiles
+
+The manual route picker accepts GPX routes/tracks and FIT courses; recorded workout FITs belong in activity upload.
+`importRouteToGarminAPI` rejects invalid inputs before delivery and emits the fixed, privacy-safe
+`[importRouteToGarminAPI] File rejected.` diagnostic described in the
+[provider guide](provider-integration-guide.md#failed-file-debug-captures). The existing response and validation
+remain unchanged; no queue, retry, provider request or monitoring configuration changes are introduced.
 
 The course uploader uses existing Garmin profiles for the separately approved expanded sport names: BMX and
 LES MILLS RPM / SPRINT / THE TRIP use `ROAD_CYCLING`; Obstacle Racing uses `RUNNING`; Vertical Running uses

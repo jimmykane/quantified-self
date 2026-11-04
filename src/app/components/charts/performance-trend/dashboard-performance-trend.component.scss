@@ -1,0 +1,15 @@
+:host { display: block; width: 100%; height: 100%; min-width: 0; }
+.performance-layout { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 100%; box-sizing: border-box; padding: 8px var(--qs-dashboard-chart-content-inset, 8px); }
+header { min-width: 0; }
+header.reserve-actions { padding-inline-end: 80px; }
+.performance-title-row { display: flex; align-items: center; gap: 4px; min-height: 32px; }
+.performance-title-row > span { min-width: 0; overflow-wrap: anywhere; color: var(--mat-sys-on-surface-variant); }
+.performance-title-row button { flex: 0 0 auto; }
+.performance-period, .performance-detail, .performance-evidence { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.performance-detail, .performance-evidence { margin: 0; }
+.performance-context { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-width: 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.performance-context button { max-width: 100%; height: auto; min-height: 40px; }
+.performance-context button span { white-space: normal; overflow-wrap: anywhere; text-align: start; }
+.performance-value { font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.performance-empty { display: grid; place-content: center; min-height: 252px; margin: 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); text-align: center; }
+app-training-power-systems-trend-chart, app-training-durability-trajectory-chart { display: flex; flex-direction: column; flex: 1 0 auto; min-width: 0; }

@@ -24,6 +24,7 @@ export const SECRET_PARAMS = {
   SUUNTOAPP_GUIDE_OWNER: defineSecret('SUUNTOAPP_GUIDE_OWNER'),
   SUUNTOAPP_NOTIFICATION_SECRET: defineSecret('SUUNTOAPP_NOTIFICATION_SECRET'),
   SUUNTOAPP_SUBSCRIPTION_KEY: defineSecret('SUUNTOAPP_SUBSCRIPTION_KEY'),
+  WEB_PUSH_VAPID_KEYPAIR: defineSecret('WEB_PUSH_VAPID_KEYPAIR'),
   WAHOOAPI_ALLOWED_FILE_HOSTS: defineSecret('WAHOOAPI_ALLOWED_FILE_HOSTS'),
   WAHOOAPI_CLIENT_ID: defineSecret('WAHOOAPI_CLIENT_ID'),
   WAHOOAPI_CLIENT_SECRET: defineSecret('WAHOOAPI_CLIENT_SECRET'),
@@ -59,6 +60,10 @@ const WAHOO: SecretParam[] = [
  * zero-binding default as well as every non-empty entry below.
  */
 export const FUNCTION_SECRET_BINDINGS = {
+  sendTestPushNotification: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
+  sendHistoryImportNotification: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
+  sendActivitySyncNotifications: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
+  sendActivityDeliveryNotifications: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
   createStripePortalLink: [SECRET_PARAMS.STRIPE_BILLING_KEY],
   'ext-firestore-stripe-payments-createPortalLink': [SECRET_PARAMS.STRIPE_BILLING_KEY],
   stripeBillingWebhook: [SECRET_PARAMS.STRIPE_BILLING_WEBHOOK_SECRET],
@@ -67,6 +72,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   addSuuntoAppHistoryToQueue: SUUNTO_API,
   addSuuntoAppRoutesToQueue: SUUNTO_API,
   addWahooAPIHistoryToQueue: WAHOO,
+  generateDayWorkout: [SECRET_PARAMS.GEMINI_API_KEY],
   assistantChat: [SECRET_PARAMS.GEMINI_API_KEY, SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   applyAssistantTrainingProposal: [SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   backfillCorosAPISleep: COROS,
@@ -118,6 +124,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   processConnectionHistoryTask: [...COROS, ...GARMIN, ...SUUNTO_API, ...WAHOO],
   processWorkoutTask: [...COROS, ...GARMIN, ...SUUNTO_API, SECRET_PARAMS.WAHOOAPI_ALLOWED_FILE_HOSTS],
   previewAdminSubscriptionGift: [SECRET_PARAMS.STRIPE_ADMIN_BILLING_KEY],
+  mutateTrainingSchedule: [SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   previewTrainingProviderDelivery: [SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   receiveSuunto247Data: [SECRET_PARAMS.SUUNTOAPP_NOTIFICATION_SECRET],
   receiveGarminAPIHealthData: [SECRET_PARAMS.GARMINAPI_WEBHOOK_SECRET],

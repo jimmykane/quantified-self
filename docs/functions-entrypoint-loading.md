@@ -39,6 +39,44 @@ when the updated email is not part of a marketing campaign. Its existing 256 MiB
 change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
 has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
+## History-import notification isolation
+
+`sendHistoryImportNotification` loads directly from `web-push/history` and is the 193rd discovery export.
+Its Gen 2 Firestore written trigger observes `connectionHistoryImports/{runId}` with retry enabled, 256 MiB,
+30 seconds, concurrency 20, maximum two instances, zero minimum instances and `europe-west2`. This sender, the activity-sync sender
+and the existing self-test sender bind `WEB_PUSH_VAPID_KEYPAIR`; admission callables/workers do not bind it.
+The compiled check verifies exact descriptor equality with full discovery and these resource/trigger options.
+
+Three isolated Node 22.23.3 cold imports on 2026-11-03 measured a median 239 ms, 88.1 MiB RSS and one export
+(1,017 loaded modules). These are local import measurements, not deployed latency or delivery guarantees.
+No provider worker, task queue or schedule changes. See the [Web Push runbook](web-push-notifications.md#manual-history-import-completion)
+for durable at-most-once attempts, lifecycle fences, monitoring and separately authorized deployment/activation.
+
+## Activity-sync notification isolation
+
+`sendActivitySyncNotifications` is the 194th discovery export and loads directly from `web-push/activity`.
+It is a Gen 2 UTC minute scheduler in `europe-west2`, 256 MiB, timeout 120 seconds, concurrency one,
+maximum one instance, zero minimum instances, Scheduler retry count zero and only `WEB_PUSH_VAPID_KEYPAIR`.
+The compiled check compares its full-discovery descriptor and resource/trigger options. It queries bounded private
+pending batches; provider imports call the admission helper without loading the sender or binding a signing secret.
+Three isolated Node 22.23.3 cold imports on 2026-11-03 measured median 202 ms, 88.1 MiB RSS, 990 modules and one export;
+these local startup measurements do not establish deployed latency.
+The [Web Push runbook](web-push-notifications.md#activity-rollout-and-rollback) lists all changed runtime owners and
+requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
+
+## Activity-delivery notification isolation
+
+`queueActivitySendNotification` and `queueAutomaticDeliveryNotification` load from `web-push/delivery-admission`;
+`sendActivityDeliveryNotifications` loads from `web-push/delivery`. Full discovery adds three exports. The admission
+triggers retain retry-enabled Firestore written descriptors (activitySends and failed_jobs), 256 MiB, 60 seconds,
+concurrency ten, max two and min zero, with no secret. The UTC minute scheduler uses 256 MiB, 120 seconds,
+concurrency/max one, min zero, zero schedule retries and only the existing VAPID secret. All run in europe-west2.
+Three isolated Node 22.23.3 samples per target on 2026-11-04 measured median startup of 223 ms / 87.3 MiB RSS
+for each admission trigger and 217 ms / 88.6 MiB for the sender, each exposing exactly one endpoint. These local
+measurements do not establish deployed latency. Full compiled verification covers 197 endpoints.
+The compiled descriptor check covers isolated equivalence; the [delivery runbook](web-push-notifications.md#delivery-rollout-and-rollback)
+requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
+
 ## Derived-metrics observer isolation
 
 `observeDerivedMetricsHealth` loads directly from `derived-metrics/monitoring-schedule`. This new Gen 2 read-only
@@ -264,6 +302,25 @@ On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR mea
 Other local verification was running concurrently, so these timings are a startup sanity check rather than a
 controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
 
+## Training owner-unit wake-up (2026-10-29)
+
+`onTrainingDeliveryOwnerUnitsChanged` loads directly from `training-plans/delivery/lifecycle` and watches
+`users/{uid}` (Gen 2, `europe-west2`, 512 MiB, retries, no secrets). Normalized unit changes stage the existing
+account coordinator after deletion/enrollment guards. Other profile writes and user deletion return without reads.
+The compiled entrypoint check covers the handler identity, path and resource options. Three fresh local Node 22
+imports measured 405 ms / 136.8 MiB median RSS for this one-export target versus 1,156 ms / 251.2 MiB for full
+discovery (190 exports). These are local startup observations, not production billing measurements.
+
+## Guide preference wake-up (2026-10-28)
+
+`onTrainingDeliveryGuideSettingsChanged` loads directly from `training-plans/delivery/lifecycle` and watches
+`users/{uid}/config/settings` (Gen 2, `europe-west2`, 512 MiB, retries, no secrets). It only stages existing delivery
+reconciliation when normalized swimming preferences change. The full export/isolated loader inventory is now 189.
+The compiled entrypoint check verifies the original handler identity, event path and resource options.
+Three fresh local Node 22 imports measured a median 384 ms / 136 MiB RSS for the new target (one export),
+versus 995 ms / 250 MiB for full discovery (189 exports). These are local startup observations, not a production
+memory guarantee. The complete 189-endpoint loading check passes.
+
 ## Complete runtime coverage (2026-10-26)
 
 The remaining 73 Functions now load directly from their existing owner modules. Together with the prior billing
@@ -294,7 +351,7 @@ existing Gen 1 receivers, dispatchers and Auth cleanup. The welcome-mail trigger
 secrets and IAM declarations continue to come from the unchanged owner handlers.
 
 Every isolated runtime's complete endpoint and trigger descriptors are captured before importing the full registry,
-then compared with a separate fresh discovery process. This covers all 188 Functions, rather than a selected subset.
+then compared with a separate fresh discovery process. This covers all 189 Functions, rather than a selected subset.
 The check also validates handler identity, one exported target, import boundaries, both discovery overrides and
 standalone secret validation with inherited runtime targets, including all four public aliases.
 
@@ -317,7 +374,7 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 188 application exports and every export has a loader;
+- discovery exposes all 189 application exports and every export has a loader;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;

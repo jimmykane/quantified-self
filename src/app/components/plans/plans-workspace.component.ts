@@ -1,3 +1,5 @@
+import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
+import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import {
   ChangeDetectionStrategy,
@@ -33,10 +35,12 @@ import {
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
   WORKOUT_STRUCTURE_MAX_NODES,
+  type WorkoutStepPurposeV1,
 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { TrainingWorkoutAddedService } from '../../services/training-workout-added.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
@@ -88,6 +92,8 @@ import {
   manualWorkoutEditorNodeCount,
   manualWorkoutEditorSiblings,
   moveManualWorkoutEditorNode,
+  changeManualWorkoutEditorStepPurpose,
+  manualWorkoutEditorTimeContexts,
 } from '../../helpers/planned-workout-editor-actions.helper';
 import {
   DELETED_WORKOUT_RECOVERY_DAYS,
@@ -199,11 +205,14 @@ export class PlansWorkspaceComponent {
   private readonly userService = inject(AppUserService);
   private readonly userSettings = inject(AppUserSettingsQueryService);
   private readonly plansService = inject(TrainingPlansService);
+  private readonly dayWorkouts = inject(DayWorkoutService);
+  private generatedSaveRequest: MutateTrainingScheduleRequestV1 | null = null;
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
   private readonly libraryService = inject(WorkoutLibraryService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly dialog = inject(MatDialog);
+  private readonly addedFeedback = inject(TrainingWorkoutAddedService);
   private phaseDialog: MatDialogRef<PlanPhasesDialogComponent> | null = null;
   private readonly snackBar = inject(MatSnackBar);
   private readonly liveAnnouncer = inject(LiveAnnouncer);
@@ -462,6 +471,10 @@ export class PlansWorkspaceComponent {
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly editorTimeContexts = computed(() => {
+    const session = this.editor();
+    return session ? manualWorkoutEditorTimeContexts(session.value, session.unitSettings, this.locale) : {};
+  });
   readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
   readonly editorProfileContext = computed(() => this.editor()
     ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
@@ -497,6 +510,8 @@ export class PlansWorkspaceComponent {
     uid: string;
     plan: TrainingPlanV1;
     state: CurrentTrainingScheduleV1['state'];
+    /** An edit acknowledgement must never reinsert a plan removed from the live schedule. */
+    existingPlanOnly?: true;
   } | null>(null);
 
   readonly planOptions = computed(() => {
@@ -504,6 +519,7 @@ export class PlansWorkspaceComponent {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
     const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (!current && acknowledged.existingPlanOnly) return plans;
     if (current && current.revision >= acknowledged.plan.revision) return plans;
     return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
       : [...plans, acknowledged.plan];
@@ -564,6 +580,18 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
+  readonly generationOpen = signal(false);
+  readonly generationDate = computed(() => this.editor()?.value.localDate ?? this.addWorkoutDate() ?? this.today());
+  readonly canGenerateWorkout = computed(() => {
+    // Explicit dates also need to recheck eligibility when the existing day clock advances.
+    this.today();
+    return !this.libraryView() && this.hasTrainingPlanningUIAccess()
+      && this.scheduleState().status === 'ready' && (this.editor()?.mode === 'create' || this.browsing())
+      && !this.workoutDateInputInvalid() && this.dayWorkouts.canGenerate(this.generationDate())
+      && (this.view() !== 'plans' || !!this.selectedPlanId() || !!this.editor());
+  });
+  readonly selectedDayIsRest = computed(() => this.selectedPlan()?.restDays?.includes(this.planScheduleDate() ?? '') === true);
+  readonly selectedDayHasPlannedWorkout = computed(() => this.displayedWorkoutRows().some(row => row.workout.lifecycle === 'planned'));
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
     mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
@@ -657,11 +685,11 @@ export class PlansWorkspaceComponent {
   private readonly acknowledgedPlanEffect = effect(() => {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged) return;
-    if (acknowledged.uid !== this.currentUser()?.uid || (
-      this.schedule().state.revision >= acknowledged.state.revision
-      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
-        && plan.revision >= acknowledged.plan.revision)
-    )) {
+    const current = this.schedule().plans.find(plan => plan.id === acknowledged.plan.id);
+    if (acknowledged.uid !== this.currentUser()?.uid
+      || (acknowledged.existingPlanOnly && !current)
+      || (current && this.schedule().state.revision >= acknowledged.state.revision
+        && current.revision >= acknowledged.plan.revision)) {
       this.acknowledgedPlan.set(null);
     }
   });
@@ -980,6 +1008,25 @@ export class PlansWorkspaceComponent {
     if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
   }
 
+  async toggleSelectedRestDay(): Promise<void> {
+    const plan = this.selectedPlan(), date = this.planScheduleDate();
+    const uid = this.currentUser()?.uid;
+    if (!plan || !date || !uid || this.busyAction() || !this.browsing()
+      || (!this.selectedDayIsRest() && this.selectedDayHasPlannedWorkout())) return;
+    const generation = this.editorGeneration, routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const isCurrent = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    const restDays = this.selectedDayIsRest() ? (plan.restDays ?? []).filter(value => value !== date)
+      : [...(plan.restDays ?? []), date].sort();
+    const response = await this.runMutation({ mutationId: this.plansService.createMutationId('set-plan-rest-days'),
+      expectedRevisions: this.expectedRevisions({ planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]) }),
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`, isCurrent, isCurrent);
+    if (!response || !isCurrent()) return;
+    const updatedPlan = response.plans.find(item => item.id === plan.id);
+    if (updatedPlan) this.acknowledgedPlan.set({ uid, plan: updatedPlan, state: response.state, existingPlanOnly: true });
+    this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
+  }
+
   async renamePlan(plan: TrainingPlanV1): Promise<void> {
     const name = this.renameValue().trim();
     if (!name) return;
@@ -1107,17 +1154,55 @@ export class PlansWorkspaceComponent {
     this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
   }
 
-  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
+  async generateWorkout(): Promise<void> {
+    const uid = this.currentUser()?.uid, session = this.editor();
+    if (!uid || !this.canGenerateWorkout() || this.busyAction() || this.generationOpen()) return;
+    const date = session?.value.localDate ?? this.addWorkoutDate() ?? todayLocalDate();
+    if (!this.dayWorkouts.canGenerate(date)) return;
+    const planId = session ? session.destinationPlanId : this.view() === 'plans' ? this.selectedPlanId() : null;
+    const controls = { ...defaultDayWorkoutControls(date, Intl.DateTimeFormat().resolvedOptions().timeZone,
+      session?.value.sport ?? ActivityTypes.Running), destinationPlanId: planId };
+    const generation = this.editorGeneration, routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid && this.dayWorkouts.isOwner(uid)
+      && generation === this.editorGeneration && session === this.editor()
+      && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    this.generationOpen.set(true);
+    try {
+      await this.dayWorkouts.open(uid, date, controls.sport, { initialControls: controls, canExecute: current,
+        onEditorDraft: draft => {
+          if (!current() || draft.ownerUid !== uid) return;
+          const destination = draft.controls.destinationPlanId, localDate = draft.controls.localDate;
+          this.selectWorkoutScope(destination, localDate);
+          this.startNewWorkoutEditor(destination, localDate, draft);
+          // The form is already open. Same-URL navigation would reinitialize and discard this draft.
+          if (session) return;
+          this.navigateWorkspace(trainingPlansCreateRoute(destination, destination === null), {
+            mode: 'create', workoutId: null, planId: destination, standalone: destination === null, localDate,
+          }, { editorReturn: true });
+        },
+        onAdded: () => { if (current() && session) this.cancelEditor(); },
+      });
+    } catch (error) { if (current()) this.showError(error); }
+    finally { if (!this.destroyRef.destroyed) this.generationOpen.set(false); }
+  }
+
+  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string,
+    generated: DayWorkoutEditorDraft | null = this.dayWorkouts.takeEditorDraft(this.currentUser()?.uid ?? '', destinationPlanId, localDate)): void {
     this.advanceEditorGeneration();
     this.workoutDateInputInvalid.set(false);
+    const units = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
+    this.generatedSaveRequest = generated?.saveRequest ?? null;
     this.editor.set({
       mode: 'create',
       original: null,
       originalWorkoutRevision: null,
       destinationPlanId,
       unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
-      value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
-      strength: null,
+      value: generated ? (generated.draft.strength
+        ? { ...createManualWorkoutEditorValue(localDate), title: generated.draft.title, sport: generated.draft.structure.sport as ManualWorkoutSport, nodes: [] }
+        : workoutStructureToManualEditor(generated.draft.title, localDate, generated.draft.structure, units))
+        : createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
+      strength: generated?.draft.strength ?? null,
       strengthLoading: false,
       strengthLoadFailed: false,
     });
@@ -1418,6 +1503,9 @@ export class PlansWorkspaceComponent {
 
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
+    // The old rest save no longer owns this view; its completion must not clear a new action.
+    if (this.busyAction()?.startsWith('rest-')) this.busyAction.set(null);
+    this.generatedSaveRequest = null;
     this.editorProfileSelection.set(null);
     this.editorDrag = null;
     this.editorMenuFocus = null;
@@ -1509,6 +1597,7 @@ export class PlansWorkspaceComponent {
 
   updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
     if (this.busyAction()) return;
+    const contexts = field === 'purpose' ? this.editorTimeContexts() : {};
     const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
       && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
     this.editor.update(session => {
@@ -1521,7 +1610,11 @@ export class PlansWorkspaceComponent {
           if (field === 'endingKind') {
             return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
           }
+          if (field === 'purpose') {
+            return changeManualWorkoutEditorStepPurpose(node, value as WorkoutStepPurposeV1, contexts[node.id]?.previousRestSeconds ?? null);
+          }
           return { ...node, [field]: value,
+            ...(field === 'endingValue' ? { untouchedDuration: undefined } : {}),
             ...(field === 'endingValue' && value !== node[field]
               ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1535,7 +1628,11 @@ export class PlansWorkspaceComponent {
               if (field === 'endingKind') {
                 return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
               }
+              if (field === 'purpose') {
+                return changeManualWorkoutEditorStepPurpose(step, value as WorkoutStepPurposeV1, contexts[step.id]?.previousRestSeconds ?? null);
+              }
               return { ...step, [field]: value,
+                ...(field === 'endingValue' ? { untouchedDuration: undefined } : {}),
                 ...(field === 'endingValue' && value !== step[field]
                   ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
               } as ManualWorkoutEditorStep;
@@ -1628,30 +1725,34 @@ export class PlansWorkspaceComponent {
       return;
     }
     if (session.mode === 'create') {
-      const workoutId = this.plansService.createEntityId('workout');
-      const response = await this.runMutation({
+      const retained = this.generatedSaveRequest;
+      const operation = {
+        kind: 'create-workout' as const,
+        workoutId: retained?.operation.kind === 'create-workout' ? retained.operation.workoutId : this.plansService.createEntityId('workout'),
+        planId: session.destinationPlanId, localDate: session.value.localDate, title, structure,
+        ...(session.strength ? { strength: session.strength } : {}),
+        confirmPlanRangeExtension: retained?.operation.kind === 'create-workout'
+          && retained.operation.planId === session.destinationPlanId && retained.operation.localDate === session.value.localDate
+          ? retained.operation.confirmPlanRangeExtension : false,
+      };
+      const unchanged = retained && JSON.stringify(retained.operation) === JSON.stringify(operation);
+      const request: MutateTrainingScheduleRequestV1 = unchanged ? retained : {
         mutationId: this.plansService.createMutationId('create-workout'),
-        expectedRevisions: this.expectedRevisions({
-          planIds: session.destinationPlanId ? [session.destinationPlanId] : [],
-        }),
-        operation: {
-          kind: 'create-workout',
-          workoutId,
-          planId: session.destinationPlanId,
-          localDate: session.value.localDate,
-          title,
-          structure,
-          ...(session.strength ? { strength: session.strength } : {}),
-          confirmPlanRangeExtension: false,
-        },
-      }, 'save-workout');
+        expectedRevisions: retained?.operation.kind === 'create-workout' && retained.operation.planId === operation.planId
+          ? retained.expectedRevisions : this.expectedRevisions({ planIds: session.destinationPlanId ? [session.destinationPlanId] : [] }),
+        operation,
+      };
+      if (retained) this.generatedSaveRequest = request;
+      const response = await this.runMutation(request, 'save-workout', () => !this.destroyRef.destroyed
+        && generation === this.editorGeneration && uid === this.currentUser()?.uid
+        && (!retained || (!!uid && this.dayWorkouts.isOwner(uid))));
       if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
       this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
       this.editor.set(null);
       this.advanceEditorGeneration();
       const route = this.browseRouteState();
       this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
-      this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
+      this.addedFeedback.show('Workout added.', { id: operation.workoutId, title });
       return;
     }
 
@@ -1895,8 +1996,8 @@ export class PlansWorkspaceComponent {
       this.placementAttempt.set(null);
       this.placementItem.set(null);
       this.restoreLibraryPlacementFocus(item.id);
-      this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
-        'Dismiss', { duration: 5000 });
+      this.addedFeedback.show(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
+        response.workoutIds.length === 1 ? { id: response.workoutIds[0], title: item.title } : null);
     } catch (error) {
       if (!current()) return;
       const code = (error as { code?: string })?.code?.replace(/^functions\//, '');
@@ -1953,6 +2054,12 @@ export class PlansWorkspaceComponent {
   }
 
   async deleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const generation = this.editorGeneration;
+    const editingWorkout = this.editor()?.original?.id === workout.id;
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration;
     const expectedRevisions = this.expectedRevisions({
       workoutIds: [workout.id],
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
@@ -1964,14 +2071,19 @@ export class PlansWorkspaceComponent {
       'Delete workout',
       'warn',
     );
-    if (!confirmation) return;
+    if (!confirmation || !current() || this.busyAction()) return;
+    const action = `delete-${workout.id}`;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
       expectedRevisions,
       operation: { kind: 'delete-workout', workoutId: workout.id,
         ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
-    }, `delete-${workout.id}`);
-    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+    }, action, current, current);
+    // A changed account/view suppresses feedback but must still release this pending action.
+    if (this.busyAction() === action) this.busyAction.set(null);
+    if (!response || !current()) return;
+    if (editingWorkout) this.cancelEditor();
+    this.snackBar.open(confirmation.removePastProviderCopies
       ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
       : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
   }
@@ -2172,23 +2284,34 @@ export class PlansWorkspaceComponent {
     request: MutateTrainingScheduleRequestV1,
     action: string,
     feedbackAllowed: () => boolean = () => true,
+    canExecute?: () => boolean,
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
+    const executionGuard = canExecute ?? (this.generatedSaveRequest?.mutationId === request.mutationId ? feedbackAllowed : undefined);
     this.busyAction.set(action);
     try {
-      const response = await this.plansService.mutate(request);
+      const response = await this.plansService.mutate(request,
+        ...(executionGuard ? [executionGuard] : []));
       if (feedbackAllowed()) this.haptics.success();
       return response;
     } catch (error) {
       if (!feedbackAllowed()) return null;
       const message = errorMessage(error);
+      if (this.generatedSaveRequest?.mutationId === request.mutationId
+        && ['aborted', 'functions/aborted'].includes(String((error as { code?: string }).code))) {
+        this.generatedSaveRequest = { ...request, mutationId: this.plansService.createMutationId('create-workout'),
+          expectedRevisions: this.expectedRevisions({ planIds: request.operation.kind === 'create-workout' && request.operation.planId ? [request.operation.planId] : [] }) };
+      }
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
         if (confirmed && feedbackAllowed()) {
           try {
-            const response = await this.plansService.mutate({
+            const extendedRequest = {
               ...request,
               operation: { ...request.operation, confirmPlanRangeExtension: true },
-            } as MutateTrainingScheduleRequestV1);
+            } as MutateTrainingScheduleRequestV1;
+            if (this.generatedSaveRequest?.mutationId === request.mutationId) this.generatedSaveRequest = extendedRequest;
+            const response = await this.plansService.mutate(extendedRequest,
+              ...(executionGuard ? [executionGuard] : []));
             if (feedbackAllowed()) this.haptics.success();
             return response;
           } catch (retryError) {
@@ -2201,7 +2324,7 @@ export class PlansWorkspaceComponent {
       this.showError(error);
       return null;
     } finally {
-      this.busyAction.set(null);
+      if (!canExecute || canExecute()) this.busyAction.set(null);
     }
   }
 

@@ -81,7 +81,7 @@ jobs:
           node-version: "22"
 
       - name: Install Firebase Tools
-        run: npm install -g firebase-tools
+        run: npm run firebase:tools
 
       - name: Install and build Functions
         working-directory: functions
@@ -90,4 +90,4 @@ jobs:
           npm run build
 
       - name: Deploy Functions
-        run: firebase deploy --only functions
+        run: npm run firebase -- deploy --only functions

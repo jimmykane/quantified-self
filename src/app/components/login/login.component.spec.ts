@@ -467,7 +467,7 @@ describe('LoginComponent', () => {
         expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
     });
 
-    it.each(['/tools/compare', '/services?serviceName=COROS%20API'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {
         activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         await component.sendEmailLink('test@example.com');
@@ -797,7 +797,7 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });
 
-    it.each(['/tools/compare', '/services?serviceName=COROS%20API'])('returns to the safe local URL %s after login', async returnUrl => {
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app'])('returns to the safe local URL %s after login', async returnUrl => {
         activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         component.ngOnInit();

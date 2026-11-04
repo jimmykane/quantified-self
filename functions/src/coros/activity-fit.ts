@@ -4,9 +4,15 @@ import * as logger from 'firebase-functions/logger';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES } from '../shared/activity-processing-config';
 import { FitActivitySessionRepair } from '../shared/fit-activity-session-repair';
 
-// Fixed mappings verified through controlled COROS imports and owner app checks (#600).
+// Fixed mappings with controlled COROS import evidence (#600).
 const SNORKELING = 82;
 const SAILING = 32;
+const FISHING = 29;
+const DIVING = 53;
+const ICE_SKATING = 33;
+const FITNESS_EQUIPMENT = 4;
+const INDOOR_ROWING = 14;
+const MULTISPORT = 18;
 const SWIMMING = 5;
 const OPEN_WATER = 18; // FIT sub_sport; 17 is lap_swimming, not open water.
 const MAX_BYTES = MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES;
@@ -15,6 +21,32 @@ const CATEGORY_FIELDS = new Map([
   [18, { sport: 5, subSport: 6 }],
   [19, { sport: 25, subSport: 39 }], // Lap field 26 is event_group.
 ]);
+
+export interface COROSActivityFITCategory { sport: number | null; subSport: number | null }
+
+/** Original classification only; no activity samples, names or identities. */
+export function readCOROSActivityFITCategory(input: Buffer): COROSActivityFITCategory {
+  try {
+    const parsed = readFitMessages(input, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+    if (!parsed.issues.length && parsed.messages.length === 1) {
+      const session = parsed.messages[0];
+      return {
+        sport: readFitUnsignedField(session.fields.find(field => field.fieldNumber === 5), 0, 1, session.littleEndian) ?? null,
+        subSport: readFitUnsignedField(session.fields.find(field => field.fieldNumber === 6), 0, 1, session.littleEndian) ?? null,
+      };
+    }
+  } catch { /* Diagnostics must not change upload behavior. */ }
+  return { sport: null, subSport: null };
+}
+
+export function logCOROSActivityProcessingFailure(category?: COROSActivityFITCategory): void {
+  const label = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 255 ? `${value}` : 'unknown';
+  try {
+    logger.warn('[COROSActivityUpload] Processing failed.', {
+      telemetryVersion: 1, fit_sport: label(category?.sport), fit_sub_sport: label(category?.subSport),
+    });
+  } catch { /* A failed diagnostic must not change the provider result. */ }
+}
 
 interface FieldDefinition { number: number; size: number; baseType: number }
 interface Definition {
@@ -44,8 +76,9 @@ export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer
 }
 
 /**
- * Recover an evidenced missing Session, repair reproduced empty definitions, then adapt the two
- * verified mappings. Snorkeling needs no GPS; sailing retains its GPS requirement.
+ * Recover an evidenced missing Session, repair reproduced empty definitions, then adapt the
+ * verified mappings. Snorkeling, diving, ice skating, indoor rowing and single-session multisport
+ * need no GPS; sailing and fishing require GPS.
  * No original is mutated or retained. Fingerprint and send the returned buffer.
  */
 export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
@@ -78,15 +111,30 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
     if (parsed.messages.length !== 1) return prepared;
     const session = parsed.messages[0];
     sourceSport = readFitUnsignedField(session.fields.find(field => field.fieldNumber === 5), 0, 1, session.littleEndian);
+    const sourceSubSportField = session.fields.find(field => field.fieldNumber === 6);
+    const sourceSubSport = readFitUnsignedField(sourceSubSportField, 0, 1, session.littleEndian);
     if (sourceSport === SNORKELING) output = createCOROSSnorkelingFIT(prepared);
     else if (sourceSport === SAILING) output = createCOROSSailingFIT(prepared, true);
-    else return prepared;
+    else if (sourceSport === FISHING) output = createCategoryCopy(prepared, FISHING, 0, 0, 'fishing', true);
+    else if (sourceSport === DIVING) output = createCategoryCopy(prepared, DIVING, 0, 0, 'diving', false);
+    else if (sourceSport === ICE_SKATING && (!sourceSubSportField || sourceSubSport === 0)) {
+      output = createCategoryCopy(prepared, ICE_SKATING, 0, 0, 'ice_skating', false, 0);
+    } else if (sourceSport === FITNESS_EQUIPMENT && sourceSubSport === INDOOR_ROWING) {
+      output = createCategoryCopy(prepared, FITNESS_EQUIPMENT, 0, 0, 'indoor_rowing', false, INDOOR_ROWING);
+    } else if (sourceSport === MULTISPORT && (!sourceSubSportField || sourceSubSport === 0)) {
+      output = createCategoryCopy(prepared, MULTISPORT, 0, 0, 'single_session_multisport', false, 0);
+    } else return prepared;
   } catch {
     // A fallback must not reject files the existing upload path might accept.
     return prepared;
   }
   logger.info('[COROS] Applied activity FIT category fallback.', {
-    mapping: sourceSport === SNORKELING ? 'snorkeling_to_open_water_swim' : 'sailing_to_gps_cardio',
+    mapping: sourceSport === SNORKELING ? 'snorkeling_to_open_water_swim'
+      : sourceSport === SAILING ? 'sailing_to_gps_cardio'
+        : sourceSport === FISHING ? 'fishing_to_gps_cardio'
+          : sourceSport === DIVING ? 'diving_to_generic'
+            : sourceSport === ICE_SKATING ? 'ice_skating_to_generic'
+              : sourceSport === FITNESS_EQUIPMENT ? 'indoor_rowing_to_generic' : 'single_session_multisport_to_generic',
   });
   return output;
 }
@@ -175,7 +223,7 @@ function removeCOROSEmptyFieldDefinitions(input: Buffer): { output: Buffer; remo
 }
 
 function createCategoryCopy(input: Buffer, sourceSport: number, targetSport: number,
-  targetSubSport: number, sourceName: string, requireGPS: boolean): Buffer {
+  targetSubSport: number, sourceName: string, requireGPS: boolean, expectedSourceSubSport?: number): Buffer {
   const parsed = readFitMessages(input, { messageNumbers: [0, 12, 18, 19], maxInputBytes: MAX_BYTES });
   const value = (message: typeof parsed.messages[number], number: number) => readFitUnsignedField(
     message.fields.find(field => field.fieldNumber === number), 0, 1, message.littleEndian,
@@ -194,7 +242,10 @@ function createCategoryCopy(input: Buffer, sourceSport: number, targetSport: num
       throw new Error('Conversion refuses conflicting FIT sport classifications.');
     }
     // Validate the scalar shape even though the selected fallback replaces it.
-    value(message, category.subSport);
+    const subSport = value(message, category.subSport);
+    if (expectedSourceSubSport !== undefined && subSport !== undefined && subSport !== expectedSourceSubSport) {
+      throw new Error('Conversion refuses conflicting FIT sub-sport classifications.');
+    }
   }
 
   // Walk the already validated record envelope, patching only category bytes

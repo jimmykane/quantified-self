@@ -65,7 +65,7 @@ describe('Training delivery task correlation', () => {
 
     await expect(run(request)).rejects.toBe(error);
 
-    expect(processor).toHaveBeenCalledWith(runtime, 'user', ...(kind === 'reconcile' ? [] : ['delivery']));
+    expect(processor).toHaveBeenCalledWith(runtime, 'user', ...(kind === 'reconcile' ? [''] : ['delivery']));
     expect(logger.info).toHaveBeenCalledExactlyOnceWith('[TrainingDeliveryTask]', { event: 'started', ...context });
     expect(logger.error).toHaveBeenCalledExactlyOnceWith('[TrainingDeliveryTask]', {
       event: 'failed', ...context, jobKind: kind, errorCode: 10,
@@ -81,7 +81,7 @@ describe('Training delivery task correlation', () => {
 
     await run(request);
 
-    expect(processor).toHaveBeenCalledWith(runtime, 'user', ...(kind === 'reconcile' ? [] : ['delivery']));
+    expect(processor).toHaveBeenCalledWith(runtime, 'user', ...(kind === 'reconcile' ? [''] : ['delivery']));
     expect(logger.info).toHaveBeenLastCalledWith('[TrainingDeliveryTask]', {
       event: 'acknowledged', ...context, jobKind: kind, reason: 'handler_returned',
     });
@@ -98,6 +98,14 @@ describe('Training delivery task correlation', () => {
       event: 'failed', ...context, jobKind: 'unread', errorCode: 'unknown',
     });
     expect(processTrainingDelivery).not.toHaveBeenCalled();
+  });
+
+  it('passes a new task reservation to the account claim without logging it', async () => {
+    get.mockResolvedValue({ exists: true, data: () => ({ kind: 'reconcile', uid: 'user' }) });
+    const reserved = { ...request, data: { ...request.data, reservation: 'private-reservation' } };
+    await run(reserved);
+    expect(reconcileTrainingDeliveryPage).toHaveBeenCalledWith(runtime, 'user', 'private-reservation');
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('private-reservation');
   });
 
   it('acknowledges a missing row without recreating or processing it', async () => {

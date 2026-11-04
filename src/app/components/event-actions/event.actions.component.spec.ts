@@ -511,6 +511,26 @@ describe('EventActionsComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
+    it('closes an open row menu while disabled without destroying the action component or reading metadata', async () => {
+        const trigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+        trigger.openMenu();
+        fixture.detectChanges();
+        expect(trigger.menuOpen).toBe(true);
+        mockHapticsService.selection.mockClear();
+        fixture.componentRef.setInput('disabled', true);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(trigger.menuOpen).toBe(false);
+        expect(fixture.nativeElement.querySelector('button').disabled).toBe(true);
+        expect(fixture.componentInstance).toBe(component);
+        await component.menuOpen(undefined);
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        expect(mockEventService.getEventMetaData).not.toHaveBeenCalled();
+        fixture.componentRef.setInput('disabled', false);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button').disabled).toBe(false);
+    });
+
     it('should stay on the current page after a table action deletes an event', async () => {
         component.navigateAfterDelete = false;
         const deleted = vi.fn();

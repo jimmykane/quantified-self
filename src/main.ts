@@ -11,6 +11,7 @@ import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
 import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
 import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
+import { scrubSentryOAuthEvent } from './app/helpers/sentry-oauth-url.helper';
 
 // Navigation is asynchronous: do not start App Check on the alias while leaving it.
 if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)) {
@@ -23,6 +24,7 @@ if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)
       debug: false,
       beforeBreadcrumb: appCheckBeforeBreadcrumb,
       beforeSend: appCheckBeforeSend,
+      beforeSendTransaction: scrubSentryOAuthEvent,
       integrations: [
         Sentry.browserTracingIntegration(),
       ],

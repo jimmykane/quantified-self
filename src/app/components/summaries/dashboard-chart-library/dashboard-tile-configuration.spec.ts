@@ -278,6 +278,7 @@ describe('DashboardTileConfiguration', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
     expect(component.curatedChartDefinitions.map(definition => definition.chartType)).toEqual([
+      'CriticalPowerHistory', 'WPrimeHistory', 'MaximumPowerHistory', 'DurabilityTrend',
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
       DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,

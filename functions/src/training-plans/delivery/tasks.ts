@@ -15,6 +15,7 @@ import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
 import { processTrainingVerification } from './verification-worker';
 import { observeTrainingQueueHealth } from './monitoring';
+import { RECONCILIATION_BATCH_MS } from './reconciliation-coordinator';
 
 const region = FUNCTIONS_MANIFEST.processTrainingDeliveryTask.region;
 const RECOVERY_DISPATCH_PAGE_SIZE = 25;
@@ -23,7 +24,7 @@ const MAX_RECOVERY_SCAN_PER_PRIORITY = 100;
 export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: string,
   enqueue = enqueueTrainingDeliveryTask): Promise<boolean> {
   const ref = runtime.db.collection(DELIVERY_QUEUE).doc(id);
-  const reservation = randomUUID();
+  const dispatchId = randomUUID();
   const claimed = await runtime.db.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
     if (!snapshot.exists) return false;
@@ -34,12 +35,32 @@ export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: 
       tx.delete(ref);
       return false;
     }
+    if (job.kind === 'reconcile') {
+      if (job.reconciliationLease?.expiresAtMs > runtime.now()) {
+        tx.set(ref, { dueAtMs: job.reconciliationLease.expiresAtMs }, { merge: true });
+        return false;
+      }
+      // A fixed first-event deadline coalesces a burst without sliding under continuous edits.
+      if (!job.scanKey && !job.targetWorkoutId && !job.batchNotBeforeMs
+        && (job.generation ?? 0) !== (job.settledGeneration ?? 0)) {
+        tx.set(ref, { batchNotBeforeMs: runtime.now() + RECONCILIATION_BATCH_MS,
+          dueAtMs: runtime.now() + RECONCILIATION_BATCH_MS }, { merge: true });
+        return false;
+      }
+      if (job.batchNotBeforeMs > runtime.now()) {
+        tx.set(ref, { dueAtMs: job.batchNotBeforeMs }, { merge: true }); return false;
+      }
+    }
+    // Recovery must not invalidate tasks still waiting in the queue. Keep the account
+    // reservation until one task claims it; use a fresh enqueue ID to recover lost tasks.
+    const reservation = job.kind === 'reconcile' && typeof job.dispatchReservation === 'string' && job.dispatchReservation
+      ? job.dispatchReservation : dispatchId;
     tx.set(ref, { dispatchReservation: reservation, dueAtMs: runtime.now() + 60_000 }, { merge: true });
-    return true;
+    return reservation;
   });
   if (!claimed) return false;
   // Reservation first: crashes before/after enqueue are both recovered by the due scan.
-  await enqueue(id, reservation);
+  await enqueue(id, claimed, dispatchId);
   return true;
 }
 
@@ -61,7 +82,8 @@ export const processTrainingDeliveryTask = onTaskDispatched({ region, timeoutSec
     }
     const job = doc.data()!;
     jobKind = ['reconcile', 'delivery', 'verification'].includes(job.kind) ? job.kind : 'unknown';
-    if (job.kind === 'reconcile') await reconcileTrainingDeliveryPage(runtime, job.uid);
+    if (job.kind === 'reconcile') await reconcileTrainingDeliveryPage(runtime, job.uid,
+      typeof request.data?.reservation === 'string' ? request.data.reservation : '');
     else if (job.kind === 'delivery') await processTrainingDelivery(runtime, job.uid, job.deliveryId);
     else if (job.kind === 'verification') await processTrainingVerification(runtime, job.uid, job.deliveryId);
     // A normal handler return is not proof of provider acceptance or committed delivery.

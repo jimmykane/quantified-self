@@ -107,6 +107,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP loopback Fir
     await user.set({});
     await user.collection('mcpConnections').doc('connection').set({ scopes: ['training-plans:read'], status: 'active' });
     await user.collection('trainingPlanState').doc('current').set({ revision: 1, activePlanId: 'plan' });
+    await user.collection('trainingDeliveryState').doc('current').set({ revision: 1, privateCoordinator: 'PRIVATE' });
+    await user.collection('trainingDeliveryState').doc('current').collection('reconciliationTargets').doc('w0')
+      .set({ generation: 10, requestedAt: new Date(), privateTarget: 'PRIVATE' });
     await user.collection('trainingPlans').doc('plan').set({ schemaVersion: 1, name: 'Scale fixture', lifecycle: 'active',
       startLocalDate: '2026-12-01', endLocalDate: '2027-01-31', revision: 1, workoutCount: 400, createdAtMs: 1, updatedAtMs: 1 });
     let batch = db.batch(), pending = 0;

@@ -174,7 +174,7 @@ This existing payment sandbox was exercised with real Stripe test-mode Checkout 
 emulators and Stripe test account are separate parts of it: a connector showing only live mode does not mean the
 local test account is unavailable. Before creating another sandbox, check the private per-user credential file
 `~/.config/quantified-self/stripe-billing-test.env`, then the previous billing worktree's ignored credential file,
-fixture journal and preserved generated runtime. The private file can be copied to the worktree credential path below;
+fixture journal and preserved generated runtime. Select that existing external file with `QS_BILLING_TEST_SECRETS_FILE` if needed;
 never print or commit its contents. Worktree cleanup can remove ignored files; preserve
 needed test credentials and synthetic evidence privately before archiving. Revalidate credentials, account and test
 configuration for each run; the historical results do not verify a new change.
@@ -183,14 +183,14 @@ Billing ports are Auth 9191, Firestore 8181, Functions 5101 and Storage 9291, al
 
 Normal `npm start` is a hybrid development environment and is **not** a billing sandbox. Use Node 22 and the dedicated configuration below. The launcher rejects live keys, uses only `demo-stripe-billing`, scrubs inherited cloud credentials and overrides well-known ADC with an inert local-only credential, and directs Auth, Firestore, Functions, Storage and task dispatch to loopback. The frontend disables hosted App Check, Analytics, Performance and Remote Config for this project and connects both full and Lite Firestore SDKs locally.
 
-Store these two entries in ignored, permission-600 `functions/.secret.billing-test.local` in the worktree:
+Store these two entries in permission-600 `~/.config/quantified-self/billing-test.env` outside the worktree:
 
 ```dotenv
 STRIPE_BILLING_KEY=sk_test_REPLACE_LOCALLY
 STRIPE_BILLING_WEBHOOK_SECRET=whsec_REPLACE_LOCALLY
 ```
 
-The webhook secret comes from the local Stripe CLI listener using the same test account/key, not a production endpoint. The launcher maps that single test API key to the three backend API binding names **only inside this local runtime**. It writes a permission-600 `.secret.local` in a dedicated temporary runtime outside repository test discovery, never touches an existing `functions/.secret.local`, and exports only billing-related Functions. Its local-only Auth cleanup exercises billing deletion and recursive user/customer erasure; the broader native account cleanup has its own unit and emulator suites. Mail is written to the emulator but never sent: the email extension is not started. No real users, cards or production exports belong in fixtures.
+The webhook secret comes from the local Stripe CLI listener using the same test account/key, not a production endpoint. The launcher maps that single test API key to the three backend API binding names **only inside this local runtime**. It writes a permission-600 `.secret.local` in a dedicated temporary runtime outside repository test discovery, never writes credentials into the checkout, and exports only billing-related Functions. Its local-only Auth cleanup exercises billing deletion and recursive user/customer erasure; the broader native account cleanup has its own unit and emulator suites. Mail is written to the emulator but never sent: the email extension is not started. No real users, cards or production exports belong in fixtures.
 
 ```sh
 npm --prefix functions run build

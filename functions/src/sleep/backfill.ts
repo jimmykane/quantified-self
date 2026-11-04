@@ -36,6 +36,7 @@ import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
+import { suuntoHistoryWindowDays, SUUNTO_HISTORY_WINDOWS_PER_BATCH } from '../suunto/history-windows';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
     SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS,
@@ -680,7 +681,17 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
     );
     const sleepToken = tokens[0];
     const startMs = options.startMs ?? getHealthBackfillStartMs(SLEEP_PROVIDERS.SuuntoApp, nowMs);
-    const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
+    const batchedResource = options.suuntoWindowBatchVersion === 1 ? options.resources?.[0] : undefined;
+    if (options.suuntoWindowBatchVersion !== undefined && (!options.execution || options.suuntoWindowBatchVersion !== 1
+        || options.resources?.length !== 1 || (batchedResource !== 'sleep' && batchedResource !== 'health'))) {
+        throw new Error('Invalid Suunto history batch policy.');
+    }
+    const windowDays = batchedResource === 'sleep' || batchedResource === 'health'
+        ? suuntoHistoryWindowDays(batchedResource)
+        : getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
+    if (batchedResource && Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_HISTORY_WINDOWS_PER_BATCH) {
+        throw new Error('Suunto history batch bound exceeded.');
+    }
 
     if (Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS) {
         throw new HttpsError('resource-exhausted', 'Suunto history exceeds the per-request window limit.');
@@ -1075,6 +1086,8 @@ export async function queueGarminSleepHealthHistory(userID: string, options: Sle
 }
 
 export interface SleepHistoryOptions {
+    /** Server-owned coordinator snapshot; never accepted from the callable. */
+    suuntoWindowBatchVersion?: 1;
     startMs?: number;
     endMs?: number;
     resources?: readonly HistoryResource[];

@@ -25,6 +25,17 @@ channel, independently of the Firebase mail extension.
 
 ## Outcome semantics and privacy
 
+Suunto, COROS and Wahoo activity-history imports no longer enter automatic outbound delivery. They keep their normal
+inbound import outcome; suppressing fan-out is not a delivery failure or a skipped import. Explicit historical sends
+still use this bundle's existing historical mode. Ordinary feed imports, already queued sends, retries and
+accepted operations are unchanged. Coverage is **covered/unchanged** across #829, #832 and #847: only admission volume
+changes, with no new worker outcome, telemetry label, probe, queue, schedule or alert resource.
+
+Garmin's history-start cutoff likewise changes only new automatic-send eligibility. Earlier recordings still complete
+their normal inbound import, and explicit sending remains available. Suppression is neither a skipped import nor an
+attempted/failed delivery. The callback queue keeps its first admission decision through duplicates/retries, including
+after later history requests advance the cutoff. Existing #829/#832/#847 coverage remains **covered/unchanged**.
+
 The versioned `[ActivityDelivery]` structured events contain fixed source,
 destination, mode and outcome categories only. They never include user/account/event
 IDs, titles, original files, provider upload IDs, signed continuation URLs,
@@ -38,7 +49,7 @@ untrusted label. All twelve current automatic/manual route contracts are tested.
 | Committed `skipped` | An explicit terminal skip, not delivered |
 | `provider_pending` | Accepted Wahoo/COROS status-only polling or recognized Suunto `NEW`/`PROCESSING` wait, not delivered or a failure |
 | `retry` | A real committed retry, excluding normal pending polls and expected contention |
-| `expected_contention` | A known provider-operation/token-refresh wait, not an outage |
+| `expected_contention` | A known provider-operation/token-refresh or Wahoo application-quota wait, not an outage |
 | `dead_lettered` | A newly committed guarded DLQ transition, not retained failed-job totals |
 | `manual_reconciliation` | A newly durable unresolved-provider outcome; automatic upload replay is unsafe |
 | Worker `acknowledged` | The task returned normally; it does **not** prove delivery |
@@ -65,10 +76,13 @@ existing committed `retry` outcome and bounded retry budget, with the provider-s
 at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor delivery success. Already accepted uploads
 keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
 
-COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing → GPS
-Cardio) use these same workers, destination labels and committed outcomes. Coverage
-is unchanged when Snorkeling also permits GPS-less files; Sailing retains its GPS
-requirement. A mapping INFO is not provider acceptance or delivery. Confirm
+COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing and
+Fishing → GPS Cardio; Diving, Ice Skating, Indoor Rowing and single-session Multisport → Generic)
+use these same workers, destination labels and committed outcomes.
+Coverage is unchanged when Snorkeling, Diving, Ice Skating, Indoor Rowing and single-session Multisport permit
+GPS-less files and Fishing uses the existing GPS Cardio conversion; Sailing and
+Fishing retain their GPS requirement. Other fitness sub-types and true multi-session
+recordings remain outside these fallbacks. A mapping INFO is not provider acceptance or delivery. Confirm
 status `2` and the guarded success write, not the preparation log or task ACK.
 Already accepted uploads remain status-only; this change adds no probe, metric or
 alert-policy dimension and does not authorize replaying old failed records.
@@ -99,6 +113,65 @@ change does not authorize historical replay, new telemetry or production monitor
 
 ## Bounded read-only observation
 
+### COROS sport discovery warning — 1 November 2026
+
+`[COROSActivityUpload] Processing failed.` is a best-effort WARNING emitted only
+after COROS returns its confirmed processing status `-1` for the requested upload.
+Its entire diagnostic payload is `telemetryVersion: 1`, `fit_sport` and
+`fit_sub_sport`: original FIT enum codes 0–254 or `unknown`. No user/workout/upload
+identities, names, filenames, samples, URLs, credentials or raw errors are added.
+This is an observed failed attempt, not proof that the sport is unsupported or that
+the job exhausted its retry budget. Pending, success, malformed status, wrong-upload
+responses and HTTP/auth/quota failures do not emit this observation.
+
+Fresh queued sends retain the two original codes in `corosSourceFIT` alongside the
+existing guarded outbound fingerprint marker, before conversion/provider work. No
+extra database read/write, original-file download, scheduler or retry is introduced.
+Accepted uploads keep status-only reconciliation. Legacy cached receipts, unreadable
+or multi-session files and the separate legacy direct-status endpoint can report
+`unknown`; diagnostics never reopen those operations or fetch a file to fill the gap.
+Logging failure cannot change the provider result. Existing queue/account cleanup
+and retention cover these optional private fields; event/activity data is unchanged.
+
+The new `coros_sport_failures` counter and **Review COROS FIT category** WARNING
+policy use the existing Alerts email channel. A log-match condition extracts the
+original codes into the email and groups notifications by their pair, with a
+24-hour notification limit per pair and one-day autoclose. It sends only opening
+notifications. The first confirmed failure qualifies without waiting for a metric
+threshold. The dashboard counter groups failed attempts, including retries—not
+distinct workouts. A warning can remain open after the upload recovers.
+Google's log-metric labels are not supported in documentation templates, so the
+email uses documented `log.extracted_label` variables, not `metric.label` guesses.
+The notification includes both codes and investigation/count-dashboard links.
+Review a representative original and verify a mapping before adding one; no blanket
+Generic fallback is enabled. Existing delivery/retry/DLQ policies remain unchanged.
+
+Coverage is **extended** by one metric, one policy and one dashboard chart. Unit and
+offline provisioning tests cover field bounds/privacy, asynchronous original-code
+retention, unchanged upload/retry behavior, exclusions, email grouping and ownership.
+No user-facing Help, frontend, MCP or Training contract change is needed for this
+operator diagnostic. Runtime and Monitoring activation require their own readback;
+offline tests alone do not prove email delivery or a positive metric series.
+
+The owner-approved activation completed on 1 November 2026. Configuration readback
+at 15:57 UTC verified fifteen owned metrics, ten enabled policies, the matching
+log-match extractors/rate limit, the new chart and the same enabled email channel.
+All unrelated metrics, policies, dashboards and notification-channel configuration
+were unchanged. The new counter query returned HTTP 200 at 16:06 UTC with no series;
+no qualifying post-creation failure, notification or synthetic email test is claimed.
+
+The approved five-function deployment completed at approximately 16:06 UTC:
+`processActivitySyncTask`, `importActivityToCOROSAPI`,
+`getCOROSAPIWorkoutFileUploadStatus`, `activitySendCommand` and
+`uploadActivitySendFile`. This also releases the previously verified mapping/preview
+changes. Readback at 16:06–16:08 UTC verified ACTIVE Functions, fresh ready revisions
+and 100% traffic, unchanged runtime memory/CPU/concurrency/timeouts/secret bindings,
+unchanged task retry/rate limits and zero ERROR logs in those new revisions.
+The source build, 385 backend tests, six monitoring checks, lint, all 191 isolated
+entrypoint contracts and 75 secret-bound endpoint checks passed. No Hosting, Rules,
+index, provider replay, queue reset or new provider request was performed for this
+diagnostic rollout. Existing classifications and retry behavior remain authoritative.
+
 Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact
 Firestore reads and emits `[HistoricalActivitySend] Preview page checked.` with only fixed destination, source count,
 checked/failure counts, continuation presence and elapsed milliseconds. These diagnostics describe read-only eligibility
@@ -125,6 +198,19 @@ also requires its saved provider-account resume ID. Already accepted polls do no
 require renewed new-upload entitlement, new-send allowlisting or the automatic route
 setting. They are observed, never reset or resent. Missing native depth/resume
 information is unknown.
+
+Wahoo application-quota cooldowns are **covered/unchanged**: early guarded wait commits and later API-quota retry commits reuse
+`expected_contention`, scheduled workers emit `deferred` (or `provider_pending` for an existing accepted poll), and
+future dispatch markers stay outside actionable backlog samples. The dispatcher pages past these waits even before
+an upload ID exists. Existing failure filters exclude these outcomes; exhausted budgets still commit new-DLQ or
+manual-reconciliation failures, and enqueue/storage failures remain visible. Actual upstream 429s retain numeric-only
+WARNING diagnostics. No metric/filter/label, dashboard, alert threshold or production Monitoring apply changes.
+Early known waits consume no business retry/error entry and perform no processing-metadata, source-file or fingerprint
+work. They still start a worker; its existing latency/attempt signals measure that remaining work. Compare those
+signals, committed retries, actual 429s, native queue depth and confirmed deliveries after deployment, rather than
+treating fewer retries or HTTP acknowledgements as completed sends or a measured euro saving. Cooldown read/marker
+and delayed-handoff failures (including a refused handoff to the current active task) remain failed worker attempts;
+accepted IDs and status-only reconciliation remain intact. No task identity enters metric labels.
 
 Each eligible row is re-read in a read-only transaction with owner, deletion,
 settings and connection snapshots; a changed queue revision is excluded. Token
@@ -280,7 +366,7 @@ Preview is offline and needs no credentials or network:
 node tools/activity-delivery-monitoring/cli.mjs --project=quantified-self-io
 ```
 
-After separate approval to apply the fourteen metrics, one dashboard and nine
+After separate approval to apply the fifteen metrics, one dashboard and ten
 policies using the existing enabled email channel, supply its exact resource name:
 
 ```sh
@@ -293,7 +379,7 @@ dashboard etags, updates serially, and never deletes resources or creates email
 channels. It preserves the Training, import and Health/Sleep bundles. Reapplying
 does not duplicate this bundle. Private API errors/channel labels are not printed.
 
-After activation, read back exactly one owned dashboard, fourteen log metrics and nine
+After activation, read back exactly one owned dashboard, fifteen log metrics and ten
 enabled policies, their conditions and the unchanged email channel. Check policy
 validity and each dashboard query through the API. After the next normal dispatcher
 run, verify a post-metric-creation heartbeat **time series** for Suunto, Wahoo and COROS;

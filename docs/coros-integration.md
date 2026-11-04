@@ -258,11 +258,22 @@ sending the file. The fixed mappings are:
 | --- | --- | --- |
 | Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
 | Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+| Fishing (`29`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+| Diving (`53`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
+| Ice Skating (`33`, sub_sport absent or `0`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
+| Indoor Rowing (`4` / sub_sport `14`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
+| Single-session Multisport (`18`, sub_sport absent or `0`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
 
 The adapter only converts structurally valid, single-session activity FITs with
-consistent category fields. Snorkeling converts with or without recorded GPS;
-Sailing still requires at least one valid recorded latitude/longitude pair.
-Apart from the empty-field repair above, GPS-less Sailing, mixed/multi-session,
+consistent category fields. Snorkeling, Diving, Ice Skating, Indoor Rowing and single-session
+Multisport convert with or without recorded GPS;
+Sailing and Fishing require at least one valid recorded latitude/longitude pair.
+Indoor Rowing must explicitly declare fitness-equipment / indoor-rowing (`4` / `14`);
+other fitness sub-types do not inherit its fallback. Multisport requires exactly one
+Session with absent or Generic sub_sport, and explicit conflicting Lap/Sport sub-types
+prevent conversion. Ice Skating likewise requires absent or Generic sub_sport,
+including any explicit Lap/Sport sub-types. Genuine multi-session recordings are not flattened.
+Apart from the empty-field repair above, GPS-less Sailing or Fishing, mixed/multi-session,
 malformed and unrelated files pass through unchanged for the existing provider
 inference/rejection behavior; no support for those cases is claimed.
 FIT sub_sport `17` is pool swimming, not open water.
@@ -291,6 +302,42 @@ swimming/open-water without adding GPS or changing timing, duration, distance or
 the retained original. This extends the tested mapping to GPS-less Snorkeling,
 not Sailing or universal acceptance; app category confirmation is separate.
 
+On 28 October 2026, a separately authorized controlled Fishing copy reached
+terminal status `2` after changing only its outgoing category to generic/generic.
+All non-category native/developer fields, timing, distance and recorded GPS were
+verified unchanged, as were the saved QS event and activity. This proves the tested
+file, not universal acceptance; its visible app category has not yet been confirmed.
+Fishing uses the existing helper and GPS requirement, with a fixed
+`fishing_to_gps_cardio` INFO label.
+
+Separate controlled Diving copies, including recorded depth without GPS, also
+reached terminal status `2`. A matched control with explicit sub_sport and unchanged
+Diving sport `53` failed with status `-1`; the same-sized generic copy succeeded.
+The matched pair differed only in the sport field and file CRC. This supports the
+explicit Diving-to-Generic fallback without requiring GPS, not other sports or
+universal acceptance. Depth, sensor and developer fields remain in the outgoing
+file; COROS app category and dive-profile/depth display are not established by
+terminal success. The fixed INFO label is `diving_to_generic`.
+
+On 1 November 2026, separately authorized owner-account tests of Indoor Rowing
+and single-session Multisport copies reached terminal status `2` as FIT
+generic/generic (`0` / `0`), including summary-only Multisport with no Record samples.
+The attempted fitness-equipment/generic (`4` / `0`) encoding failed on tested files;
+it is not the implemented fallback and does not establish Gym Cardio support.
+Only classification fields and CRCs changed; every other native/developer field
+was compared with its retained original. No GPS, samples or metrics were added.
+This validates the tested copies, not universal acceptance or the app's visible
+category. New fixed INFO labels are `indoor_rowing_to_generic` and
+`single_session_multisport_to_generic`.
+
+On 2 November 2026, a separately authorized owner-account Ice Skating copy without
+GPS reached terminal status `2` after changing sport `33` to generic/generic (`0` / `0`).
+Every non-category native/developer field was compared unchanged with the retained
+original. This proves the tested copy, not universal acceptance or the app's visible
+category. The fixed INFO label is `ice_skating_to_generic`. Private files and test
+identifiers remain outside the repository; the original queued job is not completed
+by this separate test. Deployment and queue recovery require separate approval.
+
 Fingerprint receipts are computed from the actual sent copy. A converted fresh
 send/restart replaces a legacy original-file queue fingerprint marker through the
 existing guarded update; previously accepted operations keep their receipt and
@@ -300,6 +347,16 @@ are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only 
 fixed mapping label, never files, coordinates or account identifiers. App Help
 discloses the category change and unsupported cases.
 
+Send previews expose the Fishing, Diving, Ice Skating, Indoor Rowing and single-session Multisport category changes through the existing
+row `warnings` field for both saved activities and local files. Fishing names the
+GPS eligibility requirement; Diving names the Generic fallback, optional GPS and
+unverified COROS depth/profile display. Ice Skating, Indoor Rowing and Multisport name Generic
+and optional GPS. Their notices use the single FIT Session's sport/sub_sport,
+leaving the original preview sport and file unchanged. The existing renderer needs
+no new response field; Help and the public integration page also describe the mappings.
+Monitoring coverage remains **unchanged** because
+these are preview descriptions, not queue transitions or provider outcomes.
+
 Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes
 COROS, committed delivery/pending/retry/DLQ outcomes and overdue status-only polls.
 No metric dimensions, scheduler, queue policy, Rules, indexes, secrets, persistent
@@ -307,6 +364,14 @@ schema, Training or MCP contracts change. Functions deployment and any historica
 replay require separate explicit approval; this implementation does not deploy,
 replay or complete old queue records. Roll back by reverting the adapter wiring,
 preserving all accepted operation IDs and their polling state.
+
+Confirmed COROS processing failures also emit the privacy-safe original-sport
+diagnostic and grouped email warning described in
+[COROS sport discovery](activity-delivery-monitoring.md#coros-sport-discovery-warning--1-november-2026).
+Fresh queued sends preserve only original sport/sub_sport codes with their existing
+guarded fingerprint marker; accepted legacy operations remain status-only and can
+report unknown codes. This adds no mapping, automatic Generic conversion, provider
+request or retry policy. A failure is not proof that a sport is unsupported.
 
 ## Echo suppression
 

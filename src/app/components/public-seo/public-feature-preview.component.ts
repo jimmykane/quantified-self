@@ -17,6 +17,7 @@ import { HealthOverviewPreviewComponent } from './health-overview-preview.compon
 import { HealthNoteComparisonPreviewComponent } from './health-note-comparison-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { TrainingPlansPreviewComponent } from './training-plans-preview.component';
+import { DailyWorkoutPreviewComponent } from './daily-workout-preview.component';
 
 @Component({
   selector: 'app-public-feature-preview',
@@ -27,6 +28,7 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
     HealthNoteComparisonPreviewComponent,
     TrainingExplorerPreviewComponent,
     TrainingPlansPreviewComponent,
+    DailyWorkoutPreviewComponent,
     HomeDashboardPreviewComponent,
     HomeMyTracksPreviewComponent,
     HomeSignalChartsPreviewComponent,
@@ -40,7 +42,10 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
   templateUrl: './public-feature-preview.component.html',
   styleUrls: ['./public-feature-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.preview-prepares-ahead]': 'prepareAhead()' },
+  host: {
+    '[class.preview-prepares-ahead]': 'prepareAhead()',
+    '[class.preview--hero]': 'previewKey() === "training-hero"',
+  },
 })
 export class PublicFeaturePreviewComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

@@ -738,4 +738,28 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(template).not.toContain('getActivityTabLabel(');
     expect(template).not.toContain('isSticky(');
   });
+  it('renders coverage details and affected lengths, with one haptic per disclosure and none on hydration', () => {
+    component.selectedActivities = [createActivity([createSwimLength({ index: 6, strokes: null }),
+      createSwimLength({ index: 7, distance: null, poolLength: null })])];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const summary = fixture.nativeElement.querySelector('.swim-coverage-summary');
+    expect(summary.textContent).toContain('2 of 2 recorded active lengths');
+    summary.querySelector('button').click(); fixture.detectChanges();
+    expect(summary.querySelector('button').getAttribute('aria-expanded')).toBe('true');
+    const details = fixture.nativeElement.querySelector('.swim-coverage-details');
+    expect(details.hidden).toBe(false);
+    expect(details.textContent).toContain('Stroke counts · 1 of 2');
+    expect(details.textContent).toContain('Independent totals recorded by the watch');
+    details.querySelector('button').click(); fixture.detectChanges();
+    expect(details.querySelector('.swim-coverage-affected').textContent).toContain('Length 6');
+    expect(details.querySelector('.swim-coverage-affected').textContent).toContain('Length 7');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.selectedActivities = [createActivity([createSwimLength()])]; component.ngOnChanges();
+    fixture.changeDetectorRef.markForCheck(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-coverage')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
 });

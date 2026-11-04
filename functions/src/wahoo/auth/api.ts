@@ -1,6 +1,8 @@
 import fetch from 'node-fetch';
+import * as logger from 'firebase-functions/logger';
 import { WAHOO_API_BASE_URL, WAHOO_API_REQUEST_TIMEOUT_MS } from '../constants';
 import { WahooRequestTimeoutError, withWahooRequestTimeout } from '../request-timeout';
+import { extendWahooRateLimitCooldown, getWahooRateLimitCooldownSeconds, normalizeWahooRateLimitResetSeconds } from '../rate-limit';
 
 export class WahooAPIRequestError extends Error {
   public readonly responseBody!: unknown;
@@ -23,7 +25,7 @@ export class WahooAPIRequestError extends Error {
 }
 
 export class WahooAPITransportError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public readonly requestStarted = true) {
     super(message);
     this.name = 'WahooAPITransportError';
   }
@@ -37,7 +39,7 @@ export interface WahooAPIRequestOptions {
 }
 
 function parseResetHeader(value: string | null): number | null {
-  if (!value) return null;
+  if (!value?.trim()) return null;
   const parsed = Number(value.split(',')[0]?.trim());
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
@@ -59,6 +61,15 @@ export async function requestWahooAPI<T>(
 ): Promise<{ data: T; rateLimit: { limit: string | null; remaining: string | null; resetAfterSeconds: number | null } }> {
   const options = typeof methodOrOptions === 'string' ? { method: methodOrOptions } : methodOrOptions;
   const method = options.method || 'GET';
+  let cooldownSeconds: number;
+  try {
+    cooldownSeconds = await getWahooRateLimitCooldownSeconds();
+  } catch {
+    throw new WahooAPITransportError('Wahoo API cooldown could not be checked. Please retry.', false);
+  }
+  if (cooldownSeconds > 0) {
+    throw new WahooAPIRequestError('Wahoo API quota cooldown is active.', 429, cooldownSeconds);
+  }
   let response;
   let body: unknown;
   try {
@@ -79,7 +90,31 @@ export async function requestWahooAPI<T>(
     if (error instanceof WahooRequestTimeoutError) throw new WahooAPITransportError('Wahoo API request timed out.');
     throw new WahooAPITransportError('Wahoo API request failed.');
   }
-  const resetAfterSeconds = parseResetHeader(response.headers.get('x-ratelimit-reset'));
+  let resetAfterSeconds = parseResetHeader(response.headers.get('x-ratelimit-reset'));
+  if (response.status === 429) {
+    resetAfterSeconds = normalizeWahooRateLimitResetSeconds(resetAfterSeconds);
+    try {
+      resetAfterSeconds = await extendWahooRateLimitCooldown(resetAfterSeconds);
+    } catch {
+      // Preserve the provider's retryable rejection even if its shared marker
+      // could not be saved. Do not turn a rejected POST into an uncertain upload.
+      try { logger.error('[WahooAPI] Failed to persist application quota cooldown.'); } catch { /* Diagnostic only. */ }
+    }
+    const numericQuota = (header: string): number[] | null => {
+      const value = response.headers.get(header);
+      if (!value?.trim()) return null;
+      const parts = value.split(',').map((part: string) => Number(part.trim()));
+      return parts.length === 3 && parts.every((part: number) => Number.isSafeInteger(part) && part >= 0)
+        ? parts : null;
+    };
+    try {
+      logger.warn('[WahooAPI] Application API quota exceeded; shared cooldown requested.', {
+        retryAfterSeconds: resetAfterSeconds,
+        quotaLimits: numericQuota('x-ratelimit-limit'),
+        quotaRemaining: numericQuota('x-ratelimit-remaining'),
+      });
+    } catch { /* Diagnostics must not erase a definitive quota rejection. */ }
+  }
   if (!response.ok) {
     throw new WahooAPIRequestError(
       `Wahoo API ${method} ${path} failed with ${response.status}`,

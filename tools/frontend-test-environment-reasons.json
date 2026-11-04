@@ -15,6 +15,10 @@
     "environment": "angular",
     "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
   },
+  "src/app/components/charts/performance-trend/dashboard-performance-trend.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real dashboard wrapper and shared Training renderers, exercises Material menu selection, input-driven rendering, haptics and teardown."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
@@ -31,9 +35,21 @@
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
   },
+  "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Today rest-day indicator with TestBed to verify owner-fenced signal inputs, shared plan reads, date changes, Material navigation, haptic ownership and destruction cleanup."
+  },
+  "src/app/components/plans/day-workout-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."
+  },
   "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
+  },
+  "src/app/components/public-seo/daily-workout-preview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders Material toggles, compact rows and the real workout profile with TestBed to verify explicit review, rest transitions, unit settings and haptic ownership without account or generation services."
   },
   "src/app/components/public-seo/health-note-comparison-preview.component.spec.ts": {
     "environment": "angular",
@@ -42,6 +58,10 @@
   "src/app/components/public-seo/health-overview-preview.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the real Health overview and history renderers with TestBed to verify signal inputs, chart bindings, category navigation, focus restoration and haptic feedback."
+  },
+  "src/app/components/push-notification-settings/push-notification-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles notification Settings with real Material buttons and spinner bindings to verify accessible permission states, pending actions and single-owner haptic feedback."
   },
   "src/app/components/services/connection-history/connection-history.component.spec.ts": {
     "environment": "angular",
@@ -67,9 +87,17 @@
     "environment": "angular",
     "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
   },
+  "src/app/components/shared/table-date-filter/table-date-filter.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared table date control with real Material menus and range-picker portals to verify calendar selection, deferred Apply versus Cancel, focus restoration, disabled controls and haptic ownership."
+  },
+  "src/app/components/summaries/daily-workout-suggestion/daily-workout-suggestion.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the standalone Material Today row to verify foreground/debounce effects, settled-data and owner guards, review/preference callbacks and DestroyRef cancellation."
+  },
   "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
     "environment": "angular",
-    "reason": "Compiles the real sentence-only Dashboard rail to verify owner-fenced bounded reads, signal bindings, note visibility, local-day rollover and listener teardown."
+    "reason": "Compiles the real sentence-only Dashboard rail to verify authenticated-owner fencing, accessible headline-only rendering, assessment input resets and silent display updates without independent data readers."
   },
   "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
     "environment": "angular",
@@ -107,9 +135,25 @@
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
   },
+  "src/app/services/app.notification-preferences.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed, injected Auth/Firestore, signals and DestroyRef to verify account-scoped category listeners, transaction retries and stale-session cancellation."
+  },
+  "src/app/services/app.push.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection, Angular effects and DestroyRef to verify owner-isolated device subscriptions, browser permissions, key rotation and Auth cleanup with mocked Firebase boundaries."
+  },
   "src/app/services/benchmark-rr-analysis.service.spec.ts": {
     "environment": "angular",
     "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R\u2013R panel fixture suite."
+  },
+  "src/app/services/daily-workout-suggestion.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection for owner, Pro and Functions execution fences, queued preference writes and consent-aware analytics dependencies."
+  },
+  "src/app/services/day-workout.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses Angular dependency injection and DestroyRef with the dialog and router to verify single-use unsaved draft handoff, Firebase owner changes and the delayed callable execution fence."
   },
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
@@ -134,5 +178,13 @@
   "src/app/services/training-load.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
+  },
+  "src/app/services/training-rest-days.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed with injected Firebase/Auth services to verify shared server-confirmed listeners, transaction retries, owner/session fences and acknowledged calendar rest-date updates."
+  },
+  "src/app/services/training-workout-added.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses injected Material snackbar/dialog services, DestroyRef and child EnvironmentInjector teardown to verify the owner-bound action survives source-view navigation and cancels on account changes."
   }
 }

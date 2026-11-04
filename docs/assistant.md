@@ -48,6 +48,20 @@ single-purpose comparison workflow. Plan-level and provider-only actions use the
 strength or pool workout is mentioned; one authored strength or pool-length change uses its focused preview.
 Explicit plan creation remains on that multi-workout workflow rather than being reduced to a one-date recommendation.
 
+## Calendar workout generation
+
+Calendar's **Add workout → Generate with AI** uses the same Assistant entitlement, legal checks, App Check,
+model and quota through the separate private `generateDayWorkout` callable. The model receives bounded recorded
+context and explicit controls with no callable tools. Generation produces a reviewable draft or a rest suggestion;
+only the existing Training editor/schedule mutation can save a workout. Training-plan and Timeline-note choices
+start off for each draft and are independent of chat grants. No new feedback is collected or inferred.
+
+Replay state lives in a separate bounded, browser-denied `assistantConversations/day-workout` leaf with the
+existing seven-day TTL and account cleanup. Exact retries do not charge again; explicit regeneration is a new
+request. There is no public MCP generation tool or new mutation authority. The full product, persistence,
+validation and MCP read-back contract lives in
+[Training workspace: Calendar generation](training-workspace.md#generate-a-workout-from-a-calendar-day).
+
 ## Request architecture
 
 ```text

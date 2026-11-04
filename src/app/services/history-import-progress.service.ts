@@ -1,10 +1,12 @@
+import { hasActiveDataHistoryImport } from '@shared/connection-history';
 import { isPlatformBrowser } from '@angular/common';
 import { DestroyRef, Injectable, NgZone, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, authState, type FirebaseUserType } from 'app/firebase/auth';
 import { Subject, catchError, combineLatest, defer, distinctUntilChanged, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AppUserService } from './app.user.service';
-import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportProgress, type HistoryImportSource,
+import { HISTORY_IMPORT_PROVIDERS, HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX, parseHistoryImportResultDismissal,
+  buildHistoryImportItems, buildHistoryImportProgress, type HistoryImportSource,
   type HistoryImportProgressItem, type HistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { APP_STORAGE } from './storage/app.storage.token';
 
@@ -71,6 +73,9 @@ export class HistoryImportProgressService {
     }) : [];
     return buildHistoryImportProgress(owner ? this.snapshot().sources : [], Math.max(this.now(), Date.now()), dismissed);
   });
+  readonly dataImportActive = computed(() => !!this.owner() && this.snapshot().sources.some(source =>
+    hasActiveDataHistoryImport(source.projection, source.connectionState)));
+  readonly latestImports = computed(() => buildHistoryImportItems(this.owner() ? this.snapshot().sources : []));
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
   readonly dashboardHidden = computed(() => {
     const uid = this.owner()?.uid;
@@ -128,7 +133,7 @@ export class HistoryImportProgressService {
   }
 
   private resultDismissalKey(uid: string, serviceName: string): string {
-    return `history-import.dismissed-result.v1.${encodeURIComponent(uid)}.${encodeURIComponent(serviceName)}`;
+    return `${HISTORY_IMPORT_RESULT_DISMISSAL_PREFIX}${encodeURIComponent(uid)}.${encodeURIComponent(serviceName)}`;
   }
 
   private readDismissedResult(uid: string, serviceName: HistoryImportResultDismissal['serviceName']): HistoryImportResultDismissal | null {
@@ -136,12 +141,8 @@ export class HistoryImportProgressService {
     const override = this.dismissedResults().get(key);
     if (override) return override;
     try {
-      const saved: unknown = JSON.parse(this.storage?.getItem(key) ?? 'null');
-      if (!saved || typeof saved !== 'object') return null;
-      const result = saved as Partial<HistoryImportResultDismissal>;
-      if (result.serviceName !== serviceName || typeof result.runId !== 'string' || !result.runId
-        || result.runId.length > 256 || typeof result.updatedAtMs !== 'number' || !Number.isFinite(result.updatedAtMs)) return null;
-      return {serviceName, runId: result.runId, updatedAtMs: result.updatedAtMs};
+      const result = parseHistoryImportResultDismissal(this.storage?.getItem(key) ?? null);
+      return result?.serviceName === serviceName ? result : null;
     } catch { return null; }
   }
 }

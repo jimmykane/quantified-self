@@ -1,0 +1,33 @@
+@if (item(); as progress) {
+  @if (progress.rangeLabel) { <p class="requested-range">Requested range: {{ progress.rangeLabel }}</p> }
+  @if (progress.explanation) {
+    <p class="status-explanation">{{ progress.explanation }}</p>
+  } @else {
+    <div class="history-steps">
+      @for (step of progress.steps; track $index) {
+      <div class="history-step" [class.step-failed]="step.status === 'failed'">
+        <mat-icon aria-hidden="true">{{ step.icon }}</mat-icon>
+        <div class="step-copy"><span>{{ step.label }}</span>
+          @if (step.count !== null && step.count > 0) { <small>{{ step.count | number }} {{ step.countLabel }}</small> }
+        </div>
+        <span class="step-status">{{ step.description }}</span>
+        @if (step.message) { <p class="step-explanation">{{ step.message }}</p> }
+      </div>
+      }
+    </div>
+    @if (progress.kind === 'active') { <mat-progress-bar mode="indeterminate" [attr.aria-label]="progress.name + (progress.requestOnly ? ' history request submission in progress' : ' history import in progress')" /> }
+    <p class="coverage-note">
+      @if (progress.requestOnly) {
+        @if (progress.canDismiss) { Request processing has finished with issues. Counts are not failure totals. }
+        Counts describe scheduled requests, not records received. Garmin sends records separately after accepting requests.
+        Delivery may take hours or days; delivery completion is not tracked here.
+      } @else if (progress.canDismiss) {
+        Processing has finished with issues. Counts shown are items or requests, not failure totals.
+      } @else if (progress.kind === 'requested') {
+        History requested. Provider delivery may take hours or days.
+      } @else {
+        Counts describe processing, not complete data coverage.
+      }
+    </p>
+  }
+}

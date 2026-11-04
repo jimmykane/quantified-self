@@ -12,6 +12,7 @@
       }
     </span>
   </button>
+  <p class="upload-routes-to-service__hint">Routes/courses only. Use activity upload for recorded workouts.</p>
   <input #inputFile type="file" [attr.accept]="fileAccept" multiple style="display: none;" (change)="getFiles($event)"
     [disabled]="!hasProAccess" />
 </section>

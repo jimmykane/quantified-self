@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { By } from '@angular/platform-browser';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
@@ -72,6 +72,65 @@ describe('ActivityCalendarGridComponent', () => {
     expect(context.querySelector('.activity-calendar-day-month')?.textContent).toContain('Jul');
     expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')?.textContent).toContain('Cycling');
     expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
+  });
+
+  it.each([false, true])('labels rest days independently in route/dashboard grids (compact: %s) without overlapping workouts or adding activity totals', async compact => {
+    const rest = { planId: 'plan', planName: 'Autumn', color: 'purple' };
+    const day = { entries: [], visibleEntries: [], overflowCount: 0, hasSkipped: false, ariaLabel: 'Planned rest day, Autumn', restDay: rest };
+    const fixture = await renderGrid('month', compact, [], DaysOfTheWeek.Monday, { '2026-08-03': day });
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('dashboardDayContext', compact);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('[aria-label*="Planned rest day"]') as HTMLElement;
+    expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
+    expect(button.textContent).toContain('Rest day');
+    expect(button.querySelector('.activity-calendar-workout-preview--rest')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeTruthy();
+    if (process.env.CALENDAR_REST_QA_DIR) writeFileSync(resolve(process.env.CALENDAR_REST_QA_DIR,
+      `rest-day-grid-${compact ? 'dashboard' : 'route'}.html`), fixture.nativeElement.outerHTML);
+    const entry = { workout: { ...createWorkout('Independent run', 'planned'), planId: null }, planName: null, color: 'gray' };
+    fixture.componentRef.setInput('plannedWorkoutsByDate', { '2026-08-03': { ...day, entries: [entry], visibleEntries: [entry] } }); fixture.detectChanges();
+    expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
+    expect(button.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('Independent run');
+    expect(button.querySelector('.activity-calendar-workout-preview--rest')).toBeNull();
+    expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
+  });
+
+  it.each([
+    { compact: false, today: false }, { compact: true, today: false },
+    { compact: false, today: true }, { compact: true, today: true },
+  ])('keeps rest, recorded activity, notes and the month boundary in one date cell (compact: $compact, today: $today)', async ({ compact, today }) => {
+    const date = '2026-11-01';
+    const events = [createEvent('recorded', new Date(2026, 10, 1, 8), ActivityTypes.Cycling, 3600)];
+    const rest = { planId: null, planName: 'Calendar', color: 'purple' };
+    const day = { entries: [], visibleEntries: [], overflowCount: 0, hasSkipped: false, ariaLabel: 'Rest day, Calendar', restDay: rest };
+    const fixture = await renderGrid('month', compact, events, DaysOfTheWeek.Monday, { [date]: day });
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel(events, {
+      view: 'month', anchorDate: new Date(2026, 9, 1), startOfWeek: DaysOfTheWeek.Monday,
+      locale: 'en-US', now: new Date(2026, 10, today ? 1 : 2),
+    }));
+    const note: TimelineNote = { id: 'c'.repeat(64), category: 'travel', title: 'Trip', startDate: date,
+      endDate: date, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('dashboardDayContext', compact);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('[aria-label*="Rest day, Calendar"]') as HTMLButtonElement;
+    expect(button.querySelector('.activity-calendar-day-number-value')?.textContent).toBe('1');
+    expect(button.querySelector('.activity-calendar-day-month')?.textContent).toBe('Nov');
+    expect(button.querySelector('.activity-calendar-marker')).toBeTruthy();
+    expect(button.querySelector('.activity-calendar-calm-note')).toBeTruthy();
+    expect(button.classList.contains('activity-calendar-day--today')).toBe(today);
+    expect(button.querySelector('.activity-calendar-workout-preview--rest')?.textContent).toBe('Rest day');
+    expect(button.getAttribute('aria-label')).toContain('1 Timeline note');
+    expect(button.getAttribute('aria-label')).toContain('Rest day, Calendar');
+    const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected); button.click();
+    expect(selected).toHaveBeenCalledOnce();
+    expect(selected.mock.calls[0][0].dateKey).toBe(date);
+    if (process.env.CALENDAR_REST_QA_DIR) writeFileSync(resolve(process.env.CALENDAR_REST_QA_DIR,
+      `rest-day-boundary-${compact ? 'dashboard' : 'route'}${today ? '-today' : ''}.html`), fixture.nativeElement.outerHTML);
   });
 
   it('marks only the selected date without changing the today marker or day layout', async () => {

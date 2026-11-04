@@ -1,7 +1,10 @@
+import { DashboardPerformanceTrendComponent } from '../components/charts/performance-trend/dashboard-performance-trend.component';
 import { DashboardHealthChartComponent } from '../components/charts/health/dashboard-health-chart.component';
+import { DailyWorkoutSuggestionComponent } from '../components/summaries/daily-workout-suggestion/daily-workout-suggestion.component';
 import { DashboardDailyBriefingComponent } from '../components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
 import { ActiveSicknessNoteComponent } from '../components/timeline-notes/active-sickness-note.component';
+import { CurrentPlanRestDayComponent } from '../components/plans/current-plan-rest-day.component';
 import { ActivityCalendarGridComponent } from '../components/calendar/activity-calendar-grid/activity-calendar-grid.component';
 import { DashboardChartPreviewComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-preview.component';
 import { DashboardChartThumbnailComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
@@ -33,7 +36,9 @@ import { EventTableModule } from './event-table.module';
     imports: [
         CommonModule,
         DashboardHealthChartComponent,
+        DashboardPerformanceTrendComponent,
         DashboardDailyBriefingComponent,
+        DailyWorkoutSuggestionComponent,
         DashboardChartThumbnailComponent,
         SharedModule,
         MaterialModule,
@@ -46,6 +51,7 @@ import { EventTableModule } from './event-table.module';
         ActivityCalendarGridComponent,
         TimelineNotesWorkspaceComponent,
         ActiveSicknessNoteComponent,
+        CurrentPlanRestDayComponent,
         UploadActivitiesComponent,
         EventTableModule,
     ],

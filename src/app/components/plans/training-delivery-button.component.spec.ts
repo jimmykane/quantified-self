@@ -64,6 +64,23 @@ describe('Training delivery summaries on the workspace', () => {
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries().length).toBe(1); });
     return fixture;
   }
+  it('offers a prominent Send action after saving without changing the delivery review', async () => {
+    service.anyReady.mockReturnValue(true); service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchPresence.mockReturnValue(of(false)); view$.next({ settings: [], statuses: [] });
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'workout'); fixture.componentRef.setInput('entityId', 'saved');
+    fixture.componentRef.setInput('title', 'Saved run'); fixture.componentRef.setInput('standalone', true);
+    fixture.componentRef.setInput('prominent', true); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.readState().loaded).toBe(true); });
+    const button = fixture.nativeElement.querySelector('button[mat-flat-button]') as HTMLButtonElement;
+    expect(button).toBeTruthy(); expect(button.textContent).toContain('Send to Suunto');
+    expect(open).not.toHaveBeenCalled(); button.click();
+    expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: { scope: 'workout', id: 'saved', title: 'Saved run', initialProvider: 'suunto' },
+    }));
+    expect(selection).toHaveBeenCalledOnce();
+  });
+
   it('keeps the compact history shortcut accessible and opens the same history with one haptic', async () => {
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
     fixture.componentRef.setInput('scope', 'history'); fixture.componentRef.setInput('entityId', 'current');

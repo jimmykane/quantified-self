@@ -1,0 +1,39 @@
+@if (eligible()) {
+  <section aria-label="Daily workout suggestion" class="daily-row">
+    <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false" [mobileActionFullWidth]="!!plannedWorkout()">
+      <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
+      @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
+      @if (status()?.state === 'ready' && status()?.result?.kind === 'workout' && deliveryPreferences().enabled) {
+        <div class="delivery-preference"><small>After approval · {{ deliveryLabel() }}</small><button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Change</button></div>
+      }
+      @if (status()?.state === 'ready' && error()) { <small role="status">Could not check for changes. Showing your saved suggestion.</small> }
+      @if (plannedWorkouts().length) { <small>Planned for today</small> }
+      @if (waitingForData()) { <small>Using available data uses today’s included suggestion</small> }
+      @if (actionError()) { <p role="alert">{{ actionError() }}</p> }
+      @if (busy()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="actionBusy() ? 'Updating daily preferences' : 'Preparing daily suggestion'"></mat-progress-bar> }
+    <div compactRowAction class="actions">
+      @if (plannedWorkout(); as workout) {
+        <a mat-button appHapticTap [routerLink]="plannedWorkoutRoute()" [attr.aria-label]="'Open ' + workout.title">Open</a>
+        <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
+          [standalone]="workout.planId === null" [summaryWorkouts]="plannedDeliveryWorkouts()"
+          [summaryPlan]="plannedWorkoutPlan()" [disabled]="busy()"></app-training-delivery-button>
+      }
+      @if (!preferences().enabled) {
+        <button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Set up</button>
+      } @else {
+        @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">Review</button> }
+        @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }
+        @if (waitingForData()) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button> }
+        @if (status()?.state !== 'ready' && !waitingForData() && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
+        <button mat-icon-button appHapticTap [matMenuTriggerFor]="options" [disabled]="busy()" aria-label="Daily workout options"><mat-icon>more_vert</mat-icon></button>
+        <mat-menu #options="matMenu" class="qs-menu-panel">
+          @if (waitingForData()) { <button mat-menu-item appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
+          <button mat-menu-item appHapticTap (click)="configure()">Preferences</button>
+          <button mat-menu-item (click)="dismiss()">Dismiss for today</button>
+          <button mat-menu-item (click)="disable()">Turn off daily suggestions</button>
+        </mat-menu>
+      }
+    </div>
+    </app-compact-row>
+  </section>
+}

@@ -253,7 +253,7 @@ describe('cleanupEventFile', () => {
                 return {
                     empty: false,
                     size: 2,
-                    docs: mockDocs.map(doc => ({ ref: doc.ref })) // Ensure docs have a ref property
+                    docs: mockDocs.map(doc => ({ ref: doc.ref, updateTime: { toMillis: () => 0 } })) // Ensure docs have a ref property
                 };
             }
             if (refOrQuery.path === 'users/testUser/events/testEvent/metaData') {
@@ -444,6 +444,7 @@ describe('cleanupEventFile', () => {
         const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
         const event = {
+            time: '2026-01-01T10:00:00.000Z',
             data: snap,
             params: { userId: 'testUser', eventId: 'testEvent' },
         };
@@ -458,7 +459,8 @@ describe('cleanupEventFile', () => {
                 return {
                     empty: false,
                     size: 2,
-                    docs: [{ ref: 'metadataRef1' }, { ref: 'metadataRef2' }],
+                    docs: [{ ref: 'metadataRef1', updateTime: { toMillis: () => 0 } },
+                        { ref: 'metadataRef2', updateTime: { toMillis: () => 0 } }],
                 };
             }
             return { exists: false };
@@ -470,6 +472,67 @@ describe('cleanupEventFile', () => {
         expect(mocks.transactionDelete).toHaveBeenCalledTimes(6);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef2');
+    });
+
+    it.each(['activities', 'metaData'])('preserves a new import’s %s while its parent is still missing', async phase => {
+        const deletedAt = Date.parse('2026-01-01T10:00:00.000Z');
+        const old = { ref: { path: `users/testUser/${phase}/old` }, updateTime: { toMillis: () => deletedAt - 1000 } };
+        const fresh = { ref: { path: `users/testUser/${phase}/new` }, updateTime: { toMillis: () => deletedAt + 1 },
+            data: () => ({ sourceWritePending: true, sourceWriteId: 'new-import' }) };
+        const records = new Map([[old.ref.path, old], [fresh.ref.path, fresh]]);
+        mocks.transactionDelete.mockImplementation((ref: { path: string }) => records.delete(ref.path));
+        mocks.transactionGet.mockImplementation(async (ref: { path: string }) => {
+            if (ref.path.endsWith('/' + phase)) return { empty: false, size: 2, docs: [old, fresh] };
+            return { exists: false, empty: true, size: 0, docs: [] };
+        });
+
+        await (cleanupEventFile as unknown as (value: unknown) => Promise<void>)({
+            time: '2026-01-01T10:00:00.000Z',
+            params: { userId: 'testUser', eventId: 'testEvent' },
+            data: { data: () => ({ originalFile: { path: 'users/testUser/events/testEvent/original.fit',
+                bucket: 'test', generation: 'old-generation' } }) },
+        });
+
+        expect(records.size).toBe(2);
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
+        expect(mocks.loggerWarn).toHaveBeenCalledWith(expect.stringContaining('stale_delete_trigger_skipped'),
+            expect.objectContaining({ phase: phase === 'activities' ? 'activity_transaction' : 'metadata_transaction' }));
+    });
+
+    it('still cleans an old pending import using deletion time rather than the parent’s last write', async () => {
+        const deletedAt = Date.parse('2026-01-01T10:00:00.000Z');
+        mocks.transactionGet.mockImplementation(async (ref: { path: string }) => {
+            if (ref.path.endsWith('/metaData')) return { size: 1, docs: [{ ref: 'old-pending-load',
+                updateTime: { toMillis: () => deletedAt - 1 },
+                data: () => ({ sourceWritePending: true, sourceWriteId: 'abandoned-import' }) }] };
+            return { exists: false, empty: true, size: 0, docs: [] };
+        });
+        await (cleanupEventFile as unknown as (value: unknown) => Promise<void>)({
+            time: '2026-01-01T10:00:00.000Z',
+            params: { userId: 'testUser', eventId: 'testEvent' },
+            data: { data: () => ({}), updateTime: { toMillis: () => deletedAt - 1000 } },
+        });
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('old-pending-load');
+        expect(mocks.loggerWarn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { updatedAt: 1000, deletedAt: 1000 },
+        { updatedAt: null, deletedAt: 1000 },
+        { updatedAt: 1000, deletedAt: null },
+    ])('preserves ambiguous child versions: %j', async ({ updatedAt, deletedAt }) => {
+        mocks.transactionGet.mockImplementation(async (ref: { path: string }) => {
+            if (ref.path.endsWith('/metaData')) return { size: 1, docs: [{ ref: 'trainingLoad',
+                ...(updatedAt === null ? {} : { updateTime: { toMillis: () => updatedAt } }) }] };
+            return { exists: false, empty: true, size: 0, docs: [] };
+        });
+        await (cleanupEventFile as unknown as (value: unknown) => Promise<void>)({
+            ...(deletedAt === null ? {} : { time: new Date(deletedAt).toISOString() }),
+            params: { userId: 'testUser', eventId: 'testEvent' }, data: { data: () => ({}) },
+        });
+        expect(mocks.transactionDelete).not.toHaveBeenCalled();
+        expect(mocks.fileDelete).not.toHaveBeenCalled();
     });
 
     it.each([false, true])('removes completion projections and reverse links (retired Suunto Guide only: %s)', async retiredOnly => {

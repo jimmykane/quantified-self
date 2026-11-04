@@ -18,7 +18,6 @@ import { vi } from 'vitest';
 import { EventCardChartActionsComponent } from './event.card.chart.actions.component';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
-import { MenuRadioListComponent } from '../../../shared/menu-radio-list/menu-radio-list.component';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
@@ -50,7 +49,7 @@ describe('EventCardChartActionsComponent', () => {
         MatSlideToggleModule,
         MatTooltipModule,
       ],
-      declarations: [EventCardChartActionsComponent, MenuRadioListComponent],
+      declarations: [EventCardChartActionsComponent],
       providers: [
         { provide: AppHapticsService, useValue: hapticsServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
@@ -80,6 +79,14 @@ describe('EventCardChartActionsComponent', () => {
     return TestBed.inject(OverlayContainer).getContainerElement();
   }
 
+  async function openSettingsSubmenu(name: 'Line continuity' | 'X axis'): Promise<HTMLElement> {
+    const overlay = await openOptionsMenu();
+    overlay.querySelector<HTMLButtonElement>(`button[aria-label^="${name}:"]`)!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return overlay;
+  }
+
   function patternChange(checked: boolean): MatSlideToggleChange {
     return { checked, source: { checked: component.useDistinctLinePatterns } } as MatSlideToggleChange;
   }
@@ -93,9 +100,11 @@ describe('EventCardChartActionsComponent', () => {
   it('shows Continuous by default and emits a mode choice while leaving feedback to the parent', async () => {
     component.canChangeLineContinuity = true;
     const emit = vi.spyOn(component.lineContinuityChange, 'emit');
-    const overlay = await openOptionsMenu();
-    const options = Array.from(overlay.querySelectorAll('button'));
+    const overlay = await openSettingsSubmenu('Line continuity');
+    const options = Array.from(overlay.querySelectorAll<HTMLButtonElement>('[aria-label="Line continuity"] button[role="menuitemradio"]'));
     expect(options.find(button => button.textContent?.includes('Continuous'))?.textContent).toContain('radio_button_checked');
+    expect(options.find(button => button.textContent?.includes('Continuous'))?.getAttribute('aria-checked')).toBe('true');
+    expect(options.find(button => button.textContent?.includes('Detect gaps'))?.getAttribute('aria-checked')).toBe('false');
     hapticsServiceMock.selection.mockClear();
     options.find(button => button.textContent?.includes('Detect gaps'))!.click();
     expect(emit).toHaveBeenCalledExactlyOnceWith({ mode: 'detect', maxGapSeconds: 10 });
@@ -103,11 +112,54 @@ describe('EventCardChartActionsComponent', () => {
     expect(overlay.textContent).toContain('Saved to your chart settings');
   });
 
+  it('keeps choices in compact submenus and gives opening feedback without changing settings', async () => {
+    component.canChangeLineContinuity = true;
+    const continuity = vi.spyOn(component.lineContinuityChange, 'emit');
+    const axis = vi.spyOn(component.xAxisTypeChange, 'emit');
+    const overlay = await openOptionsMenu();
+    expect(overlay.querySelector('[role="menuitemradio"]')).toBeNull();
+    expect(overlay.querySelector('button[aria-label="Line continuity: Continuous"]')).toBeTruthy();
+    expect(overlay.querySelector('button[aria-label="X axis: Duration"]')).toBeTruthy();
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+
+    overlay.querySelector<HTMLButtonElement>('button[aria-label="Line continuity: Continuous"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(overlay.querySelectorAll('[role="menu"][aria-label="Line continuity"] [role="menuitemradio"]')).toHaveLength(3);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+    expect(continuity).not.toHaveBeenCalled();
+    expect(axis).not.toHaveBeenCalled();
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+  });
+
+  it.each(['Line continuity', 'X axis'] as const)('supports keyboard focus and return in the %s submenu', async (name) => {
+    component.canChangeLineContinuity = true;
+    component.canSelectDistanceXAxis = false;
+    const overlay = await openOptionsMenu();
+    const trigger = overlay.querySelector<HTMLButtonElement>(`button[aria-label^="${name}:"]`)!;
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const submenu = overlay.querySelector<HTMLElement>(`[role="menu"][aria-label="${name}"]`)!;
+    const enabled = Array.from(submenu.querySelectorAll<HTMLButtonElement>('button')).filter(button => !button.disabled);
+    expect(enabled.length).toBe(name === 'X axis' ? 2 : 3);
+    expect(document.activeElement).toBe(enabled[0]);
+    enabled[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    expect(document.activeElement).toBe(enabled.at(-1));
+    enabled.at(-1)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', keyCode: 37, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(trigger);
+    expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
+  });
+
   it('validates custom seconds while typing and saves a valid committed value only', async () => {
     component.canChangeLineContinuity = true;
     component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
     const emit = vi.spyOn(component.lineContinuityChange, 'emit');
-    const overlay = await openOptionsMenu();
+    const overlay = await openSettingsSubmenu('Line continuity');
     const input = overlay.querySelector('input[type="number"]') as HTMLInputElement;
     hapticsServiceMock.selection.mockClear();
     const type = (value: string) => {
@@ -145,7 +197,7 @@ describe('EventCardChartActionsComponent', () => {
     component.canChangeLineContinuity = true;
     component.lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
     const emit = vi.spyOn(component.lineContinuityChange, 'emit');
-    const overlay = await openOptionsMenu();
+    const overlay = await openSettingsSubmenu('Line continuity');
     const input = overlay.querySelector('input[type="number"]') as HTMLInputElement;
     input.value = '20';
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -168,9 +220,11 @@ describe('EventCardChartActionsComponent', () => {
     component.isSavingLineContinuity = true;
     component.onLineContinuityModeChange('custom');
     component.onGapLimitCommit();
-    const overlay = await openOptionsMenu();
+    const overlay = await openSettingsSubmenu('Line continuity');
     expect(fixture.nativeElement.querySelector('[aria-label="Saving chart settings"]')).toBeTruthy();
-    expect(Array.from(overlay.querySelectorAll('app-menu-radio-list:first-child button')).every(button => (button as HTMLButtonElement).disabled)).toBe(true);
+    const options = Array.from(overlay.querySelectorAll<HTMLButtonElement>('[aria-label="Line continuity"] button[role="menuitemradio"]'));
+    expect(options).toHaveLength(3);
+    expect(options.every(button => button.disabled)).toBe(true);
     expect(emit).not.toHaveBeenCalled();
     expect(analyticsServiceMock.logEvent).not.toHaveBeenCalled();
   });
@@ -342,9 +396,8 @@ describe('EventCardChartActionsComponent', () => {
   it('renders disabled Distance with Duration and Time enabled in the axis menu', async () => {
     component.canSelectDistanceXAxis = false;
     const emit = vi.spyOn(component.xAxisTypeChange, 'emit');
-    const overlay = await openOptionsMenu();
-    const axisList = Array.from(overlay.querySelectorAll('app-menu-radio-list'))
-      .find(list => list.textContent?.includes('X Axis'))!;
+    const overlay = await openSettingsSubmenu('X axis');
+    const axisList = overlay.querySelector('[role="menu"][aria-label="X axis"]')!;
     const option = (label: string) => Array.from(axisList.querySelectorAll('button'))
       .find(button => button.querySelector('span')?.textContent?.trim() === label)!;
     hapticsServiceMock.selection.mockClear();

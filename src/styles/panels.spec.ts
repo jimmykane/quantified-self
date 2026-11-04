@@ -30,4 +30,15 @@ describe('shared panel elevation styles', () => {
       );
     }
   });
+
+  it('keeps long menus inside the viewport with one scroll owner instead of clipping their controls', () => {
+    const panel = globalStyles.match(/\.mat-mdc-menu-panel\.qs-menu-panel\s*\{([^}]+)\}/s)![1];
+    const content = globalStyles.match(/\.mat-mdc-menu-panel\.qs-menu-panel \.mat-mdc-menu-content\s*\{([^}]+)\}/s)![1];
+    expect(panel).toContain('max-height: calc(100dvh - 16px)');
+    expect(panel).toContain('overflow-y: auto !important');
+    expect(panel).toContain('overscroll-behavior-y: contain');
+    expect(panel).not.toContain('overflow: hidden');
+    expect(content).toContain('overflow: visible');
+    expect(content).toContain('max-height: none');
+  });
 });

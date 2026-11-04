@@ -15,6 +15,7 @@ export class EventTableActionsComponent implements OnInit {
   private readonly haptics = inject(AppHapticsService);
   @Input() selectedDataTypes: string[];
   @Input() icon = 'more_vert';
+  @Input() disabled = false;
   @Output() selectedDataTypesChange: EventEmitter<string[]> = new EventEmitter<string[]>();
   @Input() dataTypes = [
     ...AppUserUtilities.getDefaultSelectedTableColumns().filter(a => a !== 'Start Date'),
@@ -24,6 +25,7 @@ export class EventTableActionsComponent implements OnInit {
   }
 
   selectionChange(event: MatSelectionListChange) {
+    if (this.disabled) return;
     const next = event.source.selectedOptions.selected.map(option => option.value);
     if (next.length === this.selectedDataTypes.length && next.every((value, index) => value === this.selectedDataTypes[index])) return;
     this.selectedDataTypes = next;

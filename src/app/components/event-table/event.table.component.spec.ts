@@ -416,6 +416,7 @@ describe('EventTableComponent', () => {
         expect(mainRow).toBeTruthy();
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
+        expect(searchField.querySelector('mat-icon[matPrefix]')?.textContent).toBe('search');
         expect(mainRow.contains(filtersRow)).toBe(true);
         component.showActions = true;
         fixture.detectChanges();
@@ -553,14 +554,13 @@ describe('EventTableComponent', () => {
         expect(row['sort.Name']).toBe(event.name);
     });
 
-    it('initializes library column choices before a synchronous loading render can create the Material menu', () => {
+    it('initializes library column choices before rendering the Material picker', () => {
         component.presentation = 'tag-library';
         component.selectedColumns = ['Distance', 'Duration', 'Ascent'];
-        const renderedChoices: string[][] = [];
-        vi.spyOn(component, 'loaded').mockImplementation(() => { renderedChoices.push([...component.selectedColumns]); });
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', true) });
-        expect(renderedChoices.length).toBeGreaterThan(0);
-        expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
+        fixture.detectChanges();
+        expect(component.selectedColumns).toEqual(['Distance', 'Duration']);
+        expect(fixture.nativeElement.querySelector('app-event-table-actions').selectedDataTypes).toEqual(['Distance', 'Duration']);
     });
 
     it('keeps the Tag library metric order stable when the picker adds and restores columns', async () => {
@@ -660,6 +660,21 @@ describe('EventTableComponent', () => {
         // Material can clamp pageIndex without emitting a page event after filtering.
         component.paginator.pageIndex = 0;
         await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('keeps search focused after its clear button disappears and gives one feedback', () => {
+        component.searchTerm = 'run';
+        fixture.detectChanges();
+        const search = fixture.nativeElement.querySelector('input[aria-label="Search activities"]') as HTMLInputElement;
+        const clear = fixture.nativeElement.querySelector('.table-search-clear') as HTMLButtonElement;
+        clear.focus();
+        clear.click();
+        fixture.detectChanges();
+        expect(component.searchTerm).toBe('');
+        expect(search.value).toBe('');
+        expect(document.activeElement).toBe(search);
+        expect(fixture.nativeElement.querySelector('.table-search-clear')).toBeNull();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
@@ -792,7 +807,7 @@ describe('EventTableComponent', () => {
         expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities to show');
         expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p')).toBeNull();
         expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-loading-overlay').hasError).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-loading-overlay')).toBeNull();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         fixture.componentRef.setInput('isLoading', true); await settle();
         expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
@@ -829,15 +844,105 @@ describe('EventTableComponent', () => {
         expect(component.selection.selected).toHaveLength(0);
     });
 
-    it('should call loading and return early in ngOnChanges when events are missing', () => {
-        const loadingSpy = vi.spyOn(component as any, 'loading');
+    it('retains existing rows and reports loading when the parent temporarily removes its events input', () => {
+        const rows = component.data.data;
         component.events = null as any;
 
         component.ngOnChanges({
             events: new SimpleChange([], null, false),
         } as any);
 
-        expect(loadingSpy).toHaveBeenCalled();
+        expect(component.tableIsLoading).toBe(true);
+        expect(component.showEmptyNotice).toBe(false);
+        expect(component.data.data).toBe(rows);
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false) });
+        expect(component.tableIsLoading).toBe(false);
+        expect(component.showEmptyNotice).toBe(true);
+    });
+
+    it.each([false, true])('does not read the tag catalog for initial skeletons and only loads it after ready input (%s)', async completes => {
+        fixture.destroy();
+        mockEventTagCatalogService.listAllTags.mockClear();
+        const initialFixture = TestBed.createComponent(EventTableComponent);
+        const initialTable = initialFixture.componentInstance;
+        initialTable.sort = { sortChange: new Subject(), active: '', direction: '' } as any;
+        initialTable.paginator = { _changePageSize: vi.fn(), firstPage: vi.fn(), page: new Subject() } as any;
+        initialFixture.componentRef.setInput('user', mockUser);
+        initialFixture.componentRef.setInput('events', []);
+        initialFixture.componentRef.setInput('isLoading', true);
+        initialFixture.detectChanges();
+        await initialFixture.whenStable();
+        expect(initialTable.showInitialLoading).toBe(true);
+        expect(mockEventTagCatalogService.listAllTags).not.toHaveBeenCalled();
+        if (completes) {
+            initialFixture.componentRef.setInput('events', [new MockEvent('ready')]);
+            initialFixture.componentRef.setInput('isLoading', false);
+            initialFixture.detectChanges();
+            await initialFixture.whenStable();
+            expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledExactlyOnceWith(mockUser.uid, false);
+        }
+        initialFixture.destroy();
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledTimes(Number(completes));
+    });
+
+    it('retains rows, page and selection until a changed date range finishes loading', () => {
+        const rows = component.data.data;
+        component.selection.select(rows[0]);
+        component.paginator.pageIndex = 2;
+        component.paginator.firstPage = vi.fn();
+        component.isLoading = true;
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false), filterContext: new SimpleChange('month', 'year', false) });
+        expect(component.data.data).toBe(rows);
+        expect(component.paginator.pageIndex).toBe(2);
+        expect(component.paginator.firstPage).not.toHaveBeenCalled();
+        expect(component.selection.selected).toEqual([rows[0]]);
+        component.isLoading = false;
+        component.events = [new MockEvent('fresh-range') as any];
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+        expect(component.tableIsLoading).toBe(false);
+        expect(component.data.data.map(row => row.Event.getID())).toEqual(['fresh-range']);
+        expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+        expect(component.selection.selected).toEqual([]);
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it('defers a search queued before refresh until the new results arrive', async () => {
+        const previousFilter = component.data.filter;
+        component.onSearchInput({ target: { value: 'new search' } } as unknown as Event);
+        component.isLoading = true;
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false) });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.data.filter).toBe(previousFilter);
+
+        component.isLoading = false;
+        component.events = [new MockEvent('refreshed') as any];
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+        expect(JSON.parse(component.data.filter).text).toBe('new search');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it.each(['viewer', 'target'])('clears retained rows immediately when the %s changes and waits for that owner’s events', changed => {
+        const oldEvents = component.events;
+        component.selection.select(component.data.data[0]);
+        component.loading();
+        component.isLoading = true;
+        if (changed === 'viewer') component.user = { ...component.user, uid: 'other-owner' } as User;
+        else component.targetUser = { ...component.user, uid: 'other-owner' } as User;
+        component.ngOnChanges({ [changed === 'viewer' ? 'user' : 'targetUser']: new SimpleChange(null, changed === 'viewer' ? component.user : component.targetUser, false) });
+        expect(component.data.data).toEqual([]);
+        expect(component.selection.selected).toEqual([]);
+        expect(component.showInitialLoading).toBe(true);
+        component.isLoading = false;
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false) });
+        expect(component.data.data).toEqual([]);
+        expect(component.tableIsLoading).toBe(true);
+        component.events = [new MockEvent('other-owner-event') as any];
+        component.ngOnChanges({ events: new SimpleChange(oldEvents, component.events, false) });
+        expect(component.data.data.map(row => row.Event.getID())).toEqual(['other-owner-event']);
+        expect(component.tableIsLoading).toBe(false);
     });
 
     it('should update selected columns and page size on user/showActions changes', () => {
@@ -1265,6 +1370,23 @@ describe('EventTableComponent', () => {
         expect(component.tagFilterOptions).not.toContain('Private owner tag');
     });
 
+    it('clears the previous owner’s catalog immediately while deferring the new owner’s read', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Private old tag']);
+        await (component as any).loadAllHistoryTags(true);
+        mockEventTagCatalogService.listAllTags.mockClear();
+        component.user = { ...mockUser, uid: 'new-owner' } as User;
+        component.events = [];
+        component.isLoading = true;
+        component.ngOnChanges({ user: new SimpleChange(mockUser, component.user, false), events: new SimpleChange(null, [], false) });
+        expect(component.tagFilterOptions).not.toContain('Private old tag');
+        expect(mockEventTagCatalogService.listAllTags).not.toHaveBeenCalled();
+        component.events = [new MockEvent('new-owner-event') as any];
+        component.isLoading = false;
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false), isLoading: new SimpleChange(true, false, false) });
+        await fixture.whenStable();
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledExactlyOnceWith('new-owner', false);
+    });
+
     it('retries a failed full-history tag load when the filter is opened', async () => {
         mockEventTagCatalogService.listAllTags.mockRejectedValueOnce(new Error('offline'));
         await (component as any).loadAllHistoryTags(true);
@@ -1322,7 +1444,7 @@ describe('EventTableComponent', () => {
         expect(row['Tags Accessible Label']).toBe('Activity tags for Test Run: Race, Long run, 2026');
     });
 
-    it('should provide compact mobile tag markup and stack toolbar filters on small screens', () => {
+    it('should retain compact mobile tags and wrap text filters below search on small screens', () => {
         const template = readFileSync(
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
@@ -1335,7 +1457,8 @@ describe('EventTableComponent', () => {
         expect(template).toContain('event-tags-mobile-summary');
         expect(template).toContain('event-tags-add-text');
         expect(template).toContain("[attr.aria-label]=\"row['Tags Accessible Label']\"");
-        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.table-toolbar-filters\s*{[\s\S]*flex-direction:\s*column;/);
+        expect(styles).toMatch(/\.table-toolbar-filters\s*{[^}]*flex-wrap:\s*wrap;/);
+        expect(styles).toMatch(/@include bp\.handset-or-tablet-portrait[\s\S]*?\.table-toolbar-main \.qs-search-field\s*{\s*flex-basis:\s*100%;/);
         expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.mat-column-Tags[\s\S]*width:\s*52px !important;/);
     });
 
@@ -1788,6 +1911,60 @@ describe('EventTableComponent', () => {
     });
 
     describe('deleteSelection', () => {
+        it('unlocks after cancelling a bulk action when a live result arrives during confirmation', async () => {
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.events = [new MockEvent('live-result') as any];
+            component.ngOnChanges({ events: new SimpleChange(null, component.events, false), filterContext: new SimpleChange('previous', 'current', false) });
+            expect(component.paginator.firstPage).not.toHaveBeenCalled();
+            closed.next(false);
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['live-result']);
+            expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+        });
+
+        it('keeps a parent refresh active when a bulk action finishes', async () => {
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.isLoading = true;
+            component.events = [];
+            component.ngOnChanges({ isLoading: new SimpleChange(false, true, false), events: new SimpleChange(null, [], false) });
+            closed.next(false);
+            expect(component.isLoading).toBe(true);
+            expect(component.tableIsLoading).toBe(true);
+            component.events = [new MockEvent('fresh-result') as any];
+            component.isLoading = false;
+            component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['fresh-result']);
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+        });
+
+        it('keeps a bulk action pending when a parent refresh completes first', async () => {
+            let resolveDelete: (value: boolean) => void;
+            mockEventService.deleteAllEventData.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveDelete = resolve; }));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.isLoading = true;
+            component.events = [];
+            component.ngOnChanges({ isLoading: new SimpleChange(false, true, false), events: new SimpleChange(null, [], false) });
+            component.isLoading = false;
+            component.events = [new MockEvent('live-result') as any];
+            component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+            expect(component.tableIsLoading).toBe(true);
+            resolveDelete(true);
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['live-result']);
+            expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledOnce();
+        });
+
         it('removes a row deleted through its action menu', () => {
             const changes = vi.fn();
             component.eventsChange.subscribe(changes);
@@ -1849,7 +2026,7 @@ describe('EventTableComponent', () => {
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
-            expect(component.isLoading).toBe(false);
+            expect(component.tableIsLoading).toBe(false);
         });
 
         it('reconciles confirmed deletions even when another selected activity fails to delete', async () => {
@@ -1870,7 +2047,7 @@ describe('EventTableComponent', () => {
             expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
             expect(mockHapticsService.error).toHaveBeenCalledOnce();
             expect(mockHapticsService.success).not.toHaveBeenCalled();
-            expect(component.isLoading).toBe(false);
+            expect(component.tableIsLoading).toBe(false);
         });
 
         it('keeps activity search and sort persistence active after bulk deletion', async () => {
@@ -2492,6 +2669,17 @@ describe('EventTableActionsComponent Material menu', () => {
             ['Duration', 'true'], ['Distance', 'true'], ['Ascent', 'false'],
         ]);
         expect(haptics.selection).not.toHaveBeenCalled();
+        menuFixture.componentRef.setInput('disabled', true);
+        menuFixture.detectChanges();
+        expect(menuFixture.nativeElement.querySelector('button').disabled).toBe(true);
+        expect(overlay.querySelector('[role="listbox"]').getAttribute('aria-disabled')).toBe('true');
+        options[2].click();
+        menuFixture.detectChanges();
+        expect(menuFixture.componentInstance.selectedDataTypes).toEqual(['Distance', 'Duration']);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(changes).not.toHaveBeenCalled();
+        menuFixture.componentRef.setInput('disabled', false);
+        menuFixture.detectChanges();
         options[2].click();
         menuFixture.detectChanges();
         expect(haptics.selection).toHaveBeenCalledOnce();

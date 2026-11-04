@@ -31,6 +31,30 @@ describe('inline chart library state', () => {
     user = { uid: 'test-owner', settings: { unitSettings: { speedUnits: [], startOfTheWeek: 1 }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
     state = TestBed.inject(DashboardChartLibraryState);
   });
+  it('stages and saves a performance context without changing another tile, then restores it for editing', async () => {
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'curated-critical-power')!;
+    await state.select(user, entry);
+    state.updatePerformanceContext('Mountain Biking');
+    expect(persistence.save).not.toHaveBeenCalled();
+    expect(state.draft()?.['displaySettings']).toEqual({ performanceContext: 'Mountain Biking' });
+    await state.save();
+    expect(user.settings.dashboardSettings.tiles[0]['displaySettings']).toEqual({ performanceContext: 'Mountain Biking' });
+    await state.edit(user, 0);
+    expect(state.canConfigure()).toBe(true);
+    expect(state.configuring()).toBe(false);
+    state.updatePerformanceContext('Cycling');
+    await state.save();
+    expect(user.settings.dashboardSettings.tiles[0]['displaySettings']).toEqual({ performanceContext: 'Cycling' });
+  });
+  it('ignores invalid performance changes and changes for other chart kinds', async () => {
+    await state.select(user, calendar);
+    state.updatePerformanceContext('Cycling');
+    expect(state.draft()?.['displaySettings']?.performanceContext).toBeUndefined();
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'curated-durability')!;
+    await state.select(user, entry);
+    state.updatePerformanceContext('');
+    expect(state.draft()?.['displaySettings']).toBeUndefined();
+  });
   it('preserves legacy Sleep presentation and placement when changing its source or range', async () => {
     const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-sleep')!.tile);
     tile.order = 0; tile.name = 'My sleep';

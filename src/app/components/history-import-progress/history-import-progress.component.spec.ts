@@ -65,6 +65,61 @@ async function setup(mobile = false) {
   return {owner, sources, progress, dialog, sheet, haptics, closed$, dismiss};
 }
 describe('shared history import surfaces', () => {
+  it('uses a compact icon control while retaining the full status and provider count for accessibility', async () => {
+    const state = await setup();
+    const fixture = TestBed.createComponent(HistoryImportIndicatorComponent); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(button.hasAttribute('mat-icon-button')).toBe(true);
+    expect(button.hasAttribute('mat-button')).toBe(false);
+    expect(button.getAttribute('aria-label')).toContain('Importing history. View history import status for 1 provider');
+    expect(button.querySelector('.cdk-visually-hidden')?.textContent).toContain('Importing history · 1');
+    const spinner = fixture.nativeElement.querySelector('mat-progress-spinner') as HTMLElement;
+    expect(spinner).not.toBeNull();
+    expect(spinner.closest('button')).toBeNull();
+    expect(spinner.parentElement).toBe(fixture.nativeElement);
+    expect(spinner.style.width).toBe('32px');
+    expect(spinner.style.height).toBe('32px');
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('uses flat provider rows inside the panel and retains outlined cards on the dashboard', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-history-import-cards mat-card')?.classList.contains('qs-overlay-flat')).toBe(false);
+    const panel = TestBed.createComponent(HistoryImportPanelComponent); panel.detectChanges();
+    expect(panel.nativeElement.querySelector('mat-card')?.classList.contains('qs-overlay-flat')).toBe(true);
+    expect(panel.nativeElement.querySelector('button[role="switch"]')?.getAttribute('aria-labelledby')).toBe('history-import-dashboard-label');
+    expect(panel.nativeElement.querySelector('#history-import-dashboard-label')?.textContent).toBe('Show on dashboard');
+  });
+
+  it('keeps retry waits quiet across the header and cards, then resumes activity for the next section', async () => {
+    const state = await setup();
+    const steps = [
+      {id: 'activities', resources: ['activities'], status: 'retrying', count: 136,
+        message: 'History scan finished. Workouts: 1 waiting to retry.'},
+      {id: 'sleep', resources: ['sleep'], status: 'queued', count: 0},
+      {id: 'health', resources: ['health'], status: 'queued', count: 0},
+    ];
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: {...projection(), steps}}]);
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.history-import-header-action')?.getAttribute('aria-label')).toContain('Waiting for history retries');
+    expect(host.querySelector('.history-import-header-action mat-icon')?.textContent).toContain('schedule');
+    expect(host.querySelector('mat-progress-spinner')).toBeNull(); expect(host.querySelector('mat-progress-bar')).toBeNull();
+    expect(host.querySelector('.provider-status')?.textContent).toContain('Waiting to retry');
+    expect(host.querySelector('.step-explanation')?.textContent).toContain('1 waiting to retry');
+    expect([...host.querySelectorAll('.history-step')].map(row => row.textContent)).toEqual([
+      expect.stringContaining('Activities'), expect.stringContaining('Sleep'), expect.stringContaining('Health'),
+    ]);
+    expect(host.querySelector('button[aria-label="Dismiss Suunto history import result"]')).toBeNull();
+    steps[0].status = 'processed'; delete steps[0].message; steps[1].status = 'requesting';
+    state.sources.set([{serviceName: ServiceNames.SuuntoApp, projection: {...projection(), steps}}]); fixture.detectChanges();
+    expect(host.querySelector('.history-import-header-action')?.getAttribute('aria-label')).toContain('Importing history');
+    expect(host.querySelector('mat-progress-spinner')).not.toBeNull(); expect(host.querySelector('mat-progress-bar')).not.toBeNull();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('updates the header and dashboard card from the same live state and clears both on sign-out', async () => {
     const state = await setup(); const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
@@ -89,6 +144,7 @@ describe('shared history import surfaces', () => {
     expect(host.querySelector('mat-progress-spinner')).toBeNull();
     expect(host.querySelector('mat-progress-bar')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Garmin%20API');
+    expect(host.querySelector('a')?.getAttribute('href')).toContain('tool=history');
     expect(host.textContent).toContain('7 requests scheduled');
     expect(host.textContent).not.toContain('items or requests');
     expect(host.textContent).toContain('Counts describe scheduled requests, not records received');
@@ -215,6 +271,7 @@ describe('shared history import surfaces', () => {
     expect(opener).toHaveBeenCalledTimes(1);
     expect(opener.mock.calls[0][0]).toBe(HistoryImportPanelComponent);
     expect(opener.mock.calls[0][1].data.owner).toBe(state.owner());
+    if (mobile) expect(opener.mock.calls[0][1].panelClass).toBe('qs-bottom-sheet-container');
     expect(state.haptics.selection).toHaveBeenCalledTimes(1);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     state.closed$.next(); fixture.detectChanges(); expect(button.getAttribute('aria-expanded')).toBe('false');

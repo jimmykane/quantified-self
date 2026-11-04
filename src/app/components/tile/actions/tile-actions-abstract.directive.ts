@@ -52,7 +52,10 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     this.editTile.emit(this.order);
   }
   @ViewChild(MatMenuTrigger) protected menuTrigger?: MatMenuTrigger;
-  public restoreMenuFocus(): void { if (this.menuTrigger) this.menuTrigger.restoreFocus = true; }
+  public onMenuOpened(): void {
+    if (this.menuTrigger) this.menuTrigger.restoreFocus = true;
+    if (!this.isActionSaving) this.hapticsService.selection();
+  }
   protected closeMenuForEditor(): void {
     if (this.menuTrigger) { this.menuTrigger.restoreFocus = false; this.menuTrigger.closeMenu(); }
   }
@@ -263,21 +266,4 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return resolveDashboardTileLaneKey(tile);
   }
 
-  /**
-   * see https://github.com/angular/components/issues/11677
-   */
-  fixDisappearIOSBug() {
-    this.hapticsService.selection();
-    document.getElementById('panel-fix')?.remove();
-    const styleNode = document.createElement('style');
-    styleNode.type = 'text/css';
-    styleNode.id = 'panel-fix';
-    styleNode.appendChild(
-      document.createTextNode('.mat-mdc-menu-panel,.mat-menu-panel{overflow: visible !important;}')
-    );
-    document.getElementsByTagName('head')[0].appendChild(styleNode);
-    setTimeout(() => {
-      styleNode.remove();
-    }, 500);
-  }
 }

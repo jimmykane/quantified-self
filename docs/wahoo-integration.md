@@ -171,6 +171,63 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Pro access is required to connect, receive new imports, and run history. Disconnect remains available after Pro access ends.
 - User deletion guards run before queue insertion, worker processing, and event persistence. Local cleanup remains authoritative if provider deauthorization is temporarily unavailable.
 
+### Application API cooldown
+
+Wahoo's [rate-limit headers](https://cloud-api.wahooligan.com/#rate-limiting) describe application-wide quotas.
+`X-RateLimit-Reset` is seconds until reset, not an epoch timestamp. The shared JSON API helper records a 429's
+deadline in the existing server-only `trainingProviderCapacity/wahoo_86400000_app.notBeforeMs`. Its transaction
+only extends that deadline and merges the field, preserving Training's rolling counters. Training already consults
+this application record; activity, route, history and profile calls now check it before sending a request. This adds
+one document read per shared JSON API call, not a new quota counter, queue, scheduler or account record. OAuth token
+exchange/refresh and CDN downloads retain their separate transports. Training's own request counting is unchanged.
+
+Valid reset delays are bounded to one day, with a five-second grace; absent, zero or invalid reset values use five
+minutes. Recorded-activity delivery also checks this existing cooldown after lifecycle/Stop and uncertain-operation
+checks, before processing metadata, source downloads, fingerprints or provider claims. A known wait changes only
+the guarded dispatch marker: it does not increment `retryCount`/`totalRetryCount` or append an error. Read/marker
+failures fail the current task without consuming the business retry budget. Eligible open-cooldown attempts add
+one document read; the final API-level check remains in place for concurrent quota changes.
+
+The due time retains 1–30 seconds of jitter and acknowledgement requires a confirmed delayed-task handoff or duplicate.
+An unaccepted workspace send waits no later than its existing send-window expiry, with Stop/expiry rechecked in the
+marker transaction. Early redeliveries reuse that durable schedule, including after a lost enqueue response.
+Stale contenders also reuse near-term quota deadlines inside the initial dispatch-marker grace, without another
+marker write or new jitter. The original task's own creation timestamp is not evidence of a separate delayed handoff.
+The worker uses the SDK's current task ID to distinguish a different delivery from the scheduled Wahoo task itself,
+including inside the five-second clock grace. A handoff to its own active task remains a transport failure rather
+than an acknowledgement, so an expiry-clamped wait cannot lose its final delivery. Payloads and task names are unchanged.
+Both unaccepted sends and accepted status/type-correction work wait; accepted upload IDs and the pinned type survive,
+so recovery checks the original upload instead of reposting its FIT. Future Wahoo waits do not consume the dispatcher's
+candidate budget. A later extension is rechecked when the scheduled task becomes due. A real 429 or cooldown that
+begins after the early check retains the existing guarded retry path and budget. Expiry, deletion/disconnect guards
+and the uncertain-upload policy remain.
+If the cooldown cannot be read, no provider request starts and the failure remains retryable. A failed cooldown write
+does not erase a definitive 429 rejection. No manual replay or retry-count reset is part of this change.
+
+Actual upstream 429s log WARNING with numeric quota limits, remaining counts and retry delay only. Local waits log
+INFO and use existing deferred/expected-contention observations; new DLQ/manual-reconciliation outcomes remain failures.
+No raw headers, URLs, identities, payloads or credentials are added. Monitoring is **covered/unchanged** by the existing
+activity-delivery outcome filters and future-work exclusions; no monitoring resource apply is needed. Existing Help's
+background-send/status-only recovery explanation remains accurate. No frontend, MCP/Assistant or Training planning
+contract, consent, Rules, index, TTL or migration change is required. Function deployment requires separate approval.
+
+After that approval, the recorded-delivery worker and reconciliation rollout is:
+
+```sh
+firebase deploy --only functions:processActivitySyncTask,functions:dispatchActivitySyncQueue --project quantified-self-io --non-interactive
+```
+
+Other shared Wahoo API consumers receive the cooldown helper through their separately approved function deployments.
+The early recorded-activity guard alone requires only `processActivitySyncTask`:
+
+```sh
+npm run firebase -- deploy --only functions:processActivitySyncTask --project quantified-self-io --non-interactive
+```
+
+No deployment or production replay is included in the implementation. Compare the existing Wahoo `deferred`
+worker counts/latency, committed retries, actual upstream 429s, queue depth and successful deliveries after release.
+This removes avoidable processing during known waits; worker invocations and genuine Wahoo quota limits remain.
+
 ### FIT download diagnostics
 
 `[WahooFITDownload] Request diagnostic.` records each started download request at INFO for a validated FIT

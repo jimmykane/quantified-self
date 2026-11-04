@@ -1,0 +1,300 @@
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { catchError, map, of, switchMap } from 'rxjs';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
+import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
+import { HistoryImportProgressService } from '../../../services/history-import-progress.service';
+import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
+import { DayWorkoutService } from '../../../services/day-workout.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
+import { CompactRowComponent } from '../../shared/compact-row/compact-row.component';
+import { AppUserService } from '../../../services/app.user.service';
+import { selectCalendarVisibleScheduledWorkouts, TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
+import { trainingPlansWorkoutRoute } from '../../../helpers/training-plans-navigation.helper';
+import { dailyWorkoutDeliveryPreferences } from '../../../helpers/daily-workout-delivery.helper';
+import { dayWorkoutReviewTiming } from '../../../helpers/day-workout-review.helper';
+import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
+
+@Component({ selector: 'app-daily-workout-suggestion', standalone: true,
+  imports: [CompactRowComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, AppChartSharedModule,
+    RouterLink, TrainingDeliveryButtonComponent],
+  templateUrl: './daily-workout-suggestion.component.html', styleUrl: './daily-workout-suggestion.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush })
+export class DailyWorkoutSuggestionComponent {
+  readonly ownerUid = input.required<string>();
+  // The parent's browser date refreshes preferences; the saved-zone date owns the daily scope.
+  readonly localDate = input.required<string>();
+  readonly dataReady = input(false);
+  readonly sleepRevision = input(0);
+  readonly sleepKey = input<string | null>(null);
+  private readonly evidenceKey = computed(() => this.sleepKey() ?? String(this.sleepRevision()));
+  readonly daily = inject(DailyWorkoutSuggestionService);
+  private readonly generation = inject(DayWorkoutService);
+  private readonly users = inject(AppUserService);
+  private readonly imports = inject(HistoryImportProgressService);
+  private readonly plans = inject(TrainingPlansService);
+  private readonly haptics = inject(AppHapticsService);
+  private readonly destroy = inject(DestroyRef);
+  private readonly document = inject(DOCUMENT);
+  readonly eligible = computed(() => this.daily.eligible(this.ownerUid()));
+  readonly deliveryPreferences = computed(() => dailyWorkoutDeliveryPreferences(this.users.user()?.settings?.appSettings?.dailyWorkoutDelivery));
+  readonly deliveryLabel = computed(() => this.deliveryPreferences().providers.map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label).join(', '));
+  readonly visible = signal(this.document.visibilityState !== 'hidden');
+  // Re-evaluate the saved-zone date on foreground return; equal same-day values retain the cache scope.
+  readonly preferences = computed(() => { this.localDate(); this.visible(); return this.daily.preferences(); },
+    { equal: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
+  readonly status = signal<DailyWorkoutSuggestionStatus | null>(null);
+  readonly waitingForData = computed(() => ['waiting-sleep', 'waiting-import'].includes(this.status()?.state ?? ''));
+  private readonly loading = signal(false);
+  readonly actionBusy = signal(false);
+  readonly actionError = signal<string | null>(null);
+  readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
+  // A request failure does not establish that the model failed or spent today's allowance.
+  readonly error = signal<string | null>(null);
+  // Reuse Calendar's bounded reader only for the current owner's planned date.
+  private readonly plannedScope = computed(() => {
+    const preferences = this.preferences(), status = this.status();
+    return this.eligible() && preferences.enabled && status?.state === 'planned'
+      && status.localDate === preferences.controls.localDate ? { uid: this.ownerUid(), date: status.localDate } : null;
+  }, { equal: (left, right) => left?.uid === right?.uid && left?.date === right?.date });
+  private readonly savedWorkouts = toSignal(toObservable(this.plannedScope).pipe(switchMap(scope => scope
+    ? this.plans.watchCalendarSchedule(scope.uid, scope.date, scope.date).pipe(
+      map(schedule => ({ ...scope, schedule })), catchError(() => of(null)))
+    : of(null))), { initialValue: null });
+  readonly plannedWorkouts = computed(() => {
+    const scope = this.plannedScope(), saved = this.savedWorkouts();
+    if (!scope || saved?.uid !== scope.uid || saved.date !== scope.date || saved.schedule.restoreUnavailable
+      || saved.schedule.workoutsComplete === false) return [];
+    return selectCalendarVisibleScheduledWorkouts(saved.schedule, scope.date, scope.date)
+      .filter(workout => workout.lifecycle === 'planned');
+  });
+  readonly plannedWorkout = computed(() => this.plannedWorkouts()[0] ?? null);
+  readonly plannedWorkoutRoute = computed(() => this.plannedWorkout() ? trainingPlansWorkoutRoute(this.plannedWorkout()!.id) : null);
+  readonly plannedDeliveryWorkouts = computed(() => this.plannedWorkout() ? [this.plannedWorkout()!] : null);
+  readonly plannedWorkoutPlan = computed(() => {
+    const workout = this.plannedWorkout();
+    return workout ? this.savedWorkouts()?.schedule.plans.find(plan => plan.id === workout.planId) ?? null : null;
+  });
+  readonly title = computed(() => {
+    if (!this.preferences().enabled) return 'Daily workout suggestion · Pro';
+    if (this.status()?.state !== 'planned') return 'Today’s suggestion';
+    return this.plannedWorkouts().length > 1 ? 'Today’s workouts' : 'Today’s workout';
+  });
+  readonly summary = computed(() => {
+    const value = this.status();
+    if (value?.state === 'ready' && value.result) {
+      const draft = value.result.draft;
+      return draft ? `${draft.title} · ${dayWorkoutReviewTiming(draft, this.users.user()?.settings?.unitSettings).summary}` : 'Rest day suggested';
+    }
+    const planned = this.plannedWorkouts();
+    if (planned.length) {
+      const workout = planned[0];
+      return `${workout.title} · ${formatWorkoutPrescriptionSummaryV1(workout.structure, this.users.user()?.settings?.unitSettings, workout.structure.sport)}`
+        + (planned.length > 1 ? ` · +${planned.length - 1} more` : '');
+    }
+    if (this.busy()) return 'Preparing with your latest available context…';
+    if (this.error()) return this.error();
+    if (value?.state === 'failed') return 'Today’s suggestion could not be generated.';
+    if (value?.state === 'planned') return 'Your workout is planned for today.';
+    if (value?.state === 'completed') return 'You already recorded a workout today.';
+    if (value?.state === 'rest-day') return 'Today is a rest day.';
+    if (value?.state === 'dismissed') return 'Dismissed for today.';
+    if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
+    if (value?.state === 'waiting-import') return 'Waiting for history import. Today’s AI allowance has not been used.';
+    if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
+    return 'Prepared on your first visit to Today each day.';
+  });
+  private sequence = 0;
+  private actionSequence = 0;
+  private shown = new Set<string>();
+  private checkedSleepKey: string | null = null;
+  private readScope = '';
+  private readRevision = -1;
+  private needsCheck = false;
+  private lastImportActive = false;
+  private importFinishedDuringLoad = false;
+  constructor() {
+    const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
+    this.document.addEventListener('visibilitychange', visibility);
+    this.destroy.onDestroy(() => { this.sequence++; this.actionSequence++; this.document.removeEventListener('visibilitychange', visibility); });
+    effect(onCleanup => {
+      // Track the owner, day, settled data, preferences, shared import progress and foreground state.
+      const eligible = this.eligible(), preferences = this.preferences(), saving = this.daily.saving();
+      const importActive = this.imports.owner()?.uid === this.ownerUid() && this.imports.dataImportActive();
+      if (this.lastImportActive && !importActive && untracked(() => this.loading())) this.importFinishedDuringLoad = true;
+      this.lastImportActive = importActive;
+      const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
+      if (eligible && preferences.enabled && ready) untracked(() => this.daily.observeSleep(this.ownerUid(), sleepKey));
+      const scope = JSON.stringify([this.ownerUid(), eligible, preferences]), revision = this.daily.cacheRevision();
+      // Hydration is a start barrier, not authority to discard work already running for this same scope.
+      if (scope !== this.readScope || revision !== this.readRevision) {
+        const previous = scope === this.readScope ? untracked(() => this.status()) : null;
+        this.readScope = scope; this.readRevision = revision; this.sequence++; this.importFinishedDuringLoad = false;
+        const cached = eligible && preferences.enabled ? untracked(() => this.daily.cached(this.ownerUid())) : null;
+        // Retain the recipe for display only. Review still requires fresh coverage authority.
+        this.status.set(cached?.status ?? (previous?.state === 'ready' ? previous : null));
+        this.needsCheck = !cached && previous?.state === 'ready';
+        this.checkedSleepKey = cached?.sleepKey ?? null;
+        this.error.set(null); this.actionError.set(null); this.loading.set(false);
+      }
+      if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
+      const status = untracked(() => this.status());
+      // Foreground return may start previously deferred work, but never reload an already checked suggestion.
+      // Sleep changes and import completion may resume deferred work; ready results retain their cache.
+      if (status?.state === 'waiting-import' && importActive) return;
+      if (status && !['waiting', 'waiting-import'].includes(status.state) && !this.needsCheck) return;
+      const timer = setTimeout(() => { untracked(() => { void this.load(false, status?.state === 'waiting-import'); }); }, 1500);
+      onCleanup(() => clearTimeout(timer));
+    });
+    effect(() => {
+      const controls = this.preferences().controls;
+      // Only account/day changes retire user actions; a settings acknowledgement must not swallow their outcome.
+      const scope = JSON.stringify([this.ownerUid(), this.eligible(), controls.localDate, controls.timeZone]);
+      if (scope !== this.actionScope) {
+        this.actionScope = scope; this.actionSequence++; this.actionBusy.set(false); this.actionError.set(null);
+      }
+    });
+    effect(onCleanup => {
+      const revision = this.evidenceKey(), waiting = this.status()?.state === 'waiting-sleep';
+      // React to existing Sleep listener updates, including ones arriving during a context read; never poll.
+      if (!waiting || this.busy() || revision === this.checkedSleepKey || !this.eligible()
+        || !this.preferences().enabled || !this.dataReady() || !this.visible()) return;
+      const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
+      onCleanup(() => clearTimeout(timer));
+    });
+    effect(() => {
+      const status = this.status(), uid = this.ownerUid();
+      if (!this.eligible() || !this.preferences().enabled || !this.visible() || !status
+        || !['ready', 'planned', 'completed', 'rest-day'].includes(status.state)) return;
+      untracked(() => {
+        const key = `${uid}:${status.localDate}:${status.state}`;
+        if (this.shown.has(key)) return;
+        this.shown.add(key); this.daily.event(uid, 'shown', status.state);
+      });
+    });
+  }
+  private actionScope = '';
+  private current(sequence: number, uid: string): boolean {
+    return !this.destroy.destroyed && sequence === this.sequence && uid === this.ownerUid() && this.daily.eligible(uid);
+  }
+  async load(useAvailableData = false, refresh = true): Promise<void> {
+    const uid = this.ownerUid();
+    if (this.busy() || !this.daily.eligible(uid) || !this.preferences().enabled || !this.visible() || !this.dataReady()) return;
+    if (useAvailableData && !this.waitingForData()) return;
+    const sequence = ++this.sequence;
+    this.checkedSleepKey = this.evidenceKey(); this.importFinishedDuringLoad = false;
+    this.loading.set(true); this.error.set(null); this.actionError.set(null);
+    let preparing = useAvailableData;
+    try {
+      let status = useAvailableData
+        ? await this.daily.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
+        : await this.daily.request(uid, 'status', () => this.current(sequence, uid), undefined, refresh);
+      if (!this.current(sequence, uid)) return;
+      if (!useAvailableData && ['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) {
+        if (this.dataReady() && this.visible()) {
+          preparing = true;
+          status = await this.daily.request(uid, 'prepare', () => this.current(sequence, uid));
+        } else if (status.state === 'waiting-sleep') {
+          // A status-only read did not check current Sleep context; resume once the start barriers settle.
+          this.checkedSleepKey = null;
+        }
+      }
+      if (!this.current(sequence, uid)) return;
+      this.status.set(status);
+      this.needsCheck = false;
+    } catch {
+      if (this.current(sequence, uid)) {
+        this.error.set(preparing ? 'Could not retrieve today’s suggestion. Check again to see whether it finished.'
+          : 'Could not check today’s suggestion. Try again.');
+        this.daily.event(uid, 'failed');
+      }
+    }
+    finally { if (this.current(sequence, uid)) {
+      this.loading.set(false);
+      // Consume one observed completion that arrived during the request; never retry on a timer loop.
+      const recheckImport = this.importFinishedDuringLoad;
+      this.importFinishedDuringLoad = false;
+      if (recheckImport && this.status()?.state === 'waiting-import') void this.load(false, true);
+    } }
+  }
+  async configure(): Promise<void> {
+    const uid = this.ownerUid(), preferences = this.preferences();
+    await this.generation.open(uid, preferences.controls.localDate, preferences.controls.sport, {
+      mode: 'preferences', initialControls: preferences.controls, followRoutine: preferences.followRoutine, dailyDelivery: this.deliveryPreferences(),
+      savePreferences: async (controls, followRoutine, delivery) => {
+        await this.daily.save(uid, { enabled: true, controls, followRoutine }, delivery ?? this.deliveryPreferences());
+        this.daily.event(uid, preferences.enabled ? 'preferences_saved' : 'enabled');
+      },
+    });
+  }
+  async review(): Promise<void> {
+    const uid = this.ownerUid();
+    if (this.busy() || this.status()?.state !== 'ready' || !this.preferences().enabled || !this.daily.eligible(uid)) return;
+    const sequence = ++this.sequence;
+    this.loading.set(true); this.error.set(null); this.actionError.set(null);
+    let value: DailyWorkoutSuggestionStatus;
+    try {
+      // An imported activity may cover today since this browser last fetched its daily result.
+      value = await this.daily.request(uid, 'status', () => this.current(sequence, uid), undefined, true);
+      if (!this.current(sequence, uid)) return;
+      this.status.set(value);
+      this.needsCheck = false; this.error.set(null);
+    } catch {
+      if (this.current(sequence, uid)) {
+        this.actionError.set('Today could not be checked. Try Review again.'); this.haptics.error();
+      }
+      return;
+    } finally { if (this.current(sequence, uid)) this.loading.set(false); }
+    if (value.state !== 'ready' || !value.controls || !value.result) return;
+    this.daily.event(uid, 'reviewed', 'ready');
+    await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result, dailyDelivery: this.deliveryPreferences(),
+      onAdded: kind => {
+        if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;
+        this.daily.event(uid, 'added', kind === 'rest' ? 'rest-day' : 'ready');
+        const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: kind === 'rest' ? 'rest-day' : 'planned' };
+        this.daily.remember(uid, status);
+        if (!this.destroy.destroyed && this.ownerUid() === uid) {
+          this.status.set(status);
+        }
+      },
+    });
+  }
+  async manual(): Promise<void> {
+    const uid = this.ownerUid(), controls = this.preferences().controls;
+    await this.generation.open(uid, controls.localDate, controls.sport, { initialControls: controls });
+  }
+  private currentAction(sequence: number, uid: string, date: string): boolean {
+    return !this.destroy.destroyed && sequence === this.actionSequence && uid === this.ownerUid()
+      && this.daily.eligible(uid) && this.preferences().controls.localDate === date;
+  }
+  async dismiss(): Promise<void> {
+    const uid = this.ownerUid(), date = this.status()?.localDate || this.preferences().controls.localDate;
+    if (this.busy() || !this.daily.eligible(uid) || !this.preferences().enabled) return;
+    const sequence = ++this.actionSequence;
+    this.actionBusy.set(true); this.actionError.set(null);
+    try {
+      const status = await this.daily.request(uid, 'dismiss', () => this.currentAction(sequence, uid, date), date);
+      if (this.currentAction(sequence, uid, date)) { this.status.set(status); this.haptics.success(); this.daily.event(uid, 'dismissed'); }
+    } catch { if (this.currentAction(sequence, uid, date)) { this.actionError.set('Today could not be dismissed. Try again from the options menu.'); this.haptics.error(); } }
+    finally { if (this.currentAction(sequence, uid, date)) this.actionBusy.set(false); }
+  }
+  async disable(): Promise<void> {
+    const uid = this.ownerUid(), preferences = this.preferences(), date = preferences.controls.localDate;
+    if (this.busy() || !this.daily.eligible(uid)) return;
+    const sequence = ++this.actionSequence;
+    this.actionBusy.set(true); this.actionError.set(null);
+    try {
+      await this.daily.save(uid, { ...preferences, enabled: false });
+      if (this.currentAction(sequence, uid, date)) { this.haptics.success(); this.daily.event(uid, 'disabled'); }
+    } catch { if (this.currentAction(sequence, uid, date)) { this.actionError.set('Daily preferences could not be saved. Try again from the options menu.'); this.haptics.error(); } }
+    finally { if (this.currentAction(sequence, uid, date)) this.actionBusy.set(false); }
+  }
+}

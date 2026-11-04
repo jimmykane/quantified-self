@@ -1,3 +1,4 @@
+import { supportsHistoryNotification, isHistoryNotificationTarget, type HistoryNotificationTarget } from '@shared/history-import-notifications';
 import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
 import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
@@ -1410,7 +1411,7 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string, notification?: HistoryNotificationTarget) {
     const canExecute = this.captureHistoryImportAccount(expectedUserID);
     let functionName: FunctionName;
     let payload: any;
@@ -1440,6 +1441,10 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
 
+    if (notification !== undefined) {
+      if (!supportsHistoryNotification(serviceName) || !isHistoryNotificationTarget(notification)) throw new Error('Unsupported import notification.');
+      payload.notification = notification;
+    }
     const result = await this.functionsService.call(functionName, payload, { canExecute });
     return result.data;
   }

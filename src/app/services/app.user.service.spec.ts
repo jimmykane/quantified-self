@@ -2726,6 +2726,15 @@ describe('AppUserService', () => {
         });
 
         describe('importServiceHistoryForCurrentUser', () => {
+            it('includes explicit one-import consent only for supported providers', async () => {
+                const notification = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002' };
+                await service.importServiceHistoryForCurrentUser(ServiceNames.WahooAPI, startDate, endDate, undefined, notification);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', expect.objectContaining({ notification }), { canExecute: expect.any(Function) });
+                mockFunctionsService.call.mockClear();
+                await expect(service.importServiceHistoryForCurrentUser(ServiceNames.GarminAPI, startDate, endDate, undefined, notification)).rejects.toThrow();
+                expect(mockFunctionsService.call).not.toHaveBeenCalled();
+            });
+
             it('should call cloud function for COROS', async () => {
                 const serviceName = 'COROS API' as any; // Matches encoded value
                 await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);

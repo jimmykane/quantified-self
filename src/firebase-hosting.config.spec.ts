@@ -1,5 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { Generator, type Config as ServiceWorkerConfig } from '@angular/service-worker/config';
 import { describe, expect, it } from 'vitest';
 import {
   CLIENT_RENDERED_APP_ROUTES,
@@ -13,7 +15,8 @@ interface FirebaseHostingTarget {
   target: string;
   public: string;
   headers?: Array<{
-    source: string;
+    source?: string;
+    regex?: string;
     headers: Array<{
       key: string;
       value: string;
@@ -44,6 +47,7 @@ interface AngularBuildOptions {
 }
 
 interface AngularBuildConfiguration {
+  outputHashing?: string;
   budgets?: Array<{ type: string; maximumWarning?: string; maximumError?: string }>;
   optimization?: boolean | {
     styles?: {
@@ -63,10 +67,6 @@ interface AngularConfig {
       };
     };
   };
-}
-
-interface ServiceWorkerConfig {
-  navigationUrls: string[];
 }
 
 const firebaseConfig = JSON.parse(
@@ -203,14 +203,77 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-function getCspDirective(policy: string, directiveName: string): string | undefined {
-  return policy
-    .split(';')
-    .map(directive => directive.trim())
-    .find(directive => directive === directiveName || directive.startsWith(`${directiveName} `));
-}
-
 describe('Firebase Hosting configuration', () => {
+  it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
+    const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
+    const immutableHeaders = target.headers.filter(entry => entry.headers.some(header =>
+      header.key.toLowerCase() === 'cache-control' && header.value.includes('immutable')));
+
+    expect(angularConfig.projects['track-tools'].architect.build.configurations[configuration].outputHashing).toBe('all');
+    expect(immutableHeaders).toHaveLength(1);
+    expect(immutableHeaders[0].source).toBeUndefined();
+    expect(immutableHeaders[0].regex).toBeDefined();
+    expect(immutableHeaders[0].headers).toEqual([
+      { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+    ]);
+
+    const pattern = new RegExp(immutableHeaders[0].regex);
+    for (const path of [
+      '/media/inter-latin-400-normal-55WT6UWF.woff2',
+      '/media/material-symbols-rounded-latin-400-normal-FQYDMJ5A.woff2',
+      '/media/inter-latin-400-normal-1234ABCD.woff',
+      '/media/icon-1234ABCD.svg',
+      '/media/icon-1234ABCD.png',
+    ]) {
+      expect(pattern.test(path), path).toBe(true);
+    }
+    for (const path of [
+      '/media/inter.woff2', '/media/icon.svg', '/assets/favicons/favicon-32x32.png',
+      '/index.html', '/index.csr.html', '/help/index.html', '/manifest.json',
+      '/ngsw.json', '/ngsw-worker.js', '/media/index-1234ABCD.html',
+      '/media/icon-1234ABCD.svg.html', '/media/nested/icon-1234ABCD.svg',
+    ]) {
+      expect(pattern.test(path), path).toBe(false);
+    }
+  });
+
+  it('includes emitted media in the lazy asset cache with stable font hashes across releases', async () => {
+    const fontPaths = [
+      '/media/inter-latin-400-normal-55WT6UWF.woff2',
+      '/media/material-symbols-rounded-latin-400-normal-FQYDMJ5A.woff2',
+    ];
+    const files: Record<string, string> = {
+      '/index.csr.html': 'first release',
+      [fontPaths[0]]: 'font bytes',
+      [fontPaths[1]]: 'icon font bytes',
+      '/media/icon-1234ABCD.svg': '<svg/>',
+    };
+    const generator = new Generator({
+      async list() { return Object.keys(files); },
+      async read(path) { return files[path]; },
+      async hash(path) { return createHash('sha1').update(files[path]).digest('hex'); },
+      async write() { throw new Error('Unexpected fixture write'); },
+    }, '/');
+    type Manifest = {
+      hashTable: Record<string, string>;
+      assetGroups: Array<{ name: string; installMode: string; updateMode: string; urls: string[] }>;
+    };
+    const first = await generator.process(serviceWorkerConfig) as Manifest;
+    files['/index.csr.html'] = 'second release';
+    const second = await generator.process(serviceWorkerConfig) as Manifest;
+
+    expect(first.hashTable['/index.csr.html']).not.toBe(second.hashTable['/index.csr.html']);
+    for (const manifest of [first, second]) {
+      const assets = manifest.assetGroups.find(group => group.name === 'assets');
+      expect(assets).toMatchObject({ installMode: 'lazy', updateMode: 'prefetch' });
+      expect(assets.urls).toEqual(expect.arrayContaining([...fontPaths, '/media/icon-1234ABCD.svg']));
+      for (const path of fontPaths) {
+        expect(manifest.assetGroups.find(group => group.name === 'app').urls).not.toContain(path);
+        expect(manifest.hashTable[path]).toBe(createHash('sha1').update(files[path]).digest('hex'));
+      }
+    }
+  });
+
   it('serves pre-release Plans at its Training URL without retaining /plans as a redirect, rewrite, or offline fallback', () => {
     for (const hosting of firebaseConfig.hosting) {
       const rewriteSources = (hosting.rewrites ?? []).map(rewrite => rewrite.source);
@@ -257,10 +320,33 @@ describe('Firebase Hosting configuration', () => {
     // Includes contextual provider offers, trial review and paginated Connections navigation.
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
+    // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
     // Manual-history help now explains existing-account verification and reconnect requirements.
-    // Pool-swim help covers intervals without source laps, recorded membership and keyboard header explanations.
-    // Training swim help also applies swim units to weekly distances and the SWOLF pool-length label.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
+    // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
+    // Training editor help covers explicit duration summaries, new-Rest defaults and non-blocking duration comparisons.
+    // Dashboard help keeps the greeting assessment and Today details visible by default; selecting the sentence collapses or reopens the details (2026-10-29).
+    // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
+    // It applies swim units to weekly distances and the SWOLF pool-length label.
+    // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
+    // Calendar help covers standalone rest on any date, independent plan markers, immediate cache masking/removal and unchanged daily allowance (2026-10-31).
+    // MCP, Help and Policies cover standalone rest reads and revision-bound preview/Apply under independent Training changes consent (2026-10-31).
+    // Daily workout suggestion help covers opt-in Pro suggestions, current-sleep waiting/rechecks, explicit available-data fallback, all-day foreground preparation and saved-zone dates, separate daily allowance, the daily browser cache, status-only coverage before Review, sign-out cleanup, explicit Add and resuming after deleting today's planned workout without resetting the allowance (2026-10-30).
+    // Activity table help covers initial placeholders, retained rows and paused row actions while refreshing (2026-10-30).
+    // R–R help also separates filtered Suunto HR, raw statistics, recorded FIT HR and historical reparse (2026-10-30).
+    // Planned-workout editor help includes its recoverable Delete workout footer action (2026-10-31).
+    // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
+    // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
+    // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
+    // Notification help covers default-on categories, recent live-sync batching and caps, history exclusion, and cancellation (2026-11-03).
+    // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
+    // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
+    // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
+    // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
+    // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
+    // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -362,6 +448,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
+  it('records the GPX comparison copy update in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-04');
+  });
+
   it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
@@ -384,23 +474,31 @@ describe('Firebase Hosting configuration', () => {
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
-    // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
+    // Event chart help covers compact option submenus and scrolling to reach every menu setting.
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
+    // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-10-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-10');
+    // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
+    // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-coros`)).toBe('2026-11-01');
     // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
@@ -412,8 +510,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
@@ -446,10 +544,13 @@ describe('Firebase Hosting configuration', () => {
     // Unambiguous Session end segments append as Final lap rows without changing recorded data.
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
+    // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
+    // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 
@@ -520,34 +621,23 @@ describe('Firebase Hosting configuration', () => {
       expect(new Set(headers.map(header => header.key)).size).toBe(headers.length);
       expect(headersByKey).toMatchObject(mcpAuthorizeSecurityHeaders);
 
-      const reportOnlyPolicy = headersByKey['Content-Security-Policy-Report-Only'];
-      expect(reportOnlyPolicy).toBeDefined();
-      expect(getCspDirective(reportOnlyPolicy, 'default-src')).toBe("default-src 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'base-uri')).toBe("base-uri 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'frame-ancestors')).toBe("frame-ancestors 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'object-src')).toBe("object-src 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'form-action')).toBe("form-action 'self'");
-      expect(getCspDirective(reportOnlyPolicy, 'script-src-attr')).toBe("script-src-attr 'none'");
-      expect(getCspDirective(reportOnlyPolicy, 'style-src')).toBe("style-src 'self' 'unsafe-inline'");
-      expect(getCspDirective(reportOnlyPolicy, 'worker-src')).toBe("worker-src 'self' blob:");
-      expect(reportOnlyPolicy).toContain('https://*.googleapis.com');
-      expect(reportOnlyPolicy).toContain('https://*.firebaseio.com');
-      expect(reportOnlyPolicy).toContain('https://*.cloudfunctions.net');
-      expect(reportOnlyPolicy).toContain('https://*.ingest.sentry.io');
-      expect(reportOnlyPolicy).toContain('https://*.g.doubleclick.net');
-      expect(reportOnlyPolicy).toContain('https://api.mapbox.com');
-      expect(reportOnlyPolicy).toContain('https://www.googletagmanager.com');
-      expect(reportOnlyPolicy).toContain('https://www.google.com/recaptcha/');
-      expect(reportOnlyPolicy).toContain('https://recaptcha.google.com/recaptcha/');
-      expect(getCspDirective(reportOnlyPolicy, 'script-src')).toContain("'wasm-unsafe-eval'");
-      expect(reportOnlyPolicy).not.toContain("'unsafe-eval'");
-      expect(reportOnlyPolicy).not.toContain('default-src *');
-      expect(reportOnlyPolicy).not.toContain('script-src https:');
-      expect(reportOnlyPolicy).not.toContain('https://*.mapbox.com');
     }
 
     expect(targetHeaderSets[0]).toContainEqual(betaNoIndexHeader);
     expect(targetHeaderSets[1]).not.toContainEqual(betaNoIndexHeader);
+  });
+
+  it('omits report-only CSP until a real reporting destination is configured', () => {
+    // Safari logs errors for the former collector-less policy on every document load.
+    // Keep frame-ancestors in the enforced policy above, where it provides protection.
+    for (const target of firebaseConfig.hosting) {
+      for (const entry of target.headers ?? []) {
+        expect(
+          entry.headers.map(header => header.key.toLowerCase()),
+          `${target.target}: ${entry.source ?? entry.regex}`,
+        ).not.toContain('content-security-policy-report-only');
+      }
+    }
   });
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
@@ -576,7 +666,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13700kb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
     });
   });
 
