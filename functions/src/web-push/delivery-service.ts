@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
-import { isPushId, isPushRegistration, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
+import { isPushId, isPushRegistration, isAutomaticPushOrigin, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 import { DELIVERY_PUSH, currentDeliveryEntry, type DeliveryCandidate, type DeliveryEntry } from './delivery-policy';
@@ -49,12 +49,13 @@ export async function admitDeliveryNotification(uid: string, candidate: Delivery
     // An explicitly chosen device must not be hidden behind the automatic fan-out limit.
     const registrations = entry.target
       ? [await tx.get(db.doc(`users/${uid}/pushSubscriptions/${entry.target.installationId}`))]
-      : (await tx.get(db.collection(`users/${uid}/pushSubscriptions`).where('origin', '==', WEB_PUSH_ORIGINS[0]).limit(DELIVERY_PUSH.deviceLimit))).docs;
+      : (await tx.get(db.collection(`users/${uid}/pushSubscriptions`).where('origin', 'in', [...WEB_PUSH_ORIGINS]).limit(DELIVERY_PUSH.deviceLimit))).docs;
     const targets = registrations.flatMap(doc => {
       const registration = doc.data();
       if (!isPushId(doc.id) || !isPushRegistration(registration)
-        || registration.origin !== WEB_PUSH_ORIGINS[0] || registration.vapidPublicKey !== config.publicKey
-        || entry.target && (entry.target.installationId !== doc.id || entry.target.generation !== registration.generation)) return [];
+        || !isAutomaticPushOrigin(registration.origin) || registration.vapidPublicKey !== config.publicKey
+        || entry.target && (entry.target.installationId !== doc.id || entry.target.generation !== registration.generation
+          || entry.target.origin !== registration.origin)) return [];
       return [{ id: doc.id, generation: registration.generation }];
     });
     if (!targets.length || entry.categoryRevision !== undefined && entry.categoryRevision !== preference.revision) return;
@@ -124,10 +125,12 @@ export async function sendDeliveryNotification(uid: string, deps: DeliveryPushDe
           Promise.all(claim.batch.entries.map(entry => currentDeliveryEntry(db, tx, uid, entry, deps.now()))),
         ]);
         const preference = readNotificationCategoryPreference(preferenceSnapshot.data()); const registration = registrationSnapshot.data();
-        const liveEntries = entries.filter((entry): entry is DeliveryEntry => !!entry && entry.targets.some(saved => saved.id === target.id && saved.generation === target.generation));
+        const liveEntries = entries.filter((entry): entry is DeliveryEntry => !!entry
+          && (!entry.target || entry.target.origin === registration?.origin)
+          && entry.targets.some(saved => saved.id === target.id && saved.generation === target.generation));
         if (guard.shouldSkip || !preference?.enabled || preference.revision !== claim.batch.categoryRevision
           || snapshot.data()?.lastClaimId !== claim.batch.id || !liveEntries.length
-          || !isPushRegistration(registration) || registration.origin !== WEB_PUSH_ORIGINS[0]
+          || !isPushRegistration(registration) || !isAutomaticPushOrigin(registration.origin)
           || registration.generation !== target.generation || registration.vapidPublicKey !== config.publicKey) return null;
         return { registration, entries: liveEntries };
       });

@@ -1,6 +1,17 @@
 /** Browser subscription contract. Never log endpoint or encryption keys. */
 export const WEB_PUSH_ORIGINS = ['https://quantified-self.io', 'https://beta.quantified-self.io'] as const;
 export const WEB_PUSH_SETTINGS_PATH = '/settings?section=notifications';
+export const PUSH_BROWSERS = ['Chrome', 'Safari', 'Firefox', 'Edge', 'Opera', 'Samsung Internet', 'Browser'] as const;
+export const PUSH_PLATFORMS = ['macOS', 'Windows', 'Android', 'iOS', 'ChromeOS', 'Linux', 'Unknown device'] as const;
+export interface PushDeviceInfo {
+  browser: typeof PUSH_BROWSERS[number];
+  platform: typeof PUSH_PLATFORMS[number];
+}
+export function isPushDeviceInfo(value: unknown): value is PushDeviceInfo {
+  if (!value || typeof value !== 'object') return false;
+  const info = value as PushDeviceInfo;
+  return Object.keys(value).length === 2 && PUSH_BROWSERS.includes(info.browser) && PUSH_PLATFORMS.includes(info.platform);
+}
 export interface PushRegistration {
   schemaVersion: 1;
   origin: string;
@@ -8,6 +19,7 @@ export interface PushRegistration {
   generation: string;
   endpoint: string;
   keys: { p256dh: string; auth: string };
+  device?: PushDeviceInfo;
 }
 export interface PushTestRequest { installationId: string; }
 export interface PushTestResponse { status: 'accepted' | 'subscription_expired'; }
@@ -45,5 +57,5 @@ export function buildPushTestPayload(origin: string) {
     data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: WEB_PUSH_SETTINGS_PATH } } },
   } };
 }
-/** Future automatic senders must use this gate; beta only supports explicit tests. */
-export function isAutomaticPushOrigin(origin: string): boolean { return origin === WEB_PUSH_ORIGINS[0]; }
+/** Both deployed sites share account consent and rate limits; local/arbitrary origins stay excluded. */
+export function isAutomaticPushOrigin(origin: string): boolean { return isPushOrigin(origin); }

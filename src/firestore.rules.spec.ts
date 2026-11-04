@@ -117,6 +117,26 @@ describe('Firestore Security Rules', () => {
                 await assertFails(ref.update({ providers: {} })); await assertFails(ref.delete());
             }
         });
+        it('allows bounded owner lists across sites, but denies other accounts and impersonation', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext('push-owner').firestore();
+            await assertSucceeds(owner.doc(path).set({ ...base, device: { browser: 'Chrome', platform: 'macOS' }, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path.replace(id, '00000000-0000-4000-8000-000000000002')).set({
+                ...base, origin: 'https://beta.quantified-self.io', updatedAt: serverTimestamp() }));
+            const result = await assertSucceeds(owner.collection('users/push-owner/pushSubscriptions').orderBy('__name__').limit(26).get());
+            expect(result.size).toBe(2);
+            await assertFails(owner.collection('users/push-owner/pushSubscriptions').limit(27).get());
+            for (const context of [testEnv.authenticatedContext('other'), testEnv.unauthenticatedContext(),
+                testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' })]) {
+                await assertFails(context.firestore().collection('users/push-owner/pushSubscriptions').limit(26).get());
+                await assertFails(context.firestore().doc(path).delete());
+            }
+        });
+        it.each([null, {}, { browser: 'Chrome' }, { browser: 'Raw user agent', platform: 'macOS' },
+            { browser: 'Chrome', platform: 'hostname' }, { browser: 'Chrome', platform: 'macOS', name: 'private' }])('rejects invalid device hints %j', async device => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base, device, updatedAt: serverTimestamp() }));
+        });
         it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
             { endpoint: 'https://fcm.googleapis.com:443/fcm/send/client:token' },
             { endpoint: 'https://user:password@fcm.googleapis.com/fcm/send/client:token' },

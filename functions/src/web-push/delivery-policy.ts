@@ -9,7 +9,7 @@ export const DELIVERY_PUSH = { groupMs: 120000, cooldownMs: 15 * 60000, dayMs: 8
 export interface DeliveryCandidate { kind: 'manual' | 'automatic'; id: string; createdAt: number; completedAt: number; }
 export interface DeliveryEntry extends DeliveryCandidate {
   path: string; attention: boolean; connectionGeneration: string;
-  categoryRevision?: number; target?: { installationId: string; generation: string };
+  categoryRevision?: number; target?: { installationId: string; generation: string; origin: string };
   targets: { id: string; generation: string }[];
 }
 export function completedSend(data: Record<string, unknown> | undefined): boolean {
@@ -68,5 +68,5 @@ export async function currentDeliveryEntry(db: Firestore, tx: Transaction, uid: 
     || previous.connectionGeneration && previous.connectionGeneration !== meta.connectionStateGeneration) return null;
   return { ...candidate, path, attention, connectionGeneration: meta.connectionStateGeneration,
     targets: previous.targets ?? [], ...(consent ? { categoryRevision: consent.categoryRevision,
-      target: { installationId: consent.installationId, generation: consent.generation } } : {}) };
+      target: { installationId: consent.installationId, generation: consent.generation, origin: consent.origin } } : {}) };
 }
