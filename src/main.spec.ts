@@ -13,6 +13,11 @@ const startup = vi.hoisted(() => ({
     localhost: false,
     production: true,
     beta: false,
+    backendMode: 'hosted',
+    billingMode: 'stripe',
+    appCheckEnabled: true,
+    observabilityEnabled: true,
+    firebase: { projectId: 'quantified-self-io' },
     appUrl: 'https://quantified-self.io',
     appVersion: 'test'
   },
@@ -33,6 +38,7 @@ describe('browser startup', () => {
     vi.clearAllMocks();
     startup.environment.localhost = false;
     startup.environment.production = true;
+    startup.environment.observabilityEnabled = true;
     startup.redirect.mockReturnValue(false);
     startup.registerLocale.mockResolvedValue(undefined);
     startup.bootstrapModule.mockResolvedValue(undefined);
@@ -85,6 +91,7 @@ describe('browser startup', () => {
   it('keeps localhost startup without production telemetry', async () => {
     startup.environment.localhost = true;
     startup.environment.production = false;
+    startup.environment.observabilityEnabled = false;
 
     await import('./main');
     await vi.dynamicImportSettled();

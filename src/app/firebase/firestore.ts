@@ -33,6 +33,7 @@ export {
   addDoc,
   clearIndexedDbPersistence,
   collection,
+  connectFirestoreEmulator,
   deleteField,
   deleteDoc,
   doc,

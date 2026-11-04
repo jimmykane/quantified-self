@@ -64,6 +64,7 @@ interface SubscriptionSummary {
 })
 export class PricingComponent implements OnInit, OnDestroy {
     readonly dailyWorkoutBenefit = DAILY_WORKOUT_PRO_BENEFIT;
+    readonly billingDisabled = environment.billingMode === 'disabled';
     @Input() isOnboarding = false;
     @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();

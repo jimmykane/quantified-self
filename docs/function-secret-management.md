@@ -91,11 +91,27 @@ provisioning, deployment, provider URL changes and eventual resource deletion ea
 
 ## Source-control guardrails
 
-Install the repository hooks with `npm run hooks:install` and install [Gitleaks](https://github.com/gitleaks/gitleaks) locally. Every commit rejects credential-like file names (dotenv, local secret, Runtime Config, service-account, Firebase Admin SDK, and private-key files) and scans staged content for hard-coded credentials. The only allowed local-secret template is the value-free `functions/.secret.local.example`.
+Install the repository hooks with `npm run hooks:install` and install [Gitleaks](https://github.com/gitleaks/gitleaks) locally. Every commit rejects credential-like file names (dotenv, local secret, Runtime Config, service-account, Firebase Admin SDK, and private-key files) and scans staged content for hard-coded credentials. The only allowed local-secret template is `functions/.secret.local.example`, whose `LOCAL_EMULATOR_DISABLED` values are deliberate non-secret sentinels.
 
 CI scans the commits introduced by each push or pull request with a pinned Gitleaks version. It does not re-scan the entire historical repository on every change. A detector finding must be treated as a possible credential exposure: rotate a real value first; add a reviewed fingerprint to `.gitleaksignore` only for a documented false positive.
 
 ## Local emulators and scripts
+
+The default contributor workflow never uses provider credentials. Run the isolated stack from the repository root; it
+creates or repairs a missing/empty/all-blank `functions/.secret.local` from the sentinel template and otherwise rejects
+missing, extra, blank, or non-sentinel bindings:
+
+```bash
+npm start
+```
+
+Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Missing or blank parameters can fall
+back to Secret Manager, which is why the isolated workflow uses explicit sentinels rather than empty values. Never
+replace them with development or production credentials in the default workflow: provider calls and background workers
+can still reach real external services. See [Isolated local development](local-development.md).
+
+Maintainer provider testing uses a separate external-profile workflow. It does not weaken or reuse `npm start`, and it
+must use development-only provider accounts, never production credentials.
 
 Keep local credentials outside every checkout and worktree. `shared/local-secret-paths.js` defines the common
 per-user paths; no personal file is loaded merely by importing this module or the operational environment loader.
@@ -120,7 +136,8 @@ mkdir -p "$HOME/.config/quantified-self"
 chmod 700 "$HOME/.config/quantified-self"
 cp functions/.secret.local.example "$HOME/.config/quantified-self/functions.env"
 chmod 600 "$HOME/.config/quantified-self/functions.env"
-# Fill the external file privately with credentials for the intended development project.
+# Replace the sentinels privately with credentials for the intended development project.
+npm run firebase:tools
 npm --prefix functions run build
 npm run emulators:local -- emulators:start --only auth,functions,firestore,storage
 ```
@@ -199,7 +216,7 @@ it does not authorize running a mail, cleanup, migration, backfill or provider o
 1. Create the Secret Manager entry in the target project through the Cloud console or `npm run firebase -- functions:secrets:set NAME`.
 2. Add its `defineSecret()` registration to `SECRET_PARAMS` in `functions/src/secrets.ts`.
 3. Add it only to the endpoints that directly or transitively require it in `FUNCTION_SECRET_BINDINGS`.
-4. Add an empty entry to `functions/.secret.local.example` and update this inventory.
+4. Add the name with value `LOCAL_EMULATOR_DISABLED` to `functions/.secret.local.example` and update this inventory.
 5. Add positive and negative policy fixtures, then run:
 
 ```bash

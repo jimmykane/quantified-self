@@ -39,17 +39,21 @@ export class LoggerService {
         }
         console.error(message, ...optionalParams);
         const error = [message, ...optionalParams].find(arg => arg instanceof Error);
-        if (error) {
+        if (error && environment.observabilityEnabled) {
             Sentry.captureException(error);
         }
     }
 
     captureException(error: any, context?: any) {
-        Sentry.captureException(error, context);
+        if (environment.observabilityEnabled) {
+            Sentry.captureException(error, context);
+        }
     }
 
     captureMessage(message: string, context?: any) {
-        Sentry.captureMessage(message, context);
+        if (environment.observabilityEnabled) {
+            Sentry.captureMessage(message, context);
+        }
     }
 
     getUser(): Sentry.User {
@@ -58,11 +62,14 @@ export class LoggerService {
     }
 
     setUser(user: { id?: string; email?: string; username?: string; ip_address?: string } | null) {
-        Sentry.setUser(user);
+        if (environment.observabilityEnabled) {
+            Sentry.setUser(user);
+        }
     }
 
     setTag(key: string, value: string) {
-        Sentry.setTag(key, value);
+        if (environment.observabilityEnabled) {
+            Sentry.setTag(key, value);
+        }
     }
 }
-
