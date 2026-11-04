@@ -294,3 +294,10 @@ separate. Sustainable distance is neither distance travelled nor distance remain
 summaries and the final sampled reading can differ; preserve the reported minimum, zeros, null gaps and rebounds.
 Never sum or blend these estimates across activities or devices, infer a missing FIT stream, or interpret them as
 Training load or medical evidence. Missing original-file data cannot be recovered by a different query.
+
+Calendar goals are authored intentions, separate from measured recovery and activity history. Route goal-only
+questions and explicit goal changes through the focused Training skill. For cross-domain advice, read relevant goals
+only with Training permission; their weekly progress also requires activity metrics permission. Respect multiple
+priorities, fixed event dates, selected sport, explicit rest and existing workouts. Incomplete history is unknown and
+a goal never overrides recovery or proves achievement. Goal edits require the focused preview/approval workflow and
+do not authorize changes to plans, provider sending or regeneration of today's included suggestion.

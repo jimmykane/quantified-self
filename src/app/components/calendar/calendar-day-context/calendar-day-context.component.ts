@@ -1,3 +1,4 @@
+import { TrainingGoalsDayComponent } from '../../training-goals/training-goals-day.component';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
@@ -58,7 +59,7 @@ interface HealthState {
     '[class.calendar-day-context--calm-month]': 'calmMonth()',
     '[class.calendar-day-context--compact]': 'compact()',
   },
-  imports: [SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent, CalendarActivityTagsComponent],
+  imports: [TrainingGoalsDayComponent, SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent, CalendarActivityTagsComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -138,11 +139,13 @@ export class CalendarDayContextComponent {
       : `${entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned'}${entry.completionKnown === false ? ' · completion unknown' : ''}`,
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data().unitSettings, this.data().locale),
   })));
+  readonly goalsDay = viewChild(TrainingGoalsDayComponent);
   readonly dashboardDayIsEmpty = computed(() => (this.dashboardTile() || this.calmMonth())
     && this.activitiesComplete()
     && this.activities().length === 0
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
+    && this.goalsDay()?.isEmpty() === true
     && !this.planPhase()
     && !this.plannedRestDay()
     && (!this.canPlan() || (this.plannedWorkoutsComplete() && this.plannedRows().length === 0)));

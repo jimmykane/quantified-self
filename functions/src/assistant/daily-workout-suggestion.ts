@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import type { DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
@@ -109,8 +111,11 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   enforceAppCheck(context);
   const input = record(value);
   const datedAction = input.action === 'dismiss' || input.action === 'use-available-data';
-  const keys = datedAction ? ['mode', 'action', 'localDate'] : ['mode', 'action'];
+  const keys = datedAction ? ['mode', 'action', 'localDate', 'resultVersion'] : ['mode', 'action', 'resultVersion'];
+  const project = (status: DailyWorkoutSuggestionStatus): DailyWorkoutSuggestionStatus => status.result?.kind === 'event-advice' && input.resultVersion !== 2
+    ? { localDate: status.localDate, state: 'failed' } : status;
   if (Object.keys(input).some(key => !keys.includes(key)) || input.mode !== 'daily-suggestion'
+    || (input.resultVersion !== undefined && input.resultVersion !== 2)
     || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss', 'use-available-data'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a daily action.');
   const uid = context.auth.uid;
   await dependencies.legal(uid);
@@ -125,13 +130,13 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   if (expectedDate && preferences && expectedDate !== preferences.controls.localDate) {
     throw new HttpsError('aborted', 'The day changed. Review today before generating.');
   }
-  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) return status;
+  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) return project(status);
   const now = dependencies.now();
   const useAvailable = input.action === 'use-available-data';
   // The explicit fallback requires a previously deferred suggestion for this local date.
-  if (useAvailable && !['waiting-sleep', 'waiting-import'].includes(status.state)) return status;
+  if (useAvailable && !['waiting-sleep', 'waiting-import'].includes(status.state)) return project(status);
   const token = await dependencies.store.begin(uid, preferences);
-  if (!token) return (await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status;
+  if (!token) return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
   const date = preferences.controls.localDate;
   const assertActive = async () => {
     await dependencies.store.assertActive(uid, date, token);
@@ -170,7 +175,12 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     if (awaitingSleep) {
       evidence.missingContext.push('Today’s completed sleep is not included. Treat older sleep and sleep-dependent readiness as dated history, not today’s recovery. You explicitly chose to use available data.');
     }
-    let providerContext = deliveryPreferences?.enabled && deliveryPreferences.providers.length
+    const adviceOnly = !!evidence.eventGoals?.length;
+    if (adviceOnly && input.resultVersion !== 2) {
+      await dependencies.store.finish(uid, date, token, 'failed');
+      return { localDate: date, state: 'failed' };
+    }
+    let providerContext = !adviceOnly && deliveryPreferences?.enabled && deliveryPreferences.providers.length
       ? dayWorkoutProviderContext(controls, deliveryPreferences.providers, evidence.references) : null;
     if (providerContext) {
       const combined = { ...evidence.evidence, deliveryProviders: providerContext.evidence };
@@ -183,23 +193,33 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       }
     }
     // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
-    if (!await dependencies.store.charge(uid, date, token, useAvailable)) {
+    if (!await dependencies.store.charge(uid, date, token, useAvailable, ...(evidence.goalsRevision === undefined ? [] : [evidence.goalsRevision]))) {
       outcome = 'waiting-import';
       return { localDate: date, state: outcome };
     }
-    const suggestion = await generateValidatedDayWorkout(request, evidence, async (request, evidence, correction) => {
+    const generate: typeof dependencies.generate = async (request, evidence, correction) => {
       attempts++;
       return dependencies.generate(request, evidence, correction, usage => {
         if (usage.available) meteredAttempts++; inputTokens += usage.inputTokens; outputTokens += usage.outputTokens; thoughtsTokens += usage.thoughtsTokens;
       });
-    }, assertActive, providerContext?.correction);
-    if (providerContext) evidence.missingContext.push(...providerContext.limitations(suggestion));
-    await assertActive();
-    const result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
-      usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+    };
+    let result: DailyWorkoutSuggestionResult;
+    if (adviceOnly) {
+      const schema = z.strictObject({ kind: z.literal('event-advice'), rationale: z.string().trim().min(1).max(3000) });
+      const advice = schema.parse(await generate(request, { ...evidence, adviceOnly: true }));
+      await assertActive();
+      result = { version: 1, ...advice, events: evidence.eventGoals!, requestId: request.requestId,
+        observedAt: observedAt.toISOString(), draft: null, previousLoads: [], usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+    } else {
+      const suggestion = await generateValidatedDayWorkout(request, evidence, generate, assertActive, providerContext?.correction);
+      if (providerContext) evidence.missingContext.push(...providerContext.limitations(suggestion));
+      await assertActive();
+      result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
+        usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+    }
     await dependencies.store.finish(uid, date, token, 'ready', controls, result);
     outcome = 'ready';
-    return (await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status;
+    return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
   } catch {
     await dependencies.store.finish(uid, date, token, 'failed').catch(() => undefined);
     throw new HttpsError('unavailable', 'Today’s suggestion could not finish. Check again to retrieve it, or use the manual generator.');

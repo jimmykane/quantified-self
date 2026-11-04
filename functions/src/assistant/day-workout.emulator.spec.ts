@@ -20,6 +20,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('keeps authored goals but omits recorded progress when Recent activities is turned off', async () => {
+    const uid = `goal-source-${randomUUID()}`, user = db.collection('users').doc(uid);
+    const now = new Date('2026-10-28T12:00Z');
+    await user.set({});
+    await user.collection('trainingGoals').doc('weekly').set({ schemaVersion: 1, id: 'weekly', name: 'Run consistently',
+      kind: 'ongoing', lifecycle: 'active', priority: 'normal', startLocalDate: '2026-10-01', targetLocalDate: null,
+      sportScope: 'sport', sport: ActivityTypes.Running, objective: '', planId: null, weeklyTarget: { kind: 'workouts', value: 3 },
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 });
+    await user.collection('events').doc('run').set({});
+    await user.collection('activities').doc('run').set({ eventID: 'run', eventStartDate: new Date('2026-10-27T08:00Z'), type: ActivityTypes.Running });
+    const enabled = await readDayWorkoutTrainingContext(uid, controls, now, db);
+    expect(enabled.goals?.items[0].weeklyProgress).toMatchObject({ value: 1, complete: true });
+    const disabled = await readDayWorkoutTrainingContext(uid, { ...controls, activityContext: false }, now, db);
+    expect(disabled.goals?.items[0]).toMatchObject({ name: 'Run consistently', weeklyTarget: { kind: 'workouts', value: 3 }, weeklyProgress: null });
+    expect(disabled.missing).toContain('Goal progress: turned off with Recent activities.');
+  });
   it('honors standalone calendar rest without a plan and restores the same charged daily result after removal', async () => {
     const uid = `calendar-rest-${randomUUID()}`, user = db.collection('users').doc(uid);
     const now = new Date('2026-10-28T08:00Z');
@@ -155,6 +171,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect(await store.begin(uid, { requestId: latest.requestId, controls })).toEqual({ response: latest });
     await expect(store.begin(uid, { requestId: 'large-request-0', controls })).rejects.toMatchObject({ code: 'failed-precondition' });
   }, 30_000);
+  it('fences goal edits before charging and keeps charged event guidance after later edits', async () => {
+    const uid = `daily-goals-${randomUUID()}`, now = new Date('2026-11-03T09:00Z');
+    const user = db.doc(`users/${uid}`); await user.set({});
+    const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-11-03', 'Europe/Athens') };
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: saved } });
+    const state = user.collection('trainingGoalState').doc('current'); await state.set({ revision: 1 });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    const token = (await store.begin(uid, saved))!;
+    await state.update({ revision: 2 });
+    await expect(store.charge(uid, '2026-11-03', token, false, 1)).rejects.toMatchObject({ code: 'aborted' });
+    expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-03.charged')).toBe(false);
+    await store.finish(uid, '2026-11-03', token, 'failed');
+    const current = (await store.begin(uid, saved))!;
+    await store.charge(uid, '2026-11-03', current, false, 2);
+    const advice = { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-11-03', observedAt: now.toISOString(),
+      rationale: 'Follow the event plan.', events: [{ name: 'Race', localDate: '2026-11-03' }], usedContext: [], missingContext: [], draft: null, previousLoads: [] as [] };
+    await state.update({ revision: 3 });
+    await store.finish(uid, '2026-11-03', current, 'ready', saved.controls, advice);
+    expect((await store.read(uid)).status.result).toEqual(advice);
+    expect(await store.begin(uid, saved)).toBeNull();
+  }, 30000);
   it('claims one included daily result after noon across devices, preserves preferences and never touches Assistant quota', async () => {
     const uid = `daily-suggestion-${randomUUID()}`;
     let now = new Date('2026-10-30T13:00Z');

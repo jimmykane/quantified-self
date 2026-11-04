@@ -40,6 +40,17 @@
     </button>
   </header>
 
+  @if (planRequest(); as request) {
+    <section class="assistant-plan-request" aria-labelledby="plan-request-title">
+      <h2 id="plan-request-title">Your plan request is ready</h2>
+      <p>Start a new chat to replace the current conversation and enable Training reads and reviewed changes{{ request.timelineNotesEnabled ? ', plus Timeline notes' : '' }}. You can edit the request before sending.</p>
+      <div>
+        <button mat-flat-button type="button" [disabled]="planRequestBusy()" (click)="startPlanChat()">{{ resetting() ? 'Starting…' : 'Start plan chat' }}</button>
+        <button mat-button type="button" [disabled]="resetting()" (click)="dismissPlanRequest()">Dismiss</button>
+      </div>
+    </section>
+  }
+
   <section class="assistant-chat">
     @if (loadingConversation()) {
       <section class="assistant-loading" aria-live="polite">
@@ -57,7 +68,7 @@
         </button>
       </section>
     } @else {
-      @if (isEmpty() && !sending()) {
+      @if (isEmpty() && !sending() && !planRequest()) {
         <section class="assistant-empty-state" aria-labelledby="assistant-empty-state-title">
           <mat-icon aria-hidden="true">history</mat-icon>
           <h2 id="assistant-empty-state-title">If you could ask your training history one question, what would it be?</h2>
@@ -230,6 +241,13 @@
             </div>
           </div>
           <div class="training-proposal-list">
+            @if (proposal.goalReview; as review) {
+              <section aria-label="Review calendar goal" class="training-phase-review">
+                @if (review.before) { <h3>Current goal</h3><app-training-goal-details [goal]="review.before" [units]="workoutReviewUnitSettings()" /> }
+                <h3>Proposed goal</h3><app-training-goal-details [goal]="review.after" [units]="workoutReviewUnitSettings()" />
+                <p>This saves the goal after Apply. Changes influence future suggestions; today’s prepared suggestion stays unchanged.</p>
+              </section>
+            }
             @if (proposal.phaseReview; as review) {
               <section aria-label="Review plan phases" class="training-phase-review">
                 <h3>{{ review.planName }}</h3>

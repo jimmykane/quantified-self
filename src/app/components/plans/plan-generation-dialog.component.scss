@@ -1,0 +1,11 @@
+:host { display: flex; flex-direction: column; min-height: 0; }
+mat-dialog-content { display: flex; flex-direction: column; gap: 12px; }
+mat-form-field, app-activity-filter-picker { width: 100%; min-width: 0; }
+p { margin: 0; }
+.secondary, .quota { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.plan-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.goal-action, .weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.goal-action span, .goal-action p { flex: 1 1 200px; }
+.quota { flex-basis: 100%; margin-bottom: 8px; }
+mat-dialog-actions { gap: 8px; }
+@media (max-width: 360px) { .plan-dates { grid-template-columns: 1fr; } }

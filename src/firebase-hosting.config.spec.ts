@@ -478,6 +478,7 @@ describe('Firebase Hosting configuration', () => {
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
@@ -485,7 +486,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
@@ -550,7 +551,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
@@ -671,7 +672,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.1mb',
     });
   });
 

@@ -56,6 +56,7 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  <app-training-goals-day [uid]="data().userId" [localDate]="data().day.dateKey" />
   @if (restDaySaving()) { <p role="status">Saving rest day…</p> }
   @if (plannedRestDay(); as rest) {
     <section class="calendar-day-phase" aria-label="Planned rest day">

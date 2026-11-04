@@ -73,7 +73,7 @@ concurrency ten, max two and min zero, with no secret. The UTC minute scheduler 
 concurrency/max one, min zero, zero schedule retries and only the existing VAPID secret. All run in europe-west2.
 Three isolated Node 22.23.3 samples per target on 2026-11-04 measured median startup of 223 ms / 87.3 MiB RSS
 for each admission trigger and 217 ms / 88.6 MiB for the sender, each exposing exactly one endpoint. These local
-measurements do not establish deployed latency. Full compiled verification covers 197 endpoints.
+measurements do not establish deployed latency. Full compiled verification covers 198 endpoints, including Calendar goal progress.
 The compiled descriptor check covers isolated equivalence; the [delivery runbook](web-push-notifications.md#delivery-rollout-and-rollback)
 requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
 
