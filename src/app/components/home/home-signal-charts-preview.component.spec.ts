@@ -138,8 +138,8 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(form.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
     const summaryCards = Array.from(fixture.nativeElement.querySelectorAll('.hero-summary mat-card')) as HTMLElement[];
     expect(summaryCards.map(card => card.dataset.metricId)).toEqual(['volume', 'recovery']);
-    expect(summaryCards[0].textContent).toContain('08h 20m');
-    expect(summaryCards[1].textContent).toContain('14h 30m');
+    expect(summaryCards[0].textContent).toContain('08h 55m');
+    expect(summaryCards[1].textContent).toContain('16h 45m');
     expect(fixture.nativeElement.textContent).toContain('Last 12 weeks');
     expect(fixture.nativeElement.textContent).toContain('Example post-workout estimate');
     expect(fixture.nativeElement.textContent).not.toContain('no additional training load');

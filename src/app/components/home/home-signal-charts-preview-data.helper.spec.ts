@@ -53,6 +53,8 @@ describe('home hero summary examples', () => {
     expect(data.latestFormPoint?.time).toBe(Date.UTC(2026, 10, 4));
     const visible = data.formTimeline.slice(-84);
     expect(visible[0].ctl).toBeGreaterThan(40);
+    expect(visible.at(-1)!.ctl - visible[0].ctl).toBeGreaterThan(15);
+    expect(visible.at(-1)!.formSameDay).toBeLessThan(-5);
     expect(visible.some(point => point.trainingStressScore === 0 && point.activityCount === 0)).toBe(true);
     expect(Math.min(...visible.map(point => point.formSameDay))).toBeLessThan(-15);
     expect(Math.max(...visible.map(point => point.formSameDay))).toBeGreaterThan(10);
@@ -63,8 +65,8 @@ describe('home hero summary examples', () => {
   it('keeps training volume separate from the imported recovery estimate', () => {
     const cards = buildHomeHeroSummaryMetrics();
     expect(cards.map(card => [card.label, card.valueText, card.detailText])).toEqual([
-      ['Training volume', '08h 20m', 'Last 7 days'],
-      ['Recovery left', '14h 30m', 'Example post-workout estimate'],
+      ['Training volume', '08h 55m', 'Last 7 days'],
+      ['Recovery left', '16h 45m', 'Example post-workout estimate'],
     ]);
   });
 });

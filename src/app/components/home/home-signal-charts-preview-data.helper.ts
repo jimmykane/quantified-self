@@ -8,13 +8,13 @@ export * from '../../helpers/dashboard-chart-example-signals.helper';
 const DAY_MS = 86_400_000;
 // Fictional cycling week shared by the chart and volume card. Never an account export.
 const HERO_LATEST_WEEK = [
-  { load: 62, minutes: 55 },
-  { load: 96, minutes: 80 },
-  { load: 41, minutes: 50 },
+  { load: 38, minutes: 45 },
+  { load: 112, minutes: 90 },
+  { load: 64, minutes: 65 },
   { load: 0, minutes: 0 },
-  { load: 88, minutes: 85 },
-  { load: 174, minutes: 160 },
-  { load: 56, minutes: 70 },
+  { load: 94, minutes: 85 },
+  { load: 186, minutes: 170 },
+  { load: 78, minutes: 80 },
 ];
 
 export function buildHomeHeroPreviewData(timestampMs: number) {
@@ -23,8 +23,8 @@ export function buildHomeHeroPreviewData(timestampMs: number) {
   // Sixteen earlier weeks establish fitness before the visible twelve-week window.
   // Build blocks, easier weeks and varied ride/rest days make the three signals distinct.
   const weeklyLoads = [
-    ...Array.from({ length: 16 }, (_, index) => [400, 450, 510, 330][index % 4]),
-    490, 570, 680, 320, 560, 650, 740, 390, 520, 610, 240,
+    ...Array.from({ length: 16 }, (_, index) => [320, 370, 410, 300][index % 4]),
+    410, 480, 565, 640, 300, 450, 550, 660, 730, 360, 500,
   ];
   const dailyWeights = [
     [0, 18, 12, 21, 7, 30, 12],
@@ -49,6 +49,6 @@ export function buildHomeHeroSummaryMetrics(unitSettings: UserUnitSettingsInterf
     { compactDuration: true, stripRepeatedUnit: true }) ?? '--';
   return [
     { id: 'volume', label: 'Training volume', valueText: duration(HERO_LATEST_WEEK.reduce((sum, ride) => sum + ride.minutes * 60, 0)), detailText: 'Last 7 days' },
-    { id: 'recovery', label: 'Recovery left', valueText: duration(52200), detailText: 'Example post-workout estimate' },
+    { id: 'recovery', label: 'Recovery left', valueText: duration(60300), detailText: 'Example post-workout estimate' },
   ];
 }

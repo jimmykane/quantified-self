@@ -178,17 +178,24 @@
 // The provider paths are a decorative illustration, not a second chart implementation.
 .hero-visual { --hero-flow-color: var(--mat-sys-primary); position: relative; isolation: isolate; display: grid; grid-template-columns: 228px minmax(0, 1fr); align-items: center; min-width: 0; padding-block: 2.5rem; }
 .hero-product { position: relative; --qs-glass-panel-radius: 16px; }
+@property --qs-hero-border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
 .hero-border-glow {
-  --hero-edge-origin: 0 50%;
-  --hero-edge-start: 100% 18%;
-  --hero-edge-end: 100% 100%;
+  --hero-entry-angle: 270deg;
   position: absolute;
   inset: -1px;
   padding: 1.5px;
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  background: radial-gradient(ellipse at var(--hero-edge-origin), var(--hero-flow-color), transparent 72%) left center / var(--hero-edge-start) no-repeat;
+  background: conic-gradient(from calc(var(--qs-hero-border-angle) + var(--hero-entry-angle)),
+    transparent 0deg 300deg,
+    color-mix(in srgb, var(--hero-flow-color) 12%, transparent) 324deg,
+    color-mix(in srgb, var(--hero-flow-color) 60%, transparent) 346deg,
+    var(--hero-flow-color) 358deg, transparent 360deg);
   // Only the card outline receives the light; its content remains untouched.
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
@@ -228,10 +235,10 @@
   78% { stroke-dashoffset: -100; opacity: 1; }
   79%, 100% { stroke-dashoffset: -100; opacity: 0; }
 }
-@keyframes heroBorderArrival {
-  0% { opacity: 0; background-size: var(--hero-edge-start); }
-  12% { opacity: .8; }
-  85%, 100% { opacity: 0; background-size: var(--hero-edge-end); }
+@keyframes heroBorderTravel {
+  0% { --qs-hero-border-angle: 0deg; opacity: 0; }
+  5%, 90% { opacity: .9; }
+  100% { --qs-hero-border-angle: 360deg; opacity: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
   // Normalize whole paths so arrivals stay synchronized at every viewport size.
@@ -240,8 +247,10 @@
   .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
   .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
   .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
-  // The leading edge reaches the border at 3.536s, repeating every 1.2s.
-  .hero-border-glow { animation: heroBorderArrival 1.2s linear -.064s infinite; }
+  // Arrivals are 1.2s apart; two staggered traces each take 2.4s for a full lap.
+  // Both start at the connection point when the incoming leading edge arrives.
+  .hero-border-glow { animation: heroBorderTravel 2.4s linear -.064s infinite; }
+  .hero-border-glow--following { animation-delay: -1.264s; }
   .hero-motion-toggle { display: inline-flex; }
   .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
 }
@@ -266,7 +275,7 @@
   .hero-provider-wires--desktop { display: none; }
   .hero-provider-wires--mobile { display: block; width: 100%; height: 88px; clip-path: inset(-8px -8px 0 -8px); }
   .hero-aggregation-point { left: 50%; top: calc(100% * 64 / 104); }
-  .hero-border-glow { --hero-edge-origin: 50% 0; --hero-edge-start: 18% 100%; --hero-edge-end: 100% 100%; background-position: center top; }
+  .hero-border-glow { --hero-entry-angle: 0deg; }
   .hero-product { padding: 1rem; }
   .hero-product-header { gap: .25rem; }
   .hero-actions { flex-direction: column; align-items: stretch; }
