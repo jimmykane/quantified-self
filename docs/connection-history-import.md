@@ -214,6 +214,15 @@ Acceptance is not processing completion. A long manual import can take multiple 
 sharing the coordinator is not a promise that every large range completes faster than the old bulk scan.
 The foreground request is now limited to durable admission instead of provider scanning.
 
+A separately disabled-by-default option on manual Suunto/COROS/Wahoo activity imports stores explicit device
+consent privately in the admission transaction. The independent `sendHistoryImportNotification` terminal-write
+observer sends at most one best-effort whole-import alert (two attempts per rolling day per account), using existing
+committed child outcomes and truthful failure copy. It does not modify the coordinator, ingestion queues, progress
+projection or retry semantics. Garmin is excluded. See [notification policy, lifecycle and release](web-push-notifications.md#manual-history-import-completion)
+for exact generation binding, bounded send receipts, suppression, monitoring and separately approved activation.
+The account-wide History imports category defaults on; admission binds its current revision so disabling then
+re-enabling it cannot revive an earlier import alert. Device registration and the per-import checkbox remain separate.
+
 Garmin reuses its existing activity adapter and backfill operation, submitting one bounded 30-day window per
 coordinator step. It retains permission checks, exact token/connection fences, provider-minimum clipping and `409`
 already-requested handling. A transient failure resumes the failed window; successful earlier windows are checkpointed.

@@ -1,3 +1,4 @@
+import type { HistoryNotificationConsent } from '../../../shared/history-import-notifications';
 import { GARMIN_HEALTH_SUMMARY_TYPES, type GarminHealthSummaryType } from '../garmin/health-summary-types';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRangePreset, type HistoryImportRange, type HistoryCapability, type ConnectionHistoryStepStatus, type ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
@@ -33,6 +34,8 @@ export interface HistoryStep extends ConnectionHistoryStepStatus {
   failedChildPaths?: string[];
 }
 export interface ConnectionHistoryRun {
+  /** Explicit consent for one manual import, never included in the public projection. */
+  notification?: HistoryNotificationConsent;
   id: string;
   userID: string;
   serviceName: ServiceNames;

@@ -1078,6 +1078,7 @@ export async function markServiceConnectedLifecycle(
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     connectionStateGeneration,
+    activityNotificationConnectedAtMs: nowMs,
     connectionHistoryReservation: FieldValue.delete(),
     connectionHistoryReservationExpiresAt: FieldValue.delete(),
     connectionHistoryImport: historyRun ? historyProjection(historyRun) : FieldValue.delete(),

@@ -15,10 +15,12 @@ import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-rout
 import { getActivitySyncMetadataDocId } from '../activity-sync/metadata';
 import { describeSavedFIT, operationRef, batchRef, guardedSendTransaction, providerAccount, publicBatch, requireDraft, SendOperation, SendSource } from './store';
 import { sendIdentifier, projectSendQueue } from './policy';
+import { readDeliveryNotificationRequest, validateDeliveryNotificationConsent } from '../web-push/delivery-consent';
+import { automaticPushConfiguration } from '../web-push/history-consent';
 
 const SOURCES = [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI, 'manualUpload'] as const;
 const SAVED_PREVIEW_PAGE_BUDGET_MS = 20_000;
-export async function runSendCommand(uid: string, request: ActivitySendCommand) {
+export async function runSendCommand(uid: string, request: ActivitySendCommand, context?: { origin?: string; impersonatedBy?: unknown }) {
   if (!request || request.version !== 1) throw new HttpsError('invalid-argument', 'Unsupported send version.');
   const id = sendIdentifier(request.batchId);
   const ref = operationRef(uid, id);
@@ -54,6 +56,9 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
     });
   }
   if (request.action === 'confirm') {
+    const notification = readDeliveryNotificationRequest(request.notification, context?.origin, context?.impersonatedBy);
+    const pushConfig = notification ? await automaticPushConfiguration('web_push_activity_delivery_enabled') : null;
+    if (notification && !pushConfig?.enabled) throw new HttpsError('failed-precondition', 'Delivery notifications are unavailable. Send without a notification.');
     const snapshot = (await ref.get()).data() as SendOperation | undefined;
     if (!snapshot) throw new HttpsError('not-found', 'Send was not found.');
     if (await providerAccount(uid, snapshot.provider) !== snapshot.providerAccount) throw new HttpsError('failed-precondition', 'Destination account changed. Review a new draft.');
@@ -61,6 +66,8 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       const current = (await tx.get(ref)).data() as SendOperation;
       if (current.state !== 'draft') return { batchId: id, revision: current.revision };
       if (!current.reviewed || current.stopped || current.revision !== request.revision || current.total <= current.finished || current.expiresAt <= Date.now()) throw new HttpsError('failed-precondition', 'Review the current selection before sending.');
+      if (notification) current.deliveryNotification = await validateDeliveryNotificationConsent(admin.firestore(), tx, uid,
+        ACTIVITY_SEND_PROVIDERS[current.provider], current.providerAccount, notification, pushConfig!.publicKey);
       current.state = 'confirmed'; current.updatedAt = Date.now(); current.expiresAt = Date.now() + 7 * 86400_000; current.cleanupAfter = Timestamp.fromMillis(current.expiresAt);
       tx.set(ref, current); tx.set(batchRef(uid, id), publicBatch(current));
       return { batchId: id, revision: current.revision };
@@ -115,6 +122,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
       if (request.action === 'check' && queue.processed && recovery !== 'check_status') throw new HttpsError('failed-precondition', 'This delivery has a final result; there is no pending status to check.');
       if (request.action === 'check' && !queue.destinationUploadID) throw new HttpsError('failed-precondition', 'Check the provider directly; no safe operation identifier is available.');
       if (request.action === 'check' && !queue.processed) return null;
+      const notificationBatch = operation?.deliveryNotification ? await tx.get(batchRef(uid, id)) : undefined;
       const dateCreated = Math.max(Date.now(), Number(queue.dateCreated) + 1);
       if (request.action === 'retry') {
         const currentSource = await tx.get(sourceRef);
@@ -126,6 +134,11 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand) 
         tx.update(sourceRef, { priorAttempts });
       }
       tx.update(queueRef, { dateCreated, processed: false, resultStatus: null, skippedReason: null, deferredReason: null, dispatchedToCloudTask: null, ...(request.action === 'retry' ? { destinationUploadID: null, destinationProviderUserID: null, destinationWorkoutKey: null, destinationInfoCode: null, providerOperationStartedAt: null, destinationUploadContinuation: null, destinationExpectedWorkoutTypeID: FieldValue.delete(), retryCount: 0, sendConfirmedFailure: false } : {}) });
+      // Result projection is asynchronous. Retire its completed notification snapshot atomically
+      // with resumed work, even when the command and completion share a millisecond.
+      if (notificationBatch?.exists) tx.update(notificationBatch.ref, {
+        updatedAt: Math.max(dateCreated, Number(notificationBatch.data()?.updatedAt || 0) + 1),
+      });
       return dateCreated;
     });
     if (dispatch !== null) await enqueueActivitySyncTask(source.queueId, dispatch);
@@ -301,7 +314,10 @@ export const activitySendCommand = onCall({ region: 'europe-west2', cors: ALLOWE
     stage = 'authentication';
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to send activities.');
     stage = 'command';
-    return await runSendCommand(request.auth.uid, request.data as ActivitySendCommand);
+    return await runSendCommand(request.auth.uid, request.data as ActivitySendCommand, {
+      origin: typeof request.rawRequest.headers.origin === 'string' ? request.rawRequest.headers.origin : undefined,
+      impersonatedBy: request.auth.token?.impersonatedBy,
+    });
   } catch (error) {
     try {
       const known = error instanceof HttpsError;

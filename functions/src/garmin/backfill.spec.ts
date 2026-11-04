@@ -300,6 +300,7 @@ describe('Garmin Backfill', () => {
         const startedAt = Date.now();
         vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
             expect(metaState.activitySyncCutoffMs).toBe(startedAt);
+            expect(metaState.activityNotificationHistoryEndMs).toBe(+new Date('2026-08-10'));
             return {};
         });
         await processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-10'));
@@ -325,6 +326,7 @@ describe('Garmin Backfill', () => {
     it('does not move a newer cutoff backwards when an older run resumes', async () => {
         const latestCutoff = Date.now();
         metaState.activitySyncCutoffMs = latestCutoff;
+        metaState.activityNotificationHistoryEndMs = latestCutoff + 86400000;
         const execution: HistoryExecution = {
             userID: 'testUserID', serviceName: ServiceNames.GarminAPI, runId: 'run',
             tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: latestCutoff - 3600000,
@@ -332,6 +334,7 @@ describe('Garmin Backfill', () => {
         };
         await withHistoryExecution(execution, () => processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-10'), execution));
         expect(metaState.activitySyncCutoffMs).toBe(latestCutoff);
+        expect(metaState.activityNotificationHistoryEndMs).toBe(latestCutoff + 86400000);
     });
 
     it('should throw permission-denied if throttled', async () => {
@@ -411,6 +414,7 @@ describe('Garmin Backfill', () => {
         expect(metaState.historyImportLeaseOwner).toBeUndefined();
         expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
         expect(metaState.didLastHistoryImport).toBeUndefined();
+        expect(metaState.activityNotificationHistoryEndMs).toBe(+new Date('2023-01-10'));
         expect(logger.error).toHaveBeenCalledWith('Error backfilling Garmin:', expect.anything());
     });
 

@@ -12,6 +12,10 @@ import { AppFunctionsService } from './app.functions.service';
 import { AuthSessionCleanupService } from './auth-session-cleanup.service';
 import { isPushId, isPushOrigin, isPushRegistration, isVapidPublicKey, type PushRegistration, type PushTestRequest, type PushTestResponse } from '../../../shared/web-push';
 import { environment } from '../../environments/environment';
+import { isAutomaticPushOrigin } from '../../../shared/web-push';
+import type { DeliveryNotificationTarget } from '../../../shared/activity-delivery-notifications';
+import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
+import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -21,6 +25,7 @@ export class AppPushService {
   private readonly auth = inject(Auth);
   private readonly firestore = inject(Firestore);
   private readonly config = inject(AppRemoteConfigService);
+  private readonly preferences = inject(AppNotificationPreferencesService);
   private readonly functions = inject(AppFunctionsService);
   private readonly storage = inject(APP_STORAGE);
   private readonly windows = inject(AppWindowService);
@@ -36,6 +41,14 @@ export class AppPushService {
   readonly canEnable = computed(() => this.state() === 'disabled' && !this.operation());
   readonly canTest = computed(() => this.state() === 'enabled' && !this.operation());
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
+  readonly historyNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && this.config.webPushHistoryEnabled() && isAutomaticPushOrigin(this.origin()));
+  readonly canNotifyHistory = computed(() => this.historyNotificationsAvailable() && this.canTest()
+    && this.preferences.isEnabled('history_import'));
+  readonly deliveryNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && this.config.webPushDeliveryEnabled() && isAutomaticPushOrigin(this.origin()));
+  readonly canNotifyDelivery = computed(() => this.deliveryNotificationsAvailable() && this.canTest()
+    && this.preferences.isEnabled('activity_delivery'));
   private manager: PushManager | null = null;
   private subscription: PushSubscription | null = null;
   private owner: FirebaseUserType | null = null;
@@ -198,6 +211,27 @@ export class AppPushService {
       throw new Error('Registration context changed.');
     }
     if (!reconcile) this.storage.setItem(STORAGE_KEY, JSON.stringify({ uid: owner.uid, installationId: id }));
+  }
+  async historyNotificationTarget(expectedUserID: string): Promise<HistoryNotificationTarget> {
+    return this.notificationTarget(expectedUserID, () => this.canNotifyHistory(),
+      'Enable this device and the History imports category in Settings, or uncheck the import notification option.');
+  }
+  async deliveryNotificationTarget(expectedUserID: string): Promise<DeliveryNotificationTarget> {
+    return this.notificationTarget(expectedUserID, () => this.canNotifyDelivery(),
+      'Enable this device and the Activity delivery category, or uncheck the send notification option.');
+  }
+  private async notificationTarget(expectedUserID: string, canNotify: () => boolean, hint: string): Promise<DeliveryNotificationTarget> {
+    const owner = this.owner, epoch = this.epoch, local = this.readLocal();
+    if (!canNotify() || !owner || owner.uid !== expectedUserID || local?.uid !== expectedUserID) {
+      throw new Error(hint);
+    }
+    const snapshot = await getDocFromServer(doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`));
+    const saved = snapshot.data();
+    if (!this.current(owner, epoch) || !this.sameInstallation(local) || !canNotify()
+      || !isPushRegistration(saved) || saved.origin !== this.origin() || saved.vapidPublicKey !== this.config.webPushPublicKey()) {
+      throw new Error('Notification registration changed. Please check this device and retry.');
+    }
+    return { installationId: local.installationId, generation: saved.generation };
   }
   async enable(): Promise<void> {
     if (!this.canEnable() || !this.manager || !this.owner) return;

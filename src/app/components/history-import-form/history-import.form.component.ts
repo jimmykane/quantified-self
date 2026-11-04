@@ -35,6 +35,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
 import { historyRangeOptions, type ConnectionHistoryStatusProjection, type ConnectionHistoryRangeOption, type HistoryImportRange } from '@shared/connection-history';
 import { activityHistoryRange } from '../../helpers/activity-history-range.helper';
+import { AppPushService } from '../../services/app.push.service';
+import { supportsHistoryNotification } from '@shared/history-import-notifications';
 
 
 /** Response from COROS/Suunto/Wahoo history import */
@@ -67,6 +69,10 @@ const SLEEP_SYNC_INITIAL_READ_TIMEOUT_MS = 10_000;
 })
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
+  readonly push = inject(AppPushService);
+  readonly notifyHistory = signal(false);
+  readonly notificationError = signal('');
+  historyNotificationSupported = false;
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: AppUserServiceMetaInterface | undefined;
   @Input() minDate: Date | null = null;
@@ -233,6 +239,26 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!this.formGroup.disabled) this.hapticsService.selection();
   }
 
+  onHistoryNotificationChange(selected: boolean): void {
+    if (this.formGroup.disabled || (selected && !this.push.canNotifyHistory()) || selected === this.notifyHistory()) return;
+    this.notifyHistory.set(selected); this.notificationError.set(''); this.hapticsService.selection();
+  }
+
+  async enableHistoryNotifications(): Promise<void> {
+    if (!this.push.canEnable() || this.formGroup.disabled) return;
+    const uid = this.currentUserID, service = this.serviceName, generation = this.contextGeneration;
+    this.hapticsService.selection(); this.notificationError.set('');
+    try {
+      await this.push.enable();
+      if (uid && this.isCurrentView(uid, service, generation)) this.hapticsService.success();
+    } catch {
+      if (uid && this.isCurrentView(uid, service, generation)) {
+        this.notificationError.set('Could not enable notifications. You can still import without a notification.');
+        this.hapticsService.error();
+      }
+    }
+  }
+
   private historyDatesKey(): string {
     return ['startDate', 'endDate'].map(name => {
       const value = this.formGroup.get(name)?.value;
@@ -287,6 +313,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   private processChanges() {
     if (this.isDestroyed) return;
+    this.historyNotificationSupported = supportsHistoryNotification(this.serviceName);
     this.isPro = AppUserUtilities.hasProAccess(this.currentUser);
     this.today = dayjs().endOf('day');
     this.historyRangeOptions = historyRangeOptions(this.serviceName);
@@ -370,6 +397,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.sharedStateSubscriptions = new Subscription();
     this.sharedStateKey = key;
     this.contextGeneration += 1;
+    this.notifyHistory.set(false);
+    this.notificationError.set('');
     this.activityState = { status: 'idle' };
     this.sleepState = { status: 'idle' };
     this.pendingImportResult.set(null);
@@ -504,6 +533,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const userID = this.currentUserID;
     const serviceName = this.serviceName;
     const generation = this.contextGeneration;
+    const connectionGeneration = this.userMetaForService?.connectionStateGeneration ?? null;
     const key = this.importState.key(userID, serviceName, 'activity');
     const operation = this.importState.begin(key);
     if (!operation) return;
@@ -527,13 +557,21 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.syncActivityHistoryImportRunning();
       if (this.isActivityHistoryImportRunning()) return;
 
+      const notification = this.notifyHistory() && this.historyNotificationSupported
+        ? await this.push.historyNotificationTarget(userID) : undefined;
+      // Device lookup can outlive this form or its owner; do not start an import in that case.
+      if (!this.isCurrentView(userID, serviceName, generation)) return;
+      if (connectionGeneration !== (this.userMetaForService?.connectionStateGeneration ?? null)) {
+        this.notifyHistory.set(false);
+        throw new Error('Connection changed. Review the import and try again.');
+      }
       dispatched = true;
-      const connectionGeneration = this.userMetaForService?.connectionStateGeneration ?? null;
       const result = await this.userService.importServiceHistoryForCurrentUser(
         serviceName,
         startDate,
         endDate,
-        userID
+        userID,
+        ...(notification ? [notification] as const : [] as const)
       );
       const cooldownMs = result?.historyImport ? 0 : serviceName === ServiceNames.GarminAPI
         ? GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 86_400_000
@@ -546,6 +584,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         ...(cooldownMs !== null ? { nextAllowedAtMs: Date.now() + cooldownMs } : {}),
       });
       if (!this.isCurrentView(userID, serviceName, generation)) return;
+      // Consent belongs to the admitted run; another import starts with a fresh choice.
+      this.notifyHistory.set(false);
       // The parent treats this event as a legacy scan result and resets import counts.
       // Background acceptance must retain server-owned progress and cooldown metadata.
       if (!result?.historyImport) this.importInitiated.emit(result);

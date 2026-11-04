@@ -1005,6 +1005,42 @@ Monitoring is **unchanged**: the reviewed #847/#829 bundles still cover the same
 backlog and committed outcomes. No provider API, worker, consent, MCP or Training contract changes. Release only the
 frontend with separate deployment approval; accepted background runs need no migration or replay.
 
+### Optional history completion notification
+
+Manual Suunto/COROS/Wahoo activity imports can attach an unchecked, per-import notification choice for the current
+production device. The account-wide History imports category defaults on; turning it off cancels unsent consent,
+and re-enabling it does not revive earlier imports. The existing callables atomically validate consent and bind the category revision; an isolated terminal observer delivers a
+single best-effort result, subject to a two-attempt rolling daily cap. Garmin request completion, automatic OAuth
+history, Sleep, Health and routes remain excluded. Provider queues and ingestion/dispatch/retry behavior are unchanged.
+The authoritative [Web Push runbook](web-push-notifications.md#manual-history-import-completion) covers privacy,
+anti-spam receipts, truthful partial results, monitoring definitions and backend-first release. New sender monitoring
+is covered in source; live activation/readback is deferred in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+No deployment, switch activation or test send is authorized by implementation or passing offline tests.
+
+### Recent live-activity notifications
+
+The default-on New activities synced category groups genuinely new, fully persisted workouts from all four activity
+providers. Verified first canonical creation and positive webhook provenance are both required; manual/OAuth history,
+unknown legacy work, corrections, reprocessing, cross-provider duplicates and manual uploads are excluded. Workouts
+recovered by Suunto's outage-backfill script remain silent: its shared enqueue helper does not infer live provenance
+from insertion/dispatch intent, and only the authenticated webhook supplies the notification marker. Eligible workouts
+must finish within 48 hours and start after the current connection. Garmin additionally persists a monotonic requested
+history-end cutoff before requesting files because history shares its live callback. This can conservatively suppress
+genuine workouts through an end-of-day history range. Exact queue revision, account/provider/connection, event dates,
+category revision and registration generation are checked before sending. Failure never changes import success/retry.
+
+The [Web Push runbook](web-push-notifications.md#recent-live-activity-sync-notifications) owns batching, private state,
+rate caps, payload, scheduler/index, deployment order and costs. Two-minute grouping yields one summary for a burst;
+at most one batch per 15 minutes and four per rolling day across providers, with capped arrivals discarded. Production
+registrations only; beta remains self-test-only. Both operational sender switches stay off during preparation.
+
+Monitoring: **covered in source** by the existing Web Push bundle extended with admission/send failures, native runtime
+5xx, bounded due-age observation and minute heartbeat. No new telemetry scanner or provider queue/retry changes.
+Existing import monitoring remains authoritative for ingestion. Live activation/readback is **deferred** in
+[#1011](https://github.com/jimmykane/quantified-self/issues/1011), with the existing channel; source tests are not live evidence.
+Release checklist: deploy cutoff/OAuth writers, webhook admission, changed workers, sender and Rules/index; verify
+scheduler and monitoring before an approved production window. Never enable with only the frontend or sender deployed.
+
 ### Shared history progress surfaces
 
 Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.
@@ -1598,6 +1634,21 @@ to display the new admin histogram bucket; this does not change sending or retry
 limit/backoff after deployment. Live tasks are not reset, and already deleted tasks or terminal failed records are not
 resurrected. Roll back the same endpoints to restore the previous limits; retained retries above the old limit may then
 become terminal on their next failure.
+
+### Activity delivery notifications
+
+The Activity delivery category covers explicit per-batch results from Send activities and grouped automatic activity
+send dead letters. The review offers device enablement and an unchecked notification choice; confirmation stores
+owner/origin/device/category/destination-bound consent privately. Results use committed batch state, and exhausted
+unaccepted queue failures now project into Needs action so a batch can finish. No notification claims provider success
+from an HTTP acknowledgement. Automatic successes and intermediate retries remain silent; history imports cannot
+create activity-delivery alerts. Upload authorization, retry budgets and transport are unchanged.
+Explicit Retry and Check status retire any completed notification snapshot atomically with resuming queue work,
+before asynchronous public-result projection. This prevents a stale completion alert during that projection gap.
+The [Web Push runbook](web-push-notifications.md#activity-delivery-notifications) owns the bounded grouping, category
+and device cancellation, shared delivery cap, exact runtime release/rollback commands and cost/limitations.
+Monitoring definitions are covered in the existing Web Push bundle; provider delivery monitoring is unchanged.
+Activation/readback is tracked in #1011. No Training planning or MCP surface change is involved.
 
 ### Outbound activity delivery
 

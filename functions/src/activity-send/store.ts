@@ -12,8 +12,10 @@ import { getDestinationConnectionStatus } from '../activity-sync/process-queue-i
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { decodeSendFile } from './policy';
 import { resolveWahooWorkoutType } from '../../../shared/wahoo-activity-types';
+import type { DeliveryNotificationConsent } from '../../../shared/activity-delivery-notifications';
 
 export interface SendOperation extends ActivitySendBatch {
+  deliveryNotification?: DeliveryNotificationConsent;
   providerAccount: string;
   expiresAt: number;
   cleanupAfter: Timestamp;
@@ -41,7 +43,8 @@ export const operationRef = (uid: string, id: string) => admin.firestore().doc(`
 export const batchRef = (uid: string, id: string) => admin.firestore().doc(`users/${uid}/activitySends/${id}`);
 export function publicBatch(operation: SendOperation): ActivitySendBatch {
   const { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt } = operation;
-  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt, stopped: operation.stopped === true, savedSelectionReady: !!operation.savedSelection };
+  return { id, provider, source, state, revision, accountLabel, createdAt, updatedAt, reviewed, total, finished, expiresAt, stopped: operation.stopped === true, savedSelectionReady: !!operation.savedSelection,
+    ...(operation.deliveryNotification ? { notificationRequested: true } : {}) };
 }
 export async function guardedSendTransaction<T>(uid: string, action: (tx: admin.firestore.Transaction) => Promise<T>): Promise<T> {
   return admin.firestore().runTransaction(async tx => {

@@ -338,12 +338,14 @@ describe('Firebase Hosting configuration', () => {
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
+    // Notification help covers default-on categories, recent live-sync batching and caps, history exclusion, and cancellation (2026-11-03).
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
-    // Notification help explains Safari's browser icon and Add to Dock app branding (2026-11-03).
+    // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
 
@@ -469,6 +471,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
@@ -539,6 +542,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
@@ -658,7 +662,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.1mb',
     });
   });
 

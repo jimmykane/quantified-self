@@ -107,6 +107,16 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').get());
             await assertSucceeds(owner.doc(path).delete());
         });
+        it('keeps history send receipts server-only for owners, other accounts and impersonation', async () => {
+            const receiptPath = 'users/push-owner/pushState/historyCompletion';
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(receiptPath).set({ attempts: [], providers: {} }); });
+            for (const context of [testEnv.authenticatedContext('push-owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }), testEnv.unauthenticatedContext()]) {
+                const ref = context.firestore().doc(receiptPath);
+                await assertFails(ref.get()); await assertFails(ref.set({ attempts: [] }));
+                await assertFails(ref.update({ providers: {} })); await assertFails(ref.delete());
+            }
+        });
         it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
             { endpoint: 'https://fcm.googleapis.com:443/fcm/send/client:token' },
             { endpoint: 'https://user:password@fcm.googleapis.com/fcm/send/client:token' },
@@ -147,6 +157,51 @@ describe('Firestore Security Rules', () => {
             await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('userDeletionTombstones/push-owner').set({}); });
             await assertFails(testEnv.authenticatedContext('push-owner').firestore().doc(path).set(value));
             await assertSucceeds(testEnv.authenticatedContext('push-owner').firestore().doc(path).delete());
+        });
+    });
+
+    describe.each(['history_import', 'activity_sync', 'activity_delivery'])('Notification category preferences: %s', category => {
+        const path = `users/category-owner/notificationPreferences/${category}`;
+        const base = { schemaVersion: 1, enabled: false, revision: 1 };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/category-owner').set({}); });
+        });
+        it('allows private owner reads and atomic toggles, but no resets, list or descendants', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext('category-owner').firestore();
+            const ref = owner.doc(path);
+            await assertSucceeds(ref.get()); // Absent preference means the new category defaults on.
+            await assertSucceeds(ref.set({ ...base, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 1, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: false, revision: 4, updatedAt: serverTimestamp() }));
+            await assertFails(ref.update({ enabled: true, revision: 3, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.update({ enabled: false, revision: 3, updatedAt: serverTimestamp() }));
+            await assertFails(ref.delete());
+            await assertFails(owner.collection('users/category-owner/notificationPreferences').get());
+            await assertFails(owner.doc(path + '/nested/value').set({}));
+            await assertFails(owner.doc('users/category-owner/notificationPreferences/unknown').set({ ...base, updatedAt: serverTimestamp() }));
+        });
+        it.each([{ schemaVersion: 2 }, { enabled: 'false' }, { revision: 0 }, { revision: 2 }, { revision: 1.5 },
+            { revision: 9007199254740992 }, { updatedAt: 0 }, { origin: 'https://quantified-self.io' }])('rejects malformed category preferences %j', async patch => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).set({ ...base, updatedAt: serverTimestamp(), ...patch }));
+        });
+        it('blocks other accounts, impersonation, missing users and deletion resurrection', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const value = { ...base, updatedAt: serverTimestamp() };
+            for (const context of [testEnv.authenticatedContext('other'), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc(path).get());
+                await assertFails(context.firestore().doc(path).set(value));
+            }
+            await assertFails(testEnv.authenticatedContext('category-owner', { impersonatedBy: 'admin' }).firestore().doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore().doc(`users/missing/notificationPreferences/${category}`).set(value));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set(base);
+                await context.firestore().doc('userDeletionTombstones/category-owner').set({});
+            });
+            await assertFails(testEnv.authenticatedContext('category-owner').firestore().doc(path).update({ enabled: true, revision: 2, updatedAt: serverTimestamp() }));
         });
     });
 

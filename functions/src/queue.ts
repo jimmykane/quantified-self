@@ -1,4 +1,5 @@
 import { withHistoryQueueExecution, type HistoryExecution } from './connection-history/execution';
+import { notifyNewActivityAfterPersistence } from './web-push/activity-admission';
 import * as functions from 'firebase-functions/v1';
 import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { retainCOROSTrainingCompletion } from './coros/training-completion';
@@ -189,6 +190,7 @@ type WorkoutQueueDispatchMode = 'immediate' | 'deferred';
 interface WorkoutQueueInsertOptions {
   intent: WorkoutQueueInsertIntent;
   dispatchMode: WorkoutQueueDispatchMode;
+  activityNotificationOrigin?: 'live';
 }
 
 type StoredWorkoutQueueItem = Omit<Partial<QueueItemInterface>, 'processed'> & { processed?: boolean };
@@ -518,6 +520,8 @@ export async function addToQueueForSuunto(queueItem: {
   userName: string,
   workoutID: string,
   firebaseUserID?: string,
+  /** Only authenticated webhook callers opt in; recovery uses the same insertion semantics. */
+  activityNotificationOrigin?: 'live',
 }): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
@@ -536,6 +540,7 @@ export async function addToQueueForSuunto(queueItem: {
   }, ServiceNames.SuuntoApp), ServiceNames.SuuntoApp, {
     intent: 'provider_webhook',
     dispatchMode: 'immediate',
+    activityNotificationOrigin: queueItem.activityNotificationOrigin,
   });
 }
 
@@ -565,6 +570,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
   }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, {
     intent: 'provider_webhook',
     dispatchMode: queueItem.manual ? 'deferred' : 'immediate',
+    activityNotificationOrigin: 'live',
   });
 }
 
@@ -577,6 +583,7 @@ export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInte
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem(queueItem, ServiceNames.COROSAPI), ServiceNames.COROSAPI, {
     intent: 'provider_webhook',
     dispatchMode: 'immediate',
+    activityNotificationOrigin: 'live',
   });
 }
 
@@ -1419,6 +1426,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
               : {}),
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.COROSAPI, corosWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           if (corosWorkoutQueueItem.planWorkoutId) {
             await retainCOROSTrainingCompletion(
               admin.firestore(),
@@ -1474,6 +1483,8 @@ async function parseHistoryGuardedWorkoutQueueItem(
             providerEventIDField: 'serviceWorkoutID',
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (!bulkWriter) await notifyNewActivityAfterPersistence(parentID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem,
+            setEventResult, event.startDate, event.endDate, tokenQueryDocumentSnapshot.data().dateCreated);
           await retainSuuntoGuideCompletions(admin.firestore(), parentID, deterministicID, suuntoWorkoutQueueItem.userName,
             String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id,
             fitActivityReferencesFromEvent(event));
@@ -2231,6 +2242,7 @@ async function handleDuplicateProviderWebhookQueueItem(
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, options: WorkoutQueueInsertOptions): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   const queuePayload = Object.assign({}, queueItem, {
+    ...(options.intent === 'provider_webhook' && options.activityNotificationOrigin === 'live' ? { activityNotificationOrigin: 'live' as const } : {}),
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
     dispatchedToCloudTask: null,
   });

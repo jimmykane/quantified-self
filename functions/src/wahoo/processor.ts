@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
 import * as admin from 'firebase-admin';
+import { notifyNewActivityAfterPersistence } from '../web-push/activity-admission';
 import * as logger from 'firebase-functions/logger';
 import {
   EventImporterFIT,
@@ -126,7 +127,7 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'pro_access_required',
       });
     }
-    await getActiveWahooTokenSnapshot(userID, queueItem.wahooUserID);
+    const activeToken = await getActiveWahooTokenSnapshot(userID, queueItem.wahooUserID);
     const accountGuard = await captureWahooActiveAccountGuard(userID, queueItem.wahooUserID);
 
     const fitFile = await downloadWahooFITFile(queueItem.FITFileURI);
@@ -213,6 +214,8 @@ export async function processWahooWorkoutQueueItem(
         },
       },
     );
+    await notifyNewActivityAfterPersistence(userID, ServiceNames.WahooAPI, queueItem, setEventResult,
+      event.startDate, event.endDate, activeToken.data()?.dateCreated);
     await retainWahooTrainingCompletion(
       admin.firestore(),
       userID,

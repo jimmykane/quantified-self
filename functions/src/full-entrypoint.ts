@@ -275,3 +275,8 @@ export {
 } from './stripe/billing/handlers';
 
 export { sendTestPushNotification } from './web-push';
+export { sendHistoryImportNotification } from './web-push/history';
+export { sendActivitySyncNotifications } from './web-push/activity';
+
+export { queueActivitySendNotification, queueAutomaticDeliveryNotification } from './web-push/delivery-admission';
+export { sendActivityDeliveryNotifications } from './web-push/delivery';
