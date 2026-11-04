@@ -15,6 +15,13 @@ export interface WorkoutPowerProfileV1 {
   zoneUpperBoundsWatts: number[];
 }
 export interface WorkoutPowerSettingsV1 { version: 1; revision: number; profiles: WorkoutPowerProfileV1[] }
+function hasASCIIControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
 function record(value: unknown, keys: string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) {
     throw Error('Invalid workout power settings.');
@@ -27,7 +34,7 @@ export function parseWorkoutPowerProfileV1(value: unknown): WorkoutPowerProfileV
   const watts = reference.watts;
   if (!WORKOUT_POWER_SPORTS.includes(p.sport as WorkoutPowerProfileV1['sport'])
     || !WORKOUT_POWER_PROVIDERS.includes(p.provider as WorkoutPowerProfileV1['provider'])
-    || typeof p.source !== 'string' || !p.source.trim() || p.source.trim().length > 80 || /[\x00-\x1f\x7f]/.test(p.source)
+    || typeof p.source !== 'string' || !p.source.trim() || p.source.trim().length > 80 || hasASCIIControlCharacter(p.source)
     || !['functional-threshold-power', 'critical-power'].includes(String(reference.kind))
     || typeof watts !== 'number' || !Number.isFinite(watts) || watts <= 0 || watts > 3000) {
     throw Error('Choose a supported sport, source and positive power reference.');

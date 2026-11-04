@@ -964,7 +964,10 @@ This local build workflow changes no MCP contract or authorization policy.
 Private owner settings at `users/{uid}/config/settings.workoutPower` hold version 1, an optimistic revision,
 and at most 20 exact-sport profiles. Each sport has one chosen service/ecosystem, a manually confirmed device/power-source
 label, FTP or critical-power watts, a reference date and optional increasing watt zone boundaries. `shared/workout-power-settings.ts`
-is the bounded allowlist shared by Settings and generation. Boundaries are exclusive upper bounds; Z1 starts at zero and
+is the bounded allowlist shared by Settings and generation. Source labels trim surrounding spaces and allow at most
+80 characters; the original input rejects ASCII controls U+0000–U+001F and U+007F, including leading/trailing whitespace
+controls, while preserving printable Unicode. An explicit character-code scan keeps that validation compatible with
+the shared-source lint rules. Boundaries are exclusive upper bounds; Z1 starts at zero and
 the final zone is open-ended. There is no provider fetch, auto-calibration, source conversion, live zone-linked target,
 watch smoothing change, or dependency on recorded-metric/TSS/durability settings.
 
