@@ -7262,7 +7262,8 @@ retains Banister priority. File HR ambiguity is never used to infer the saved th
 
 New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
 This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
-changing recorded stats, parse options, original files or the file-only cache. Swimming Automatic is imported → CSS pace
+changing recorded stats, parse options, original files or the file-only cache. Source finalization serializes each leg
+once for its identity and source fingerprint; this adds no stored state or reads. Swimming Automatic is imported → CSS pace
 → calibrated HR → MET → unavailable, with no calculated power TSS. Explicit Swim pace (CSS), HR or MET prefers its
 available candidate, then falls back through Automatic. Other sports retain their existing order. Swim pace TSS remains
 `100 × activeHours × (averageSwimSpeed / CSS)^3`. Workout average pace is never its own CSS.

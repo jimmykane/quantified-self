@@ -62,6 +62,36 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
+  it.each([false, true])('does not adopt new threshold or Health inputs on the first legacy reparse (controls: %s)', async controlled => {
+    const uid = setup(); const old = workout(); old.getFirstActivity().type = ActivityTypes.Cycling;
+    await source(uid, old);
+    if (controlled) await db.doc(metadataPath(uid)).set({ version: 1, revision: 1, excluded: false,
+      controls: { leg: { override: 0 } } });
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/saved`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)),
+      functionalThresholdPower: 200, lactateThresholdHR: 165 });
+    await db.doc(`users/${uid}/healthSourceRecords/prior-weight`).set({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: 'weight-70' } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: 70, unit: 'kg' } }] });
+    const next = workout(); const activity = next.getFirstActivity(); activity.type = ActivityTypes.Cycling;
+    activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
+    activity.removeStat(DataTrainingStressScoreMethod.type);
+    for (const [type, value] of [[DataPower.type, 200], [DataHeartRate.type, 165]] as const) {
+      const stream = activity.createStream(type); stream.setData(Array(3601).fill(value)); activity.addStream(stream);
+    }
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+      const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration).toBeUndefined();
+      expect(saved.legs!.leg.evaluations?.automatic.score).toBeNull();
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject(controlled
+        ? { status: 'available', score: 0, method: 'OVERRIDE' } : { status: 'unavailable', score: null });
+    } finally { collections.mockRestore(); }
+  });
   it.each([
     { type: ActivityTypes.VideoGaming, importedTss: undefined },
     { type: ActivityTypes.Walking, importedTss: 0 },

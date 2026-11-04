@@ -174,12 +174,13 @@ async function finalizeTrainingLoadMetadata(
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
   const activities = event.getActivities();
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
-  const candidates: TrainingLoadLeg[] = activities.map(activity => ({
-    activityId: activity.getID() as string, identity: identity(activity.toJSON()),
-    recordedTss: recordedTrainingStressScore(activity),
-    evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
-    policy: defaultAppliedTrainingLoadPolicy(activity.type), sourceFingerprint: trainingLoadSourceFingerprint(activity.toJSON()),
-  }));
+  const candidates: TrainingLoadLeg[] = activities.map(activity => {
+    const data = activity.toJSON();
+    return { activityId: activity.getID() as string, identity: identity(data),
+      recordedTss: recordedTrainingStressScore(activity),
+      evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
+      policy: defaultAppliedTrainingLoadPolicy(activity.type), sourceFingerprint: trainingLoadSourceFingerprint(data) };
+  });
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
   const parentFingerprint = trainingLoadSourceFingerprint(event.toJSON());
