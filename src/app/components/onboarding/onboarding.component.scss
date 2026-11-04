@@ -1,3 +1,4 @@
+@use '@angular/material' as mat;
 @use '../../../styles/breakpoints' as bp;
 
 :host { display: block; }
@@ -9,7 +10,6 @@
     margin: 0 auto;
     min-height: min(800px, calc(100dvh - var(--qs-effective-top-offset, 0px) - 48px));
     overflow: clip;
-    background: var(--mat-sys-surface);
 }
 
 .field-guide--intro { grid-template-columns: 1fr 1fr; }
@@ -32,13 +32,24 @@
 .hero-caption { font: var(--mat-sys-body-medium); }
 .eyebrow { font: var(--mat-sys-label-medium); text-transform: uppercase; letter-spacing: 1.5px; }
 .guide-content { margin: 42px auto 0; max-width: 600px; }
-.guide-content > .eyebrow { color: var(--mat-sys-primary); margin: 0 0 16px; }
-h1 { font: var(--mat-sys-headline-large); font-weight: 500; letter-spacing: -1px; margin: 0 0 18px; text-wrap: balance; }
+.guide-content > .eyebrow { color: var(--mat-sys-on-primary-container); font-weight: 700; margin: 0 0 16px; }
+h1 { font: var(--mat-sys-headline-large); font-weight: 700; letter-spacing: -1px; margin: 0 0 18px; text-wrap: balance; }
 h1:focus { outline: none; }
 .lead { font: var(--mat-sys-body-large); color: var(--mat-sys-on-surface-variant); margin: 0; }
 .chapter-points { list-style: none; margin: 36px 0; padding: 0; display: grid; gap: 24px; }
 .chapter-points li { display: flex; align-items: flex-start; gap: 16px; }
-.chapter-points mat-icon { flex: 0 0 24px; color: var(--mat-sys-primary); }
+// Reuse the Dashboard empty-state icon treatment.
+.chapter-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: var(--mat-sys-on-primary-container);
+    background: var(--mat-sys-primary-container);
+}
 .chapter-points h2 { font: var(--mat-sys-title-small); margin: 0 0 4px; }
 .chapter-points p { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); margin: 0; }
 .intro-progress { display: flex; align-items: center; gap: 12px; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
@@ -46,11 +57,22 @@ h1:focus { outline: none; }
 .chapter-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--mat-sys-outline-variant); }
 .chapter-dots .active { width: 22px; border-radius: 4px; background: var(--mat-sys-primary); }
 
-.starting-points { display: grid; gap: 24px; margin: 32px 0; }
+.starting-points {
+    display: grid;
+    gap: 24px;
+    margin: 32px 0;
+    @include mat.radio-overrides((
+        selected-icon-color: var(--mat-sys-primary),
+        selected-hover-icon-color: var(--mat-sys-primary),
+        selected-focus-icon-color: var(--mat-sys-primary),
+        selected-pressed-icon-color: var(--mat-sys-primary),
+    ));
+}
+.starting-points mat-radio-button + mat-radio-button { padding-top: 24px; border-top: 1px solid var(--mat-sys-outline-variant); }
 .choice-title, .choice-description, .choice-detail { display: block; }
 .choice-title { font: var(--mat-sys-title-medium); margin-bottom: 6px; }
 .choice-description { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
-.choice-detail { font: var(--mat-sys-label-medium); color: var(--mat-sys-primary); margin-top: 8px; }
+.choice-detail { font: var(--mat-sys-label-medium); color: var(--mat-sys-on-primary-container); margin-top: 8px; }
 .onboarding-form { margin-top: 32px; }
 .policy-list { display: grid; gap: 20px; }
 .policy-item { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
@@ -93,7 +115,7 @@ h1:focus { outline: none; }
     .field-guide-body { padding: 16px 20px 24px; }
     .brand span { display: none; }
     .field-guide-header { gap: 8px; }
-    h1 { font: var(--mat-sys-headline-medium); font-weight: 500; }
+    h1 { font: var(--mat-sys-headline-medium); font-weight: 700; }
     .field-guide--intro .hero-copy .eyebrow { font: var(--mat-sys-label-small); }
     .field-guide--plan .hero-copy { padding: 24px; }
     .onboarding-actions > button { min-height: 44px; }
