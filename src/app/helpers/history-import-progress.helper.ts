@@ -103,7 +103,7 @@ function item(source: HistoryImportSource): HistoryImportProgressItem | null {
   }
   return {serviceName, name: getProviderDisplayName(serviceName), runId: value.runId, kind,
     label: (requestOnly ? requestLabels : labels)[kind], requestOnly,
-    rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active && kind === 'attention'};
+    rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active};
 }
 /** Latest persisted statuses for Connections, independent of notification dismissal and age. */
 export function buildHistoryImportItems(sources: readonly HistoryImportSource[]): HistoryImportProgressItem[] {

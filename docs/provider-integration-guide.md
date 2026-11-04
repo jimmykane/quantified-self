@@ -1069,7 +1069,8 @@ not records received or confirmed HTTP submissions. The shared card explicitly s
 and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
 All finished results, including failures/skips,
 stay prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
-counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
+counts are not failure totals. Every finished result, including **Processed** and **History requested**, offers
+**Dismiss this result**. It acknowledges only that provider/run/result timestamp on this
 browser and clears it from the shared header/panel/Dashboard. Logout retains only validated dismissal receipt fields,
 so they survive signing out and back in while other browser data and Firestore persistence are cleared. Details and
 retry controls remain in Connections after notification dismissal or expiry.

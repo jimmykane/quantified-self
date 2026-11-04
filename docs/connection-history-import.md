@@ -83,7 +83,8 @@ requests say **History requested** without an activity spinner. Older processed 
 processing finished**, never that records have finished importing. All terminal context, including failed/skipped results,
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
 does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
-**Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
+**Dismiss this result** is available for every finished result, including **Processed** and **History requested**.
+It clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
 current account on this browser, including after signing out and back in. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
 is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
 timestamp from a retry is a new result. Logout preserves only validated account/provider-scoped receipts (provider, opaque
