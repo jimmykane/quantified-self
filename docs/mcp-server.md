@@ -249,20 +249,25 @@ slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
-by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
+by preview; explicit providers return independent blocked/success results. Pro, supported compatibility, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
-For a degraded standalone create-and-send (for example, a Suunto step instruction that must be shortened), the public
-preview names the bounded, safe mapping warnings before the host's native approval. The approved Send proposal may carry
-the server-computed digest into the existing delivery command, which rechecks the current destination and payload in the
-write transaction; a changed mapping blocks delivery rather than silently approving new loss. This removes a second
-approval for the same unchanged workout. Browser Send without a digest and later plan-workout changes retain their
-existing per-workout review behavior. An applied Send result means consent and any disclosed adjustment were recorded
-and reconciliation was queued; it is not a provider acceptance or watch-receipt claim. For Suunto-bound new workouts,
-clients should omit unrequested step notes and keep necessary instructions watch-sized (40 characters alongside a
-duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
-If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
-without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
+For supported provider adjustments (for example, shortened Suunto instructions), the public preview discloses bounded
+safe mapping warnings before the host's native confirmation. Initial Send/Enable records account-bound sync consent;
+eligible future edits and workouts entering the provider window then sync automatically without separate per-workout
+mapping approval. The full authored prescription stays in QS. Unsupported recipes and changed account authority still
+block delivery. Extensive informational warnings use the existing bounded summary and direct users to compatibility
+details rather than preventing the proposal. An applied Send means preferences were recorded and reconciliation queued,
+not provider or watch receipt. Obsolete mapping `approve` proposals are rejected with guidance to use normal sync; frozen
+schema/action and historical status enums remain readable. Native proposal approval, grant/revision/expiry checks,
+initial delivery consent and explicit replacement/fresh-Guide recovery confirmations remain independent.
+Suunto-bound generated notes should be omitted when unrequested or kept watch-sized (40 characters alongside a duration
+or target, 54 for manual-only steps), without dropping requested meaning merely to avoid a warning. See the
+[Training policy](training-workspace.md#supported-provider-adjustments-and-ongoing-sync-november-2026) for historical
+status refresh, content-digest fencing, monitoring and coordinated release. No new scope or registered tool/schema is required; read coverage includes current pending and historical approval
+statuses without private evidence. Runtime instruction metadata is updated in the existing pending candidate; the registered
+baseline/history stay unchanged. Deploy separately and refresh/rescan the registered app before claiming client availability. Bundled Training guidance now explains automatic supported adjustments. Validate the
+source and fixture package, then refresh installed guidance with a separately requested `npm run plugin:sync`.
 An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
 skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
@@ -407,7 +412,7 @@ recipe schema already accepts the complete Sports Lib activity-type enum, and fo
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
 `RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport. Garmin's
 explicit folds cover the QS running and cycling Training profiles, including indoor/virtual running, virtual cycling,
-velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
+velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains a disclosed degradation under initial Send/Enable consent; clients must
 not rewrite the authored sport just to satisfy a provider.
 
 The provider-name preservation preparation extends the pending Training recipe and prescription-analysis sport enums
@@ -415,7 +420,7 @@ with the explicit canonical names in `shared/activity-type-compatibility.ts`, al
 sports. The catalog's `Unknown Sport` placeholder remains invalid for workout recipes.
 Scheduled and saved recipe reads and complete-recipe proposals keep the exact authored sport through JSON round trips;
 unknown labels, provider profile fields and private source identifiers remain rejected. This does not imply delivery
-support for every catalog sport: existing local compatibility assessment and mapping approval still apply. The registered
+support for every catalog sport: existing local compatibility assessment and initial delivery consent still apply. The registered
 baseline contains no Training recipe tools, so these enum additions belong to the existing pending metadata transition;
 they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
 digest after integration and use the existing explicit deployment/client-refresh lifecycle.
@@ -495,7 +500,7 @@ tests prove only local behavior, not live cloud or device acceptance. No registe
 Wahoo assesses timed, untargeted outdoor Walking/Hiking, Rowing/Indoor Rowing and pool/open-water swimming as exact
 when no authored pool length is dropped. All 21 profiles have owner-confirmed native profile/timed playback (#789);
 obsolete validation warnings are removed. Distance/manual endings and intensity targets remain unsupported for these
-sports. An authored pool length still produces a degraded mapping requiring review because Wahoo cannot receive it.
+sports. An authored pool length still produces a degraded mapping warning because Wahoo cannot receive it.
 Existing substitutions and Strength losses remain disclosed.
 Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.
 Selected pool length remains canonical but is not sent to Wahoo. Strict compatibility and recipe reads cover all 21
@@ -552,7 +557,7 @@ accepts one complete create/update draft, derives the v1 summary server-side and
 owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
 consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
 need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
-delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+delivery preview without separate per-workout/per-edit mapping approval; other supported mapping loss is informational too.
 COROS compatibility reads use the full validated companion and report exact named/set/reps-or-time/rest/fixed-kg mappings.
 Missing, malformed, foreign or mismatched companions fail the read; they never return a partial prescription.
 Its delivery preview performs no provider I/O and apply keeps independent
@@ -561,7 +566,7 @@ boundary used by the app and MCP; local assessment and synthetic delivery tests 
 or completion evidence (#741). Normal owner/grant-bound MCP proposal confirmation and apply remain required for admitted
 providers. No registered schema, scope, permission, provider action or response field changes for this policy. Wahoo #783 uses the
 validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
-Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
+Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding is disclosed as an informational warning.
 Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
 owner/revision/expiry binding, native/app confirmation and idempotency. Existing strict mapping issue codes are reused;
 there is no new registered tool, schema, response field, scope, consent or provider action.

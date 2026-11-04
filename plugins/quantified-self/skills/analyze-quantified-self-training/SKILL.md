@@ -294,8 +294,10 @@ plan; **Plan actions → Activate plan** remains available. Plan sync is a separ
 - For a new workout being sent to Suunto, omit step notes the user did not ask for. Keep necessary concise watch
   instructions within 40 characters when the step also shows duration or targets, or 54 for a manual-only step. Never
   silently drop a requested instruction to fit. Explain any exact mapping warning in the provider preview before the
-  native approval: one approved Send proposal covers its current digest-bound adjustment, not provider/watch receipt.
-- Keep the user's canonical sport unchanged. Provider family folds are private, approval-bound adapter behavior; never
+  native confirmation of the authored change and initial Send. Once sync is enabled, supported adjustments apply
+  automatically to future eligible edits and workouts entering the provider window, without separate mapping approval.
+  Warnings remain visible; unsupported recipes and changed account authority still block delivery. Send is not provider/watch receipt.
+- Keep the user's canonical sport unchanged. Provider family folds are private adapter behavior disclosed as warnings under Send/Enable consent; never
   offer to rewrite a workout from a specific sport such as Downhill Cycling to generic Cycling solely to make delivery
   pass.
 

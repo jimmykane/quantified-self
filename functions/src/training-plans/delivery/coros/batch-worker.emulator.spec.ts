@@ -117,7 +117,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(JSON.parse(client.mock.calls[0][0].data).Workouts).toHaveLength(2);
   });
 
-  it.each([false, true])('keeps the six additional subtype folds behind approval (%s) in the Firestore worker', async approved => {
+  it.each([false, true])('sends supported subtype folds with or without legacy approval metadata (%s)', async approved => {
     const sports = [ActivityTypes.IndoorRunning, ActivityTypes.VirtualRunning, ActivityTypes.VirtualCycling,
       ActivityTypes.Velomobile, ActivityTypes['Enduro MTB'], ActivityTypes.DownhillCycling];
     const ids = await seed(sports.length, sports);
@@ -132,14 +132,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     }
     await Promise.all(ids.map(id => processTrainingDelivery(runtime, uid, id)));
     const ledgers = await Promise.all(ids.map(id => user.collection(DELIVERY_LEDGER).doc(id).get()));
-    expect(ledgers.every(row => row.data()?.status === (approved ? 'delivered' : 'approval_required'))).toBe(true);
-    if (approved) {
-      // Concurrent dispatch may split the batch; every stable workout is still sent once.
-      const sent = client.mock.calls.flatMap(([request]) => JSON.parse(request.data).Workouts)
-        .sort((a, b) => a.WorkoutDay.localeCompare(b.WorkoutDay));
-      expect(sent.map(entry => entry.WorkoutType)).toEqual(['run', 'run', 'bike', 'bike', 'bike', 'bike']);
-      expect(new Set(sent.map(entry => entry.Id)).size).toBe(sports.length);
-    } else expect(client).not.toHaveBeenCalled();
+    expect(ledgers.every(row => row.data()?.status === 'delivered' && row.data()?.approvalDigest === null)).toBe(true);
+    // Concurrent dispatch may split the batch; every stable workout is still sent once.
+    const sent = client.mock.calls.flatMap(([request]) => JSON.parse(request.data).Workouts)
+      .sort((a, b) => a.WorkoutDay.localeCompare(b.WorkoutDay));
+    expect(sent.map(entry => entry.WorkoutType)).toEqual(['run', 'run', 'bike', 'bike', 'bike', 'bike']);
+    expect(new Set(sent.map(entry => entry.Id)).size).toBe(sports.length);
     const authored = await Promise.all(sports.map((_, index) => user.collection('scheduledWorkouts').doc(`w${index}`).get()));
     expect(authored.map(row => row.data()?.structure.sport)).toEqual(sports);
   });

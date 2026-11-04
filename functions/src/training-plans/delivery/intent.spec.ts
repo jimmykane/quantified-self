@@ -26,6 +26,27 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
+  it('automatically syncs edited relative HR when a later plan workout enters the Suunto window', () => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const transport = new SuuntoGuideTransport(request, 'Quantified Self');
+    const context: DeliveryContext = { ...base, transport,
+      setting: { ...base.setting!, provider: 'suunto', scope: 'plan', scopeId: 'plan' },
+      workout: { ...base.workout!, planId: 'plan', localDate: '2026-09-24', structure: {
+        ...base.workout!.structure, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+          ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'heart-rate', mode: 'relative',
+            minimumPercent: 65, maximumPercent: 80, reference: { kind: 'max-heart-rate', bpm: 190 } }] }],
+      } },
+    };
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'absent', status: 'outside_horizon' });
+    const eligible = { ...context, nowMs: Date.parse('2026-09-18T10:00:00Z') };
+    const intent = resolveDeliveryIntent(eligible);
+    expect(intent).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(intent.issues).toContainEqual(expect.stringContaining('stored reference snapshot'));
+    expect(resolveDeliveryIntent({ ...eligible, setting: null }).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...eligible, connection: { ...base.connection, epoch: 1 } }).status)
+      .toBe('fresh_consent_required');
+    expect(request).not.toHaveBeenCalled();
+  });
   it.each([
     [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
     [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
@@ -51,7 +72,7 @@ describe('delivery intent', () => {
     const reviewed = resolveDeliveryIntent(context, previous);
     expect(reviewed.digest).not.toBe(previous.desiredDigest);
     if (fallback) {
-      expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
+      expect(reviewed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
       expect(reviewed.issues).toContainEqual(expect.stringContaining(`${sport} using its ${fallback} profile`));
     } else {
       expect(reviewed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null, issues: [] });
@@ -65,7 +86,7 @@ describe('delivery intent', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it.each(['garmin', 'wahoo'] as const)('requires mapping review for previously unsupported Virtual Rowing on %s', provider => {
+  it.each(['garmin', 'wahoo'] as const)('syncs previously unsupported Virtual Rowing with disclosed adjustments on %s', provider => {
     const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
     const context: DeliveryContext = { ...base,
       transport: provider === 'garmin' ? new GarminTrainingTransport(request) : new WahooTrainingTransport(request),
@@ -76,8 +97,8 @@ describe('delivery intent', () => {
     // Generic mappers hash the prescription even while unsupported; a status change must still be reassessed.
     const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
       desired: 'preserve', desiredDigest: digest, acceptedDigest: null } as DeliveryLedgerV1;
-    expect(resolveDeliveryIntent(context, previous)).toMatchObject({ desired: 'preserve', status: 'approval_required',
-      digest, approvalDigest: digest });
+    expect(resolveDeliveryIntent(context, previous)).toMatchObject({ desired: 'present', status: 'pending',
+      digest, approvalDigest: null });
     expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: digest } }, previous))
       .toMatchObject({ desired: 'present', status: 'pending', digest });
     expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
@@ -146,15 +167,15 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent({ ...context, override: { ...base.setting!, associationPlanId: 'p', suppressed: true } })).toMatchObject({ desired: 'absent' });
     expect(resolveDeliveryIntent({ ...context, override: { ...base.setting!, associationPlanId: 'other', suppressed: true } })).toMatchObject({ desired: 'present' });
   });
-  it('binds degradation consent to current content/destination/mapping', () => {
+  it('syncs supported adjustments and later edits under existing delivery consent', () => {
     const transport = new FakeTrainingTransport(); transport.level = 'degraded';
     const context = { ...base, transport };
     const initial = resolveDeliveryIntent(context);
-    expect(initial.status).toBe('approval_required');
+    expect(initial.status).toBe('pending');
     context.setting = { ...base.setting!, approvedDigest: initial.approvalDigest };
     expect(resolveDeliveryIntent(context).desired).toBe('present');
     context.workout = { ...base.workout!, title: 'Changed' };
-    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    expect(resolveDeliveryIntent(context).status).toBe('pending');
     transport.level = 'unsupported';
     expect(resolveDeliveryIntent(context).status).toBe('unsupported');
   });
@@ -202,7 +223,7 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent(context, ledger).desired).toBe('present');
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits }, {
       ...ledger, acceptedContentDigest: 'mismatch', mappingApprovalProof: undefined,
-    }).status).toBe('approval_required');
+    }).status).toBe('pending');
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, hasPro: false }, ledger).status).toBe('paused_pro');
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, setting: null }, ledger).desired).toBe('absent');
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits,
@@ -210,7 +231,7 @@ describe('delivery intent', () => {
     const edited = structuredClone(strength);
     edited.exercises[0].name = 'A'.repeat(59) + 'B'; // An edit hidden beyond the watch's truncated text.
     expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, strength: edited,
-      workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('approval_required');
+      workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('pending');
   });
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining])(
     'does not retain unrelated swimming preferences in %s timed-Rest approval evidence', sport => {
@@ -245,7 +266,7 @@ describe('delivery intent', () => {
     expect(changed).toEqual(original);
   });
 
-  it('retains proved app-preview approval across repeated distance-unit changes, never across prescription or authority changes', () => {
+  it('retains proved app-preview approval across repeated distance-unit changes, while prescription edits sync and authority stays fenced', () => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ kind: 'step' as const,
       id: 'step', purpose: 'work' as const, ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [], note: 'A'.repeat(45) }] } };
@@ -262,11 +283,11 @@ describe('delivery intent', () => {
       current = resolveDeliveryIntent(changed, ledger);
       expect(current.desired).toBe('present'); expect(current.approvalDigest).toBeNull();
       expect(current.mappingApprovalProof!.suuntoApprovedUnitSettings).toEqual(units);
-      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('pending');
       expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
       if (current.digest !== approval) expect(resolveDeliveryIntent(changed, { ...ledger,
         mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' },
-        acceptedContentDigest: 'mismatch' }).status).toBe('approval_required');
+        acceptedContentDigest: 'mismatch' }).status).toBe('pending');
       ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
     }
   });
@@ -295,7 +316,7 @@ describe('delivery intent', () => {
         status: current.digest === ledger.acceptedDigest ? 'delivered' : 'pending', approvalDigest: null });
       expect(current.mappingApprovalProof!.suuntoApprovedSwimmingSettings).toEqual(initial);
       expect(current.mappingApprovalProof!.suuntoMappingSwimmingSettings).toEqual(settings);
-      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Changed' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Changed' } }, ledger).status).toBe('pending');
       expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
       expect(resolveDeliveryIntent({ ...changed, hasPro: false }, ledger).status).toBe('paused_pro');
       expect(resolveDeliveryIntent({ ...changed, setting: null }, ledger).desired).toBe('absent');
@@ -320,8 +341,8 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: approved.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
-    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
-    expect(resolveDeliveryIntent({ ...context, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+    expect(resolveDeliveryIntent(context).status).toBe('pending');
+    expect(resolveDeliveryIntent({ ...context, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('pending');
   });
   it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
     'retains legacy approval after the app-preview upgrade and subsequent unit changes (%#)', assessLegacy => {
@@ -348,10 +369,10 @@ describe('delivery intent', () => {
         const current = resolveDeliveryIntent(changed, ledger);
         expect(current).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
         expect(current.mappingApprovalProof!.suuntoMappingUnitSettings).toEqual(changed.suuntoUnitSettings);
-        expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+        expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('pending');
         expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
         expect(resolveDeliveryIntent(changed, { ...ledger, acceptedContentDigest: 'mismatch',
-          mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' } }).status).toBe('approval_required');
+          mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' } }).status).toBe('pending');
         ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
       }
     });
@@ -378,7 +399,7 @@ describe('delivery intent', () => {
         setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
       const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
         acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki', strength) } as DeliveryLedgerV1;
-      expect(resolveDeliveryIntent(context, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent(context, ledger).status).toBe('pending');
     }
   });
   it.each([
@@ -394,7 +415,7 @@ describe('delivery intent', () => {
     ...[ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming]
       .map(sport => ({ assessLegacy: assessSuuntoGuideV10ForRecovery, sport, manual: true })),
   ])(
-    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes (manual=$manual)', ({ assessLegacy, sport, manual }) => {
+    'keeps exact legacy loss approval for $sport across Suunto display upgrades, while edits sync and changed authority stays fenced (manual=$manual)', ({ assessLegacy, sport, manual }) => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const restPresentation = assessLegacy === assessSuuntoGuideV10ForRecovery || assessLegacy === assessSuuntoGuideV11ForRecovery;
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [
@@ -424,21 +445,21 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent(context, retired).status).not.toBe('delivered');
     for (const key of ['approvedDigest', 'mappingDigest', 'contentDigest'] as const) {
       expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, [key]: 'mismatch' } }).status)
-        .toBe('approval_required');
+        .toBe('pending');
     }
     const editNote = (note: string) => ({ ...workout, structure: { ...workout.structure,
       nodes: workout.structure.nodes.map(node => 'note' in node ? { ...node, note } : node) } });
     for (const edited of [{ ...workout, title: 'Changed' }, { ...workout, localDate: '2026-09-11' },
       editNote('B'.repeat(45)), editNote('A'.repeat(40) + 'BBBBB')]) {
-      expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('approval_required');
-      expect(resolveDeliveryIntent({ ...context, workout: edited }, retired).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('pending');
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, retired).status).toBe('pending');
     }
-    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    expect(resolveDeliveryIntent(context).status).toBe('pending');
     const attempt = { digest: prior.digest, contentDigest: ledger.acceptedContentDigest } as NonNullable<DeliveryLedgerV1['attempt']>;
     expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, attempt }).desired).toBe('present');
     expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, acceptedContentDigest: null,
       attempt: { ...attempt, digest: currentDigest, progress: { version: 1, step: 'update', state: 'started' } } }).desired).toBe('present');
-    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: 'unknown' } }).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: 'unknown' } }).status).toBe('pending');
     expect(resolveDeliveryIntent({ ...context, setting: null }).desired).toBe('absent');
     expect(resolveDeliveryIntent({ ...context, hasPro: false }).status).toBe('paused_pro');
     expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }).status).toBe('fresh_consent_required');

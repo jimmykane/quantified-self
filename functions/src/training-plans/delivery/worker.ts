@@ -6,7 +6,7 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { getCloudTaskRetryBackoffSeconds, MAX_RETRY_COUNT } from '../../shared/queue-config';
 import { DELIVERY_LEDGER, DELIVERY_LEASE_MS, DELIVERY_QUEUE, TrainingDeliveryTransportError,
   type DeliveryArtifact, type DeliveryLedgerV1, type DeliveryRuntime, type DeliveryTransportProgress } from './contracts';
-import { readDeliveryContext, writeDelivery } from './store';
+import { queuedDeliveryOperation, readDeliveryContext, writeDelivery } from './store';
 import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
@@ -69,7 +69,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       tx.delete(jobRef);
       return null;
     }
-    const changed = ledger.desiredDigest !== intent.digest || ledger.desired !== intent.desired;
+    const contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
+    const changed = ledger.desiredDigest !== intent.digest || ledger.desired !== intent.desired
+      || ledger.contentDigest !== contentDigest;
     ledger.desiredGeneration += changed ? 1 : 0;
     ledger.desiredDigest = intent.digest;
     ledger.desired = intent.desired;
@@ -77,7 +79,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     ledger.issues = intent.issues;
     ledger.approvalDigest = intent.approvalDigest;
     ledger.timeZone = intent.timeZone;
-    ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
+    ledger.contentDigest = contentDigest;
     // Keep authorization evidence separate from acceptance: retiring an old
     // unaccepted attempt must not erase a verified presentation-only upgrade.
     if (intent.mappingApprovalProof) ledger.mappingApprovalProof = intent.mappingApprovalProof;
@@ -96,8 +98,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     }
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
-      const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
-        : intent.desired === 'absent' && (ledger.actual || ledger.repair) ? 'remove' : null;
+      const kind = queuedDeliveryOperation(ledger);
       if (!kind) {
         writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef);
         stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]); return null;
@@ -303,7 +304,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.retries = 0;
         ledger.retryAtMs = 0;
         ledger.providerNotBeforeMs = 0;
-        ledger.status = ledger.desiredDigest === operation.digest ? operation.kind === 'upsert' ? 'delivered' : 'removed' : 'pending';
+        const acceptedCurrent = ledger.desiredDigest === operation.digest
+          && (operation.kind === 'remove' || ledger.contentDigest === operation.contentDigest);
+        ledger.status = acceptedCurrent ? operation.kind === 'upsert' ? 'delivered' : 'removed' : 'pending';
       }
       ledger.updatedAtMs = runtime.now();
       writeDelivery(runtime, tx, uid, ledger);

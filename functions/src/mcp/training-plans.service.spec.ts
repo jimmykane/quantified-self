@@ -835,7 +835,7 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_training_sync_status', args)).rejects.toMatchObject({ code: 'invalid_request' });
     await expect(f.run('get_planned_workout_completion', { workoutRef })).rejects.toMatchObject({ code: 'invalid_request' });
   });
-  it.each(['delivered', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
+  it.each(['delivered', 'pending', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
       suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-account', associationPlanId: null, updatedAtMs: 1 };

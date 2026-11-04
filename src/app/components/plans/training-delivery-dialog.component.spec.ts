@@ -456,7 +456,7 @@ describe('Training provider delivery controls', () => {
     expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.success).not.toHaveBeenCalled();
   });
-  it.each([false, true])('makes review primary and keeps plan exclusion in a secondary menu, even when paused: %s', async paused => {
+  it.each([false, true])('offers sync refresh and keeps plan exclusion secondary for legacy approvals, even when paused: %s', async paused => {
     service.isReady.mockImplementation(provider => provider === 'suunto' && !paused);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
       status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval' }] }));
@@ -464,15 +464,15 @@ describe('Training provider delivery controls', () => {
       plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const heading = fixture.nativeElement.querySelector('.delivery-provider-settings .delivery-status-label');
-    expect(heading.textContent).toBe('Not sent · Needs review');
+    expect(heading.textContent).toBe('Awaiting sync refresh');
     expect(fixture.nativeElement.textContent).not.toContain('A provider copy exists');
     expect(fixture.nativeElement.querySelectorAll('.delivery-status-label')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('.delivery-provider-settings').textContent).not.toContain('today and the next six days');
     const guidance = fixture.nativeElement.querySelector('#delivery-guidance-details') as HTMLElement;
     expect(guidance.hidden).toBe(true); expect(guidance.textContent).toContain('today and the next six days');
     const review = fixture.nativeElement.querySelector('button[aria-label="Review workout changes for Suunto"]') as HTMLButtonElement | null;
-    expect(!!review).toBe(!paused);
-    if (review) expect(review.hasAttribute('mat-flat-button')).toBe(true);
+    expect(review).toBeNull();
+    if (!paused) expect(fixture.nativeElement.textContent).toContain('Retry workout sync');
     expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).not.toContain('Stop workout sync');
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -492,21 +492,22 @@ describe('Training provider delivery controls', () => {
     fixture.componentInstance.phase.set('saving'); fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('button[aria-label="More Suunto workout sync actions"]') as HTMLButtonElement).disabled).toBe(true);
   });
-  it('reviews real differences without approving them on open, and labels retained copies as updates', async () => {
+  it('keeps legacy mapping warnings visible and offers refresh without a separate approval', async () => {
     service.isReady.mockImplementation(provider => provider === 'suunto');
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto',
       status: 'approval_required', approvalDigest: 'approval', lastAcceptedAtMs: 1000 }] }));
     service.preview.mockResolvedValue({ ...(await service.preview()), approvalDigest: 'approval',
       issues: ['The instruction will be shortened on the watch.'] });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Update needs review');
+    expect(fixture.nativeElement.textContent).toContain('Awaiting sync refresh');
     expect(fixture.nativeElement.textContent).not.toContain('Not sent');
-    fixture.nativeElement.querySelector('button[aria-label="Review workout changes for Suunto"]').click();
+    const retry = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.includes('Retry workout sync')) as HTMLButtonElement;
+    retry.click();
     await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('The instruction will be shortened on the watch');
-    expect(fixture.nativeElement.textContent).toContain('Approve differences');
+    expect(fixture.nativeElement.textContent).not.toContain('Approve differences');
     expect(service.mutate).not.toHaveBeenCalled();
-    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve', approvalDigest: 'approval' }), expect.any(Function));
+    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ action: 'retry' }), expect.any(Function));
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('checks without a preview or consent wizard and distinguishes cloud checking from device availability', async () => {
@@ -1023,7 +1024,7 @@ describe('Training provider delivery controls', () => {
     fixture.componentInstance.cancelReview(); expect(close).toHaveBeenCalledOnce();
     expect(service.mutate).not.toHaveBeenCalled();
   });
-  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('shows %s Generic and device limits before explicit mapping approval', async sport => {
+  it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1)('shows %s Generic and device limits during ordinary Send consent', async sport => {
     service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
     const assessment = assessPlannedWorkoutProviderMappingV1('garmin', { version: 1, sport, nodes: [
       { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] },
@@ -1036,7 +1037,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.textContent).toContain(`Garmin receives ${sport} as a Generic workout`);
     expect(fixture.nativeElement.textContent).toContain('only on some devices');
     expect(fixture.nativeElement.textContent).toContain('native sport tracking and display are not guaranteed');
-    expect(fixture.nativeElement.textContent).toContain('1 workout needs review');
+    expect(fixture.nativeElement.textContent).toContain('No separate mapping approval is needed');
     expect(service.mutate).not.toHaveBeenCalled();
     await component.confirm();
     expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
@@ -1044,15 +1045,15 @@ describe('Training provider delivery controls', () => {
     await component.confirm();
     expect(service.mutate.mock.calls[1][0]).toMatchObject({ action: 'approve', provider: 'garmin', approvalDigest: 'current-generic-digest' });
   });
-  it('does not turn mapping warnings into automatic degradation approval', async () => {
+  it('discloses provider adjustments during Send without requiring a later approval', async () => {
     service.isSetupAvailable.mockImplementation(provider => provider === 'garmin');
     const response = await service.preview(); service.preview.mockClear();
     service.preview.mockResolvedValue({ ...response, warningCount: 1, issues: ['Power target requires review.'], approvalDigest: 'latest-digest' });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
     await component.begin('garmin', 'send'); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('1 workout needs review');
-    expect(fixture.nativeElement.textContent).toContain('review of mapping differences before delivery');
+    expect(fixture.nativeElement.textContent).toContain('No separate mapping approval is needed');
+    expect(fixture.nativeElement.textContent).toContain('apply automatically with sync');
     expect(service.mutate).not.toHaveBeenCalled();
     await component.confirm();
     expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
@@ -1084,7 +1085,7 @@ describe('Training provider delivery controls', () => {
     service.preview.mockResolvedValue({ ...(await service.preview()), warningCount });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     await fixture.componentInstance.begin('garmin', 'send'); fixture.detectChanges();
-    if (warningCount) expect(fixture.nativeElement.textContent).toContain(`${warningCount} ${warningCount === 1 ? 'workout needs' : 'workouts need'} review`);
+    if (warningCount) expect(fixture.nativeElement.textContent).toContain(`${warningCount} ${warningCount === 1 ? 'workout has' : 'workouts have'} provider adjustments`);
     else expect(fixture.nativeElement.textContent).not.toContain('workouts need review');
   });
   it('renders 25 dense history summaries without a panel or repeated attempt/help details per workout', () => {

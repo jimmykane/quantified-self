@@ -133,7 +133,8 @@ function projectVerification(ledger: DeliveryLedgerV1, canInspect: boolean, nowM
 
 export function queuedDeliveryOperation(record: DeliveryLedgerV1): 'upsert' | 'remove' | null {
   if (record.attempt) return record.attempt.kind;
-  if (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest) return 'upsert';
+  if (record.desired === 'present' && (record.acceptedDigest !== record.desiredDigest
+    || record.acceptedContentDigest !== record.contentDigest)) return 'upsert';
   if (record.desired === 'absent' && (record.actual || record.repair)) return 'remove';
   return null;
 }
@@ -147,7 +148,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const intent = resolveDeliveryIntent(context, previous ?? undefined);
   const id = previous?.id ?? deliveryIdentity(uid, provider, destinationKey, workoutId);
   const settingRevision = Math.max(setting?.revision ?? 0, context.override?.revision ?? 0);
-  const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
+  const contentDigest = deliveryContentDigest(context.workout, intent.timeZone, context.strength);
+  const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired
+    || previous.contentDigest !== contentDigest;
   const retried = settingRevision !== previous?.settingsRevision;
   const mappingApprovalProof = intent.mappingApprovalProof ?? previous?.mappingApprovalProof;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: structuredClone(previous.verification) } : {}),
@@ -170,7 +173,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     settingsRevision: settingRevision, desired: intent.desired, status: intent.status, timeZone: intent.timeZone,
     issues: intent.issues, approvalDigest: intent.approvalDigest,
     actual: previous?.actual ?? null, acceptedDigest: previous?.acceptedDigest ?? null,
-    contentDigest: deliveryContentDigest(context.workout, intent.timeZone, context.strength), acceptedContentDigest: previous?.acceptedContentDigest ?? null,
+    contentDigest, acceptedContentDigest: previous?.acceptedContentDigest ?? null,
     attempt: previous?.attempt ?? null, lease: previous?.lease ?? null,
     retries: changed || retried ? 0 : previous.retries,
     retryAtMs: Math.max(changed || retried ? 0 : previous.retryAtMs, previous?.providerNotBeforeMs ?? 0),
@@ -206,7 +209,8 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   }
   if (previous?.status === 'retrying' && !changed && !retried && previous.retryAtMs > runtime.now()) record.status = 'retrying';
   if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
-    && (record.attempt || (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest)
+    && (record.attempt || (record.desired === 'present' && (record.acceptedDigest !== record.desiredDigest
+      || record.acceptedContentDigest !== record.contentDigest))
       || (record.desired === 'absent' && (record.actual || record.repair)))) record.status = 'retrying';
   if (record.desired === 'absent' && !record.actual && !record.repair && !record.attempt
     && record.status !== 'outside_horizon') record.status = 'removed';

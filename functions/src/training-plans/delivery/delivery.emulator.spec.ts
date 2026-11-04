@@ -815,14 +815,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(10);
     expect(new Set(transport.calls.map(call => call.id)).size).toBe(1);
   });
-  it('requires new approval after content changes, retains the old artifact on unsupported updates, and rejects completed deletion', async () => {
+  it('keeps a newer full-content edit pending when a matching payload is accepted during the edit', async () => {
+    // Model a provider whose text limit omits an authored edit from its payload digest.
+    const assessment = transport.assess(workout('w'), account, 'Europe/Helsinki');
+    vi.spyOn(transport, 'assess').mockReturnValue(assessment);
+    const row = await send();
+    transport.afterAccept = async () => {
+      transport.afterAccept = null;
+      await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w')
+        .update({ title: 'Full recipe changed while old payload was in flight' });
+      await mark(); await drain();
+    };
+    await processTrainingDelivery(runtime, uid, row.id);
+    const pending = (await ledgers())[0];
+    expect(pending).toMatchObject({ status: 'pending', desiredDigest: assessment.digest,
+      acceptedDigest: assessment.digest, desiredGeneration: row.desiredGeneration + 1 });
+    expect(pending.acceptedContentDigest).not.toBe(pending.contentDigest);
+    await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    const accepted = (await ledgers())[0];
+    expect(accepted).toMatchObject({ status: 'delivered', acceptedContentDigest: pending.contentDigest });
+    expect(projectDelivery(accepted).differsFromQS).toBe(false);
+    expect(transport.artifacts.size).toBe(1);
+    expect(transport.calls).toHaveLength(2);
+  });
+
+  it('syncs supported edits automatically, retains unsupported copies and protects completed workouts', async () => {
     transport.level = 'degraded'; const ledger = await send();
-    const pending = (await ledgers())[0]; expect(pending.status).toBe('approval_required');
-    await trainingDeliveryCommand(runtime, uid, await currentCommand({ action: 'approve', approvalDigest: pending.approvalDigest! }), false);
+    const pending = (await ledgers())[0]; expect(pending.status).toBe('pending');
+    expect(pending.issues).toContain('Test target mapping warning');
+    expect(pending.approvalDigest).toBeNull();
     await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect(transport.artifacts.size).toBe(1);
     await editSchedule({ kind: 'move-workout', workoutId: 'w', planId: null, localDate: '2026-09-11', confirmPlanRangeExtension: false });
-    await drain(); expect((await ledgers())[0].status).toBe('approval_required');
+    await drain(); expect((await ledgers())[0].status).toBe('pending');
     transport.level = 'unsupported'; await mark(); await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect((await ledgers())[0].status).toBe('unsupported'); expect(transport.calls).toHaveLength(1);
     await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(ledger.id).update({ 'actual.completed': true });
@@ -871,8 +896,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     pro = true; await mark(); await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect(transport.calls[0].workout?.localDate).toBe('2026-09-11');
   });
-  it('holds workouts outside the adapter horizon and automatically admits them on the saved-zone day boundary', async () => {
-    transport.horizonDays = 0;
+  it.each(['exact', 'degraded'] as const)('automatically admits %s workouts on the saved-zone day boundary without weekly approval', async level => {
+    transport.level = level; transport.horizonDays = 0;
     await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w').update({ localDate: '2026-09-11' });
     const ledger = await send(); expect(ledger.status).toBe('outside_horizon');
     expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.nextTimeWakeAtMs)
@@ -882,7 +907,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
       .toBe(Date.parse('2026-09-10T21:00:00Z'));
     now = Date.parse('2026-09-10T21:01:00Z'); await drain();
+    expect((await ledgers())[0]).toMatchObject({ status: 'pending', approvalDigest: null });
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(1);
+    expect((await ledgers())[0].status).toBe('delivered');
   });
 
   it('coalesces real edits to a fixed deadline and fences duplicated, consumed and legacy tasks', async () => {

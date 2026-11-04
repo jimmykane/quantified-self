@@ -83,9 +83,6 @@ export class TrainingDeliveryDialogComponent {
   private readonly dialogTitleElement = viewChild<ElementRef<HTMLHeadingElement>>('dialogTitleElement');
   private readonly providerManageButtons = viewChildren('providerManage', { read: ElementRef<HTMLButtonElement> });
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
-  // Older servers did not distinguish informative limitations from approval-gated losses.
-  readonly mappingApprovalCount = computed(() => this.preview()?.result.approvalRequiredCount
-    ?? this.preview()?.result.warningCount ?? 0);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
   // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
   // and gaps when reconciliation inserts, removes, or transfers records between pages.
@@ -269,8 +266,7 @@ export class TrainingDeliveryDialogComponent {
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
-      approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
-      canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying', 'provider_unavailable'].includes(item.status)),
+      canRetry: statuses.some(item => ['approval_required', 'failed', 'needs_attention', 'retrying', 'provider_unavailable'].includes(item.status)),
       canReplace: provider === 'garmin' && this.data.scope === 'workout' && this.workout()?.lifecycle === 'planned'
         && !this.completions().some(item => item.workoutId === this.data.id && item.planId === this.workout()?.planId)
         && statuses.some(item => item.status === 'needs_attention' && item.issues.includes(GARMIN_WORKOUT_NOT_FOUND_ISSUE)

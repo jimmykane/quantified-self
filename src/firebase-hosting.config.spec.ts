@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
@@ -477,6 +478,7 @@ describe('Firebase Hosting configuration', () => {
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Approved corrections preserve manual Health permissions and link existing account tools.
@@ -556,6 +558,7 @@ describe('Firebase Hosting configuration', () => {
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
