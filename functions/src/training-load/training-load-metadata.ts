@@ -228,7 +228,9 @@ async function finalizeTrainingLoadMetadata(
         leg.policy = await policyAt(db, transaction, uid, leg);
       const activity = activities.find(activity => activity.getID() === leg.activityId);
       if (!activity) continue;
-      if (firstImport && !finalizedKeys.has(key)) {
+      // A newly recovered leg also owns a first import. Never adopt new inputs
+      // for matched legacy legs or an older workout with no saved leg evidence.
+      if ((firstImport || finalizedKeys.size > 0) && !finalizedKeys.has(key)) {
         leg.calibration = { version: 2, weight: null };
         const energy = activity.getStat(DataEnergy.type)?.getValue();
         const mass = activity.getStat(DataWeight.type)?.getValue();

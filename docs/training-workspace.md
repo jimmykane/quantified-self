@@ -7282,6 +7282,8 @@ MET remains `100 × hours × (kcal / (kg × hours) / 10)^2`, labelled estimated;
 The small private per-leg `calibration.version: 2` distinguishes this file-first/frozen-weight behavior. Absence is the
 legacy behavior: existing workouts keep the original CSS-first wrapper and no new FTP/HR/Health fallback. Matched legs,
 duplicate uploads, interrupted imports, resync, reparse and benchmark merges preserve that absence or saved calibration.
+When reparse recovers an additional leg and the prior leg set is known, only that new leg adopts version 2; matched
+legs retain their inputs. Older workouts without saved leg evidence keep compatibility behavior.
 No historical migration or automatic reparse is introduced. Reset removes controls and restores the saved policy,
 not today's defaults. Future-preference copies change method/inclusion only and preserve the current head's thresholds.
 

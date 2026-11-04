@@ -87,6 +87,22 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect(saved.legs!.leg).toMatchObject({ activityId: 'changed-id', policy: { revision: 1, functionalThresholdPower: 200 },
       evaluations: { automatic: { score: 100 }, hr: { score: 100 } } });
   });
+  it('initializes a newly recovered multisport leg without changing a matched legacy leg', async () => {
+    const uid = setup(); await importWorkout(uid, workout());
+    const ref = db.doc(metadataPath(uid)); const previous = (await ref.get()).data() as TrainingLoadMetadata;
+    delete previous.legs!.leg.calibration; await ref.set(previous);
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), functionalThresholdPower: 200 });
+    const event = workout(); const extra = workout('recovered', Date.UTC(2026, 0, 2, 1)).getFirstActivity();
+    extra.type = ActivityTypes.Cycling;
+    const power = extra.createStream(DataPower.type); power.setData(Array(3601).fill(200)); extra.addStream(power);
+    ActivityUtilities.evaluateTrainingStressScore(extra); event.addActivity(extra); event.endDate = extra.endDate;
+    const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration).toBeUndefined();
+    expect(saved.legs!.recovered).toMatchObject({ calibration: { version: 2 },
+      policy: { functionalThresholdPower: 200 }, evaluations: { automatic: { score: 100, method: 'POWER' } } });
+  });
   it('freezes actual prior Health weight and never adopts later edits or adds Weight to recorded data', async () => {
     const uid = setup();
     const weight = db.doc(`users/${uid}/healthSourceRecords/actual-weight`);

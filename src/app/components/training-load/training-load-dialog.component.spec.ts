@@ -51,6 +51,20 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('explains saved FTP and unavailable frozen weight when MET falls back to power', () => {
+    component.activities[0].type = ActivityTypes.Cycling;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 100, method: 'POWER' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Cycling, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Cycling), method: 'MET', functionalThresholdPower: 200 },
+      calibration: { version: 2, weight: { status: 'unavailable', reason: 'conflicting' } }, recordedTss: 9,
+      evaluations: { version: 1, automatic: candidate, hr: { ...candidate, preference: 'HR' },
+        met: { ...candidate, preference: 'MET', reasons: ['missing-met-inputs'] } } } } });
+    expect(component.explanation).toContain('saved FTP fallback');
+    expect(component.reasonText).toContain('saved prior Health weight fallback');
+    expect(component.savedHealthWeightLabel).toContain('conflicted at first import');
+  });
   it('shows saved threshold and prior weight inputs with units without revealing private provenance', () => {
     const leg: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 10 * 86400000, endMs: 10 * 86400000 + 3600000,
       type: 'Walking', duration: 3600, distance: null }, recordedTss: 9, evaluations: null,
@@ -64,6 +78,11 @@ describe('Training load editor', () => {
     component.data.unitSettings = normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds });
     expect(component.savedHealthWeightLabel).toContain('154.3'); expect(component.savedHealthWeightLabel).toContain('lb');
     expect(component.savedHealthWeightLabel).not.toContain('PRIVATE');
+    for (const reason of ['missing', 'conflicting', 'scan-limit'] as const) {
+      leg.calibration!.weight = { status: 'unavailable', reason };
+      expect(component.savedHealthWeightLabel).toContain('Unavailable:');
+      expect(component.savedHealthWeightLabel).not.toContain('PRIVATE');
+    }
     delete leg.calibration;
     expect(component.savedHealthWeightLabel).toBeNull();
   });

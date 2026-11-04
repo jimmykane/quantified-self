@@ -2123,7 +2123,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }).success).toBe(false);
   });
 
-  it('advertises strict schemas and validates every successful tool call', async () => {
+  it('advertises strict schemas within each explicit discovery budget', async () => {
     const dataService = createFixtureDataService();
     const connection = await connectFixtureServer(dataService);
     connections.push(connection);
@@ -2226,118 +2226,59 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       Object.values(DERIVED_METRIC_KINDS).length,
     );
 
-    const ajv = createAjv();
-    const validators = new Map(tools.map(tool => [
-      tool.name,
-      ajv.compile(tool.outputSchema as AnySchema),
-    ]));
-    const trainingValidator = validators.get('get_training_metric')!;
-    expect(trainingValidator({
-      metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
-      updatedAtMs: DAY_MS,
-      sourceEventCount: 0,
-      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
-    })).toBe(false);
+  });
 
-    const healthFixture = await dataService.queryHealthMetric({
-      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
-      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
-    });
-    expect(validators.get('query_health_metric')!({
-      ...healthFixture,
-      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
-    })).toBe(false); // Body composition must not expose otherwise-valid source series.
+  it.each(PUBLIC_MCP_TOOL_NAMES)('validates successful %s output and JSON-text equivalence', async toolName => {
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === toolName)!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: toolName, arguments: successfulToolArguments[toolName] });
+    expect(result.isError, toolName).not.toBe(true);
+    expect(result.structuredContent, toolName).toBeDefined();
+    expect(validator(result.structuredContent), `${toolName}: ${JSON.stringify(validator.errors)}`).toBe(true);
+    const text = result.content.find(content => content.type === 'text');
+    expect(text?.type).toBe('text');
+    if (text?.type === 'text') expect(JSON.parse(text.text)).toEqual(result.structuredContent);
 
-    for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
-      const result = await connection.client.callTool({
-        name: toolName,
-        arguments: successfulToolArguments[toolName],
-      });
-      expect(result.isError, toolName).not.toBe(true);
-      expect(result.structuredContent, toolName).toBeDefined();
-      const validator = validators.get(toolName)!;
-      expect(
-        validator(result.structuredContent),
-        `${toolName}: ${JSON.stringify(validator.errors)}`,
-      ).toBe(true);
-      const text = result.content.find(content => content.type === 'text');
-      expect(text?.type).toBe('text');
-      if (text?.type === 'text') {
-        expect(JSON.parse(text.text)).toEqual(result.structuredContent);
-      }
+    if (toolName === 'get_training_metric') expect(validator({ metricKind: DERIVED_METRIC_KINDS.Form,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION, updatedAtMs: DAY_MS, sourceEventCount: 0,
+      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend] })).toBe(false);
+    if (toolName === 'query_health_metric') {
+      const fixture = await dataService.queryHealthMetric({ uid: 'user-1', metricId: 'heart_rate',
+        startDate: '2026-07-01', endDate: '2026-07-02', mode: 'summaries', maxPoints: 200, measurementsAllowed: false });
+      expect(validator({ ...fixture, metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat') }))
+        .toBe(false); // Body composition cannot expose otherwise-valid source series.
     }
-    expect(dataService.listActivities).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        limit: 1,
-      }),
-    );
-    expect(dataService.queryActivitiesWithTags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        tags: ['Race'],
-        tagMatch: 'all',
-        limit: 1,
-      }),
-    );
-    await connection.client.callTool({
-      name: 'list_activities',
-      arguments: {
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      },
-    });
-    expect(dataService.listActivities).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      }),
-    );
-    expect(dataService.listRoutes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        activityTypes: ['Running'],
-        search: 'ridge',
-      }),
-      undefined, // External calls never receive an internal Assistant family.
-    );
-
-    const distanceChart = await connection.client.callTool({
-      name: 'get_activity_chart_data',
-      arguments: {
-        activityRef: ACTIVITY_REF,
-        metrics: ['heart_rate'],
-        xAxis: 'distance',
-        includeLocation: false,
-      },
-    });
-    expect(distanceChart.structuredContent).toMatchObject({
-      xAxis: 'distance',
-      xAxisUnit: 'meters',
-    });
-
-    for (const metricKind of Object.values(DERIVED_METRIC_KINDS)) {
-      const result = await connection.client.callTool({
-        name: 'get_training_metric',
-        arguments: { metricKind },
-      });
-      expect(result.isError, metricKind).not.toBe(true);
-      expect(
-        validators.get('get_training_metric')!(result.structuredContent),
-        `${metricKind}: ${JSON.stringify(
-          validators.get('get_training_metric')!.errors,
-        )}`,
-      ).toBe(true);
+    if (toolName === 'list_activities') {
+      expect(dataService.listActivities).toHaveBeenCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, activityTypes: ['Running'], limit: 1 }));
+      await connection.client.callTool({ name: toolName,
+        arguments: { relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 } });
+      expect(dataService.listActivities).toHaveBeenLastCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 }));
     }
-  }, 30_000);
+    if (toolName === 'query_activities_with_tags') expect(dataService.queryActivitiesWithTags)
+      .toHaveBeenCalledWith(expect.objectContaining({ startTimeMs: undefined, endTimeMs: undefined,
+        activityTypes: ['Running'], tags: ['Race'], tagMatch: 'all', limit: 1 }));
+    if (toolName === 'list_routes') expect(dataService.listRoutes).toHaveBeenCalledWith(
+      expect.objectContaining({ activityTypes: ['Running'], search: 'ridge' }),
+      undefined); // External calls never receive an internal Assistant family.
+    if (toolName === 'get_activity_chart_data') {
+      const distance = await connection.client.callTool({ name: toolName,
+        arguments: { activityRef: ACTIVITY_REF, metrics: ['heart_rate'], xAxis: 'distance', includeLocation: false } });
+      expect(distance.structuredContent).toMatchObject({ xAxis: 'distance', xAxisUnit: 'meters' });
+    }
+  });
+
+  it.each(Object.values(DERIVED_METRIC_KINDS))('validates the complete %s derived payload', async metricKind => {
+    const connection = await connectFixtureServer(createFixtureDataService()); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === 'get_training_metric')!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: 'get_training_metric', arguments: { metricKind } });
+    expect(result.isError, metricKind).not.toBe(true);
+    expect(validator(result.structuredContent), `${metricKind}: ${JSON.stringify(validator.errors)}`).toBe(true);
+  });
 
   it('rejects private Health ordering fields and arbitrary categorical values at the output boundary', async () => {
     const dataService = createFixtureDataService();
