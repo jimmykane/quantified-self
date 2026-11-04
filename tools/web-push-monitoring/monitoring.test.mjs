@@ -6,6 +6,17 @@ import { buildWebPushMonitoring, OWNER } from './definitions.mjs';
 import { applyWebPushMonitoring } from './cli.mjs';
 const project = 'demo-push-monitoring';
 const channel = `projects/${project}/notificationChannels/123`;
+test('Monitoring alert and chart filters reject Logging-only grouped comparison values', () => {
+  const bundle = buildWebPushMonitoring(project, channel);
+  const filters = [
+    ...bundle.policies.flatMap(policy => policy.conditions.map(condition =>
+      (condition.conditionThreshold ?? condition.conditionAbsent).filter)),
+    ...bundle.dashboard.mosaicLayout.tiles.flatMap(tile =>
+      tile.widget.xyChart.dataSets.map(dataset => dataset.timeSeriesQuery.timeSeriesFilter.filter)),
+  ];
+  // Logging accepts label=("a" OR "b"); Monitoring requires one_of(...) or full comparisons.
+  for (const filter of filters) assert.doesNotMatch(filter, /\b(?:resource|metric)\.[\w.]+\s*=\s*\(/);
+});
 test('scope, low-cardinality outcomes and sustained idle-safe failure policy', () => {
   const b = buildWebPushMonitoring(project, channel);
   assert.equal(b.metrics.length, 8); assert.equal(b.policies.length, 4);
