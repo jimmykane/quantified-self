@@ -66,12 +66,14 @@ For local release builds, configure ADC outside the checkout with
 A normal `gcloud auth login` session alone is not the ADC setup. Do not copy or
 symlink a credential profile into a checkout or set a global anonymous fallback.
 
-### Pending IAM prerequisite: separate approval required
+### IAM prerequisite and approved scope
 
-The Hosting identities' project bindings currently grant Hosting administration
-and service-usage viewing, without Firestore data reads. The code change does
-not apply IAM grants. After explicit approval of these identities and this scope,
-an operator can add the following database-conditioned read-only grants:
+The production and beta Hosting identities have database-conditioned
+`roles/datastore.viewer` grants in addition to their existing Hosting and
+service-usage roles. These two grants were applied on 2026-11-04 after explicit
+approval, and their exact conditions were verified by reading back the project
+policy. Builds do not modify IAM. The following commands document the approved
+configuration:
 
 ```bash
 gcloud projects add-iam-policy-binding quantified-self-io \
@@ -89,12 +91,13 @@ This grants read access across the default database, including private documents
 IAM does not enforce the generator's published-only filter or field allowlist.
 Those filters limit this build's output, not the credential's authority. The
 condition excludes other databases and the role grants no data writes. Review
-that trust boundary before approval. See
+that trust boundary before changing or extending these grants. See
 [Firestore IAM](https://cloud.google.com/firestore/native/docs/security/iam) and
 [per-database conditions](https://cloud.google.com/firestore/native/docs/manage-databases#configure_per-database_access_permissions).
 Allow IAM propagation before verifying a protected build. An HTTP 403 after
 ADC is configured indicates an authorization prerequisite, not permission to
-weaken App Check or Security Rules.
+weaken App Check or Security Rules. Do not invoke a Hosting deployment workflow
+merely to test this access without separate deployment approval.
 
 ## Server rendering and browser behavior
 
