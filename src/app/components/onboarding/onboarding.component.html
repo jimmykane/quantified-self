@@ -1,5 +1,5 @@
 <main class="qs-workspace-page field-guide-page" aria-labelledby="field-guide-title">
-    <mat-card appearance="outlined" class="field-guide" [class.field-guide--intro]="stage() === 'intro'"
+    <mat-card appearance="outlined" class="field-guide qs-glass-card-panel" [class.field-guide--intro]="stage() === 'intro'"
         [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
         <aside class="field-guide-hero" aria-label="A runner on a mountain trail">
             <img class="hero-image" src="assets/onboarding/field-guide.jpg" alt="" width="1024" height="1536" fetchpriority="high">
@@ -27,7 +27,7 @@
                     <p class="lead">{{ chapter().description }}</p>
                     <ul class="chapter-points">
                         @for (point of chapter().points; track point.title) {
-                            <li><mat-icon aria-hidden="true">{{ point.icon }}</mat-icon><div><h2>{{ point.title }}</h2><p>{{ point.description }}</p></div></li>
+                            <li><span class="chapter-icon"><mat-icon aria-hidden="true">{{ point.icon }}</mat-icon></span><div><h2>{{ point.title }}</h2><p>{{ point.description }}</p></div></li>
                         }
                     </ul>
                     <div class="intro-progress" role="status" [attr.aria-label]="'Introduction ' + (chapterIndex() + 1) + ' of ' + chapters.length">
@@ -38,7 +38,7 @@
                     </div>
                     <div class="onboarding-actions intro-actions">
                         @if (chapterIndex() > 0) { <button mat-button type="button" (click)="previousChapter()">Back</button> }
-                        <button mat-flat-button type="button" class="next-action" (click)="nextChapter()">{{ chapterIndex() === chapters.length - 1 ? 'Find my starting point' : 'Next' }} <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                        <button mat-flat-button type="button" class="next-action qs-mat-primary" (click)="nextChapter()">{{ chapterIndex() === chapters.length - 1 ? 'Find my starting point' : 'Next' }} <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                     </div>
                 </section>
             } @else {
@@ -67,7 +67,7 @@
                             </mat-radio-group>
                             <div class="onboarding-actions">
                                 <button mat-button type="button" (click)="back()">Back</button>
-                                <button mat-flat-button type="button" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                                <button mat-flat-button type="button" class="qs-mat-primary" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                             </div>
                         }
                         @case ('privacy') {
@@ -79,7 +79,7 @@
                                         <section class="policy-item">
                                             <h2>{{ policy.title }} <span class="policy-requirement">{{ policy.isOptional ? 'Optional' : 'Required' }}</span></h2>
                                             @if (policy.subtitle) { <p class="policy-subtitle">{{ policy.subtitle }}</p> }
-                                            <mat-checkbox [required]="!policy.isOptional" [formControlName]="policy.formControlName" (change)="onPolicyCheckboxChange(policy.id, $event.checked)">{{ policy.checkboxLabel }}</mat-checkbox>
+                                            <mat-checkbox class="qs-checkbox-primary" [required]="!policy.isOptional" [formControlName]="policy.formControlName" (change)="onPolicyCheckboxChange(policy.id, $event.checked)">{{ policy.checkboxLabel }}</mat-checkbox>
                                             <button mat-button type="button" class="policy-read-more" [attr.aria-expanded]="expandedPolicyId === policy.id" [attr.aria-controls]="'policy-details-' + policy.id" (click)="togglePolicyDetails(policy.id)">{{ expandedPolicyId === policy.id ? 'Hide details' : 'Read more' }}</button>
                                             <div class="policy-details" [id]="'policy-details-' + policy.id" [hidden]="expandedPolicyId !== policy.id">
                                                 @for (item of policy.content; track $index) { <div [innerHTML]="item"></div> }
@@ -91,7 +91,7 @@
                                 <p class="setup-note">You can change optional analytics and marketing choices in Settings.</p>
                                 <div class="onboarding-actions">
                                     <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
-                                    <button mat-flat-button type="submit" [disabled]="!termsFormGroup.valid || isLoading || !user">
+                                    <button mat-flat-button type="submit" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading || !user">
                                         <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : 'Save and continue' }}</span></span>
                                     </button>
                                 </div>
@@ -104,7 +104,7 @@
                                 (loadingStateChange)="onPricingLoadingChange($event)" (planSelected)="onPlanSelected()"></app-pricing>
                             <div class="onboarding-actions">
                                 <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="back()">Back</button>
-                                <button mat-flat-button type="button" [disabled]="isLoading || isPricingLoading || !user" (click)="finishOnboarding()">
+                                <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading || isPricingLoading || !user" (click)="finishOnboarding()">
                                     <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Finishing setup…' : 'Continue to ' + completionLabel }}</span></span>
                                 </button>
                             </div>
