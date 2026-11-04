@@ -2618,7 +2618,8 @@ alert condition or deployed resource changes. Existing sanitized persistence and
 
 Garmin power averaging uses the explicit recipe field `garminPowerAveragingSeconds` (3, 10 or 30), mapped to the
 Training API's corresponding `POWER_3S`/`POWER_10S`/`POWER_30S` primary or supported secondary target type. Default
-keeps the historical artifact/digest. Other services reject the choice rather than silently dropping it. The existing
+keeps the historical artifact/digest. Other services reject the choice rather than silently dropping it. Daily model
+capability guidance probes the selected window; a format-only retry cannot discard it to fit another service. The existing
 Training Delivery monitoring, consent, revision, retry and uncertain-create boundaries are unchanged; actual watch
 execution is unverified. See [Training](training-workspace.md#garmin-execution-power-averaging) for authoring,
 generation, legacy MCP handling and release sequencing. Suunto native sport-mode 10/30-second display fields are

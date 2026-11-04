@@ -1,5 +1,5 @@
 import type { DayWorkoutControls } from '../../../shared/day-workout';
-import { WORKOUT_STRUCTURE_MAX_NODES, WORKOUT_STRUCTURE_MAX_REPEAT_COUNT, WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP,
+import { hasGarminPowerAveragingV1, WORKOUT_STRUCTURE_MAX_NODES, WORKOUT_STRUCTURE_MAX_REPEAT_COUNT, WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP,
   type WorkoutEndingV1, type WorkoutStructureV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
@@ -30,10 +30,12 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
     }
   };
   const probe = (ending: WorkoutEndingV1, target?: WorkoutTargetV1) => {
+    const executionTarget = target?.kind === 'power' && controls.garminPowerAveragingSeconds !== undefined
+      ? { ...target, garminPowerAveragingSeconds: controls.garminPowerAveragingSeconds } : target;
     const strength: StrengthWorkoutDetailsV1 | null = strengthSport ? { version: 1, workoutId: 'capability-probe', revision: 1,
       exercises: [{ id: 'probe', name: 'Plank', sets: [{ id: 'set', ending: ending as { kind: 'time'; seconds: number } | { kind: 'repetitions'; repetitions: number } }] }] } : null;
     const structure: WorkoutStructureV1 = strength ? projectStrengthWorkoutToV1(strength, controls.sport)
-      : { version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'probe', purpose: 'work', ending, targets: target ? [target] : [] }] };
+      : { version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'probe', purpose: 'work', ending, targets: executionTarget ? [executionTarget] : [] }] };
     return { structure, strength };
   };
   const endings: WorkoutEndingV1[] = strengthSport ? [{ kind: 'time', seconds: 60 }, { kind: 'repetitions', repetitions: 8 }]
@@ -75,8 +77,9 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
     evidence: { kind: 'local-recipe-capabilities', providers: guidance, commonExactEndings,
       notice: 'These are local format checks, not proof of provider availability, connection, successful sending or watch receipt. Keep the selected sport, purpose, equipment, recovery decision and explicit targets. Disclosed limitations with requiresReview:false are informational; do not change the prescription merely to make their level exact.' },
     correction(suggestion: ValidatedDaySuggestion): string | null {
-      // A mapping-only retry must not discard an explicit target or chase an impossible native sport/profile.
-      if (!commonExactEndings.length || !['auto', 'none'].includes(controls.target) || suggestion.previousLoads.length > 0) return null;
+      // A mapping-only retry must not discard explicit targets/averaging or chase an impossible native sport/profile.
+      if (!commonExactEndings.length || !['auto', 'none'].includes(controls.target) || suggestion.previousLoads.length > 0
+        || (suggestion.draft && hasGarminPowerAveragingV1(suggestion.draft.structure))) return null;
       const issues = assessments(suggestion).filter(needsReview);
       return issues.length ? 'Prefer a locally exact recipe for the selected delivery providers, using evidence.deliveryProviders. '
         + issues.map(result => `${result.label}: ${result.level}`).join('; ')

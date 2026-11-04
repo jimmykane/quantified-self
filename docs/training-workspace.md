@@ -5262,6 +5262,10 @@ legacy fingerprints. Server validation first checks the complete model prescript
 and then decorates only existing power targets with the selected window. No watt reference/target is inferred and
 rest/targetless advice is unchanged. Routine sport selection preserves a power-capable saved sport when the selected
 window would otherwise be lost. The choice grants no provider delivery consent.
+Local daily-provider capability probes apply the selected window to power targets, including symbolic Garmin zones.
+Model-facing capability guidance marks incompatible services before generation; a mapping-only retry cannot remove
+a prescribed explicit window to fit that service, including when the general target preference is Auto. Targetless
+recipes retain the existing format-correction behavior.
 
 Garmin Training API V2 (partner reference 1.0, 26 May 2025), pages 11–12, lists `POWER_3S`, `POWER_10S` and
 `POWER_30S` for primary and secondary targets. The serializer selects that type while leaving zone/range/value-type
@@ -5331,6 +5335,8 @@ old detail reads and full replacements fail with latest-tool guidance instead of
 the distinct before/after zone numbers used, unknown watts and explicit removal; this compact set is not a substitute
 for the full recipe's per-step assignments. Assistant remains prepare-only: scheduled changes show complete app-owned
 before/after recipes, while saved-library proposals use their existing compact review and full-recipe read-back.
+When the selected current scheduled or saved-recipe preview is absent from the Assistant catalog, no alternative
+preview is exposed to the model. Legacy creation/editing tools cannot substitute for a missing complete-recipe editor.
 Private power profiles and provider credentials remain excluded. Shared instructions and bundled Training/cross-domain
 skills distinguish symbolic zones from fixed prescriptions. Backend release and registered-client refresh/rescan are
 separate approved operations; no baseline/history promotion is performed by implementation.
