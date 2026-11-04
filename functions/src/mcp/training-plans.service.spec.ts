@@ -1,3 +1,4 @@
+import { parseWorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
@@ -402,6 +403,23 @@ describe('Training plan MCP reads', () => {
         code: issue.code, field: issue.path, message: issue.message })) };
     }));
     expect(JSON.stringify(f.structures.w1)).toBe(before);
+  });
+
+
+  it.each(['functional-threshold-power', 'critical-power'] as const)('reads generated %s snapshots without exposing private power settings', async kind => {
+    const f = fixture();
+    const profile = parseWorkoutPowerProfileV1({ sport: ActivityTypes.Running, provider: 'suunto', source: 'Private source label',
+      reference: { kind, watts: 250 }, referenceDate: '2026-11-01', zoneUpperBoundsWatts: [150, 200] });
+    const target = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: profile.reference };
+    f.structures.w1 = { version: 1, sport: profile.sport, nodes: [{ kind: 'step', id: 'power', purpose: 'work',
+      ending: { kind: 'time', seconds: 600 }, targets: [target] }] };
+    f.collections.config = { settings: { workoutPower: { version: 1, revision: 1, profiles: [profile] } } };
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(result.workout.structure.nodes[0]).toMatchObject({ targets: [target] });
+      expect(JSON.stringify(result)).not.toMatch(/Private source label|suunto|zoneUpperBoundsWatts|referenceDate|workoutPower/);
+    }
   });
 
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(

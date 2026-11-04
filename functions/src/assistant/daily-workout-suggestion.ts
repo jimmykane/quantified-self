@@ -215,7 +215,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       if (providerContext) evidence.missingContext.push(...providerContext.limitations(suggestion));
       await assertActive();
       result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
-        usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+        usedContext: evidence.usedContext, missingContext: evidence.missingContext,
+        ...(suggestion.kind === 'workout' && evidence.powerReference ? { powerReference: evidence.powerReference } : {}) };
     }
     await dependencies.store.finish(uid, date, token, 'ready', controls, result);
     outcome = 'ready';

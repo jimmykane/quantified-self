@@ -72,7 +72,7 @@
           <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
         }
       </div>
-      @if (!strength()) { <p class="hint">Targets need saved athlete references. Strict timing includes all steps.</p> }
+      @if (!strength()) { <p class="hint">Power targets use the saved source for this sport in Settings → Workout power. Other targets need saved athlete references. Strict timing includes all steps.</p> }
     </div>
   </fieldset>
   @if (data.mode !== 'preferences') {
@@ -94,6 +94,11 @@
   @if (result(); as result) {
     <section class="review" [attr.aria-label]="result.kind === 'rest' ? 'Rest day review' : 'Workout review'" aria-live="polite">
       <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? (declaredRestDay() ? 'Rest day' : 'Rest suggestion') }}</h3><p>{{ result.rationale }}</p>
+      @if (powerReview(); as power) {
+        <h4 class="section-title">Power reference</h4><p>{{ power.summary }}</p>
+        @if (power.zones.length) { <ul>@for (zone of power.zones; track $index) { <li>{{ zone }}</li> }</ul> }
+        <p class="hint">Manually confirmed source at generation time. Sending does not convert between devices or services. Saved target values stay fixed.</p>
+      }
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.timingDetails) { <p class="hint">{{ review.timingDetails }}</p> }
         @for (exercise of review.exercises; track exercise.id) {

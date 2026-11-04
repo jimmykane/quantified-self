@@ -17,6 +17,12 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains source-aware planning references and immutable generated prescriptions', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references',
+      'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
+      'does not rewrite saved workouts', 'watch power smoothing is unchanged', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
+  });
   it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',

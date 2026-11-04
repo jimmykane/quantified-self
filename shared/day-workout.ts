@@ -1,3 +1,4 @@
+import type { WorkoutPowerProfileV1 } from './workout-power-settings';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, type WorkoutStructureV1 } from './planned-workout';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, isStrengthWorkoutSportV1, type StrengthWorkoutDraftV1 } from './strength-workout';
@@ -53,6 +54,8 @@ export interface DayWorkoutDraft {
   estimatedMinutes?: { minimum: number; maximum: number };
 }
 export interface GenerateDayWorkoutResponse {
+  /** Immutable first-party review snapshot; never a canonical workout field or public MCP grant. */
+  powerReference?: WorkoutPowerProfileV1;
   requestId: string;
   observedAt: string;
   kind: 'workout' | 'rest';

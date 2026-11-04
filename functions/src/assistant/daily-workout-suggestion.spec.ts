@@ -61,6 +61,27 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('resolves power after routine sport selection and retains the original source after settings change', async () => {
+    const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
+    const powerReference = { sport: ActivityTypes.Cycling, provider: 'garmin' as const, source: 'Bike power meter',
+      reference: { kind: 'functional-threshold-power' as const, watts: 240 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    deps.selectSport.mockResolvedValue(controls);
+    deps.context.mockImplementation(async (_uid, request) => {
+      expect(request.controls.sport).toBe(ActivityTypes.Cycling);
+      return { ...evidence(), powerReference, references: [{ kind: 'power', mode: 'relative' as const,
+        minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] };
+    });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy ride', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result.result).toMatchObject({ kind: 'workout', powerReference });
+    deps.context.mockResolvedValue(evidence());
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+
   it('prepares event guidance once, without a workout or provider context, and replays it after goal edits', async () => {
     const deps = dependencies();
     deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 4, eventGoals: [{ name: 'Marathon', localDate: dailyControls.localDate }] });

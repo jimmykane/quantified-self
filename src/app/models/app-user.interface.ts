@@ -1,3 +1,4 @@
+import type { WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
 import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
   User,
@@ -303,6 +304,7 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
+    workoutPower?: WorkoutPowerSettingsV1;
     suuntoSwimmingGuide?: SuuntoSwimmingGuideSettings;
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;

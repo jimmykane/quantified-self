@@ -345,6 +345,7 @@ describe('Firebase Hosting configuration', () => {
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
@@ -475,6 +476,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
@@ -549,6 +551,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');

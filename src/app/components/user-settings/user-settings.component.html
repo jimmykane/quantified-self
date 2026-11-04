@@ -36,7 +36,7 @@
         <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
         @let sectionTemplates = {
-          dashboard: dashboardSettings, training: trainingLoadSettings,
+          dashboard: dashboardSettings, training: trainingLoadSettings, 'workout-power': workoutPowerSettings,
           map: mapSettings, charts: chartSettings, units: unitSettings,
           notifications: notificationSettings, privacy: privacySettings, account: profileSettings, 'data-management': dataManagementSettings
         };
@@ -115,6 +115,14 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'training') {
               <app-training-load-settings [uid]="user.uid"></app-training-load-settings>
+            }
+          </div>
+        </ng-template>
+
+        <ng-template #workoutPowerSettings>
+          <div class="settings-panel-body">
+            @defer (when activeSection === 'workout-power') {
+              <app-workout-power-settings [uid]="user.uid"></app-workout-power-settings>
             }
           </div>
         </ng-template>

@@ -1,3 +1,4 @@
+import type { WorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { DataFeeling, DataRPE } from '@sports-alliance/sports-lib';
@@ -27,6 +28,7 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  powerReference?: WorkoutPowerProfileV1;
   goalsRevision?: number;
   eventGoals?: Array<{ name: string; localDate: string }>;
   adviceOnly?: boolean;

@@ -2303,6 +2303,23 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('allows private planning power references while preserving metric settings and denying foreign writes', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const foreign = testEnv.authenticatedContext('foreign-power-owner').firestore();
+                const path = `users/${userId}/config/settings`;
+                const trainingSettings = { visibleDisciplines: ['running'] };
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ trainingSettings, theme: 'dark' });
+                });
+                const workoutPower = { version: 1, revision: 1, profiles: [{ sport: 'Running', provider: 'suunto', source: 'Watch power',
+                    reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-11-01', zoneUpperBoundsWatts: [150, 200] }] };
+                await assertSucceeds(owner.doc(path).set({ workoutPower }, { merge: true }));
+                expect((await owner.doc(path).get()).data()).toEqual({ trainingSettings, theme: 'dark', workoutPower });
+                await assertFails(foreign.doc(path).get());
+                await assertFails(foreign.doc(path).set({ workoutPower }, { merge: true }));
+                await assertFails(owner.doc(path).update({ trainingSettings: {} }));
+            });
+
             it('should require validated callables for training settings while allowing other settings updates', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 const settingsRef = db.collection('users').doc(userId).collection('config').doc('settings');

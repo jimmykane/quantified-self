@@ -42,6 +42,24 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('returns the original confirmed source snapshot and replays it without rereading changed settings', async () => {
+    const deps = dependencies();
+    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [],
+      powerReference, references: [{ kind: 'power', mode: 'relative', minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Power run', rationale: 'Use the confirmed reference.',
+      structure: { version: 1, sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.powerReference).toEqual(powerReference);
+    expect(JSON.stringify(result.draft)).not.toContain('suunto');
+    vi.mocked(deps.store.begin).mockResolvedValueOnce({ response: structuredClone(result) });
+    vi.mocked(deps.context).mockRejectedValue(Error('Settings changed'));
+    expect(await runGenerateDayWorkout(request, auth, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+
   it('dispatches the first-party daily-suggestion mode through the existing callable', async () => {
     const input = { mode: 'daily-suggestion', action: 'status' };
     const status = { localDate: '2026-10-28', state: 'waiting' as const };

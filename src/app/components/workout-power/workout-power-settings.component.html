@@ -1,0 +1,36 @@
+<p>Choose the power source you will use for each sport. Enter its FTP or critical power and, optionally, your zone boundaries. Values are manually confirmed; they are not fetched from the service.</p>
+<p>New generated workouts use this sport’s saved source. Saved workouts, today’s prepared suggestion and Training load calculations keep their existing values. Sending to another service does not convert power between sources.</p>
+@if (busy() && !head()) { <p role="status">Loading power settings…</p> }
+@if (message()) { <p [attr.role]="failed() ? 'alert' : 'status'">{{ message() }}</p> }
+@if (!head() && !busy()) { <button mat-button type="button" (click)="load(true)">Reload power settings</button> }
+@if (head()) {
+  <app-activity-filter-picker label="Sport" allLabel="Choose sport" searchLabel="Search sports" [multiple]="false"
+    [options]="sports" [selectedValues]="[sport()]" [disabled]="busy() || form.dirty" (selectionChange)="selectSport($event)" />
+  @if (form.dirty) { <p>Save or discard your changes before switching sport.</p> }
+  @if (selectedProfile(); as profile) {
+    <p>{{ summary(profile) }}</p>
+    @if (zones(profile).length) { <ul>@for (zone of zones(profile); track $index) { <li>{{ zone }}</li> }</ul> }
+  }
+  <fieldset [formGroup]="form" [disabled]="busy()" class="power-fields">
+    <legend>Power reference for {{ sport() }}</legend>
+    <mat-form-field appearance="outline"><mat-label>Service / ecosystem</mat-label><mat-select formControlName="provider" (selectionChange)="selection()">
+      @for (provider of providers; track provider) { <mat-option [value]="provider">{{ providerLabels[provider] }}</mat-option> }
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Watch or power source</mat-label><input matInput formControlName="source" maxlength="80" placeholder="e.g. watch running power or bike power meter"></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Reference type</mat-label><mat-select formControlName="kind" (selectionChange)="selection()">
+      <mat-option value="functional-threshold-power">Functional threshold power (FTP)</mat-option><mat-option value="critical-power">Critical power (CP)</mat-option>
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Reference power</mat-label><input matInput type="number" min="0" step="any" max="3000" formControlName="watts"><span matTextSuffix>{{ powerUnit() }}</span></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Reference date</mat-label><input matInput type="date" [max]="today" formControlName="referenceDate"></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Zone upper bounds (optional)</mat-label><input matInput formControlName="zones" maxlength="140" placeholder="150, 200, 250, 300"><span matTextSuffix>{{ powerUnit() }}</span>
+      <mat-hint>Increasing, comma-separated boundaries. Z1 starts at zero; each upper bound is exclusive. The final zone has no upper limit.</mat-hint>
+    </mat-form-field>
+  </fieldset>
+  @if (form.dirty && draftError(); as error) { <p role="alert">{{ error }}</p> }
+  <div class="power-actions">
+    <button mat-flat-button type="button" [disabled]="busy() || !form.dirty || !valid()" (click)="save()">Save power reference</button>
+    @if (form.dirty) { <button mat-button type="button" [disabled]="busy()" (click)="discard()">Discard changes</button> }
+    @if (selectedProfile()) { <button mat-button type="button" [disabled]="busy() || form.dirty" (click)="save(true)">Remove reference</button> }
+    @if (failed()) { <button mat-button type="button" [disabled]="busy()" (click)="load(true)">Reload power settings</button> }
+  </div>
+}

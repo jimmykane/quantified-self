@@ -133,6 +133,25 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+
+  it('reviews the generation-time power source rather than current settings', async () => {
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
+    const component = fixture.componentInstance;
+    const draft = response('source-review');
+    draft.powerReference = { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
+      reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    component.controls.set(defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.Running));
+    draft.draft = { title: 'Easy power run', structure: { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: draft.powerReference.reference }] }] } };
+    draft.previousLoads = []; draft.usedContext = ['Manually confirmed power reference for the selected sport']; draft.missingContext = [];
+    component.result.set(draft); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Suunto · Watch running power · Critical power 250 watt');
+    expect(fixture.nativeElement.textContent).toContain('Reference date 2026-10-25');
+    expect(fixture.nativeElement.textContent).toContain('Z2: 150 watt to below 200 watt');
+    expect(fixture.nativeElement.textContent).toContain('Saved target values stay fixed');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'power-source-review');
+  });
   it('explains a standalone calendar rest day and keeps the rest result without another generation', async () => {
     TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => of({ schemaVersion: 1, localDate: '2026-10-28', isRestDay: true, revision: 1 });
     const fixture = await render(); const component = fixture.componentInstance;

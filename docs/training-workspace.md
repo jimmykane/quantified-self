@@ -958,6 +958,51 @@ schema migration is needed. For local development, the Functions emulator must l
 Use the initial build and ongoing `build:watch` workflow in README and `.agent/workflows/start-emulators.md`.
 This local build workflow changes no MCP contract or authorization policy.
 
+#### Source-aware power references for workout generation
+
+Private owner settings at `users/{uid}/config/settings.workoutPower` hold version 1, an optimistic revision,
+and at most 20 exact-sport profiles. Each sport has one chosen service/ecosystem, a manually confirmed device/power-source
+label, FTP or critical-power watts, a reference date and optional increasing watt zone boundaries. `shared/workout-power-settings.ts`
+is the bounded allowlist shared by Settings and generation. Boundaries are exclusive upper bounds; Z1 starts at zero and
+the final zone is open-ended. There is no provider fetch, auto-calibration, source conversion, live zone-linked target,
+watch smoothing change, or dependency on recorded-metric/TSS/durability settings.
+
+Settings → Workout power is an independent lazy section with its own Save. Fresh Lite reads distinguish an absent branch
+from offline/invalid data. An owner/session-fenced SDK transaction compares the complete canonical previous head, supports
+an exact already-committed retry, increments revision and narrowly merges only `workoutPower`; unrelated settings remain
+untouched. Generic full-profile/settings saves strip `workoutPower` to avoid replaying a stale revision outside this writer.
+Current `/config/settings` owner/account-deletion rules apply unchanged. User-authored planning references do
+not gain server authority: generation revalidates the entire branch, exact sport and non-future reference date. Malformed
+or unreadable settings never become a zero-revision write or an inferred threshold. Dirty drafts survive failed saves;
+explicit reload is available for conflicts. Sign-out/account changes suppress late UI outcomes.
+
+Both manual day generation and included Pro daily suggestions resolve power after the final sport selection, separately
+from optional Training-plan context. Only `auto`/`power` targets read settings. Nearby recipes cannot identify a current
+source, so their power references are withheld; other reference kinds retain existing behavior. A confirmed matching
+profile supplies the sole allowed power reference and optional authored zone guidance to the model. The existing strict
+validator accepts only relative targets matching its exact reference kind and watts. Missing, future-dated, malformed or
+unavailable settings yield effort guidance without inferred power targets, never another sport/device reference.
+
+The first-party result stores an immutable `powerReference` review snapshot alongside the generated result. Original
+request replay and daily-ready caches retain that snapshot after settings edits. Profile changes do not regenerate or
+charge again, rewrite existing prescriptions or retarget already saved workouts. Canonical v1 recipes continue to store
+only percentage ranges and the reference kind/watts; private provider/device/date/zone metadata is not persisted in the
+recipe. Existing Garmin/Suunto mapping warnings and fixed-watt export remain unchanged. Source ecosystem and delivery
+provider are independent; sending must not silently select a different threshold.
+
+MCP impact: no public tool, schema, scope, consent, instruction digest or bundled plugin change. Existing planned-workout
+reads already expose the exact canonical relative target snapshot, covered for FTP and CP by read-back tests in this change.
+Private profile settings and first-party result provenance remain outside public MCP and general Assistant plan-chat
+context. No new mutation or settings-access authority is inferred from Training read/write consent. The profile branch
+is under the existing recursively deleted user root. No migration, reparse, derived schema bump or deployment is needed
+for stored data. Feature runtime changes require the normal separately authorized frontend/Functions deployment.
+
+Verification covers codec bounds/unknown keys, missing/unreadable/future/wrong-sport references, strict generation
+validation, manual and routine-selected daily result replay, owner/session changes, concurrent settings and exact retry,
+canonical display, real Material template bindings, haptics, help and MCP read-back. Pure display specs run in helpers-node;
+Angular service/component specs have concrete environment reasons. Browser layout checks use synthetic data only.
+
+
 ### Remembered Plans view
 
 The Plans/Standalone selector saves the last explicit choice in the owner settings document at
