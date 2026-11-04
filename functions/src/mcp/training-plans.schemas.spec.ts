@@ -67,6 +67,7 @@ const targetVariantFixtures = {
   'heart-rate:absolute': { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 },
   'heart-rate:relative': { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
     reference: { kind: 'max-heart-rate', bpm: 180 } },
+  'power:garmin-zone': { kind: 'power', mode: 'garmin-zone', zone: 2 },
   'power:absolute': { kind: 'power', mode: 'absolute', minimumWatts: 0, maximumWatts: 150 },
   'power:relative': { kind: 'power', mode: 'relative', minimumPercent: 0, maximumPercent: 80,
     reference: { kind: 'critical-power', watts: 250 } },
@@ -101,6 +102,15 @@ const speedPresentationFixtures = {
 
 function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
   const serialized = JSON.parse(JSON.stringify(input));
+  if (input.nodes.some(node => (node.kind === 'step' ? [node] : node.steps).some(step => step.targets.some(target => target.mode === 'garmin-zone')))) {
+    expect(TRAINING_READ_OUTPUTS.get_planned_workout_v4.parse({ scheduleRevision: 3, workout: {
+      workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-09-18', lifecycle: 'planned',
+      revision: 2, createdAtMs: 1, updatedAtMs: 2, structure: serialized, displaySteps: [] } }).workout.structure).toEqual(input);
+    expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v4_changes.parse({ expectedScheduleRevision: 3,
+      changes: [{ kind: 'create-workout', localKey: 'workout', plan: null, localDate: '2026-09-18', title: 'Workout', structure: serialized }] }).changes[0]).toMatchObject({ structure: input });
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(serialized).success).toBe(false);
+    return;
+  }
   const read = TRAINING_READ_OUTPUTS.get_planned_workout.parse({
     scheduleRevision: 3,
     workout: {
@@ -245,7 +255,7 @@ describe('Strict public Training recipe v1', () => {
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
     'preserves %s canonical recipes through public read/write validation without watch fields', sport => {
       for (const ending of [endingFixtures.time, endingFixtures.distance, endingFixtures.manual]) {
-        for (const targets of [[], ...Object.values(targetVariantFixtures).map(target => [target]),
+        for (const targets of [[], ...Object.values(targetVariantFixtures).filter(target => target.mode !== 'garmin-zone').map(target => [target]),
           [targetVariantFixtures['heart-rate:absolute'], targetVariantFixtures['power:absolute']]]) {
           const input = { ...recipe(ending, targets), sport };
           expectPublicReadWriteRoundTrip(input);
@@ -269,7 +279,7 @@ describe('Strict public Training recipe v1', () => {
     expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.version).toBe(1);
     expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.stepPurposes)).toEqual([...WORKOUT_STEP_PURPOSES]);
     expect(Object.keys(endingFixtures)).toEqual([...WORKOUT_ENDING_KINDS]);
-    expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative']);
+    expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative', 'garmin-zone']);
     expect([...new Set(Object.values(targetVariantFixtures).map(target => target.kind))]).toEqual([...WORKOUT_TARGET_KINDS]);
     expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.additiveStructureFields).toEqual({ poolLength: true });
   });
@@ -280,7 +290,16 @@ describe('Strict public Training recipe v1', () => {
 
   it.each(Object.entries(targetVariantFixtures))('round-trips shared target variant %s through public reads and writes', (_variant, target) => {
     const input = recipe({ kind:'manual' }, [target]);
-    expectPublicReadWriteRoundTrip(input);
+    if (target.mode === 'garmin-zone') {
+      const scheduled = TRAINING_WRITE_INPUTS.preview_planned_workout_v4_change.parse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'native', plan: null, localDate: '2026-11-04', title: 'Zone', structure: JSON.parse(JSON.stringify(input)) } });
+      expect(scheduled.change).toMatchObject({ structure: input });
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v4_changes.parse({ expectedScheduleRevision: 1, changes: [scheduled.change] }).changes).toEqual([scheduled.change]);
+      expect(TRAINING_WRITE_INPUTS.preview_saved_workout_v3_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+        change: { kind: 'create', title: 'Zone', structure: input } }).change).toMatchObject({ structure: input });
+      expect(TRAINING_RECIPE_SCHEMA.safeParse(input).success).toBe(false);
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.safeParse(scheduled).success).toBe(false);
+    } else expectPublicReadWriteRoundTrip(input);
     expect(TRAINING_RECIPE_SCHEMA.safeParse(recipe({kind:'manual'},[{...target,remoteId:'PRIVATE'}])).success).toBe(false);
   });
 
@@ -532,15 +551,15 @@ describe('additive early Lap recipe contract', () => {
 
 describe('complete manual target editor coverage', () => {
   it.each(Object.entries(targetVariantFixtures))('round-trips precise ordered pairs containing %s through scheduled/library reads and proposals', (_, fixture) => {
-    const target = JSON.parse(JSON.stringify(fixture), (key, value) => typeof value === 'number' ? value + 0.1234567890123 : value);
+    const target = JSON.parse(JSON.stringify(fixture), (key, value) => typeof value === 'number' && key !== 'zone' ? value + 0.1234567890123 : value);
     const companion = fixture.kind === 'power' ? targetReferenceFixtures['heart-rate:threshold-heart-rate'] : targetReferenceFixtures['power:functional-threshold-power'];
     const input = recipe({ kind: 'time', seconds: 61.1234567890123 }, [target, { ...companion, minimumPercent: 0, maximumPercent: 130.123456789 }]);
     input.nodes = [{ kind: 'repeat', id: 'repeat', count: 3, steps: [input.nodes[0] as Extract<WorkoutStructureV1['nodes'][number], { kind: 'step' }>] }];
     expectPublicReadWriteRoundTrip(input);
-    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 1, savedWorkout: {
+    expect((fixture.mode === 'garmin-zone' ? TRAINING_READ_OUTPUTS.get_saved_workout_v3 : TRAINING_READ_OUTPUTS.get_saved_workout).parse({ libraryRevision: 1, savedWorkout: {
       savedWorkoutRef: 'opaque-library', title: 'Mixed targets', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: input,
     } }).savedWorkout.structure).toEqual(input);
-    expect(TRAINING_WRITE_INPUTS.preview_saved_workout_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    expect((fixture.mode === 'garmin-zone' ? TRAINING_WRITE_INPUTS.preview_saved_workout_v3_change : TRAINING_WRITE_INPUTS.preview_saved_workout_change).parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
       change: { kind: 'create', title: 'Mixed targets', structure: input } }).change).toMatchObject({ structure: input });
     const step = input.nodes[0].kind === 'repeat' ? input.nodes[0].steps[0] : input.nodes[0];
     for (const field of ['source', 'speedSource', 'referenceSaved', 'rangeMode', 'referenceValue', 'editorMinimum', 'providerWorkoutId']) {

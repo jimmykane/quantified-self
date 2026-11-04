@@ -334,4 +334,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
+  it('keeps Garmin zones in saved recipes and independent placements, requiring explicit full edits', async () => {
+    const { uid, user, deps, input } = await setup();
+    const native = { ...structure, nodes: [{ ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] };
+    const preview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 0,
+      change: { kind: 'create', title: 'Native zone', structure: native } }), deps, 'v3');
+    expect(preview.changes[0].summary).toContain('watts are unknown in QS');
+    const apply = input({ proposalRef: preview.proposalRef, permissionMode: 'schedule' });
+    const saved = await applySavedWorkoutChange(apply, deps);
+    expect(await applySavedWorkoutChange(apply, deps)).toEqual(saved);
+    const id = decodeOpaqueValue('training_read', saved.savedWorkoutRef!, uid, 'connection', 'Saved workout').id as string;
+    expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(native);
+    const placement = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 1,
+      change: { kind: 'place', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, planRef: null,
+        expectedPlanRevision: null, dates: ['2026-10-02'], confirmPlanRangeExtension: false } }), deps, 'v3');
+    const placed = await applySavedWorkoutChange(input({ proposalRef: placement.proposalRef, permissionMode: 'schedule' }), deps);
+    expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure')).toEqual(native);
+    const args = { expectedScheduleRevision: placed.scheduleRevision, expectedLibraryRevision: 1,
+      change: { kind: 'update', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, title: 'Numeric replacement', structure } };
+    await expect(previewSavedWorkoutChange(input(args), deps, 'v2')).rejects.toThrow('v3');
+    const edit = await previewSavedWorkoutChange(input(args), deps, 'v3');
+    expect(edit.changes[0].summary).toContain('Garmin power zones removed');
+    await applySavedWorkoutChange(input({ proposalRef: edit.proposalRef, permissionMode: 'schedule' }), deps);
+    expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(structure);
+    expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure')).toEqual(native);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
 });

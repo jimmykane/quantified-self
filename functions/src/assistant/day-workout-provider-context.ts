@@ -39,7 +39,9 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
   const endings: WorkoutEndingV1[] = strengthSport ? [{ kind: 'time', seconds: 60 }, { kind: 'repetitions', repetitions: 8 }]
     : [{ kind: 'time', seconds: 300 }, { kind: 'distance', meters: 1000 }, { kind: 'manual' }];
   const uniqueReferences: WorkoutTargetV1[] = [];
-  for (const target of references) {
+  const candidates: readonly WorkoutTargetV1[] = controls.target === 'garmin-power-zone'
+    ? [{ kind: 'power', mode: 'garmin-zone', zone: 1 }] : references;
+  for (const target of candidates) {
     if (uniqueReferences.some(other => other.kind === target.kind)) continue;
     uniqueReferences.push(target); if (uniqueReferences.length === 4) break;
   }

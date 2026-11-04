@@ -58,7 +58,7 @@ export const WORKOUT_TARGET_KINDS = [
   'cadence',
 ] as const;
 export type WorkoutTargetKindV1 = typeof WORKOUT_TARGET_KINDS[number];
-export type WorkoutTargetModeV1 = 'absolute' | 'relative';
+export type WorkoutTargetModeV1 = 'absolute' | 'relative' | 'garmin-zone';
 export type WorkoutSpeedPresentationV1 = 'pace' | 'speed';
 
 export interface WorkoutTimeEndingV1 {
@@ -130,6 +130,22 @@ export interface WorkoutAbsolutePowerTargetV1 {
   maximumWatts: number;
 }
 
+/** A symbolic Garmin sport/device setting, never a QS FTP snapshot or watt range. */
+export interface WorkoutGarminPowerZoneTargetV1 {
+  kind: 'power';
+  mode: 'garmin-zone';
+  zone: number;
+}
+
+export function isGarminPowerZoneSportV1(sport: ActivityTypes): boolean {
+  return sport === ActivityTypes.Running || sport === ActivityTypes.Cycling;
+}
+
+export function hasGarminPowerZoneTargetV1(structure: WorkoutStructureV1): boolean {
+  return structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+    .some(step => step.targets.some(target => target.mode === 'garmin-zone')));
+}
+
 export interface WorkoutRelativePowerTargetV1 {
   kind: 'power';
   mode: 'relative';
@@ -184,6 +200,7 @@ export type WorkoutTargetV1 =
   | WorkoutRelativeHeartRateTargetV1
   | WorkoutAbsolutePowerTargetV1
   | WorkoutRelativePowerTargetV1
+  | WorkoutGarminPowerZoneTargetV1
   | WorkoutAbsoluteSpeedTargetV1
   | WorkoutRelativeSpeedTargetV1
   | WorkoutAbsoluteCadenceTargetV1
@@ -598,8 +615,15 @@ function parseTarget(value: unknown, path: string, context: ParseContext): Worko
   const record = readRecord(value, path, context);
   if (!record) return null;
   const kind = readEnum(record.kind, WORKOUT_TARGET_KINDS, `${path}.kind`, context);
-  const mode = readEnum(record.mode, ['absolute', 'relative'], `${path}.mode`, context);
+  const mode = readEnum(record.mode, ['absolute', 'relative', 'garmin-zone'], `${path}.mode`, context);
   if (!kind || !mode) return null;
+
+  if (mode === 'garmin-zone') {
+    rejectUnknownFields(record, ['kind', 'mode', 'zone'], path, context);
+    const zone = readPositiveInteger(record.zone, `${path}.zone`, context, 7);
+    if (kind !== 'power') pushIssue(context, 'invalid_value', `${path}.kind`, 'Garmin zones require a power target.');
+    return kind === 'power' && zone !== null ? { kind, mode, zone } : null;
+  }
 
   if (kind === 'heart-rate' && mode === 'absolute') {
     rejectUnknownFields(record, ['kind', 'mode', 'minimumBpm', 'maximumBpm'], path, context);
@@ -876,6 +900,13 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
     pushNodeLimitIssue(context, '$.nodes');
   }
 
+  if (sport && !isGarminPowerZoneSportV1(sport)) {
+    nodes.forEach((node, index) => {
+      if ((node.kind === 'step' ? [node] : node.steps).some(step => step.targets.some(target => target.mode === 'garmin-zone'))) {
+        pushIssue(context, 'invalid_value', `$.nodes[${index}]`, 'Garmin power zones currently support Running and Cycling only.');
+      }
+    });
+  }
   if (context.issues.length > 0 || !sport || nodes.length !== expectedNodeCount) {
     throw new WorkoutStructureValidationError(context.issues);
   }
@@ -1076,6 +1107,7 @@ export function formatWorkoutTargetV1(
   locale?: string,
   sport?: ActivityTypes,
 ): string {
+  if (target.mode === 'garmin-zone') return `Garmin power zone ${target.zone}`;
   if (target.mode === 'absolute') {
     switch (target.kind) {
       case 'heart-rate':

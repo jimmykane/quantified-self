@@ -27,7 +27,7 @@ import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../traini
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewPlannedWorkoutV3Changes, previewTrainingDeletion,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewPlannedWorkoutV3Changes, previewPlannedWorkoutV4Change, previewPlannedWorkoutV4Changes, previewTrainingDeletion,
   previewGarminWorkoutReplacement, loadAssistantTrainingWorkoutReviews,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_CHANGE_STATUS_OUTPUT, TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE,
@@ -2275,6 +2275,36 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).toEqual(applied);
     await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: args }, deps)).rejects.toThrow('schedule changed');
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it('persists Garmin zones through preview/apply/replay and blocks legacy replacement', async () => {
+    const native = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] },
+    ] }] };
+    const input = { uid, connectionId: 'connection', scopes };
+    const args = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'native', plan: null,
+      localDate: '2026-09-18', title: 'Native zone', structure: native } };
+    await expect(previewPlannedWorkoutV4Change({ ...input, scopes: [TRAINING_PLANS_SCOPE], arguments: args }, deps)).rejects.toThrow('permission');
+    const preview = await previewPlannedWorkoutV4Change({ ...input, arguments: args }, deps);
+    expect(preview.changes[0].summary).toContain('watts are unknown in QS');
+    const apply = { ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } };
+    const created = await applyTrainingChanges(apply, deps);
+    expect(await applyTrainingChanges(apply, deps)).toEqual(created);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('structure')).toEqual(native);
+    expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(native);
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
+      plan: null, localDate: '2026-09-19', title: 'Explicit numeric replacement', structure };
+    const update = { expectedScheduleRevision: created.scheduleRevision, change };
+    await expect(previewPlannedWorkoutV3Change({ ...input, arguments: update }, deps)).rejects.toThrow('v4');
+    const replacement = await previewPlannedWorkoutV4Changes({ ...input, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
+    expect(replacement.changes[0].summary).toContain('Garmin power zones removed');
+    await applyTrainingChanges({ ...input, arguments: { proposalRef: replacement.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await saved.ref.get()).get('structure')).toEqual(structure);
+    await expect(previewPlannedWorkoutV4Change({ ...input, arguments: update }, deps)).rejects.toThrow('schedule changed');
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
 });

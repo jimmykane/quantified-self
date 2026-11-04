@@ -94,3 +94,15 @@ describe('provider-aware daily recipe context', () => {
     expect(context.correction({ kind: 'rest', rationale: 'Recovery', draft: null, previousLoads: [] })).toBeNull();
   });
 });
+
+
+it('checks the explicitly selected symbolic zone without an athlete reference or a provider lookup', () => {
+  const context = dayWorkoutProviderContext({ ...controls, target: 'garmin-power-zone' }, ['garmin', 'suunto', 'wahoo', 'coros'], []);
+  expect(context.evidence.providers[0].targets).toEqual([{ kind: 'power', level: 'exact', requiresReview: false, issues: [] }]);
+  for (const provider of context.evidence.providers.slice(1)) expect(provider.targets[0]).toMatchObject({ kind: 'power', level: 'unsupported', requiresReview: true });
+  for (const provider of context.evidence.providers) for (const target of provider.targets) {
+    expect(target).not.toHaveProperty('reference');
+    expect(target).not.toHaveProperty('minimumWatts');
+    expect(target).not.toHaveProperty('maximumWatts');
+  }
+});

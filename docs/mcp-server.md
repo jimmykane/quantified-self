@@ -691,6 +691,30 @@ results. Existing consent, proposal approval, source-freshness checks, bounded s
 unchanged. The 400-workout/four-provider MCP fixture includes private coordinator canaries and retains the same safe
 output; this change requires no tool schema, scope, plugin or registered-client metadata update.
 
+### Complete recipes with single Garmin power zones
+
+The latest additive full reads are `get_planned_workout_v4` and `get_saved_workout_v3`. Their explicit strict target
+variant is `{kind:'power',mode:'garmin-zone',zone:2}`: integer 1–7, exact Running/Cycling only, no reference or watt bounds.
+Use `preview_planned_workout_v4_change`, `preview_planned_workout_v4_changes` (1–25 complete creates/updates) and
+`preview_saved_workout_v3_change` under the existing independent Training planning read/write grants. They retain early
+Lap, pool length and existing native approval/Apply, owner, revision, expiry and idempotency boundaries. No new
+mutation kind, delivery consent or provider action is granted. Older recipe schemas stay frozen; old reads and full
+replacement previews fail with latest-tool guidance when they cannot preserve native zones. Summaries, saved placements,
+analysis timing and existing delivery compatibility reads use the same safe projections; no private athlete power
+profile, credential or Garmin zone table is exposed. Analysis never estimates watts or speed from the zone number.
+
+A device-zone request requires explicit intent; do not infer it from a bare zone label or convert an authored span.
+These instructions use Garmin's sport/device settings and require compatible native Running Power for running.
+QS cannot verify zone watts or when Garmin resolves later settings changes. Other providers and secondary placement
+are unsupported; fixed watts and stored FTP/CP snapshots keep their original semantics. Assistant uses latest full
+recipes and remains prepare-only, with complete app review. Source guidance lives in
+[Training workspace](training-workspace.md#single-garmin-power-zone-targets).
+
+This is local implementation pending a separately approved backend release and exact digest-bound developer refresh/
+rescan plus client catalog/plugin refresh. Registered baseline and transition history are unchanged. The bundled
+Training and cross-domain guidance changed and needs normal local plugin sync after release; no profile installation,
+cloud change, provider send or production verification is performed here.
+
 ### Full recipes with optional early Lap
 
 The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that

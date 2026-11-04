@@ -634,6 +634,13 @@ export function assessPlannedWorkoutProviderMappingV1(
     }
 
     step.targets.forEach((target, targetIndex) => {
+      if (target.mode === 'garmin-zone') {
+        if (provider !== 'garmin' || targetIndex !== 0) issues.push({
+          severity: 'unsupported', code: 'unsupported_target', path: `${path}.targets[${targetIndex}]`,
+          message: 'Garmin power zones require a primary Garmin target; no conversion to watts or another provider is available.',
+        });
+        return;
+      }
       if (target.mode !== 'relative') return;
       const targetPath = `${path}.targets[${targetIndex}]`;
       const referenceKey = relativeReferenceKey(target);

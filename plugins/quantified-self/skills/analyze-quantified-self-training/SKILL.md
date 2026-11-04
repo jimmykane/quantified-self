@@ -373,3 +373,12 @@ complete replacement, and use the host's separate native approval for Apply. Goa
 plans, and a missing plan does not erase the goal. Pause, complete, archive and restore are authored lifecycle changes;
 never infer performance achievement. Goal edits never authorize plan changes, provider sends or another daily
 suggestion. The built-in Assistant uses its app-owned goal review and Apply, not public write tools.
+
+
+For explicitly requested Garmin device power zones, discover the latest complete scheduled/saved recipe reads and
+full-recipe previews. A target has kind power, mode garmin-zone and one integer zone 1–7; only exact Running/Cycling
+and primary Garmin placement are supported. It uses Garmin sport/device zones, with unknown watts in QS and no QS FTP
+requirement. Never infer this mode from a bare zone label, assume standard boundaries, replace fixed prescriptions or
+collapse a zone span. Running needs compatible native Running Power. Other services reject it; do not convert unknown
+watts or promise when later Garmin settings changes take effect. Preserve the target through edits and read-back;
+old tools must not erase it. A recipe save grants no new provider consent and proves neither cloud nor watch receipt.

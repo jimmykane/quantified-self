@@ -446,7 +446,14 @@ const derivedPayloadFixtures = {
 } as const satisfies Record<DerivedMetricKind, unknown>;
 
 
+const nativeZoneRecipe = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'zone', purpose: 'work',
+  ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] };
 const trainingReadFixtures = {
+ get_planned_workout_v4: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Zone', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: nativeZoneRecipe, displaySteps: [{ nodeId: 'zone', text: 'Garmin power zone 2' }] } },
+ get_saved_workout_v3: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Zone', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: nativeZoneRecipe } },
  get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference', revision: 1,
    scheduleRevision: 1, libraryRevision: null, sport: ActivityTypes.Running,
    analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
@@ -625,6 +632,9 @@ const service = {
     previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
       changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV4Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV4Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV3Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1453,6 +1463,8 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_v4: { workoutRef: 'opaque-workout-reference' },
+  get_saved_workout_v3: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_planned_workout_v3: { workoutRef: 'opaque-workout-reference' },
   get_saved_workout_v2: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_planned_workout_v2: { workoutRef: 'opaque-workout-reference' },
@@ -1480,6 +1492,12 @@ const successfulToolArguments: Record<
     strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
       ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
   } },
+  preview_planned_workout_v4_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'native', plan: null, localDate: '2026-07-02', title: 'Zone', structure: nativeZoneRecipe } },
+  preview_planned_workout_v4_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'create-workout', localKey: 'native', plan: null, localDate: '2026-07-02', title: 'Zone', structure: nativeZoneRecipe }] },
+  preview_saved_workout_v3_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'create', title: 'Zone', structure: nativeZoneRecipe } },
   preview_planned_workout_v3_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'early-lap', plan: null, localDate: '2026-07-02', title: 'Lap option',
     structure: trainingReadFixtures.get_planned_workout_v3.workout.structure } },
@@ -2128,7 +2146,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_rest_days', 'get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_planned_workout_v4', 'get_saved_workout_v3', 'get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_rest_days', 'get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
     expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
@@ -2141,7 +2159,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_planned_workout_v4_change', 'preview_planned_workout_v4_changes', 'preview_saved_workout_v3_change', 'preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2152,7 +2170,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['preview_training_calendar_rest_day', 'get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
+    for (const name of ['get_planned_workout_v4', 'get_saved_workout_v3', 'preview_planned_workout_v4_change', 'preview_planned_workout_v4_changes', 'preview_saved_workout_v3_change', 'preview_training_calendar_rest_day', 'get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');

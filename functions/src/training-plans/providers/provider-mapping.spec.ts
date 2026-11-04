@@ -14,7 +14,7 @@ import {
     isPlannedWorkoutProviderDeliveryEnabled,
 } from '../../../../shared/planned-workout-providers';
 import {
-    MANUAL_WORKOUT_EDITOR_SPORTS_V1,
+    MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1, formatWorkoutTargetV1,
     type WorkoutStructureV1,
 } from '../../../../shared/planned-workout';
 import canonicalRunningFixture from './fixtures/canonical-running-v1.json';
@@ -136,7 +136,7 @@ describe('planned-workout provider proof fixtures', () => {
             expect(new Set(sports).size).toBe(sports.length);
         }
         expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(expect.arrayContaining(
-            MANUAL_WORKOUT_EDITOR_SPORTS_V1,
+            MANUAL_WORKOUT_EDITOR_SPORTS_V1, parseWorkoutStructureV1, formatWorkoutTargetV1,
         ));
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
             .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
@@ -1068,4 +1068,39 @@ describe('explicit early-Lap provider contract', () => {
     expect(() => serializer(withPermission(true), options)).toThrow(expect.objectContaining({ code: 'unsupported' }));
     expect(serializer(withPermission(false), options).artifact).toEqual(serializer(recipe, options).artifact);
   });
+});
+
+
+describe('single native Garmin power zones', () => {
+    const target = { kind: 'power', mode: 'garmin-zone', zone: 2 } as const;
+    it.each([ActivityTypes.Running, ActivityTypes.Cycling])('preserves symbolic %s targets without FTP', sport => {
+        const structure = parseWorkoutStructureV1({ ...oneStepStructure({ targets: [target] }), sport });
+        expect(JSON.parse(JSON.stringify(structure))).toEqual(structure);
+        expect(formatWorkoutTargetV1(target)).toBe('Garmin power zone 2');
+        const mapped = serializeGarminWorkoutV1(structure, { name: 'Native zone' });
+        expect(mapped.level).toBe('exact');
+        expect(mapped.artifact.segments[0].steps[0]).toMatchObject({ targetType: 'POWER', targetValue: 2,
+            targetValueLow: null, targetValueHigh: null, targetValueType: null });
+        for (const provider of ['suunto', 'wahoo', 'coros'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, structure).level).toBe('unsupported');
+        }
+        expect(() => serializeWahooPlanJsonV1(structure, { name: 'Native zone' })).toThrow();
+        expect(() => serializeSuuntoGuideJsonV1(structure, { name: 'Native zone' })).toThrow();
+    });
+    it.each([0, 8, 1.5, NaN, '2'])('rejects invalid zone %s', zone => {
+        expect(() => parseWorkoutStructureV1(oneStepStructure({ targets: [{ ...target, zone } as never] }))).toThrow();
+    });
+    it('rejects ranges, extra snapshots, unsupported sports and non-power zone kinds', () => {
+        for (const invalid of [{ ...target, minimumWatts: 100 }, { ...target, maximumZone: 3 }, { ...target, kind: 'heart-rate' }]) {
+            expect(() => parseWorkoutStructureV1(oneStepStructure({ targets: [invalid as never] }))).toThrow();
+        }
+        for (const sport of [ActivityTypes.Swimming, ActivityTypes.TrailRunning]) {
+            expect(() => parseWorkoutStructureV1({ ...oneStepStructure({ targets: [target] }), sport })).toThrow();
+        }
+    });
+    it('rejects native zones as a secondary target rather than freezing watts', () => {
+        const structure = oneStepStructure({ targets: [{ kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 }, target] });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', structure).level).toBe('unsupported');
+        expect(() => serializeGarminWorkoutV1(structure, { name: 'Secondary', allowDegraded: true })).toThrow();
+    });
 });

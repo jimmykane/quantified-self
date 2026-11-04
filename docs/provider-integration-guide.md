@@ -1017,6 +1017,20 @@ anti-spam receipts, truthful partial results, monitoring definitions and backend
 is covered in source; live activation/readback is deferred in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 No deployment, switch activation or test send is authorized by implementation or passing offline tests.
 
+### Single Garmin power-zone prescriptions
+
+Explicit `power/garmin-zone` recipes preserve one integer zone 1–7 for exact Running/Cycling as a primary Garmin
+target. They refer to Garmin sport/device settings, never fetch or configure FTP/zones and never convert to QS watts.
+Other providers and secondary zone placement fail compatibility before HTTP. Existing absolute/relative mappings
+remain byte-identical. Running needs native Running Power support; synchronization/settings-resolution timing and
+actual device behavior require separate owner-approved verification. See the authoritative
+[Training contract](training-workspace.md#single-garmin-power-zone-targets) for authoring, generation, MCP compatibility,
+limits and backend-first release order. Existing Pro, WORKOUT_IMPORT, opt-in, lifecycle/deletion fences, ledgers,
+unknown-acceptance recovery and Stop remain unchanged. Monitoring is **covered/unchanged** by the existing Training
+Delivery fixed-provider worker/dispatcher and committed-outcome coverage; no new queue or monitoring resource.
+No OAuth, credential, history/ingestion, Rules, index, admin connection, public integration-page or provider-identity
+change is needed. Local fixtures are not evidence of a production send, Garmin app display or watch receipt.
+
 ### Recent live-activity notifications
 
 The default-on New activities synced category groups genuinely new, fully persisted workouts from all four activity

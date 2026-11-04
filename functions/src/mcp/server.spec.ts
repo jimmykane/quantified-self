@@ -942,8 +942,10 @@ describe('MCP HTTP scope enforcement', () => {
       'get_planned_workout_completions',
       'get_planned_workout_v2',
       'get_planned_workout_v3',
+      'get_planned_workout_v4',
       'get_saved_workout',
       'get_saved_workout_v2',
+      'get_saved_workout_v3',
       'get_strength_workout_details',
       'get_training_calendar_rest_days',
       'get_training_change_status',
@@ -962,8 +964,11 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_planned_workout_v2_change',
       'preview_planned_workout_v3_change',
       'preview_planned_workout_v3_changes',
+      'preview_planned_workout_v4_change',
+      'preview_planned_workout_v4_changes',
       'preview_saved_workout_change',
       'preview_saved_workout_v2_change',
+      'preview_saved_workout_v3_change',
       'preview_strength_workout_change',
       'preview_training_calendar_rest_day',
       'preview_training_changes',
@@ -1049,10 +1054,10 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
     expect(writeInstructions).toContain('Construct non-strength workout recipes using stable unique node IDs');
-    expect(writeInstructions).toContain('Use get_planned_workout_v3 for the complete non-strength recipe');
+    expect(writeInstructions).toContain('Use get_planned_workout_v4 for the complete non-strength recipe');
     expect(writeInstructions).toContain(TRAINING_STRENGTH_READ_GUIDANCE);
     expect(writeInstructions).toContain(TRAINING_STRENGTH_WRITE_GUIDANCE);
-    expect(writeInstructions).toContain('use preview_planned_workout_v3_change');
+    expect(writeInstructions).toContain('use preview_planned_workout_v4_change');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');

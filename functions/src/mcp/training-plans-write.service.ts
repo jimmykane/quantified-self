@@ -26,7 +26,7 @@ import {
   type TrainingPlanV1,
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
-import { formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
+import { hasGarminPowerZoneTargetV1, formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
@@ -54,7 +54,7 @@ import {
   TRAINING_REST_DAYS_CHANGE_SCHEMA,
   TRAINING_DELETION_CHANGE_SCHEMA,
   TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
-  TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA,
+  TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA, TRAINING_WORKOUT_V4_CHANGE_SCHEMA,
   TRAINING_DELIVERY_WRITE_SCOPE,
   TRAINING_PLANS_SCOPE,
   TRAINING_PLANS_WRITE_SCOPE,
@@ -75,7 +75,7 @@ const referencePayload = z.strictObject({ kind: z.enum(['plan', 'workout']), id:
 const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entityId,
   createdAtMs: z.number().int().nonnegative().safe() });
 
-type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
+type TrainingChange = z.infer<typeof TRAINING_WORKOUT_V4_CHANGE_SCHEMA> | z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
   | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>
   | z.infer<typeof TRAINING_PLAN_PHASE_CHANGE_SCHEMA> | z.infer<typeof TRAINING_REST_DAYS_CHANGE_SCHEMA>;
 type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes> & {
@@ -509,6 +509,12 @@ function describeScheduleEffects(
   return [describeOperation(operation), ...details].join(' ');
 }
 
+export function describeGarminPowerZoneRecipeEffect(before: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined,
+  after: import('../../../shared/planned-workout').WorkoutStructureV1): string {
+  if (hasGarminPowerZoneTargetV1(after)) return ' Garmin power zones use Garmin sport/device settings; watts are unknown in QS. Running requires native Running Power support.';
+  return before && hasGarminPowerZoneTargetV1(before) ? ' Garmin power zones removed; targets no longer use Garmin zone settings.' : '';
+}
+
 export function describeEarlyLapRecipeEffect(
   previous: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined,
   current: import('../../../shared/planned-workout').WorkoutStructureV1,
@@ -887,7 +893,7 @@ export async function previewGarminWorkoutReplacement(
 export async function previewTrainingChanges(
   input: TrainingWriteInput,
   provided?: TrainingWriteDependencies,
-  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'deletion' | 'phases' | 'rest-days' = 'legacy',
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'v4' | 'v4-batch' | 'deletion' | 'phases' | 'rest-days' = 'legacy',
 ): Promise<PreviewResult> {
   const deps = provided ?? defaultDependencies();
   assertBytes(input.arguments);
@@ -900,11 +906,13 @@ export async function previewTrainingChanges(
     : recipeMode === 'strength'
     ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
       changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'v4-batch'
+      ? TRAINING_WRITE_INPUTS.preview_planned_workout_v4_changes.safeParse(input.arguments)
     : recipeMode === 'v3-batch'
       ? TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.safeParse(input.arguments)
-    : (recipeMode === 'v2' || recipeMode === 'v3')
+    : (recipeMode === 'v2' || recipeMode === 'v3' || recipeMode === 'v4')
       ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
-        changes: z.array(recipeMode === 'v3' ? TRAINING_WORKOUT_V3_CHANGE_SCHEMA : TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+        changes: z.array(recipeMode === 'v4' ? TRAINING_WORKOUT_V4_CHANGE_SCHEMA : recipeMode === 'v3' ? TRAINING_WORKOUT_V3_CHANGE_SCHEMA : TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
       : recipeMode === 'deletion'
         ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
           changes: z.array(TRAINING_DELETION_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
@@ -960,7 +968,13 @@ export async function previewTrainingChanges(
         summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} ${describeProviderDeletion(request.removePastProviderCopies === true)}` });
       return;
     }
-    if (recipeMode !== 'v3' && recipeMode !== 'v3-batch' && change.kind === 'update-workout') {
+    if (!['v4', 'v4-batch'].includes(recipeMode) && change.kind === 'update-workout') {
+      const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (hasGarminPowerZoneTargetV1(simulated.workouts.get(workoutId)!.structure)) {
+        invalid('Read the v4 recipe and use the v4 preview to preserve or explicitly change Garmin power zones.');
+      }
+    }
+    if (!['v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) && change.kind === 'update-workout') {
       const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
       if (hasAuthoredEarlyLapV1(simulated.workouts.get(workoutId)!.structure)) {
         invalid('Read the v3 recipe and use the v3 preview to preserve or explicitly change early Lap permission.');
@@ -1013,8 +1027,10 @@ export async function previewTrainingChanges(
       ? before.workouts.get(operation.workoutId) : null;
     const summary = (deletionTarget
       ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
-      + (['v2', 'v3', 'v3-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
-      + (['v3', 'v3-batch'].includes(recipeMode) ? describeEarlyLapEffect(operation, before, simulated) : '');
+      + (['v2', 'v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
+      + (['v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) ? describeEarlyLapEffect(operation, before, simulated) : '')
+      + (['v4', 'v4-batch'].includes(recipeMode) && 'workoutId' in operation && simulated.workouts.has(operation.workoutId)
+        ? describeGarminPowerZoneRecipeEffect(before.workouts.get(operation.workoutId)?.structure, simulated.workouts.get(operation.workoutId)!.structure) : '');
     const reviewStructure = ['create-workout', 'update-workout', 'copy-workout'].includes(operation.kind)
       && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
     publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure
@@ -1248,6 +1264,15 @@ export async function previewPlannedWorkoutV3Change(input: TrainingWriteInput, p
     changes: [parsed.data.change] } }, provided, 'v3');
 }
 
+export async function previewPlannedWorkoutV4Change(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v4_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid planned workout v4 create or update.');
+  if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) invalid('Use the complete strength workout preview.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'v4');
+}
+
 /** Complete non-strength recipes in one bounded review; no additional write or delivery authority. */
 export async function previewPlannedWorkoutV3Changes(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
   assertBytes(input.arguments);
@@ -1257,6 +1282,16 @@ export async function previewPlannedWorkoutV3Changes(input: TrainingWriteInput, 
     invalid('Use the complete strength workout preview for exercise and set prescriptions.');
   }
   return previewTrainingChanges({ ...input, arguments: parsed.data }, provided, 'v3-batch');
+}
+
+export async function previewPlannedWorkoutV4Changes(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v4_changes.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide 1–25 complete, valid planned workout v4 creates or updates.');
+  if (parsed.data.changes.some(change => change.structure.sport === ActivityTypes.StrengthTraining)) {
+    invalid('Use the complete strength workout preview for exercise and set prescriptions.');
+  }
+  return previewTrainingChanges({ ...input, arguments: parsed.data }, provided, 'v4-batch');
 }
 
 /** A single independent calendar date: captures its own revision without reading plan/workout history. */
