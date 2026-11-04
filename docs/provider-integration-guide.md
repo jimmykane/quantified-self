@@ -1635,6 +1635,19 @@ limit/backoff after deployment. Live tasks are not reset, and already deleted ta
 resurrected. Roll back the same endpoints to restore the previous limits; retained retries above the old limit may then
 become terminal on their next failure.
 
+### Activity delivery notifications
+
+The Activity delivery category covers explicit per-batch results from Send activities and grouped automatic activity
+send dead letters. The review offers device enablement and an unchecked notification choice; confirmation stores
+owner/origin/device/category/destination-bound consent privately. Results use committed batch state, and exhausted
+unaccepted queue failures now project into Needs action so a batch can finish. No notification claims provider success
+from an HTTP acknowledgement. Automatic successes and intermediate retries remain silent; history imports cannot
+create activity-delivery alerts. Upload authorization, retry budgets and transport are unchanged.
+The [Web Push runbook](web-push-notifications.md#activity-delivery-notifications) owns the bounded grouping, category
+and device cancellation, shared delivery cap, exact runtime release/rollback commands and cost/limitations.
+Monitoring definitions are covered in the existing Web Push bundle; provider delivery monitoring is unchanged.
+Activation/readback is tracked in #1011. No Training planning or MCP surface change is involved.
+
 ### Outbound activity delivery
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.

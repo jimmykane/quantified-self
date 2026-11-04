@@ -20,7 +20,7 @@ describe('help.content', () => {
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
-      'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Beta supports tests', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
+      'Activity delivery', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Beta supports tests', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
     }
   });

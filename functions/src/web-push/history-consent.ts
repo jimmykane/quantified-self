@@ -16,7 +16,7 @@ export function readHistoryNotificationConsent(value: unknown, origin: string | 
 export async function historyPushConfiguration(): Promise<{ enabled: boolean; publicKey: string }> {
   return automaticPushConfiguration('web_push_history_import_enabled');
 }
-export async function automaticPushConfiguration(sender: 'web_push_history_import_enabled' | 'web_push_activity_sync_enabled'): Promise<{ enabled: boolean; publicKey: string }> {
+export async function automaticPushConfiguration(sender: 'web_push_history_import_enabled' | 'web_push_activity_sync_enabled' | 'web_push_activity_delivery_enabled'): Promise<{ enabled: boolean; publicKey: string }> {
   const template = await getRemoteConfig().getTemplate();
   const value = (name: string) => {
     const parameter = template.parameters[name];

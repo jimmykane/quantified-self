@@ -28,7 +28,7 @@
       <p class="mat-body-small" [id]="'notification-category-' + category.id">{{ category.description }}</p>
     </div>
   }
-  <p class="mat-body-small">Turning a category off cancels its pending alerts. Turning it back on applies to new activity syncs or import requests.</p>
+  <p class="mat-body-small">Turning a category off cancels its pending alerts. Turning it back on applies to new activity syncs, send results or import requests.</p>
   @if (preferences.saving()) { <p role="status" aria-live="polite">Saving category preference…</p> }
   @if (preferences.status() === 'loading') { <p role="status">Loading categories…</p> }
   @if (preferences.status() === 'signed-out') { <p>Sign in to manage notification categories.</p> }

@@ -64,6 +64,19 @@ these local startup measurements do not establish deployed latency.
 The [Web Push runbook](web-push-notifications.md#activity-rollout-and-rollback) lists all changed runtime owners and
 requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
 
+## Activity-delivery notification isolation
+
+`queueActivitySendNotification` and `queueAutomaticDeliveryNotification` load from `web-push/delivery-admission`;
+`sendActivityDeliveryNotifications` loads from `web-push/delivery`. Full discovery adds three exports. The admission
+triggers retain retry-enabled Firestore written descriptors (activitySends and failed_jobs), 256 MiB, 60 seconds,
+concurrency ten, max two and min zero, with no secret. The UTC minute scheduler uses 256 MiB, 120 seconds,
+concurrency/max one, min zero, zero schedule retries and only the existing VAPID secret. All run in europe-west2.
+Three isolated Node 22.23.3 samples per target on 2026-11-04 measured median startup of 223 ms / 87.3 MiB RSS
+for each admission trigger and 217 ms / 88.6 MiB for the sender, each exposing exactly one endpoint. These local
+measurements do not establish deployed latency. Full compiled verification covers 197 endpoints.
+The compiled descriptor check covers isolated equivalence; the [delivery runbook](web-push-notifications.md#delivery-rollout-and-rollback)
+requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
+
 ## Derived-metrics observer isolation
 
 `observeDerivedMetricsHealth` loads directly from `derived-metrics/monitoring-schedule`. This new Gen 2 read-only

@@ -80,7 +80,7 @@ service cloud.firestore {
       match /notificationPreferences/{category} {
         function validPreference() {
           let d = request.resource.data;
-          return category in ['history_import', 'activity_sync']
+          return category in ['history_import', 'activity_sync', 'activity_delivery']
             && d.keys().hasOnly(['schemaVersion', 'enabled', 'revision', 'updatedAt'])
             && d.keys().hasAll(['schemaVersion', 'enabled', 'revision', 'updatedAt'])
             && d.schemaVersion == 1 && d.enabled is bool
@@ -91,7 +91,7 @@ service cloud.firestore {
           return mayWriteAccount(userID) && !('impersonatedBy' in request.auth.token)
             && exists(/databases/$(database)/documents/users/$(userID)) && validPreference();
         }
-        allow get: if isOwner() && category in ['history_import', 'activity_sync'];
+        allow get: if isOwner() && category in ['history_import', 'activity_sync', 'activity_delivery'];
         allow list, delete: if false;
         allow create: if mayWritePreference() && request.resource.data.revision == 1;
         allow update: if mayWritePreference()

@@ -30,7 +30,7 @@ let manager: { getSubscription: ReturnType<typeof vi.fn>; subscribe: ReturnType<
 let subscription: { endpoint: string; options: { applicationServerKey: ArrayBuffer }; toJSON: ReturnType<typeof vi.fn>; unsubscribe: ReturnType<typeof vi.fn> };
 let windows: Window & { pushManager?: unknown };
 let storage: Storage;
-let config: { configLoaded: ReturnType<typeof signal<boolean>>; webPushEnabled: ReturnType<typeof signal<boolean>>; webPushHistoryEnabled: ReturnType<typeof signal<boolean>>; webPushPublicKey: ReturnType<typeof signal<string>> };
+let config: { configLoaded: ReturnType<typeof signal<boolean>>; webPushEnabled: ReturnType<typeof signal<boolean>>; webPushHistoryEnabled: ReturnType<typeof signal<boolean>>; webPushDeliveryEnabled: ReturnType<typeof signal<boolean>>; webPushPublicKey: ReturnType<typeof signal<string>> };
 let functions: { call: ReturnType<typeof vi.fn> };
 let rotations: Subject<unknown>;
 let workerReady: Subject<unknown>;
@@ -58,7 +58,7 @@ beforeEach(() => {
   windows = { pushManager: manager, location: { origin: registration.origin }, navigator: { userAgent: 'desktop',
     serviceWorker: { ready: Promise.resolve({ pushManager: manager }) } }, document: { visibilityState: 'visible', addEventListener: vi.fn(), removeEventListener: vi.fn() },
     addEventListener: vi.fn(), removeEventListener: vi.fn(), matchMedia: vi.fn().mockReturnValue({ matches: false }) } as unknown as typeof windows;
-  config = { configLoaded: signal(true), webPushEnabled: signal(true), webPushHistoryEnabled: signal(true), webPushPublicKey: signal(key) };
+  config = { configLoaded: signal(true), webPushEnabled: signal(true), webPushHistoryEnabled: signal(true), webPushDeliveryEnabled: signal(true), webPushPublicKey: signal(key) };
   functions = { call: vi.fn().mockResolvedValue({ data: { status: 'accepted' } }) }; rotations = new Subject(); workerReady = new Subject();
   notifications = { permission: 'default', requestPermission: vi.fn().mockResolvedValue('granted') }; vi.stubGlobal('Notification', notifications);
   support = { checkPushSupport: vi.fn().mockReturnValue(true), createRandomUUID: vi.fn().mockReturnValue(id) };
@@ -340,6 +340,14 @@ describe('one-import notification device consent', () => {
     expect(service.canNotifyHistory()).toBe(true);
     expect(await service.historyNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
     expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('gets a fresh delivery target and respects its independent flag and category', async () => {
+    const service = await enabled();
+    expect(await service.deliveryNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
+    config.webPushDeliveryEnabled.set(false); expect(service.deliveryNotificationsAvailable()).toBe(false);
+    await expect(service.deliveryNotificationTarget('owner')).rejects.toThrow('Activity delivery');
+    config.webPushDeliveryEnabled.set(true); categoryEnabled.set(false);
+    await expect(service.deliveryNotificationTarget('owner')).rejects.toThrow('Activity delivery');
   });
   it('keeps beta and a disabled history switch out of automatic notification consent', async () => {
     const service = await enabled(); config.webPushHistoryEnabled.set(false);

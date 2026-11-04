@@ -1,3 +1,5 @@
+import { AppPushService } from '../../services/app.push.service';
+import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import dayjs from 'dayjs';
 import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
@@ -15,6 +17,11 @@ import { ACTIVITY_SEND_LIMITS, ActivitySendCommand, ActivitySendCommandResult, A
 
 @Component({ selector: 'app-activity-send-page', standalone: true, imports: [CommonModule, FormsModule, RouterModule, MaterialModule, AppChartSharedModule, PageHeaderComponent], templateUrl: './activity-send-page.component.html', styleUrl: './activity-send-page.component.scss' })
 export class ActivitySendPageComponent {
+  readonly push = inject(AppPushService);
+  readonly notificationPreferences = inject(AppNotificationPreferencesService);
+  readonly notifyWhenFinished = signal(false);
+  readonly deliveryCategoryEnabled = computed(() => this.notificationPreferences.isEnabled('activity_delivery'));
+  readonly notificationContext = computed(() => [this.users.user()?.uid, this.sends.batch()?.id, this.sends.batch()?.revision, this.provider(), this.source()].join('|'));
   readonly sends = inject(ActivitySendService);
   readonly users = inject(AppUserService);
   private readonly router = inject(Router);
@@ -58,6 +65,7 @@ export class ActivitySendPageComponent {
     this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
   });
   constructor() {
+    effect(() => { this.notificationContext(); this.notifyWhenFinished.set(false); });
     effect(() => { const uid = this.users.user()?.uid; if (!uid || uid !== this.activeOwner) this.fileReferences.clear(); });
     effect(() => {
       const batch = this.sends.batch();
@@ -189,7 +197,26 @@ export class ActivitySendPageComponent {
     this.nowMs.set(Date.now());
     if (!this.canConfirm()) return;
     const batch = this.sends.batch()!;
-    await this.run(() => this.command({ version: 1, action: 'confirm', batchId: batch.id, revision: batch.revision }));
+    const context = this.notificationContext();
+    const notify = this.notifyWhenFinished();
+    await this.run(async () => {
+      const notification = notify ? await this.push.deliveryNotificationTarget(this.activeOwner!) : undefined;
+      this.assertActive();
+      if (context !== this.notificationContext() || notify && !this.push.canNotifyDelivery()) throw new Error('Notification or sending settings changed. Review this send again.');
+      return this.command({ version: 1, action: 'confirm', batchId: batch.id, revision: batch.revision, ...(notification ? { notification } : {}) });
+    });
+  }
+  chooseNotification(checked: boolean): void {
+    if (this.busy() || checked && !this.push.canNotifyDelivery() || checked === this.notifyWhenFinished()) return;
+    this.notifyWhenFinished.set(checked); this.haptics.selection();
+  }
+  async enableNotifications(): Promise<void> {
+    if (!this.push.canEnable()) return;
+    await this.run(() => this.push.enable());
+  }
+  async enableDeliveryCategory(): Promise<void> {
+    if (!this.notificationPreferences.canEdit() || this.deliveryCategoryEnabled()) return;
+    await this.run(() => this.notificationPreferences.setEnabled('activity_delivery', true));
   }
   async rowAction(row: ActivitySendRow, action: 'remove' | 'check' | 'retry'): Promise<void> {
     this.nowMs.set(Date.now());

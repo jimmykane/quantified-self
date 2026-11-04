@@ -4,6 +4,7 @@ import { BehaviorSubject } from 'rxjs';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Auth, user } from 'app/firebase/auth';
 import { Firestore, onSnapshot, runTransaction } from 'app/firebase/firestore';
+import { NOTIFICATION_CATEGORIES } from '@shared/notification-categories';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), user: vi.fn() }));
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
@@ -18,8 +19,8 @@ let saved: unknown;
 let tx: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 const emit = (value: unknown, metadata = { fromCache: false, hasPendingWrites: false }, index?: number) => {
   // Existing cases exercise History imports; independently confirm the other category.
-  if (index === undefined) listeners[listeners.length - 1].next({ data: () => undefined, metadata });
-  listeners[index ?? listeners.length - 2].next({ data: () => value, metadata });
+  if (index === undefined) for (const listener of listeners.slice(-NOTIFICATION_CATEGORIES.length + 1)) listener.next({ data: () => undefined, metadata });
+  listeners[index ?? listeners.length - NOTIFICATION_CATEGORIES.length].next({ data: () => value, metadata });
 };
 function setup(platform = 'browser') {
   TestBed.configureTestingModule({ providers: [{ provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
@@ -38,11 +39,14 @@ beforeEach(() => {
 });
 afterEach(() => TestBed.resetTestingModule());
 describe('account notification categories', () => {
-  it('waits for both categories and saves their independent choices to separate documents', async () => {
+  it('waits for all categories and saves their independent choices to separate documents', async () => {
     const service = setup(); await tick();
     emit(undefined, { fromCache: false, hasPendingWrites: false }, 0);
     expect(service.status()).toBe('loading'); expect(service.isEnabled('activity_sync')).toBe(false);
     listeners[1].next({ data: () => preference(false, 1), metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.status()).toBe('loading');
+    listeners[2].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.isEnabled('activity_delivery')).toBe(true);
     expect(service.isEnabled('history_import')).toBe(true); expect(service.isEnabled('activity_sync')).toBe(false);
     saved = preference(false, 1); await service.setEnabled('activity_sync', true);
     expect(tx.set).toHaveBeenLastCalledWith({ path: 'users/owner/notificationPreferences/activity_sync' },

@@ -84,6 +84,35 @@
           </article>
         }
         @if (sends.rows().length < batch.total) { <button mat-button [disabled]="busy() || sends.loadingRows()" (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
+        @if (batch.state === 'draft' && !sendingClosed() && (push.deliveryNotificationsAvailable() || notifyWhenFinished())) {
+          <section class="delivery-notification-choice" aria-labelledby="delivery-notification-title">
+            <mat-icon aria-hidden="true">notifications_active</mat-icon>
+            <div class="delivery-notification-content">
+              <h3 id="delivery-notification-title">Know when your send finishes</h3>
+              <p>Get one result for this batch on this device. You can leave this page while activities are sent.</p>
+              @if (push.canNotifyDelivery() || notifyWhenFinished()) {
+                <mat-checkbox [checked]="notifyWhenFinished()" [disabled]="busy()" (change)="chooseNotification($event.checked)">Notify me when this send finishes</mat-checkbox>
+              }
+              @if (!push.canNotifyDelivery()) {
+                @if (push.state() === 'disabled' || push.operation() === 'enable') {
+                  <button mat-stroked-button type="button" [disabled]="busy() || !push.canEnable()" (click)="enableNotifications()">
+                    <span class="notification-button-content">@if (push.operation() === 'enable') { <mat-spinner diameter="20" aria-label="Enabling notifications" /> } @else { <mat-icon aria-hidden="true">notifications</mat-icon> }<span>Enable notifications on this device</span></span>
+                  </button>
+                }
+                @if (push.state() === 'enabled' && !deliveryCategoryEnabled() && notificationPreferences.canEdit()) {
+                  <button mat-stroked-button type="button" [disabled]="busy()" (click)="enableDeliveryCategory()">Turn on Activity delivery</button>
+                }
+                @if (push.state() === 'denied') { <p>Notifications are blocked. Allow them in your browser or device settings, then return here.</p> }
+                @if (push.state() === 'install-required') { <p>On iPhone or iPad, add QS to your Home Screen and open it there to enable notifications.</p> }
+                @if (push.state() === 'unsupported') { <p>This browser does not support device notifications.</p> }
+                @if (push.state() === 'unavailable' || push.state() === 'loading' || !push.deliveryNotificationsAvailable()) { <p>Notifications are currently unavailable. You can still send your activities.</p> }
+                <a mat-button routerLink="/settings" [queryParams]="{ section: 'notifications' }" appHapticTap>Notification settings</a>
+              }
+              <p class="retention-note">Optional. Enable notifications, then choose the checkbox. Alerts are grouped and limited to avoid repeated interruptions.</p>
+            </div>
+          </section>
+        }
+        @if (batch.state !== 'draft' && batch.notificationRequested) { <p class="retention-note">A notification was requested for this batch. Delivery is best-effort; results remain available here.</p> }
         <div class="batch-actions">
           @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
           @if (batch.state === 'draft' && batch.reviewed && !readyCount()) { <p>No eligible activities in this selection. Start a new send to choose other recordings.</p> }

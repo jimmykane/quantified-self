@@ -105,7 +105,7 @@ describe('Firestore Security Rules', () => {
         });
     });
 
-    describe.each(['history_import', 'activity_sync'])('Notification category preferences: %s', category => {
+    describe.each(['history_import', 'activity_sync', 'activity_delivery'])('Notification category preferences: %s', category => {
         const path = `users/category-owner/notificationPreferences/${category}`;
         const base = { schemaVersion: 1, enabled: false, revision: 1 };
         beforeEach(async () => {

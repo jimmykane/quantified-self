@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Training, billing, marketing and reminder categories are not implemented. There is no notification inbox or subscription list; only live-activity alerts use a bounded private pending batch and minute scheduler. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training, billing, marketing and reminder categories are not implemented. There is no notification inbox or subscription list; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits production only. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -41,7 +41,7 @@ For key rotation, provision the new matching pair and public parameter together 
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports) and `activity_sync` (New activities synced). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), and `activity_delivery` (Activity delivery). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -195,6 +195,101 @@ There is no per-notification charge added by QS or another messaging vendor, and
 Automated coverage includes browser and SSR states, owner changes during pending registration, denied permissions, missing configuration, key rotation, both push managers, fixed payload/navigation, server admission, concurrency/rate limits, expired-generation races, private Rules and deletion guards. History coverage additionally exercises atomic consent admission, provider boundaries, actual Firestore contention, cap enforcement across providers, aborted claims, deletion/revocation, stale completions, category defaults, off/on cancellation, private preferences and private receipts. Run focused frontend/Functions tests, Rules tests, production build, secret and entrypoint checks, frontend policy checks and monitoring tests.
 
 Before claiming device compatibility, verify physical iPhone/iPad Home Screen, Safari on macOS, Android Chrome, desktop Firefox and Edge on Windows. Test app foreground/closed, click return through login, permission revoke, disable/sign-out, beta versus production navigation, one notification per test, and declarative delivery with worker execution unavailable on an authorized test origin. Do not unregister a production worker or send tests without the applicable authorization. OS focus modes and notification settings affect delivery. Device verification is not established by unit tests or Chrome's synthetic push tool.
+
+## Activity delivery notifications
+
+`activity_delivery` defaults on as an account preference, but transport additionally requires the unconditional
+`web_push_enabled` and **`web_push_activity_delivery_enabled`** switches, a matching public key, and production device
+registration. Missing or conditional sender configuration fails closed. Keep the new switch false during preparation.
+This category concerns recorded activities sent **from QS to providers**, not imports, planned workouts or routes.
+
+### Manual sends
+
+The Send activities review offers **Enable notifications on this device**, then an unchecked **Notify me when this
+send finishes** checkbox beside Send. Permission is requested only from that button gesture. Enabling permission or
+turning on the category never selects batch consent automatically. A blocked/unsupported device or unavailable sender
+never prevents an unchecked send. Category-off links/actions use the existing owner-scoped preference transaction.
+Owner, provider, source, draft revision and permission changes fence a pending device lookup; an unavailable choice
+can still be unchecked. Completed sends show only that a notification was requested, not a delivery guarantee.
+
+Confirmation optionally accepts exactly `{ installationId, generation }`. The existing callable validates production
+Origin, own-account (no impersonation), configuration, current registration/key, category revision and destination
+account/generation transactionally with confirmation. Consent stays in private `activitySendOperations`; the public
+batch exposes only `notificationRequested: true`. No new CRUD callable or provider action is introduced.
+
+`queueActivitySendNotification` observes `users/{uid}/activitySends/{batchId}`. Only an opted-in non-stopped transition
+to complete enters admission; retries re-read the current batch, private operation and a one-row masked issue query.
+The result says **finished** or **needs attention**, never that all recordings were delivered merely because processing
+ended. Twenty files produce at most one result for their batch. The initiating device is the only target. One result
+opens its exact Send activities batch; grouped manual results open Recent sends. Stop cancels pending notification work.
+An explicit retry of the same batch does not create another notification after admission/attempt.
+
+The existing `projectActivitySendDelivery` also handles queue deletion backed by an exact matching committed
+`failed_jobs` record. Previously an unaccepted exhausted upload could leave its batch unfinished; it now projects
+Needs action exactly once. Replaced queues, wrong ownership/revision, account deletion and ordinary cleanup deletions
+cannot publish a failure. Provider retry budgets, queue transitions and uploads are unchanged.
+
+### Automatic sending
+
+`queueAutomaticDeliveryNotification` observes `failed_jobs/{jobId}` writes and admits only automatic activity-sync
+dead letters. Manual/historical sends, unrelated queues, successful delivery and intermediate retries stay silent.
+This deliberately starts with committed terminal failures, not routine successes or every temporary connection wait.
+The alert says **needs attention**, including uncertain provider acceptance; it never claims a resend is safe.
+It opens the destination in Connections (or Connections overview for a group). Current queue state, exact failure
+revision/time, retained event existence, destination account/generation and deletion guard are rechecked before sending.
+A retry, successful recovery or reconnect can invalidate queued work. Existing provider delivery status/monitoring
+remains authoritative; this adds no provider API calls or automatic resends.
+
+### Grouping, limits and delivery
+
+A server-only leaf `users/{uid}/pushState/activityDelivery` holds one pending batch, at most 50 results, ten device
+references, four attempt timestamps and 256 suppression receipts. Manual batch receipts expire logically after 30 days; automatic
+failure receipts expire with their 24-hour source eligibility, so old failure bursts cannot fill the state for a month. No endpoints,
+metrics, titles, filenames or raw errors enter this state or telemetry. The first result fixes a two-minute window;
+the UTC minute scheduler sends after roughly two to three minutes. Per-result targets preserve initiating-device
+consent when manual results share a window with automatic failures. Browser endpoint aliases receive at most one push.
+There is at most **one delivery batch attempt per 15 minutes and four per rolling 24 hours per account**, independently
+of import/live-sync/test budgets. Capped or overflow results are suppressed permanently, not queued for a later digest.
+
+Admission snapshots category and device generations. Off/on, sign-out, replacement registration, key change, stopped
+or retried source, connection change and deletion cancel stale work. Claims clear pending state before network I/O;
+ambiguous sends/crashes are never replayed. A failed device cannot strand other devices. 404/410 removes only the exact
+expired registration generation. Pending batches expire ten minutes after becoming due; results older than 24 hours
+cannot enter delivery. The scheduler reads at most 25 due users and processes five at a time, with five device sends
+at a time per user. It uses `deliveryDueAt`, separately indexed from activity-sync `dueAt`, to avoid either queue
+starving the other. This private leaf participates in existing recursive account cleanup; no new TTL policy is needed.
+
+The shared standard/declarative payload includes the QS icon, worker click fallback, fixed tag/topic
+`qs-activity-delivery`, low urgency, `renotify: false`, ten-minute TTL and five-second timeout. Push acceptance is not
+proof of display. Rate caps and OS settings can prevent a requested notification; results remain in the app.
+
+### Delivery rollout and rollback
+
+After separate deployment approval, with the new sender switch **false**:
+
+```sh
+npm run firebase -- deploy --only firestore:rules,firestore:indexes
+# Wait for pushState.deliveryDueAt's collection-group index to become ready.
+npm run firebase -- deploy --only functions:activitySendCommand,functions:projectActivitySendDelivery,functions:queueActivitySendNotification,functions:queueAutomaticDeliveryNotification,functions:sendActivityDeliveryNotifications
+```
+
+Both admission triggers use 256 MiB, 60 seconds, retry enabled, concurrency ten, max two and min zero in europe-west2;
+neither binds a signing secret. The delivery scheduler uses 256 MiB, 120 seconds, concurrency/max one, min zero,
+zero Scheduler retries and the existing `WEB_PUSH_VAPID_KEYPAIR`. Isolated loading/resource checks cover all three.
+Release the verified frontend through the existing separately authorized workflow. Beta remains self-test-only.
+Apply/read back the existing monitoring bundle on its existing channel before enabling the delivery switch and
+checking an authorized production batch. Rollback sets only `web_push_activity_delivery_enabled=false`; it does not
+stop uploads, clear receipts or replay results. Already claimed/accepted pushes may finish.
+
+Monitoring implementation is **covered** by delivery-specific fixed outcomes, native 5xx for all three notification
+functions, bounded overdue observations and idle/disabled heartbeat absence. Provider retry/backlog/dead-letter
+coverage in the activity-delivery bundle is **unchanged** because provider operations are unchanged. Live activation
+and readback remain **deferred to [#1011](https://github.com/jimmykane/quantified-self/issues/1011)**. Offline tests are
+not live monitoring proof. There is incremental scheduler, invocation, bounded Firestore read/write and transport
+cost; one batch uses one push per distinct eligible browser endpoint, not one per uploaded file.
+
+No Training planning or MCP tool, consent, metric or response surface changes. The existing private send command is
+not an MCP mutation; notification consent never authorizes provider activity sending without its existing Send action.
 
 ## Monitoring
 
