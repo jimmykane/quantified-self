@@ -30,10 +30,13 @@ export class NotificationOfferComponent {
     const uid = this.invitation.uid();
     if (!uid || this.push.state() === 'impersonating' || this.push.state() === 'signed-out') return false;
     if (this.placement() === 'tray') return true;
-    return this.ownerUid() === uid && this.config.webPushActivitySyncEnabled()
+    if (this.ownerUid() !== uid) return false;
+    // Permission and registration state can change before this gesture finishes. Keep
+    // its progress/error visible even when the device is no longer eligible for an invitation.
+    if (this.workingFor() === uid || this.error()) return true;
+    return this.config.webPushActivitySyncEnabled()
       && this.preferences.isEnabled('activity_sync')
-      && (this.push.canInvite() || this.push.operation() === 'enable')
-      && (this.invitation.due() || this.workingFor() === uid);
+      && this.push.canInvite() && this.invitation.due();
   });
   readonly status = computed(() => {
     switch (this.push.state()) {
@@ -52,7 +55,8 @@ export class NotificationOfferComponent {
     id: 'enableNotifications', icon: 'notifications', title: 'Know when your activities arrive',
     description: 'Get grouped alerts for newly synced activities and activity delivery updates. History imports won’t generate an alert for every activity.',
     busy: this.busy(), error: this.error(),
-    primaryAction: { id: 'enableNotifications', label: 'Enable on this device', loadingLabel: this.push.operation() === 'enable' ? 'Enabling…' : 'Saving…' },
+    primaryAction: { id: 'enableNotifications', label: 'Enable on this device', loadingLabel: this.push.operation() === 'enable' ? 'Enabling…' : 'Saving…',
+      disabled: !this.push.canEnable() },
     secondaryAction: { id: 'snoozeNotifications', label: 'Not now' },
     menuActions: [{ id: 'dismissNotifications', label: 'Don’t ask again' }],
   }));

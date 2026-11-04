@@ -87,6 +87,37 @@ describe('account notification invitation preferences', () => {
     window.dispatchEvent(new Event('focus')); expect(service.due()).toBe(false);
     storageWrite.mockRestore();
   });
+  it('retains an in-memory opt-out across token refresh when both persistence paths fail', async () => {
+    const service = setup(); await flush(); publish();
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage full'); });
+    vi.mocked(runTransaction).mockRejectedValue(new Error('Offline'));
+    service.recordDeviceChoice('owner', 'disabled'); await flush();
+    owners.next(owner); await flush(); publish();
+    expect(service.due()).toBe(false);
+    const next = { ...owner, uid: 'next' }; auth.currentUser = next; owners.next(next); await flush(); publish();
+    expect(service.due()).toBe(true);
+    auth.currentUser = owner; owners.next(owner); await flush(); publish();
+    expect(service.due()).toBe(false);
+    storageWrite.mockRestore();
+  });
+  it('persists an explicit device choice after a pending claim check finishes', async () => {
+    let verify!: (value: { claims: object }) => void;
+    owner.getIdTokenResult.mockReturnValue(new Promise(resolve => { verify = resolve; }));
+    const service = setup(); service.recordDeviceChoice('owner', 'disabled');
+    expect(runTransaction).not.toHaveBeenCalled();
+    verify({ claims: {} }); await flush(); publish();
+    expect(transaction.set).toHaveBeenCalledWith({ path: 'users/owner/config/settings' },
+      { appSettings: { notificationInvitation: { version: 1, choice: 'disabled' } } }, { merge: true });
+    expect(service.due()).toBe(false);
+  });
+  it.each(['signed out', 'impersonating'])('does not persist a deferred choice when %s after the claim check', async state => {
+    let verify!: (value: { claims: object }) => void;
+    owner.getIdTokenResult.mockReturnValue(new Promise(resolve => { verify = resolve; }));
+    const service = setup(); service.recordDeviceChoice('owner', 'disabled');
+    if (state === 'signed out') { auth.currentUser = null; owners.next(null); }
+    verify({ claims: state === 'impersonating' ? { impersonatedBy: 'admin' } : {} }); await flush();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
   it('rejects a changed account before committing a pending choice', async () => {
     const service = setup(); await flush(); publish();
     transaction.get.mockImplementation(async () => { auth.currentUser = null; return { exists: () => true, data: () => ({}) }; });

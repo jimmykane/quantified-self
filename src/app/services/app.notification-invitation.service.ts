@@ -29,11 +29,13 @@ export class AppNotificationInvitationService {
   private epoch = 0;
   private writes = 0;
   private unsubscribe?: () => void;
+  private observing = Promise.resolve();
+  private readonly stoppedAccounts = new Set<string>();
 
   constructor() {
     this.destroy.onDestroy(() => { this.epoch++; this.unsubscribe?.(); });
     if (!this.browser) return;
-    user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => { void this.observe(owner); });
+    user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => { this.observing = this.observe(owner); });
     const refresh = () => {
       this.now.set(Date.now());
       // A failed storage write must not undo this session's explicit opt-out.
@@ -52,6 +54,7 @@ export class AppNotificationInvitationService {
   }
   private key(uid: string): string { return `qs.notification-invitation.stopped.${uid}`; }
   private readLocalStop(uid: string): boolean {
+    if (this.stoppedAccounts.has(uid)) return true;
     try { return this.storage.getItem(this.key(uid)) !== null; } catch { return true; }
   }
   private async observe(owner: FirebaseUserType | null): Promise<void> {
@@ -76,9 +79,15 @@ export class AppNotificationInvitationService {
   /** Called for explicit enable/disable only, never sign-out, expiry, or background reconciliation. */
   recordDeviceChoice(uid: string, choice: 'enabled' | 'disabled'): void {
     if (!this.browser || this.owner?.uid !== uid || this.auth.currentUser !== this.owner) return;
+    const owner = this.owner, epoch = this.epoch;
+    this.stoppedAccounts.add(uid);
     try { this.storage.setItem(this.key(uid), choice); } catch { /* Keep the in-memory stop even without storage. */ }
     this.locallyStopped.set(true);
-    void this.choose(choice, uid);
+    // Push and invitation state verify claims independently. A completed device gesture
+    // must still save its account-wide choice if our claim check has not finished yet.
+    void this.observing.then(() => {
+      if (this.current(owner, epoch)) return this.choose(choice, uid);
+    });
   }
 
   async choose(choice: NotificationInvitationChoice, expectedUid = this.uid()): Promise<boolean> {

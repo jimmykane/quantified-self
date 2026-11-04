@@ -80,6 +80,39 @@ describe('notification discovery surfaces', () => {
     expect(fixture.nativeElement.querySelector('#notification-permission-instructions').textContent).toContain('site’s permissions');
     expect(push.enable).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
   });
+  it('keeps dashboard progress and registration failure visible after browser permission changes', async () => {
+    let fail!: () => void;
+    push.enable.mockImplementation(() => {
+      push.operation.set('enable'); push.canEnable.set(false); push.canInvite.set(false);
+      return new Promise<void>((_resolve, reject) => { fail = () => {
+        push.operation.set(null); push.state.set('loading'); reject(new Error('Registration failed'));
+      }; });
+    });
+    const fixture = render('dashboard'); button(fixture, 'Enable on this device').click(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Enabling…');
+    fail(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Could not enable notifications');
+    expect(button(fixture, 'Enable on this device').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('a').getAttribute('href')).toBe('/settings?section=notifications');
+    push.state.set('disabled'); push.canEnable.set(true); fixture.detectChanges();
+    expect(button(fixture, 'Enable on this device').disabled).toBe(false);
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('retains the current permission denial error without automatically offering another permission request', async () => {
+    push.enable.mockImplementation(async () => {
+      push.state.set('denied'); push.canEnable.set(false); push.canInvite.set(false); invitation.due.set(false);
+      throw new Error('Permission denied');
+    });
+    const fixture = render('dashboard'); button(fixture, 'Enable on this device').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeTruthy();
+    expect(button(fixture, 'Enable on this device').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('a').textContent).toContain('Notification settings');
+    expect(push.enable).toHaveBeenCalledOnce();
+    fixture.destroy();
+    const reopened = render('dashboard');
+    expect(reopened.nativeElement.querySelector('app-dashboard-action-prompt')).toBeNull();
+  });
   it('explains installation and distinguishes disabled categories from enabled device permission', () => {
     push.state.set('install-required'); push.canEnable.set(false);
     const fixture = render(); button(fixture, 'Show instructions').click(); fixture.detectChanges();

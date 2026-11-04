@@ -1,7 +1,11 @@
 @if (visible()) {
   @if (placement() === 'dashboard') {
-    <app-dashboard-action-prompt [prompt]="prompt()" (primary)="enable()"
-      (secondary)="dismiss(false)" (menuAction)="dismiss(true)" />
+    <app-dashboard-action-prompt [prompt]="prompt()" [hasActionControls]="!!error()" (primary)="enable()"
+      (secondary)="dismiss(false)" (menuAction)="dismiss(true)">
+      @if (error()) {
+        <a prompt-actions mat-button routerLink="/settings" [queryParams]="{section: 'notifications'}" (click)="manage()">Notification settings</a>
+      }
+    </app-dashboard-action-prompt>
   } @else {
     <section class="device-notification-offer" aria-labelledby="device-notification-offer-title">
       <div class="device-notification-heading">

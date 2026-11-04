@@ -152,13 +152,17 @@ proactive discovery. Transactional nested merges preserve unrelated settings, co
 reminder twice, and terminal choices cannot be revived by a late snooze. Generic profile/Settings saves exclude this
 field so stale tabs cannot replay old choices; empty app-settings maps cannot erase it. Choices synchronize across beta/production.
 An account-scoped local stop marker also preserves explicit enable/disable intent if the preference write fails.
+An in-memory stop survives token refresh and account re-entry when local storage is unavailable. Device choices wait
+for a pending invitation claim check before saving, with the same account/lifetime and impersonation checks.
 Disabling a listed registration saves the shared opt-out in the same transaction as revocation. Sign-out, expiry and
 background reconciliation do not record an explicit opt-out. Account cleanup already covers the settings document.
 
 Invitation reads require an authoritative server snapshot; cache-only, malformed, failed and impersonated reads
 suppress the dashboard offer. Focus refreshes the snooze clock. Permission requests remain synchronous in an explicit
-button gesture, and asynchronous UI completion is fenced to the starting account and component lifetime. No new
-Function, Rules deployment, scheduler, notification category or notification inbox is introduced. Frontend release
+button gesture, and asynchronous UI completion is fenced to the starting account and component lifetime.
+The current dashboard gesture keeps progress or failure feedback visible after permission state changes; failure
+provides a Settings link and only allows an enable retry when the push service can enable that device.
+No new Function, Rules deployment, scheduler, notification category or notification inbox is introduced. Frontend release
 uses the existing foundation and activity-sync switches; no cloud values are changed by this implementation.
 
 ## Recent live-activity sync notifications
