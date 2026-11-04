@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
-import { withWorkoutPowerContext } from './day-workout-power';
+import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-power';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import type { DayWorkoutContext } from './day-workout-context';
 const profile = { sport: ActivityTypes.Running, provider: 'suunto' as const, source: 'Watch running power',
@@ -45,6 +45,16 @@ describe('source-aware generation power references', () => {
       expect(context.references).toEqual([]); expect(context.powerReference).toBeUndefined();
       expect(context.missingContext.join(' ')).toMatch(/Power targets/);
     });
+  it('attributes power targets inside repeat blocks only to their matching sport and reference', () => {
+    const target = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: profile.reference } as const;
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Power intervals', rationale: 'Use the confirmed source.',
+      structure: { version: 1, sport: controls.sport, nodes: [{ kind: 'repeat', id: 'block', count: 2,
+        steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [target] }] }] } }, controls, [], [target]);
+    expect(dayWorkoutPowerReferenceUsed(suggestion, profile)).toEqual(profile);
+    expect(dayWorkoutPowerReferenceUsed(suggestion, { ...profile, sport: ActivityTypes.Cycling })).toBeUndefined();
+    expect(dayWorkoutPowerReferenceUsed(suggestion, { ...profile, reference: { ...profile.reference, watts: 300 } })).toBeUndefined();
+    expect(dayWorkoutPowerReferenceUsed(suggestion, { ...profile, reference: { ...profile.reference, kind: 'functional-threshold-power' } })).toBeUndefined();
+  });
   it('clears an earlier source snapshot when settings cannot be verified again', async () => {
     const { db, get } = database();
     const previous = await withWorkoutPowerContext('owner', controls, now, base(), db);
@@ -61,11 +71,22 @@ describe('source-aware generation power references', () => {
     expect(result.references.map(t => t.kind)).toEqual(['heart-rate']);
     expect(result.missingContext.join(' ')).toContain('could not be verified');
   });
+  it.each([ActivityTypes.Walking, ActivityTypes.Swimming, ActivityTypes.Hiking])('withholds unverified nearby power references for %s in auto mode', async sport => {
+    const { db, doc } = database(), selected = { ...controls, sport };
+    const result = await withWorkoutPowerContext('owner', selected, now, base(), db);
+    expect(doc).not.toHaveBeenCalled();
+    expect(result.references).toEqual([]); expect(result.evidence.references).toEqual([]);
+    const suggestion = { kind: 'workout', title: 'Easy session', rationale: 'Use effort.', structure: { version: 1, sport,
+      nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [legacy] }] } };
+    expect(() => validateDayWorkoutSuggestion(suggestion, selected, [], result.references)).toThrow();
+  });
   it('does not read power settings for strength, no-target or heart-rate requests', async () => {
     for (const selection of [...['none', 'heart-rate', 'speed'].map(target => ({ ...controls, target })),
       ...[ActivityTypes.Walking, ActivityTypes.Swimming, ActivityTypes.Hiking].map(sport => ({ ...controls, sport }))]) {
       const { db, doc } = database(); const context = base();
-      expect(await withWorkoutPowerContext('owner', selection as typeof controls, now, context, db)).toBe(context);
+      const result = await withWorkoutPowerContext('owner', selection as typeof controls, now, context, db);
+      expect(result.references).toEqual([]); expect(result.evidence.references).toEqual([]);
+      expect(result).not.toHaveProperty('powerReference');
       expect(doc).not.toHaveBeenCalled();
     }
   });

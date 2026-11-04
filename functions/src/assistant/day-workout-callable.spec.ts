@@ -60,6 +60,18 @@ describe('generateDayWorkout callable', () => {
     expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
   });
 
+  it.each(['effort-only', 'heart-rate'] as const)('does not attribute an unused power source to an %s generated workout', async preference => {
+    const deps = dependencies();
+    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    const heartRate = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'max-heart-rate', bpm: 180 } } as const;
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], powerReference, references: [heartRate] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: preference === 'heart-rate' ? [heartRate] : [] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.kind).toBe('workout'); expect(result).not.toHaveProperty('powerReference');
+  });
+
   it('dispatches the first-party daily-suggestion mode through the existing callable', async () => {
     const input = { mode: 'daily-suggestion', action: 'status' };
     const status = { localDate: '2026-10-28', state: 'waiting' as const };

@@ -82,6 +82,17 @@ describe('daily workout preparation', () => {
     expect(deps.context).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
   });
 
+  it('does not attribute an unused power source to a prepared effort-only workout', async () => {
+    const deps = dependencies();
+    const powerReference = { sport: dailyControls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    deps.context.mockResolvedValue({ ...evidence(), powerReference });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } } as never);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.result?.kind).toBe('workout'); expect(result.result).not.toHaveProperty('powerReference');
+  });
+
   it('prepares event guidance once, without a workout or provider context, and replays it after goal edits', async () => {
     const deps = dependencies();
     deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 4, eventGoals: [{ name: 'Marathon', localDate: dailyControls.localDate }] });

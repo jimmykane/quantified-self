@@ -16,7 +16,7 @@ import { reserveAssistantQuotaForRequest, finalizeAssistantQuotaReservation, rel
   type AssistantQuotaReservation } from './quota';
 import { createDayWorkoutStore, type DayWorkoutStore } from './day-workout-store';
 import { collectDayWorkoutContext, readDayWorkoutTrainingContext, type DayWorkoutContext } from './day-workout-context';
-import { withWorkoutPowerContext } from './day-workout-power';
+import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-power';
 import { createAssistantMcpSession } from './mcp-session';
 import { assistantGenkit } from './model';
 import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion, type ValidatedDaySuggestion } from './day-workout-validation';
@@ -198,9 +198,10 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     stage = 'model';
     const suggestion = await generateValidatedDayWorkout(request, evidence, dependencies.generate,
       () => dependencies.store.assertActive(uid, request.requestId, started.token));
+    const powerReference = dayWorkoutPowerReferenceUsed(suggestion, evidence.powerReference);
     const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext,
-      ...(suggestion.kind === 'workout' && evidence.powerReference ? { powerReference: evidence.powerReference } : {}) };
+      ...(powerReference ? { powerReference } : {}) };
     stage = 'save-result';
     await dependencies.store.finish(uid, request.requestId, started.token, response);
     return response;

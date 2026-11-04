@@ -977,13 +977,15 @@ or unreadable settings never become a zero-revision write or an inferred thresho
 explicit reload is available for conflicts. Sign-out/account changes suppress late UI outcomes.
 
 Both manual day generation and included Pro daily suggestions resolve power after the final sport selection, separately
-from optional Training-plan context. Only `auto`/`power` targets read settings. Nearby recipes cannot identify a current
+from optional Training-plan context. Only supported sports with `auto`/`power` targets read settings. Every path, including unsupported sports and explicit
+non-power preferences, removes unverified power references from both validation and model reference lists. Nearby recipes cannot identify a current
 source, so their power references are withheld; other reference kinds retain existing behavior. A confirmed matching
 profile supplies the sole allowed power reference and optional authored zone guidance to the model. The existing strict
 validator accepts only relative targets matching its exact reference kind and watts. Missing, future-dated, malformed or
 unavailable settings yield effort guidance without inferred power targets, never another sport/device reference.
 
-The first-party result stores an immutable `powerReference` review snapshot alongside the generated result. Original
+Only workouts containing an actual relative power target with the matching sport/reference store a `powerReference`
+review snapshot; effort-only and other-target workouts do not attribute an unused source. This snapshot is immutable. Original
 request replay and daily-ready caches retain that snapshot after settings edits. Profile changes do not regenerate or
 charge again, rewrite existing prescriptions or retarget already saved workouts. Canonical v1 recipes continue to store
 only percentage ranges and the reference kind/watts; private provider/device/date/zone metadata is not persisted in the
@@ -1000,7 +1002,8 @@ for stored data. Feature runtime changes require the normal separately authorize
 Verification covers codec bounds/unknown keys, missing/unreadable/future/wrong-sport references, strict generation
 validation, manual and routine-selected daily result replay, owner/session changes, concurrent settings and exact retry,
 canonical display, real Material template bindings, haptics, help and MCP read-back. Pure display specs run in helpers-node;
-Angular service/component specs have concrete environment reasons. Browser layout checks use synthetic data only.
+Angular service/component specs have concrete environment reasons. Browser layout checks use synthetic data only. Zone-boundary hints use Material dynamic subscript sizing so wrapped
+phone hints reserve their full height before the Save/Remove actions.
 
 
 ### Remembered Plans view

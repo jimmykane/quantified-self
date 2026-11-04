@@ -22,7 +22,7 @@
     </mat-select></mat-form-field>
     <mat-form-field appearance="outline"><mat-label>Reference power</mat-label><input matInput type="number" min="0" step="any" max="3000" formControlName="watts"><span matTextSuffix>{{ powerUnit() }}</span></mat-form-field>
     <mat-form-field appearance="outline"><mat-label>Reference date</mat-label><input matInput type="date" [max]="today" formControlName="referenceDate"></mat-form-field>
-    <mat-form-field appearance="outline"><mat-label>Zone upper bounds (optional)</mat-label><input matInput formControlName="zones" maxlength="140" placeholder="150, 200, 250, 300"><span matTextSuffix>{{ powerUnit() }}</span>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Zone upper bounds (optional)</mat-label><input matInput formControlName="zones" maxlength="140" placeholder="150, 200, 250, 300"><span matTextSuffix>{{ powerUnit() }}</span>
       <mat-hint>Increasing, comma-separated boundaries. Z1 starts at zero; each upper bound is exclusive. The final zone has no upper limit.</mat-hint>
     </mat-form-field>
   </fieldset>
