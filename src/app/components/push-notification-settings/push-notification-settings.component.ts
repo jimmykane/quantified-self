@@ -5,6 +5,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import type { MatSlideToggle } from '@angular/material/slide-toggle';
 import type { NotificationCategoryId } from '@shared/notification-categories';
+import { DatePipe } from '@angular/common';
+import { AppNotificationDevicesService, type NotificationDevice } from '../../services/app.notification-devices.service';
 const STATUS = {
   loading: 'Checking notification support…', 'signed-out': 'Sign in to manage notifications.',
   unsupported: 'This browser does not support device notifications.',
@@ -15,13 +17,15 @@ const STATUS = {
   disabled: 'Notifications are off on this device.', enabled: 'Notifications are enabled on this device.',
 };
 @Component({
-  selector: 'app-push-notification-settings', standalone: true, imports: [MaterialModule],
+  selector: 'app-push-notification-settings', standalone: true, imports: [MaterialModule, DatePipe],
+  providers: [AppNotificationDevicesService],
   templateUrl: './push-notification-settings.component.html', styleUrls: ['./push-notification-settings.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PushNotificationSettingsComponent {
   readonly push = inject(AppPushService);
   readonly preferences = inject(AppNotificationPreferencesService);
+  readonly devices = inject(AppNotificationDevicesService);
   private readonly haptics = inject(AppHapticsService);
   readonly status = computed(() => STATUS[this.push.state()]);
   async setCategory(category: NotificationCategoryId, enabled: boolean, toggle?: MatSlideToggle): Promise<void> {
@@ -36,7 +40,20 @@ export class PushNotificationSettingsComponent {
     if (this.preferences.status() !== 'error') return;
     this.haptics.selection(); this.preferences.reload();
   }
+  async disableDevice(device: NotificationDevice): Promise<void> {
+    if (!this.devices.canManage()) return;
+    this.haptics.selection();
+    try { if (await this.devices.disable(device)) this.haptics.success(); }
+    catch { this.haptics.error(); }
+  }
+  async loadDevices(more = false): Promise<void> {
+    if (more ? !this.devices.canManage() || !this.devices.hasMore() : !this.devices.canReload()) return;
+    this.haptics.selection();
+    await (more ? this.devices.loadMore() : this.devices.reload());
+    if (this.devices.status() === 'error') this.haptics.error();
+  }
   async act(action: 'enable' | 'disable' | 'test'): Promise<void> {
+    if (this.devices.saving()) return;
     if (!(action === 'enable' ? this.push.canEnable() : action === 'disable' ? this.push.canDisable() : this.push.canTest())) return;
     this.haptics.selection();
     try {
@@ -44,5 +61,7 @@ export class PushNotificationSettingsComponent {
       if (accepted === false) this.haptics.error(); else this.haptics.success();
     }
     catch { this.haptics.error(); }
+    // Tests can expire registrations, and a failed browser cleanup can follow a successful server removal.
+    finally { await this.devices.reload(); }
   }
 }

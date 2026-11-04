@@ -1739,6 +1739,15 @@ export class AppUserService implements OnDestroy {
     // Workout power has a dedicated revision-checked writer; generic profile saves
     // must not replay a stale planning profile or server-owned metric setting.
     const { trainingSettings: _trainingSettings, workoutPower: _workoutPower, ...clientWritableSettings } = settings as Record<string, unknown>;
+    const appSettings = clientWritableSettings['appSettings'];
+    if (appSettings && typeof appSettings === 'object' && !Array.isArray(appSettings)) {
+      // Only the invitation/device services own this choice. A profile captured before a
+      // dismissal on another tab must never replay its old snooze or clear the preference.
+      const generalAppSettings = { ...appSettings } as Record<string, unknown>;
+      delete generalAppSettings['notificationInvitation'];
+      if (Object.keys(generalAppSettings).length) clientWritableSettings['appSettings'] = generalAppSettings;
+      else delete clientWritableSettings['appSettings']; // Firestore merges an empty map by replacing it.
+    }
     return clientWritableSettings;
   }
 

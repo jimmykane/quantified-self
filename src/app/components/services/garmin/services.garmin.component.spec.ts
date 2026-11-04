@@ -1381,7 +1381,7 @@ describe('ServicesGarminComponent', () => {
             expect(fixture.nativeElement.textContent).toContain('Send Garmin activities to Suunto');
         });
 
-        it('should show inline warning pill when connected service is used by active route', () => {
+        it('should show neutral usage status when connected service is used by active route', () => {
             component.hasProAccess = true;
             component.user = {
                 uid: ACTIVITY_SYNC_ALLOWLISTED_UID,
@@ -1398,9 +1398,10 @@ describe('ServicesGarminComponent', () => {
 
             fixture.detectChanges();
 
-            const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
-            expect(warningPill).toBeTruthy();
-            expect((warningPill.textContent || '').trim()).toContain('Used by automatic sync');
+            const usageStatus = fixture.nativeElement.querySelector('.active-sync-usage');
+            expect(usageStatus).toBeTruthy();
+            expect(usageStatus.querySelector('mat-icon')?.textContent?.trim()).toBe('sync_alt');
+            expect((usageStatus.textContent || '').trim()).toContain('Used by automatic sync');
         });
 
         it('should require confirmation before disconnect when active sync route would be disabled', async () => {

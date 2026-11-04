@@ -52,6 +52,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery notific
     h.advance(); await Promise.all([h.send(), h.send()]); expect(h.deps.send).toHaveBeenCalledOnce();
     expect(JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]).notification.navigate).toBe(origin + '/services');
   }, 30000);
+  it('delivers automatic failures to production and beta with one shared attempt', async () => {
+    const h = await setup(); const registration = (await db.doc(`users/owner/pushSubscriptions/${id}`).get()).data()!;
+    await db.collection('users/owner/pushSubscriptions').doc(randomUUID()).set({ ...registration,
+      origin: 'https://beta.quantified-self.io', endpoint: 'https://web.push.apple.com/beta' });
+    await h.admit(await h.seed('automatic')); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledTimes(2); expect((await h.state.get()).data()?.attempts).toHaveLength(1);
+    for (const [target, body] of vi.mocked(h.deps.send).mock.calls) expect(JSON.parse(body).notification.navigate).toBe(target.origin + '/services?serviceName=Suunto%20app');
+  });
   it('rolls back an aborted claim and preserves the batch for one later attempt', async () => {
     const h = await setup(); await h.admit(await h.seed()); h.advance();
     const original = db.runTransaction.bind(db); vi.spyOn(db, 'runTransaction').mockImplementationOnce(fn => original(async tx => { await fn(tx); throw new Error('Abort'); }));

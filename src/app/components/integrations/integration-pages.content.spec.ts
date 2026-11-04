@@ -142,7 +142,9 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to COROS?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS Health and sleep')?.copy)
-      .toContain('every 24 hours');
+      .toContain('checked hourly');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS Health and sleep')?.copy)
+      .toContain('daily seven-day reconciliation');
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS Health and sleep')?.copy)
       .toContain('three-month Sleep and Health history');
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS Health and sleep')?.copy)

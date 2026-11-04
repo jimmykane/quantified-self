@@ -35,6 +35,10 @@
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
   },
+  "src/app/components/notification-offer/notification-offer.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles dashboard and tray offer templates with Material controls, reactive permission/preference state, async click handling, account changes and haptics."
+  },
   "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Today rest-day indicator with TestBed to verify owner-fenced signal inputs, shared plan reads, date changes, Material navigation, haptic ownership and destruction cleanup."
@@ -150,6 +154,14 @@
   "src/app/services/app-check-diagnostics.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
+  },
+  "src/app/services/app.notification-devices.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed for injected Auth, Firestore and push services, reactive view signals, owner changes and DestroyRef teardown during pending device reads and removal transactions."
+  },
+  "src/app/services/app.notification-invitation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed and DestroyRef to verify Auth lifecycle, authoritative Firestore preference snapshots, account changes and persisted opt-out state."
   },
   "src/app/services/app.notification-preferences.service.spec.ts": {
     "environment": "angular",

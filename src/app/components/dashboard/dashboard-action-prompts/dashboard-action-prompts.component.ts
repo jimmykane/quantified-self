@@ -45,6 +45,7 @@ export class DashboardActionPromptsComponent {
 
   private _prompts: DashboardActionPromptViewModel[] = [];
   private readonly promptOrder: Record<AppDashboardActionPromptId, number> = {
+    enableNotifications: 9,
     unitSetup: 0,
     firstActivityUpload: 1,
     connectActivityService: 2,

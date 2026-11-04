@@ -14,7 +14,7 @@ export class AppNotificationPreferencesService {
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly preferences = signal<Partial<Record<NotificationCategoryId, NotificationCategoryPreference>>>({});
   readonly status = signal<'loading' | 'ready' | 'signed-out' | 'impersonating' | 'error'>('loading');
-  readonly saving = signal<NotificationCategoryId | null>(null);
+  readonly saving = signal<NotificationCategoryId | 'all' | null>(null);
   readonly message = signal('');
   readonly canEdit = computed(() => this.status() === 'ready' && !this.saving());
   readonly categories = computed(() => NOTIFICATION_CATEGORIES.map(category => ({
@@ -85,6 +85,39 @@ export class AppNotificationPreferencesService {
   private acceptPreference(category: NotificationCategoryId, preference: NotificationCategoryPreference): void {
     this.preferences.update(current => (current[category]?.revision ?? -1) > preference.revision
       ? current : { ...current, [category]: preference });
+  }
+
+  /** Explicit master On action: read and enable all categories atomically. */
+  async enableAll(expectedUid = this.owner?.uid): Promise<boolean> {
+    const owner = this.owner, epoch = this.epoch;
+    if (!owner || owner.uid !== expectedUid || !this.current(owner, epoch) || !this.canEdit()) return false;
+    this.saving.set('all'); this.message.set('');
+    try {
+      const preferences = await runTransaction(this.firestore, async tx => {
+        if (!this.current(owner, epoch)) throw new Error('Account changed.');
+        const records = await Promise.all(NOTIFICATION_CATEGORIES.map(async category => {
+          const ref = doc(this.firestore, notificationPreferencePath(owner.uid, category.id));
+          const current = readNotificationCategoryPreference((await tx.get(ref)).data());
+          if (!current) throw new Error('Invalid notification preference.');
+          const next = current.enabled ? current : { enabled: true, revision: current.revision + 1 };
+          if (!Number.isSafeInteger(next.revision)) throw new Error('Invalid notification revision.');
+          return { id: category.id, ref, current, next };
+        }));
+        if (!this.current(owner, epoch)) throw new Error('Account changed.');
+        for (const record of records) {
+          if (!record.current.enabled) tx.set(record.ref, { schemaVersion: 1, ...record.next, updatedAt: serverTimestamp() });
+        }
+        return records;
+      });
+      if (!this.current(owner, epoch)) return false;
+      for (const record of preferences) this.acceptPreference(record.id, record.next);
+      this.message.set('All notification categories are on.');
+      return true;
+    } catch {
+      if (!this.current(owner, epoch)) return false;
+      this.message.set('Could not turn on all notification categories. Please try again.');
+      throw new Error('Could not turn on all notification categories.');
+    } finally { if (this.current(owner, epoch)) this.saving.set(null); }
   }
 
   async setEnabled(category: NotificationCategoryId, enabled: boolean): Promise<boolean> {

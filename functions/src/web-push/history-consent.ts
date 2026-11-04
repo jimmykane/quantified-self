@@ -8,7 +8,7 @@ import { notificationPreferencePath, readNotificationCategoryPreference } from '
 export function readHistoryNotificationConsent(value: unknown, origin: string | undefined, impersonatedBy: unknown): HistoryNotificationRequest | undefined {
   if (value === undefined) return undefined;
   if (impersonatedBy || !origin || !isAutomaticPushOrigin(origin)) {
-    throw new HttpsError('permission-denied', 'Import notifications are available on production for your own account.');
+    throw new HttpsError('permission-denied', 'Import notifications require your own account on a supported QS site.');
   }
   if (!isHistoryNotificationTarget(value)) throw new HttpsError('invalid-argument', 'Choose a registered notification device.');
   return { ...value, origin };

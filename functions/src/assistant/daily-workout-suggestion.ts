@@ -5,11 +5,11 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
-import { dayWorkoutDateOffset, dayWorkoutLocalDate, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
+import { dayWorkoutDateOffset, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
 import { assertAssistantLegalAccess } from './access';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
-import { dayWorkoutDependencies, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
+import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
@@ -80,10 +80,11 @@ export interface DailyWorkoutSuggestionDependencies {
   coverage(uid: string, controls: DayWorkoutControls): Promise<DayCoverage>;
   importActive(uid: string): Promise<boolean>;
   generate: typeof generateDayWorkoutSuggestion;
+  regenerate: typeof runGenerateDayWorkout;
   log(fields: RecordValue): void;
 }
 const defaults: DailyWorkoutSuggestionDependencies = {
-  store: createDailyWorkoutSuggestionStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
+  store: createDailyWorkoutSuggestionStore(), regenerate: runGenerateDayWorkout, now: () => new Date(), legal: assertAssistantLegalAccess,
   pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
   importActive: readDailyWorkoutHistoryImportActive, selectSport: selectDailyWorkoutSuggestionSport, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
@@ -112,12 +113,13 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   enforceAppCheck(context);
   const input = record(value);
   const datedAction = input.action === 'dismiss' || input.action === 'use-available-data';
-  const keys = datedAction ? ['mode', 'action', 'localDate', 'resultVersion'] : ['mode', 'action', 'resultVersion'];
+  const regenerating = input.action === 'regenerate';
+  const keys = regenerating ? ['mode', 'action', 'expectedRequestId', 'request'] : datedAction ? ['mode', 'action', 'localDate', 'resultVersion'] : ['mode', 'action', 'resultVersion'];
   const project = (status: DailyWorkoutSuggestionStatus): DailyWorkoutSuggestionStatus => status.result?.kind === 'event-advice' && input.resultVersion !== 2
     ? { localDate: status.localDate, state: 'failed' } : status;
   if (Object.keys(input).some(key => !keys.includes(key)) || input.mode !== 'daily-suggestion'
     || (input.resultVersion !== undefined && input.resultVersion !== 2)
-    || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss', 'use-available-data'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a daily action.');
+    || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss', 'use-available-data', 'regenerate'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a daily action.');
   const uid = context.auth.uid;
   await dependencies.legal(uid);
   if (!await dependencies.pro(uid)) throw new HttpsError('permission-denied', 'Daily suggestions require Pro.');
@@ -130,6 +132,38 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   const { preferences, status, deliveryPreferences } = await currentDailyWorkoutSuggestionStatus(uid, dependencies);
   if (expectedDate && preferences && expectedDate !== preferences.controls.localDate) {
     throw new HttpsError('aborted', 'The day changed. Review today before generating.');
+  }
+  if (regenerating) {
+    let request: GenerateDayWorkoutRequest;
+    try {
+      request = parseGenerateDayWorkoutRequest(input.request, dependencies.now());
+      if (request.replaceWorkout || request.requestId.startsWith('daily-suggestion:')
+        || typeof input.expectedRequestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(input.expectedRequestId)) throw Error();
+    } catch { throw new HttpsError('invalid-argument', 'Choose valid regeneration options.'); }
+    if (!preferences || status.state !== 'ready' || !status.result || status.result.kind === 'event-advice'
+      || ![input.expectedRequestId, request.requestId].includes(status.result.requestId)
+      || request.controls.localDate !== preferences.controls.localDate || request.controls.timeZone !== preferences.controls.timeZone
+      || request.controls.destinationPlanId !== null || !request.controls.trainingContext || request.controls.activityContext === false) {
+      throw new HttpsError('aborted', 'Today’s suggestion changed. Review it again.');
+    }
+    // Uses the existing idempotent manual generator and ordinary Assistant quota, never the daily allowance.
+    const result = await dependencies.regenerate(request, context, { ...dayWorkoutDependencies,
+      context: async (owner, generatedRequest, now) => {
+        const evidence = await dayWorkoutDependencies.context(owner, generatedRequest, now);
+        const providers = deliveryPreferences?.enabled && deliveryPreferences.providers.length
+          ? dayWorkoutProviderContext(generatedRequest.controls, deliveryPreferences.providers, evidence.references) : null;
+        if (providers) {
+          const combined = { ...evidence.evidence, deliveryProviders: providers.evidence };
+          if (JSON.stringify(combined).length <= DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) {
+            evidence.evidence = combined;
+            evidence.usedContext.push('Saved daily delivery formats; sending still requires approval.');
+          } else evidence.missingContext.push('Provider formats exceeded the context limit. Review sync before sending.');
+        }
+        return evidence;
+      },
+    });
+    await dependencies.store.replace(uid, preferences, input.expectedRequestId as string, request.controls, result);
+    return (await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status;
   }
   if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) return project(status);
   const now = dependencies.now();

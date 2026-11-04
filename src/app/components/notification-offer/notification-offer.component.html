@@ -1,0 +1,50 @@
+@if (visible()) {
+  @if (placement() === 'dashboard') {
+    <app-dashboard-action-prompt [prompt]="prompt()" [hasActionControls]="!!error()" (primary)="enable()"
+      (secondary)="dismiss(false)" (menuAction)="dismiss(true)">
+      @if (error()) {
+        <a prompt-actions mat-button routerLink="/settings" [queryParams]="{section: 'notifications'}" (click)="manage()">Notification settings</a>
+      }
+    </app-dashboard-action-prompt>
+  } @else {
+    <section class="device-notification-offer" aria-labelledby="device-notification-offer-title">
+      <div class="device-notification-top">
+        <div class="device-notification-heading">
+          <mat-icon aria-hidden="true">notifications</mat-icon>
+          <h3 id="device-notification-offer-title">Notifications on this device</h3>
+        </div>
+        <div class="notification-on-control">
+          <span class="notification-toggle-progress">
+            @if (busy() || checking()) { <mat-spinner diameter="20" aria-label="Updating notifications" /> }
+          </span>
+          <mat-slide-toggle [checked]="notificationsOn()" [disabled]="busy() || (notificationsOn() ? !push.canDisable() : !canTurnOn())"
+            aria-label="Notifications on this device" (change)="onToggle($event)">On</mat-slide-toggle>
+        </div>
+      </div>
+      <p role="status" aria-live="polite">{{ status() }}</p>
+      <p class="notification-description">On enables this device and every category. Off silences this device. Categories apply across your account.</p>
+      <div class="notification-offer-actions">
+        @if (canRetry()) {
+          <button mat-button type="button" [disabled]="busy()" (click)="retry()">Retry</button>
+        }
+        @if (push.state() === 'denied' || push.state() === 'install-required') {
+          <button mat-button type="button" [disabled]="busy()" [attr.aria-expanded]="instructionsOpen()"
+            aria-controls="notification-permission-instructions" (click)="toggleInstructions()">
+            {{ instructionsOpen() ? 'Hide instructions' : 'Show instructions' }}
+          </button>
+        }
+        <a mat-button routerLink="/settings" [queryParams]="{section: 'notifications'}" (click)="manage()">{{ push.state() === 'enabled' ? 'Manage notifications' : 'Notification settings' }}</a>
+      </div>
+      @if (instructionsOpen() && (push.state() === 'denied' || push.state() === 'install-required')) {
+        <p id="notification-permission-instructions" class="notification-description">
+          @if (push.state() === 'install-required') {
+            On iPhone or iPad, use Share → Add to Home Screen. Open QS from that icon, then enable notifications there.
+          } @else {
+            Open this site’s permissions in your browser settings and allow Notifications. Check your device’s notification settings too, then return to QS.
+          }
+        </p>
+      }
+      @if (error()) { <p role="alert">{{ error() }}</p> }
+    </section>
+  }
+}

@@ -126,6 +126,19 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       entry.state = outcome; if (controls) entry.controls = controls; if (result) entry.result = result;
       return { value: undefined, write: true };
     }),
+    replace: (uid: string, expected: DailyWorkoutSuggestionPreferences, expectedRequestId: string,
+      controls: DayWorkoutControls, result: DailyWorkoutSuggestionResult) => transact(uid, (preferences, state) => {
+      if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Daily preferences changed.');
+      const entry = state.messages[controls.localDate];
+      if (!entry || entry.state !== 'ready' || entry.result?.kind === 'event-advice'
+        || ![expectedRequestId, result.requestId].includes(entry.result?.requestId ?? '')
+        || controls.localDate !== preferences.controls.localDate || controls.timeZone !== preferences.controls.timeZone
+        || controls.destinationPlanId !== null) throw new HttpsError('aborted', 'Today’s suggestion changed. Review it again.');
+      if (entry.result?.requestId === result.requestId) return { value: publicEntry(entry) };
+      entry.controls = controls; entry.result = result;
+      // Preserve the charged receipt: explicit quota-funded replacement never resets automatic admission.
+      return { value: publicEntry(entry), write: true };
+    }),
     dismiss: (uid: string, expectedDate: string) => transact(uid, (preferences, state, now) => {
       if (!preferences?.enabled) throw new HttpsError('failed-precondition', 'Daily suggestions are off.');
       const date = preferences.controls.localDate;

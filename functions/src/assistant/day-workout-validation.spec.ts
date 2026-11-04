@@ -137,6 +137,8 @@ describe('explicit generation power averaging', () => {
   it.each([3, 10, 30] as const)('applies %i seconds only to validated power in steps and repeats', seconds => {
     const selected = { ...controls, target: 'power' as const, garminPowerAveragingSeconds: seconds };
     expect(parseGenerateDayWorkoutRequest({ requestId: 'request-avg', controls: selected }, new Date('2026-10-28T12:00Z')).controls).toEqual(selected);
+    const replacement = { requestId: 'replacement-avg', controls: selected, replaceWorkout: { id: 'saved-workout', revision: 3 } };
+    expect(parseGenerateDayWorkoutRequest(replacement, new Date('2026-10-28T12:00Z'))).toEqual(replacement);
     const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [
       { ...step(), id: 'warmup' }, { kind: 'repeat', id: 'repeats', count: 2, steps: [{ ...step(), targets: [power] }] },
     ] } };

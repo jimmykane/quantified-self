@@ -70,6 +70,22 @@ describe('mutateTrainingSchedule callable', () => {
         });
     });
 
+    it('passes only explicit replacement guards to the existing transaction', async () => {
+        const data = { ...VALID_DATA, operation: { ...VALID_DATA.operation, kind: 'update-workout' },
+            expectedRevisions: [...VALID_DATA.expectedRevisions, { scope: 'workout', id: 'workout-1', revision: 1 }] };
+        await (mutateTrainingSchedule as unknown as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'owner' }, app: {}, data: { ...data, requireUncompletedWorkout: true },
+        });
+        expect(hoisted.mutateTrainingScheduleForUser).toHaveBeenCalledWith('owner', data, { requireUncompletedWorkout: true });
+        for (const invalid of [
+            { ...data, requireUncompletedWorkout: false }, { ...data, requireUncompletedWorkout: 'true' },
+            { ...VALID_DATA, requireUncompletedWorkout: true },
+            { ...data, requireUncompletedWorkout: true, deliveryAfterCreate: { providers: ['garmin'], timeZone: 'UTC' } },
+        ]) await expect((mutateTrainingSchedule as unknown as (request: unknown) => Promise<unknown>)({
+            auth: { uid: 'owner' }, app: {}, data: invalid,
+        })).rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(hoisted.mutateTrainingScheduleForUser).toHaveBeenCalledOnce();
+    });
     it('routes explicit standalone delivery through one server-owned save and returns its durable outcomes', async () => {
         const result = { mutationId: 'create-1', deliveryOutcomes: [{ provider: 'garmin', state: 'queued' }] };
         hoisted.createWorkoutWithDeliveryForUser.mockResolvedValueOnce(result);

@@ -51,6 +51,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity notification Fir
     const state = (await h.state.get()).data();
     expect(state?.attempts).toHaveLength(1); expect(state).not.toHaveProperty('dueAt');
   }, 30000);
+  it('queries both sites and stops a remotely disabled beta registration before sending', async () => {
+    const h = await seed(), betaId = randomUUID();
+    const registration = (await mocks.db.doc(`users/owner/pushSubscriptions/${id}`).get()).data()!;
+    const betaRef = mocks.db.doc(`users/owner/pushSubscriptions/${betaId}`);
+    await betaRef.set({ ...registration, origin: 'https://beta.quantified-self.io', endpoint: 'https://web.push.apple.com/beta' });
+    await h.admit(); expect((await h.state.get()).data()?.pending.targets).toHaveLength(2);
+    await betaRef.delete(); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    expect(vi.mocked(h.deps.send).mock.calls[0][0].origin).toBe(origin);
+  });
+  it('delivers to both sites with distinct navigation and one shared rate-limit attempt', async () => {
+    const h = await seed();
+    const registration = (await mocks.db.doc(`users/owner/pushSubscriptions/${id}`).get()).data()!;
+    await mocks.db.collection('users/owner/pushSubscriptions').doc(randomUUID()).set({ ...registration,
+      origin: 'https://beta.quantified-self.io', endpoint: 'https://web.push.apple.com/beta' });
+    await h.admit(); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledTimes(2); expect((await h.state.get()).data()?.attempts).toHaveLength(1);
+    for (const [target, body] of vi.mocked(h.deps.send).mock.calls) expect(JSON.parse(body).notification.navigate).toBe(target.origin + '/user/owner/event/event');
+  });
   it('does not persist an aborted admission or consume an attempt for an aborted claim', async () => {
     const h = await seed(); const original = mocks.db.runTransaction.bind(mocks.db);
     vi.spyOn(mocks.db, 'runTransaction').mockImplementationOnce(fn => original(async tx => { await fn(tx); throw new Error('Abort'); }));

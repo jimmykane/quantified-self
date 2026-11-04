@@ -486,6 +486,8 @@ export function trainingScheduleRevisionDocumentId(revision: number): string {
 }
 
 export interface TrainingScheduleMutationOptions {
+    /** Explicit first-party replacement only; checked transactionally after successful-receipt replay. */
+    requireUncompletedWorkout?: true;
     db?: admin.firestore.Firestore;
     nowMs?: number;
     transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
@@ -681,6 +683,16 @@ export async function mutateTrainingScheduleBatchForUser(
 
         const pendingRequests = requests.slice(pendingStart);
         let snapshot = await readTrainingScheduleSnapshotInTransaction(transaction, userRef, pendingRequests);
+        if (options.requireUncompletedWorkout) {
+            const operation = pendingRequests[0]?.operation;
+            if (pendingRequests.length !== 1 || operation.kind !== 'update-workout') {
+                throw new TrainingScheduleMutationError('failed-precondition', 'Replacement requires one workout update.');
+            }
+            const completion = await transaction.get(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(operation.workoutId));
+            if (completion.exists || snapshot.workouts.get(operation.workoutId)?.lifecycle !== 'planned') {
+                throw new TrainingScheduleMutationError('failed-precondition', 'This workout is already completed or no longer planned.');
+            }
+        }
         const items: AppliedBatchItem[] = [];
         pendingRequests.forEach((request, offset) => {
             const operationNowMs = nowMs + pendingStart + offset;

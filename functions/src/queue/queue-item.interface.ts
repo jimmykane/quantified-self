@@ -222,6 +222,10 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   garminHealthBackfillWindowsTotal?: number;
   rangeStartMs?: number;
   rangeEndMs?: number;
+  /** Routine COROS poll authority captured at admission; absent on legacy/history jobs. */
+  corosTokenCredentialGeneration?: string | null;
+  corosRootOAuthCredentialGeneration?: string | null;
+  corosConnectionStateGeneration?: string | null;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
   /** Activity (1), Recovery (2), or both (3) notifications coalesced into a webhook refetch. */
   suuntoHealthWebhookFeedMask?: 1 | 2 | 3;

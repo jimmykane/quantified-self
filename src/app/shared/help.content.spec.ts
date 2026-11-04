@@ -31,6 +31,16 @@ describe('help.content', () => {
       'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
       'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
   });
+  it('limits Health read-only claims to read permission and protects imported measurements', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('This read permission cannot add, edit, delete or backfill measurements');
+    expect(copy).toContain('measurements:write');
+    expect(copy).toContain('Imported Health and Sleep readings cannot be changed');
+    expect(copy).toContain('Existing clients must authorize again');
+    expect(copy).toContain('The MCP host controls whether it asks on every call');
+    expect(copy).not.toContain('MCP cannot add, edit, delete or backfill measurements');
+  });
+
   it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',
@@ -41,7 +51,7 @@ describe('help.content', () => {
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
-      'Activity delivery', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Beta supports tests', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
+      'Activity delivery', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
     }
   });
@@ -126,6 +136,8 @@ describe('help.content', () => {
     expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
     expect(copy).toContain('QS does not promise a completion time from those counts');
     expect(copy).toContain('not an expected finish date');
+    expect(copy).toContain('Garmin sends available records separately; request acceptance does not confirm delivery');
+    expect(HELP_SECTIONS.map(section => section.content).join('\n')).not.toMatch(/hours\s+(?:or|to)\s+days/i);
   });
 
   it('explains shared provider import progress and distinguishes requests from delivery', () => {
@@ -943,6 +955,12 @@ describe('help.content', () => {
 
   it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Regenerate** beside a ready suggestion');
+    expect(content).toContain('a failure keeps the previous one');
+    expect(content).toContain('**Replace workout**');
+    expect(content).toContain('Completed workouts cannot be replaced');
+    expect(content).toContain('**Retry replacement** checks the same update');
+    expect(content).toContain('Existing workout sync settings still apply');
     expect(content).toContain('blocks automatic generation');
     expect(content).toContain('does not reset the daily allowance');
     expect(content).toContain('reuses the daily status across navigation and reloads');
@@ -2641,6 +2659,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep is synced automatically from your connected services');
     expect(serviceConnectionsSection?.content).toContain('automatically importing daily Health and sleep data from a rolling recent window');
+    expect(serviceConnectionsSection?.content).toContain('COROS Sleep and Health are checked **hourly**');
+    expect(serviceConnectionsSection?.content).toContain('daily seven-day reconciliation');
+    expect(serviceConnectionsSection?.content).toContain('history-import cooldown does not pause these automatic checks');
     expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
     expect(serviceConnectionsSection?.content).toContain('COROS does not send sleep stages through this connection');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');

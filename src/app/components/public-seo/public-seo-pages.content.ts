@@ -1299,7 +1299,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'history',
             title: 'Import older Garmin history first',
-            copy: 'For workouts missing from Quantified Self, request Garmin history before sending them to Suunto. Garmin allows the latest rolling five years, with one history request every 30 days. Imports can arrive over hours or days.',
+            copy: 'For workouts missing from Quantified Self, request Garmin history before sending them to Suunto. Garmin allows the latest rolling five years, with one history request every 30 days. Garmin sends available records separately after accepting history requests.',
           },
           {
             icon: 'description',
@@ -1321,7 +1321,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does Garmin to Suunto sync include my old Garmin history?',
-        answer: 'Enabling automatic sync does not send workouts already saved in Quantified Self. Use Send past activities under Suunto in Services for those workouts. If older workouts are missing, import Garmin history first; the available window is the latest rolling five years and imports can take hours or days.',
+        answer: 'Enabling automatic sync does not send workouts already saved in Quantified Self. Use Send past activities under Suunto in Services for those workouts. If older workouts are missing, import Garmin history first; the available window is the latest rolling five years. Garmin sends available records separately; request acceptance does not confirm delivery.',
       },
       {
         question: 'Can I sync past activities while automatic sync is off?',
@@ -1369,11 +1369,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Choose your workflow',
         title: 'Automatic sync or a one-time history transfer',
-        copy: 'Connect Garmin and Wahoo in Connections with Pro access. Allow Activity Export for Garmin and workout access for Wahoo. Connecting an account does not turn on automatic sync.',
+        copy: 'Connect Garmin and Wahoo in Connections with Pro access. Allow Activity Export for Garmin and activity write access for Wahoo. Connecting an account does not turn on automatic sync.',
         items: [
           { icon: 'sync_alt', title: 'Send new Garmin activities automatically', copy: 'Under Garmin in Connections, enable Wahoo as an automatic activity destination. Eligible new Garmin imports are queued using their saved original FIT files.' },
-          { icon: 'history', title: 'Preview older Garmin workouts', copy: 'Import missing Garmin history first and wait for the activities to arrive. Under Wahoo in Connections, open Send past activities. Select Garmin imports and your dates, then run Preview. Preview sends nothing.' },
-          { icon: 'published_with_changes', title: 'Review before sending', copy: 'Review the ready-to-send and skipped counts, then choose Send. Scheduling complete confirms queueing, not delivery. Check Wahoo for the delivered workout after processing.' },
+          { icon: 'history', title: 'Preview older Garmin workouts', copy: 'Import missing Garmin history first and wait for the activities to arrive. In Connections, open Wahoo → Send past activities → Saved activities. Choose Garmin API under Activity sources and your dates, then choose Preview saved activities. Preview sends nothing.' },
+          { icon: 'published_with_changes', title: 'Review before sending', copy: 'Review the ready-to-send and skipped activities, then confirm Send to Wahoo. Confirmation starts queueing, not delivery. Follow individual results in Recent sends and check Wahoo for the delivered workout after processing.' },
         ],
       },
       {
@@ -1389,7 +1389,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     ],
     faqItems: [
       { question: 'Can Garmin activities sync to Wahoo automatically?', answer: 'Yes. With Pro, connect Garmin and Wahoo and explicitly enable Wahoo as a Garmin activity destination. Eligible new Garmin FIT imports can then be sent to your Wahoo account automatically.' },
-      { question: 'Can I send older Garmin workouts to Wahoo?', answer: 'Yes. First import any missing Garmin history into Quantified Self. Under Wahoo in Connections, use Send past activities, choose Garmin imports and a date range, then Preview and review before Send. This one-time send does not enable future automatic sync.' },
+      { question: 'Can I send older Garmin workouts to Wahoo?', answer: 'Yes. First import any missing Garmin history into Quantified Self. In Connections, open Wahoo → Send past activities → Saved activities. Choose Garmin API under Activity sources and a date range, then Preview saved activities, review the results and confirm Send to Wahoo. This one-time send does not enable future automatic sync.' },
       { question: 'Does Garmin need to stay connected for a saved activity transfer?', answer: 'A saved Garmin import can be sent after Garmin is disconnected if its original FIT remains available. Wahoo must still be connected and you need Pro access. Automatic sync of new Garmin activities requires both connections.' },
       { question: 'Will these uploads come back as Wahoo-recorded workouts?', answer: 'Wahoo does not expose completed workouts that it identifies as coming from third-party applications through its API. Those uploads are not re-imported as Wahoo-recorded activities.' },
       { question: 'Does this move Garmin routes, training plans, Sleep, or Health?', answer: 'No. This guide covers recorded FIT activities. GPX and FIT routes, planned workouts, Sleep, and Health use separate workflows and permissions. Sending an activity to your Wahoo account is not a planned-workout or route download to an ELEMNT device.' },
@@ -1405,8 +1405,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     howToSteps: [
       'Review Pro options, then connect Garmin and Wahoo in Connections and approve the required activity permissions.',
       'For future activity sync, enable Wahoo as an automatic activity destination under Garmin in Connections.',
-      'For a one-time history transfer, import missing Garmin activities first, then open Send past activities under Wahoo, select Garmin imports and dates, and run Preview.',
-      'Review the ready-to-send and skipped counts before Send. Scheduling is not delivery; check Wahoo after processing.',
+      'For a one-time history transfer, import missing Garmin activities first. In Connections, open Wahoo → Send past activities → Saved activities, choose Garmin API under Activity sources and your dates, then Preview saved activities.',
+      'Review the ready-to-send and skipped activities, then confirm Send to Wahoo. Follow individual results in Recent sends; queueing is not delivery, so check Wahoo after processing.',
     ],
   },
   syncCorosToSuunto: {
@@ -1767,29 +1767,29 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'FIT Activity Delivery',
         title: 'Import a selected FIT activity to Wahoo',
-        copy: 'Connect Wahoo in Quantified Self, then use its activity delivery tool when you need to send one selected FIT activity without adding a new activity to your Quantified Self archive.',
+        copy: 'Connect Wahoo in Quantified Self, then open its Send activities workspace when you need to send a selected FIT activity without adding a new activity to your Quantified Self archive.',
         items: [
           {
             icon: 'login',
             title: 'Connect Wahoo',
-            copy: 'Sign in with Pro access, connect Wahoo in Services, and reconnect it once if activity write access was not included in an earlier connection.',
+            copy: 'Sign in with Pro access, connect Wahoo in Connections, and reconnect it if activity write access was not included in an earlier connection.',
           },
           {
             icon: 'upload_file',
             title: 'Select a FIT activity',
-            copy: 'Open Wahoo Services and select the FIT activity file you want to send. This direct delivery does not create or retain a Quantified Self activity.',
+            copy: 'Under Wahoo in Connections, open Send activities. In Send activities, choose Local files, select your FIT or FIT.gz activity, review it and confirm Send to Wahoo. This direct delivery does not create or retain a Quantified Self activity.',
           },
           {
             icon: 'sync',
             title: 'Check the upload status',
-            copy: 'Wahoo can process an activity upload asynchronously, so Wahoo Services keeps its status available to refresh.',
+            copy: 'Wahoo can process an activity upload asynchronously. Follow per-activity results in Recent sends in the Send activities workspace. Confirmation starts queueing, not delivery; a finished count includes exclusions and items needing action, not just delivered activities.',
           },
         ],
       },
       {
         eyebrow: 'Provider Activity Sync',
         title: 'Send activities from Garmin, COROS, or Suunto',
-        copy: 'Connect the source provider and Wahoo, then decide whether eligible future activities should be delivered automatically or whether you only need a selected history range.',
+        copy: 'Automatic sync requires Pro and connected source and Wahoo accounts. A one-time send of saved activities needs Pro, a connected Wahoo account with activity write access and eligible original FIT files; the source provider does not need to remain connected.',
         items: [
           {
             icon: 'sync_alt',
@@ -1798,8 +1798,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'published_with_changes',
-            title: 'Sync past activities by date',
-            copy: 'Use Sync past activities in the source provider’s Services tools to choose a date range for FIT-backed activities already stored in Quantified Self. This does not turn on future automatic sync.',
+            title: 'Send past activities by date',
+            copy: 'In Connections, open Wahoo → Send past activities → Saved activities. Choose Activity sources and dates, then Preview saved activities. Choose Garmin API for Garmin imports or Uploaded to QS for files you uploaded, even if recorded on a Garmin device. Preview sends nothing. Review the ready and excluded activities, then confirm Send to Wahoo. This does not turn on future automatic sync.',
+          },
+          {
+            icon: 'description',
+            title: 'Keep eligible original FIT files available',
+            copy: 'Missing or unsupported originals, merged or derived activities, and activities already sent or queued are skipped. Follow per-activity results in Recent sends and check Wahoo after processing; queueing is not delivery and does not confirm receipt on an ELEMNT device.',
           },
           {
             icon: 'route',
@@ -1812,7 +1817,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I import a FIT activity to Wahoo?',
-        answer: 'Yes. With Pro access and an active Wahoo connection, select a FIT activity file in Wahoo Services to send it directly to Wahoo.',
+        answer: 'Yes. With Pro access and a Wahoo connection with activity write access, open Connections → Wahoo → Send activities. Choose Local files in Send activities, select a FIT or FIT.gz activity, review it and confirm Send to Wahoo.',
       },
       {
         question: 'Can I automatically send Garmin, COROS, or Suunto activities to Wahoo?',
@@ -1820,7 +1825,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can I import past activities to Wahoo?',
-        answer: 'Yes. Use Sync past activities in the source provider’s Services tools and choose a date range for FIT-backed activities already stored in Quantified Self. Future automatic sync stays off unless you enable it separately.',
+        answer: 'Yes. With Pro and connected Wahoo activity write access, open Connections → Wahoo → Send past activities → Saved activities. Choose Activity sources and dates, then Preview saved activities, review the results and confirm Send to Wahoo. Eligible original FIT files must remain available. Future automatic sync stays off unless you enable it separately.',
       },
       {
         question: 'Can I import a GPX route to Wahoo as an activity?',
@@ -1835,10 +1840,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     howToSteps: [
-      'Connect Wahoo to Quantified Self with Pro access.',
-      'For one activity file, open Wahoo Services and select a FIT activity to send directly to Wahoo.',
+      'Connect Wahoo to Quantified Self with Pro access and activity write access.',
+      'For local files, open Connections → Wahoo → Send activities, choose Local files, select FIT activities, review and confirm Send to Wahoo.',
       'For provider sync, connect Garmin, COROS, or Suunto and turn on automatic activity sync in its Services tools.',
-      'Use Sync past activities in the source provider’s Services tools when you need an existing FIT-backed date range.',
+      'For saved history, open Connections → Wahoo → Send past activities → Saved activities, choose Activity sources and dates, then Preview saved activities, review the results and confirm Send to Wahoo. Follow Recent sends; queueing is not delivery.',
     ],
   },
   syncSuuntoRoutesToGarmin: {

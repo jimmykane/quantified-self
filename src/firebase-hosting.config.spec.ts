@@ -349,6 +349,7 @@ describe('Firebase Hosting configuration', () => {
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
 
@@ -480,7 +481,11 @@ describe('Firebase Hosting configuration', () => {
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
+    // Approved corrections preserve manual Health permissions and link existing account tools.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
@@ -495,7 +500,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
@@ -505,13 +510,13 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-coros`)).toBe('2026-11-01');
-    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
+    // History wording separates request acceptance from delivery without a duration estimate.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-11-03');
     // COROS guide clarifies the history limit and keeps its setup tab through signup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-11-03');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
@@ -522,6 +527,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
+    // Same-day Help covers quota-funded regeneration, guarded replacement and recovery of uncertain saves.
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
     // Billing help covers maintenance, checkout switching and expiry recovery (2026-10-26).
@@ -555,6 +561,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
@@ -677,7 +684,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.1mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.15mb',
     });
   });
 

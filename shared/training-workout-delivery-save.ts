@@ -17,17 +17,25 @@ export interface TrainingScheduleSaveResponseV1 extends MutateTrainingScheduleRe
 }
 export type TrainingScheduleSaveRequestV1 = MutateTrainingScheduleRequestV1 & {
   deliveryAfterCreate?: CreatedWorkoutDeliveryRequestV1;
+  /** First-party replacement guard; regular editing and MCP contracts remain unchanged. */
+  requireUncompletedWorkout?: true;
 };
 
 export function parseTrainingScheduleSaveRequestV1(value: unknown): {
-  request: MutateTrainingScheduleRequestV1; deliveryAfterCreate?: CreatedWorkoutDeliveryRequestV1;
+  request: MutateTrainingScheduleRequestV1; deliveryAfterCreate?: CreatedWorkoutDeliveryRequestV1; requireUncompletedWorkout?: true;
 } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     // Preserve the ordinary schedule parser's error contract.
     return { request: parseMutateTrainingScheduleRequestV1(value) };
   }
-  const { deliveryAfterCreate, ...schedule } = value as Record<string, unknown>;
+  const { deliveryAfterCreate, requireUncompletedWorkout, ...schedule } = value as Record<string, unknown>;
   const request = parseMutateTrainingScheduleRequestV1(schedule);
+  if (requireUncompletedWorkout !== undefined) {
+    if (requireUncompletedWorkout !== true || request.operation.kind !== 'update-workout' || deliveryAfterCreate !== undefined) {
+      throw new TrainingDeliveryContractError('The replacement guard requires a workout update without new delivery approval.');
+    }
+    return { request, requireUncompletedWorkout: true };
+  }
   if (deliveryAfterCreate === undefined) return { request };
   if (request.operation.kind !== 'create-workout' || request.operation.planId !== null
     || !deliveryAfterCreate || typeof deliveryAfterCreate !== 'object' || Array.isArray(deliveryAfterCreate)) {

@@ -1,3 +1,5 @@
+import { Component, input, output } from '@angular/core';
+import { NotificationOfferComponent } from '../notification-offer/notification-offer.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { WhatsNewDialogComponent } from './whats-new-dialog.component';
@@ -5,11 +7,15 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { AppUpdateService } from '../../services/app.update.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { MatDialogRef } from '@angular/material/dialog';
+import { By } from '@angular/platform-browser';
 import { signal, type WritableSignal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { ChangelogPost } from '../../services/app.whats-new.service';
+
+@Component({selector: 'app-notification-offer', standalone: true, template: ''})
+class NotificationOfferStub { placement = input('tray'); navigated = output<void>(); }
 
 const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
@@ -48,6 +54,7 @@ describe('WhatsNewDialogComponent', () => {
             close: vi.fn()
         };
 
+        TestBed.overrideComponent(WhatsNewDialogComponent, {remove: {imports: [NotificationOfferComponent]}, add: {imports: [NotificationOfferStub]}});
         await TestBed.configureTestingModule({
             imports: [WhatsNewDialogComponent, RouterTestingModule, NoopAnimationsModule],
             providers: [
@@ -75,6 +82,16 @@ describe('WhatsNewDialogComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('keeps device controls before release notes and closes on their Settings navigation without duplicate feedback', () => {
+        expect(fixture.nativeElement.querySelector('.header-text').textContent).toBe('Updates & notifications');
+        const offer = fixture.debugElement.query(By.directive(NotificationOfferStub));
+        expect(offer.componentInstance.placement()).toBe('tray');
+        expect(fixture.nativeElement.querySelector('.dialog-body').firstElementChild.tagName).toBe('APP-NOTIFICATION-OFFER');
+        offer.componentInstance.navigated.emit();
+        expect(mockDialogRef.close).toHaveBeenCalledOnce();
         expect(haptics.selection).not.toHaveBeenCalled();
     });
 
