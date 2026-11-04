@@ -579,6 +579,41 @@ describe('sleep queue', () => {
         expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
+    it('preserves a deterministic dead letter when its live queue row is missing', async () => {
+        hoisted.docGet.mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ originalCollection: 'sleepSyncQueue' }) });
+        await addSleepSyncQueueItem({
+            type: 'coros_poll', provider: 'COROSAPI', userID: 'test-user-uid',
+            providerUserId: 'account', rangeStartMs: 1000, rangeEndMs: 2000,
+            dedupeKey: 'fixed-id', preserveExisting: true,
+        });
+        expect(hoisted.docGet).toHaveBeenCalledTimes(2);
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { corosTokenCredentialGeneration: 'credential' },
+        { corosTokenCredentialGeneration: '', corosRootOAuthCredentialGeneration: null, corosConnectionStateGeneration: null },
+        { corosTokenCredentialGeneration: null, corosRootOAuthCredentialGeneration: ' padded ', corosConnectionStateGeneration: null },
+        { corosTokenCredentialGeneration: null, corosRootOAuthCredentialGeneration: null, corosConnectionStateGeneration: 'x'.repeat(129) },
+    ])('rejects partial or malformed COROS lifecycle fences (%j)', async fields => {
+        const job = buildHealthBackfillJobs('COROSAPI', 'test-user-uid', 'account', 1000, 2000, 'campaign')[0];
+        expect(getMalformedSleepQueueItemReason({ ...job.input, ...fields, id: job.queueId,
+            dateCreated: 1, processed: false, retryCount: 0, dispatchedToCloudTask: null }))
+            .toBe('invalid COROS poll lifecycle fence');
+        await expect(addSleepSyncQueueItem({ ...job.input, ...fields })).rejects.toThrow('Invalid COROS poll lifecycle fence');
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it.each([null, 'generation'])('accepts complete COROS lifecycle fences (%s)', value => {
+        const job = buildHealthBackfillJobs('COROSAPI', 'test-user-uid', 'account', 1000, 2000, 'campaign')[0];
+        expect(getMalformedSleepQueueItemReason({ ...job.input, corosTokenCredentialGeneration: value,
+            corosRootOAuthCredentialGeneration: value, corosConnectionStateGeneration: value,
+            id: job.queueId, dateCreated: 1, processed: false, retryCount: 0, dispatchedToCloudTask: null })).toBeNull();
+    });
+
     it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const)('accepts the admin catch-up job shape for %s', provider => {
         const jobs = buildHealthBackfillJobs(provider, 'test-user-uid', 'provider-account',
             Date.parse('2026-07-01'), Date.parse('2026-09-01'), 'campaign');
@@ -4274,7 +4309,7 @@ describe('sleep queue', () => {
         }));
     });
 
-    it('revalidates the active COROS account and bounds the daily sleep request', async () => {
+    it.each([false, true])('revalidates the active COROS account and bounds the daily sleep request (fenced=%s)', async fenced => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const activeToken = {
             id: 'coros-user-1',
@@ -4313,6 +4348,9 @@ describe('sleep queue', () => {
             providerUserId: 'coros-user-1',
             retryCount: 0,
             type: 'coros_poll',
+            ...(fenced ? { corosTokenCredentialGeneration: 'credential-generation-1',
+                corosRootOAuthCredentialGeneration: 'credential-generation-1',
+                corosConnectionStateGeneration: 'coros-generation-1' } : {}),
             rangeStartMs: 1_777_392_000_000,
             rangeEndMs: 1_777_478_400_000,
             ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,

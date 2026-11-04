@@ -1,4 +1,5 @@
 import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -19,7 +20,7 @@ const TIMEOUT_MS = 5_000;
 const GENERATION_FIELDS = {
     GarminAPI: ['garminHealthTokenCredentialGeneration', 'garminHealthRootOAuthCredentialGeneration', 'garminHealthConnectionStateGeneration'],
     SuuntoApp: ['suuntoHealthTokenCredentialGeneration', 'suuntoHealthRootOAuthCredentialGeneration', 'suuntoHealthConnectionStateGeneration'],
-    COROSAPI: [],
+    COROSAPI: ['corosTokenCredentialGeneration', 'corosRootOAuthCredentialGeneration', 'corosConnectionStateGeneration'],
 } as const;
 const QUEUE_FIELDS = ['provider', 'type', 'userID', 'providerUserId', 'processed', 'retryCount', 'dateCreated', 'dispatchedToCloudTask', 'dispatchAfterMs', 'processingLeaseExpiresAt', 'resultStatus', 'rangeStartMs', 'garminSummaryType', ...Object.values(GENERATION_FIELDS).flat()];
 type Workload = 'sleep_sync' | 'garmin_health_backfill';
@@ -116,7 +117,8 @@ export async function observeHealthSleepQueue(db: FirebaseFirestore.Firestore, b
                 const user = db.collection('users').doc(uid);
                 const root = db.collection(source.root).doc(uid);
                 const [current, owner, tombstone, meta, connection] = await tx.getAll(
-                    doc.ref, user, db.collection('userDeletionTombstones').doc(uid), user.collection('meta').doc(source.provider), root,
+                    doc.ref, user, db.collection('userDeletionTombstones').doc(uid),
+                    user.collection('meta').doc(source.provider === SLEEP_PROVIDERS.COROSAPI ? ServiceNames.COROSAPI : source.provider), root,
                     { fieldMask: [...QUEUE_FIELDS, 'expireAt', 'connectionState', 'disconnectState', 'disconnectOperationGeneration', 'activeOAuthCredentialGeneration', 'connectionStateGeneration'] },
                 );
                 if (stopped) return 'excluded';

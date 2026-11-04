@@ -43,6 +43,7 @@ export const EMULATOR_SUITES = {
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',
     'src/sleep/monitoring.emulator.spec.ts',
+    'src/sleep/coros-polling.emulator.spec.ts',
     'src/health/sync-status.emulator.spec.ts',
     'src/queue/import-monitoring.emulator.spec.ts',
     'src/mcp/training-plans.emulator.spec.ts',

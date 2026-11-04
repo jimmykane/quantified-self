@@ -5,7 +5,7 @@ import { GenkitError, genkit, type GenerateResponseData } from 'genkit';
 import { ValidationError } from 'genkit/schema';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { assistantGenkit } from './model';
-import { defaultDayWorkoutControls } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { DAY_WORKOUT_SYSTEM, generateDayWorkout, generateDayWorkoutSuggestion, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
 import { runDailyWorkoutSuggestion } from './daily-workout-suggestion';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
@@ -72,6 +72,16 @@ describe('generateDayWorkout callable', () => {
     expect(result.kind).toBe('workout'); expect(result).not.toHaveProperty('powerReference');
   });
 
+  it('accepts only bounded replacement identity and revision with Training context', () => {
+    expect(parseGenerateDayWorkoutRequest({ ...request, replaceWorkout: { id: 'workout', revision: 2 } }, new Date('2026-10-28T12:00Z')))
+      .toMatchObject({ replaceWorkout: { id: 'workout', revision: 2 } });
+    for (const replaceWorkout of [{ id: '../other', revision: 2 }, { id: 'workout', revision: 0 }, { id: 'workout', revision: 2, uid: 'other' }]) {
+      expect(() => parseGenerateDayWorkoutRequest({ ...request, replaceWorkout }, new Date('2026-10-28T12:00Z'))).toThrow();
+    }
+    expect(() => parseGenerateDayWorkoutRequest({ ...request, controls: { ...request.controls, trainingContext: false },
+      replaceWorkout: { id: 'workout', revision: 2 } }, new Date('2026-10-28T12:00Z'))).toThrow();
+    expect(DAY_WORKOUT_SYSTEM).toContain('unless evidence.replacement');
+  });
   it('dispatches the first-party daily-suggestion mode through the existing callable', async () => {
     const input = { mode: 'daily-suggestion', action: 'status' };
     const status = { localDate: '2026-10-28', state: 'waiting' as const };

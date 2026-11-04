@@ -1,6 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, PLATFORM_ID, afterNextRender, inject, input, signal } from '@angular/core';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { HomeDashboardPreviewComponent } from '../home/home-dashboard-preview.component';
 import { HomeMyTracksPreviewComponent } from '../home/home-my-tracks-preview.component';
 import { HomeSignalChartsPreviewComponent } from '../home/home-signal-charts-preview.component';
@@ -51,6 +52,7 @@ export class PublicFeaturePreviewComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly destroyRef = inject(DestroyRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly charts = inject(EChartsLoaderService);
   readonly previewKey = input.required<PublicFeaturePreviewKey>();
   readonly prepareAhead = input(false);
   readonly previewReady = signal(false);
@@ -58,7 +60,16 @@ export class PublicFeaturePreviewComponent {
 
   constructor() {
     afterNextRender(() => {
-      if (!this.isBrowser || !this.prepareAhead()) return;
+      if (!this.isBrowser) return;
+      if (this.previewKey() === 'training-hero') {
+        // Start the hero component and chart library together, without waiting
+        // for the below-fold preparation queue. SSR keeps its reserved layout.
+        this.previewReady.set(true);
+        // Best-effort warming: the shared loader retries on the chart's real init.
+        void this.charts.load().catch(() => undefined);
+        return;
+      }
+      if (!this.prepareAhead()) return;
       // Share the plots' scroll root, 600px lookahead and one-per-frame scheduling.
       const pending = chartViewportQueue.wait(this.host.nativeElement);
       this.destroyRef.onDestroy(pending.cancel);

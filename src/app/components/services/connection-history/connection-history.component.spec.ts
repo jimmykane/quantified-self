@@ -98,7 +98,7 @@ describe('recent history status', () => {
   it('restores durable status and never equates Garmin submission with delivery', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('status', { ...status, canRetry: false, steps: [{ ...status.steps[0], status: 'requested' }] }); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Requested; delivery may take hours or days');
+    expect(fixture.nativeElement.textContent).toContain('Requested; delivery is not confirmed');
     expect(fixture.nativeElement.textContent).toContain('1 request scheduled');
     expect(fixture.nativeElement.textContent).not.toContain('has been processed'); expect(haptics.success).not.toHaveBeenCalled();
   });

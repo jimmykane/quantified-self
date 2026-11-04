@@ -1,5 +1,5 @@
 import { normalizeTrainingLocalDate } from './training-plans';
-import { dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutResponse } from './day-workout';
+import { dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutResponse, type GenerateDayWorkoutRequest } from './day-workout';
 
 /** Private first-party preferences; never a Training recipe or an MCP permission. */
 export interface DailyWorkoutSuggestionPreferences {
@@ -9,6 +9,9 @@ export interface DailyWorkoutSuggestionPreferences {
 }
 export type DailyWorkoutSuggestionRequest = ({ mode: 'daily-suggestion'; action: 'status' | 'prepare' }
   | { mode: 'daily-suggestion'; action: 'dismiss' | 'use-available-data'; localDate: string }) & { resultVersion?: 2 };
+export interface RegenerateDailyWorkoutSuggestionRequest {
+  mode: 'daily-suggestion'; action: 'regenerate'; expectedRequestId: string; request: GenerateDayWorkoutRequest;
+}
 export interface DailyWorkoutEventAdviceV1 {
   version: 1;
   kind: 'event-advice';

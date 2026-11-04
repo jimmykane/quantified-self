@@ -14,8 +14,10 @@ export function buildHealthSleepMonitoring(project, channel) {
   const operational = 'jsonPayload.message="[HealthSleep]"';
   const summary = 'jsonPayload.message=("[SleepSyncTaskWorker] Invocation summary" OR "[GarminHealthBackfillTaskWorker] Invocation summary")';
   function metric(key, resource, selection, description, labels = ['provider', 'workload'], field) {
+    const resourceFilter = Array.isArray(resource)
+      ? `resource.type=(${resource.map(type => `"${type}"`).join(' OR ')})` : `resource.type="${resource}"`;
     metrics.push({ name: `qs_health_sleep_${key}_v1`, description: `[${OWNER}] ${description}`,
-      filter: `${base} resource.type="${resource}" ${selection}`,
+      filter: `${base} ${resourceFilter} ${selection}`,
       metricDescriptor: { metricKind: 'DELTA', valueType: field ? 'DISTRIBUTION' : 'INT64', unit: field?.endsWith('Ms') ? 'ms' : '1',
         labels: labels.map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
       labelExtractors: Object.fromEntries(labels.map(key => [key, `EXTRACT(jsonPayload.${key})`])),
@@ -30,7 +32,8 @@ export function buildHealthSleepMonitoring(project, channel) {
   metric('worker_latency', 'cloud_run_revision', `${summary} jsonPayload.durationMs>=0`, 'Whole invocation latency; backfill requests are deliberately paced.', ['provider', 'workload'], 'durationMs');
   metric('worker_failures', 'cloud_run_revision', `((${summary} jsonPayload.outcome=("failed" OR "error" OR "missing")) OR (${operational} jsonPayload.event="retry_transition" jsonPayload.outcome="retry"))`, 'Failed attempts and committed ordinary retry transitions; expected lease/refresh contention excluded.');
   metric('new_dead_letters', 'cloud_run_revision', `${operational} jsonPayload.event="committed" jsonPayload.outcome="dead_lettered"`, 'New committed permanent failures, not retained failed_jobs or repeated ACKs.');
-  metric('dispatch_failures', 'cloud_function', `${operational} jsonPayload.event="dispatch_run" jsonPayload.outcome="failed"`, 'Unconfirmed/failed dispatch attempts and whole-run failures; not stale post-enqueue marker refusals.');
+  metric('dispatch_failures', ['cloud_function', 'cloud_run_revision'], `${operational} jsonPayload.event="dispatch_run" jsonPayload.outcome="failed"`, 'Unconfirmed/failed dispatch attempts and whole-run failures, including hourly COROS poll admission; not stale post-enqueue marker refusals.');
+  metric('coros_poll_runs', 'cloud_run_revision', `${operational} resource.labels.service_name="schedulecorossleepsync" jsonPayload.provider="COROSAPI" jsonPayload.workload="sleep_sync" jsonPayload.event="dispatch_run" jsonPayload.outcome=("completed" OR "failed")`, 'Hourly COROS scheduler heartbeat, including idle runs, pending polls, lifecycle skips and failed runs.');
   metric('queue_samples', 'cloud_function', `${operational} jsonPayload.event=("queue_sample" OR "queue_sample_unavailable")`, 'Four observation heartbeats on the existing 30-minute scheduler, including idle/failed observations.');
   metric('sampled_due', 'cloud_function', `${operational} jsonPayload.event="queue_sample" jsonPayload.dueSample>=0`, 'Bounded actionable undispatched lower bound, excluding future work/retries/leases/lifecycle and intentional serialized backfill waits.', ['provider', 'workload'], 'dueSample');
   metric('sampled_age', 'cloud_function', `${operational} jsonPayload.event="queue_sample" jsonPayload.ageLowerBoundMs>=0`, 'Last-write delay lower bound, not oldest creation time or complete backlog age.', ['provider', 'workload'], 'ageLowerBoundMs');
@@ -56,13 +59,19 @@ export function buildHealthSleepMonitoring(project, channel) {
     });
   }
   policy('backlog', 'Sustained undispatched work', 'ERROR', [threshold('overdue_samples', 'cloud_function', 2, '5400s', 'sleep_sync'), threshold('overdue_samples', 'cloud_function', 2, '14400s', 'garmin_health_backfill')], 'Ordinary ingestion: two eligible observations >=1h old in 90m. Backfill: two >=6h old observations in 4h, only while its native task queue is empty. One shared bounded sample is not global coverage.');
-  policy('dispatch', 'Repeated dispatch failures', 'ERROR', [threshold('dispatch_failures', 'cloud_function', 3, '5400s', 'sleep_sync'), threshold('dispatch_failures', 'cloud_function', 3, '21600s', 'garmin_health_backfill')], 'Three failed/unconfirmed attempts. Unknown-provider ordinary failures can describe a scheduler/scan failure; inspect the original exception privately. Existing temporary #759 diagnostics are not required.');
+  const corosAdmissionFailures = threshold('dispatch_failures', 'cloud_run_revision', 3, '14400s', 'sleep_sync');
+  corosAdmissionFailures.displayName = 'Hourly COROS poll admissions';
+  corosAdmissionFailures.conditionThreshold.filter += ' metric.labels.provider="COROSAPI"';
+  policy('dispatch', 'Repeated dispatch failures', 'ERROR', [threshold('dispatch_failures', 'cloud_function', 3, '5400s', 'sleep_sync'), threshold('dispatch_failures', 'cloud_function', 3, '21600s', 'garmin_health_backfill'), corosAdmissionFailures], 'Three failed/unconfirmed attempts. Hourly COROS poll admission/dispatch uses three failures in four hours; pending polls and lifecycle skips are successful scheduler observations. Unknown-provider ordinary failures can describe a scheduler/scan failure; inspect the original exception privately.');
   policy('processing', 'Repeated processing failures', 'ERROR', [threshold('worker_failures', 'cloud_run_revision', 10, '900s', 'sleep_sync'), threshold('worker_failures', 'cloud_run_revision', 3, '21600s', 'garmin_health_backfill')], 'Ten ordinary failures/retries in 15m, or three backfill failures/retries in 6h. Expected refresh/lease contention, stale revisions, skips and deferred acknowledgements are excluded.');
   policy('dead-letter', 'New permanent failures', 'WARNING', [threshold('new_dead_letters', 'cloud_run_revision', 3, '1800s', 'sleep_sync'), threshold('new_dead_letters', 'cloud_run_revision', 1, '21600s', 'garmin_health_backfill')], 'Three new ordinary DLQ commits in 30m or one new historical backfill failure in 6h. Retained failure totals and already-failed acknowledgements never trigger this signal.');
   policy('telemetry', 'Observations unavailable', 'WARNING', [threshold('probe_failures', 'cloud_function', 2, '5400s', 'sleep_sync'), threshold('probe_failures', 'cloud_function', 2, '5400s', 'garmin_health_backfill')], 'Two unknown/unavailable observations per provider/lane in 90m. Read failures and unknown metadata are not zero backlog.');
-  policy('heartbeat', 'Required observation heartbeat missing', 'WARNING', workloads.map(([provider, workload]) => ({
+  policy('heartbeat', 'Required observation heartbeat missing', 'WARNING', [...workloads.map(([provider, workload]) => ({
     displayName: `${provider} ${workload} heartbeat absent`, conditionAbsent: { filter: filter('queue_samples', 'cloud_function', `metric.labels.provider="${provider}" metric.labels.workload="${workload}"`), aggregations: [sum('1800s')], duration: '7200s', trigger: { count: 1 } },
-  })), 'Only operational observation loss is monitored, never lack of new Sleep or Health measurements. Idle queues still emit heartbeats. Absence detection requires an initial series; it does not prove first activation.');
+  })), { displayName: 'Hourly COROS scheduler heartbeat absent', conditionAbsent: {
+    filter: filter('coros_poll_runs', 'cloud_run_revision', 'metric.labels.provider="COROSAPI" metric.labels.workload="sleep_sync"'),
+    aggregations: [sum('3600s')], duration: '10800s', trigger: { count: 1 },
+  } }], 'Only operational observation loss is monitored, never lack of new Sleep or Health measurements. Idle queues still emit heartbeats. The hourly COROS scheduler has an independent three-hour absence condition; a healthy queue scanner does not prove poll discovery is running. Absence detection requires an initial series; it does not prove first activation.');
   function chart(title, queryFilter, aggregation, unit = '1') {
     return { title, xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: queryFilter, aggregation }, unitOverride: unit } }], yAxis: { label: unit, scale: 'LINEAR' } } };
   }
@@ -74,6 +83,8 @@ export function buildHealthSleepMonitoring(project, channel) {
     chart('Worker summaries — processed/ACK is not ingestion success', filter('worker_attempts'), sum('900s', [...groups, 'metric.label.outcome'])),
     chart('Whole-worker latency p95', filter('worker_latency'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: groups }, 'ms'),
     ...[['worker_failures', 'Failed attempts / committed retries'], ['new_dead_letters', 'Newly committed permanent failures'], ['dispatch_failures', 'Dispatch failures'], ['queue_samples', 'Observation heartbeats'], ['probe_failures', 'Unknown / failed observations']].map(([key, title]) => chart(title, filter(key, ['dispatch_failures', 'queue_samples', 'probe_failures'].includes(key) ? 'cloud_function' : 'cloud_run_revision'), sum('900s'))),
+    chart('Hourly COROS poll admission failures', filter('dispatch_failures', 'cloud_run_revision', 'metric.labels.provider="COROSAPI" metric.labels.workload="sleep_sync"'), sum('14400s')),
+    chart('Hourly COROS scheduler heartbeats', filter('coros_poll_runs'), sum('3600s')),
     ...[['sampled_due', 'Eligible undispatched sample — hourly mean/lower bound', '1'], ['sampled_age', 'Last-write delay lower bound — hourly mean', 'ms']].map(([key, title, unit]) => chart(title, filter(key, 'cloud_function'), { alignmentPeriod: '3600s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_MEAN', groupByFields: groups }, unit)),
   ];
   return { project, metrics, policies, dashboard: { displayName: 'QS Health & Sleep', labels: { [OWNER]: '' }, mosaicLayout: { columns: 12,

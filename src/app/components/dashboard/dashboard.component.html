@@ -64,7 +64,10 @@
         (controlChange)="onDashboardActionPromptControlChange($event)">
       </app-dashboard-action-prompts>
 
-      <!-- Removed mat-divider in favor of CSS spacing/gap -->
+      @if (user && (!targetUser || targetUser.uid === user.uid) && hasActivityServiceConnection === true
+        && !showNoActivityDashboardState && dashboardActionPrompts.length === 0) {
+        <app-notification-offer placement="dashboard" [ownerUid]="user.uid" />
+      }
 
       @if (user) {
       <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"

@@ -21,16 +21,35 @@ import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 describe('PublicFeaturePreviewComponent', () => {
   let fixture: ComponentFixture<PublicFeaturePreviewComponent>;
   let wait: MockInstance<typeof chartViewportQueue.wait>;
+  const warmCharts = vi.fn();
 
   beforeEach(async () => {
     wait = vi.spyOn(chartViewportQueue, 'wait');
+    warmCharts.mockReset().mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
       deferBlockBehavior: DeferBlockBehavior.Manual,
       imports: [PublicFeaturePreviewComponent, MatIconTestingModule, NoopAnimationsModule],
+      providers: [{ provide: EChartsLoaderService, useValue: { load: warmCharts } }],
     }).compileComponents();
   });
 
   afterEach(() => wait.mockRestore());
+
+  it('starts the hero and warms its chart library without waiting for viewport entry', async () => {
+    renderPlaceholder('training-hero');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.previewReady()).toBe(true);
+    expect(warmCharts).toHaveBeenCalledOnce();
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hero eligible to render if speculative library warming fails', async () => {
+    warmCharts.mockRejectedValueOnce(new Error('Temporary chunk failure'));
+    renderPlaceholder('training-hero');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.previewReady()).toBe(true);
+    expect(warmCharts).toHaveBeenCalledOnce();
+  });
 
   it('prepares an opted-in example before viewport entry through the shared chart queue', async () => {
     let approach: (ready: boolean) => void;
@@ -75,17 +94,19 @@ describe('PublicFeaturePreviewComponent', () => {
     renderPlaceholder('training-signals');
     await fixture.whenStable();
     expect(wait).not.toHaveBeenCalled();
+    expect(warmCharts).not.toHaveBeenCalled();
   });
 
-  it('preserves server placeholders without queuing browser work', async () => {
+  it.each(['training-signals', 'training-hero'])('preserves the %s server placeholder without loading browser charts', async previewKey => {
     TestBed.overrideProvider(PLATFORM_ID, { useValue: 'server' });
     fixture = TestBed.createComponent(PublicFeaturePreviewComponent);
-    fixture.componentRef.setInput('previewKey', 'training-signals');
+    fixture.componentRef.setInput('previewKey', previewKey);
     fixture.componentRef.setInput('prepareAhead', true);
     fixture.detectChanges();
     await fixture.whenStable();
     expect(wait).not.toHaveBeenCalled();
     expect(fixture.componentInstance.previewReady()).toBe(false);
+    expect(warmCharts).not.toHaveBeenCalled();
   });
 
   function renderPlaceholder(previewKey: PublicFeaturePreviewKey): HTMLElement {
@@ -137,6 +158,7 @@ describe('PublicFeaturePreviewComponent', () => {
   it('hydrates the hero chart inside its persistent layout reservation', async () => {
     TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });
     TestBed.overrideProvider(EChartsLoaderService, { useValue: {
+      load: warmCharts,
       init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn() }),
       setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
       subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,

@@ -40,7 +40,11 @@ export interface DayWorkoutControls extends Partial<Record<DayWorkoutSignalKey, 
   trainingContext: boolean;
   timelineContext: boolean;
 }
-export interface GenerateDayWorkoutRequest { requestId: string; controls: DayWorkoutControls }
+export interface GenerateDayWorkoutRequest {
+  requestId: string; controls: DayWorkoutControls;
+  /** First-party replacement intent only. Saving still requires a separate revision-bound approval. */
+  replaceWorkout?: { id: string; revision: number };
+}
 export function dayWorkoutReadinessSourcesEnabled(controls: DayWorkoutControls): boolean {
   return controls.freshnessContext !== false && controls.hrvContext !== false
     && controls.sleepContext !== false && controls.overnightHeartRateContext !== false;
@@ -97,7 +101,7 @@ function object(value: unknown, keys: string[]): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date()): GenerateDayWorkoutRequest {
-  const request = object(value, ['requestId', 'controls']);
+  const request = object(value, ['requestId', 'controls', 'replaceWorkout']);
   if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(request.requestId)) throw new Error('Invalid request identifier.');
   const c = object(request.controls, Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')));
   if (typeof c.timeZone !== 'string' || c.timeZone.length > 100) throw new Error('Choose a valid time zone.');
@@ -125,8 +129,17 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
     if (typeof c[key] !== 'boolean') throw new Error('Choose valid personalization options.');
     signals[key] = c[key] as boolean;
   }
+  let replaceWorkout: GenerateDayWorkoutRequest['replaceWorkout'];
+  if (request.replaceWorkout !== undefined) {
+    const target = object(request.replaceWorkout, ['id', 'revision']);
+    if (typeof target.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(target.id)
+      || !Number.isSafeInteger(target.revision) || Number(target.revision) < 1 || c.trainingContext !== true) {
+      throw new Error('Choose a current workout with Training context enabled.');
+    }
+    replaceWorkout = { id: target.id, revision: Number(target.revision) };
+  }
   // Construct an allowlisted, stable-key object for request fingerprinting.
-  return { requestId: request.requestId, controls: {
+  return { requestId: request.requestId, ...(replaceWorkout ? { replaceWorkout } : {}), controls: {
     localDate, timeZone: c.timeZone, sport, minutes: c.minutes as number, purpose: c.purpose as DayWorkoutPurpose,
     timing: c.timing as DayWorkoutControls['timing'], target: c.target as DayWorkoutTarget,
     structure: c.structure as DayWorkoutControls['structure'], destinationPlanId: c.destinationPlanId as string | null,

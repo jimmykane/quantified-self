@@ -144,12 +144,7 @@
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .hero-content > * { animation: homeFadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-  .hero-content h1 { animation-delay: 0.05s; }
-  .hero-content .hero-subtitle { animation-delay: 0.1s; }
-  .hero-content .hero-actions { animation-delay: 0.15s; }
-  .hero-content .hero-access-note { animation-delay: 0.2s; }
-  .hero-content .trust-indicators { animation-delay: 0.2s; }
+  // Above-fold copy stays visible from the prerendered first paint.
   [appHomeReveal].home-reveal-visible { animation: homeFadeInUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
   [appHomeReveal].home-reveal-visible:focus-within { animation: none; }
   .brand-badge, .landing-page a { transition: transform 0.2s ease; }
@@ -294,6 +289,7 @@
 .hero-border-glow { animation: heroBorderTravel 4.8s linear -.064s infinite; }
 .hero-border-glow--following { animation-delay: -2.464s; }
 .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
+.hero-motion-suspended .hero-connection-pulse, .hero-motion-suspended .hero-connection-halo, .hero-motion-suspended .hero-border-glow { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .hero-connection-pulse, .hero-connection-halo, .hero-border-glow { animation: none; }
   .hero-motion-toggle { display: none; }

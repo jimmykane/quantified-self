@@ -6,6 +6,7 @@ import { Auth, user } from 'app/firebase/auth';
 import { Firestore, getDocFromServer, setDoc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { AppPushService } from './app.push.service';
+import { AppNotificationInvitationService } from './app.notification-invitation.service';
 import { AppRemoteConfigService } from './app.remote-config.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppWindowService } from './app.window.service';
@@ -20,8 +21,10 @@ const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
 const categoryEnabled = signal(true);
 const localKey = 'qs.web-push.installation.v1';
+const invitation = { recordDeviceChoice: vi.fn() };
 const registration = { schemaVersion: 1, origin: 'https://quantified-self.io', vapidPublicKey: key, generation: id,
-  endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) } };
+  endpoint: 'https://web.push.apple.com/test', keys: { p256dh: key, auth: 'A'.repeat(22) },
+  device: { browser: 'Browser', platform: 'Unknown device' } };
 const tick = async () => { TestBed.tick(); for (let n = 0; n < 30; n++) await Promise.resolve(); };
 let owner: { uid: string; getIdTokenResult: ReturnType<typeof vi.fn> };
 let owner$: BehaviorSubject<typeof owner | null>;
@@ -39,6 +42,7 @@ let support: { checkPushSupport: ReturnType<typeof vi.fn>; createRandomUUID: Ret
 function setup(platform = 'browser', conventional = false) {
   TestBed.configureTestingModule({ providers: [
     AppPushService, AuthSessionCleanupService,
+    { provide: AppNotificationInvitationService, useValue: invitation },
     { provide: AppNotificationPreferencesService, useValue: { isEnabled: () => categoryEnabled() } },
     { provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
     { provide: AppRemoteConfigService, useValue: config }, { provide: AppFunctionsService, useValue: functions },
@@ -67,6 +71,144 @@ beforeEach(() => {
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
+  it('reuses this account’s installation when retrying a failed server check', async () => {
+    const retainedId = '00000000-0000-4000-8000-000000000002';
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: retainedId }));
+    vi.mocked(getDocFromServer).mockRejectedValue(new Error('Offline'));
+    const service = setup(); await tick(); expect(service.state()).toBe('unavailable');
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${retainedId}` }), expect.anything());
+    expect(JSON.parse(storage.getItem(localKey)!)).toEqual({ uid: 'owner', installationId: retainedId });
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+  });
+  it('revokes a previous account’s endpoint before registering the retry for this account', async () => {
+    storage.setItem(localKey, JSON.stringify({ uid: 'previous-owner', installationId: id }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick(); expect(service.state()).toBe('unavailable');
+    const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/new-owner',
+      toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/new-owner', keys: registration.keys })) };
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    manager.subscribe.mockImplementation(async () => {
+      expect(subscription.unsubscribe).toHaveBeenCalledOnce();
+      manager.getSubscription.mockResolvedValue(replacement); return replacement;
+    });
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, endpoint: replacement.endpoint }) } as never);
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }),
+      expect.objectContaining({ endpoint: replacement.endpoint }));
+    expect(deleteDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+  });
+  it('keeps the same device entry when retrying with a different subscription key', async () => {
+    const retainedId = '00000000-0000-4000-8000-000000000002';
+    notifications.permission = 'granted'; storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: retainedId }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    const previous = { ...subscription, options: { applicationServerKey: new Uint8Array([1]).buffer }, unsubscribe: vi.fn().mockResolvedValue(true) };
+    manager.getSubscription.mockResolvedValue(previous);
+    manager.subscribe.mockImplementation(async () => {
+      expect(previous.unsubscribe).toHaveBeenCalledOnce();
+      manager.getSubscription.mockResolvedValue(subscription); return subscription;
+    });
+    await service.enable(); await tick();
+    expect(setDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${retainedId}` }), expect.anything());
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(retainedId);
+  });
+  it.each(['previous account', 'orphan'])('does not register a retry when %s subscription cleanup fails', async kind => {
+    if (kind === 'previous account') storage.setItem(localKey, JSON.stringify({ uid: 'previous-owner', installationId: id }));
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    manager.getSubscription.mockResolvedValue(subscription); subscription.unsubscribe.mockResolvedValue(false);
+    await expect(service.enable()).rejects.toThrow('Notification enable failed'); await tick();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+  });
+  it('preserves a newer installation from another tab during an enable retry', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    vi.mocked(getDocFromServer).mockRejectedValue(new Error('Offline'));
+    const service = setup(); await tick();
+    let finish!: (value: typeof subscription) => void;
+    manager.getSubscription.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); await tick();
+    const replacementId = '00000000-0000-4000-8000-000000000002';
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: replacementId }));
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
+    finish(subscription); await expect(pending).rejects.toThrow(); await tick();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(replacementId);
+  });
+  it.each(['flag', 'key'])('stops offering enable immediately when the site %s changes', async change => {
+    const service = setup(); await tick(); expect(service.canEnable()).toBe(true);
+    if (change === 'flag') config.webPushEnabled.set(false); else config.webPushPublicKey.set('');
+    expect(service.canEnable()).toBe(false); await service.enable();
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('does not subscribe if the site is disabled while permission is pending', async () => {
+    const service = setup(); await tick();
+    let finish!: (value: string) => void;
+    notifications.requestPermission.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); config.webPushEnabled.set(false); finish('granted');
+    await expect(pending).rejects.toThrow();
+    expect(manager.subscribe).not.toHaveBeenCalled(); expect(setDoc).not.toHaveBeenCalled();
+  });
+  it('does not replace another tab’s consent when subscription creation finishes late', async () => {
+    const service = setup(); await tick();
+    let finish!: (value: typeof subscription) => void;
+    manager.subscribe.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.enable(); await tick();
+    const replacementId = '00000000-0000-4000-8000-000000000002';
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: replacementId }));
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    finish(subscription); await expect(pending).rejects.toThrow(); await tick();
+    expect(setDoc).not.toHaveBeenCalled(); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(replacementId);
+  });
+  it('allows an explicit enable retry after the worker was initially unavailable, requesting permission before waiting', async () => {
+    delete windows.pushManager;
+    const service = setup(); await tick();
+    expect(service.state()).toBe('unavailable'); expect(service.canEnable()).toBe(true);
+    expect(service.canInvite()).toBe(false); expect(service.unavailableReason()).toContain('not ready');
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+    windows.pushManager = manager; manager.getSubscription.mockResolvedValue(subscription);
+    notifications.requestPermission.mockImplementation(() => { notifications.permission = 'granted'; return Promise.resolve('granted'); });
+    const enabling = service.enable();
+    expect(notifications.requestPermission).toHaveBeenCalledOnce();
+    await enabling; await tick();
+    expect(manager.subscribe).toHaveBeenCalledOnce(); expect(service.state()).toBe('enabled');
+  });
+  it('recovers from a failed device check through an explicit enable gesture', async () => {
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    expect(service.canEnable()).toBe(true); expect(service.unavailableReason()).toContain('Turn On to retry');
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    await service.enable(); await tick();
+    expect(service.state()).toBe('enabled'); expect(setDoc).toHaveBeenCalled();
+  });
+  it('does not make unsupported site configuration actionable as an enable retry', async () => {
+    config.webPushEnabled.set(false);
+    const service = setup(); await tick();
+    expect(service.state()).toBe('unavailable'); expect(service.canEnable()).toBe(false);
+    expect(service.unavailableReason()).toContain('not available from this site');
+    await service.enable(); expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('invites only unasked devices and records explicit decisions without inviting after expiry', async () => {
+    const service = setup(); await tick(); expect(service.canInvite()).toBe(true);
+    notifications.permission = 'granted'; await service.refreshRegistration();
+    expect(service.canEnable()).toBe(true); expect(service.canInvite()).toBe(false);
+    manager.getSubscription.mockResolvedValue(subscription);
+    await service.enable(); await tick();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'enabled');
+    await service.disable(); await tick();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
+  });
+  it('remembers a dismissed browser permission prompt without silently asking again', async () => {
+    const service = setup(); await tick(); notifications.requestPermission.mockResolvedValue('default');
+    await expect(service.enable()).rejects.toThrow();
+    expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
+    await service.refreshRegistration(); expect(notifications.requestPermission).toHaveBeenCalledOnce();
+  });
   it('does not touch browser APIs or request permission during SSR', async () => {
     const service = setup('server'); await tick(); expect(service.state()).toBe('unsupported');
     expect(user).not.toHaveBeenCalled(); expect(manager.getSubscription).not.toHaveBeenCalled(); expect(notifications.requestPermission).not.toHaveBeenCalled();
@@ -130,12 +272,11 @@ describe('device notification lifecycle', () => {
     expect(updateDoc).not.toHaveBeenCalled();
     expect(service.state()).toBe('enabled');
   });
-  it.each(['flag', 'key', 'origin', 'browser', 'worker'])('does not prompt when %s is unavailable', async missing => {
+  it.each(['flag', 'key', 'origin', 'browser'])('does not prompt when %s is unavailable', async missing => {
     if (missing === 'flag') config.webPushEnabled.set(false);
     if (missing === 'key') config.webPushPublicKey.set('');
     if (missing === 'origin') Object.assign(windows.location, { origin: 'https://evil.example' });
     if (missing === 'browser') support.checkPushSupport.mockReturnValue(false);
-    if (missing === 'worker') delete windows.pushManager;
     const service = setup(); await tick(); expect(service.canEnable()).toBe(false); await service.enable(); expect(notifications.requestPermission).not.toHaveBeenCalled();
   });
   it.each([{ userAgent: 'iPhone' }, { userAgent: 'Mac desktop', platform: 'MacIntel', maxTouchPoints: 5 }])('explains mobile Apple installation and blocked permissions %j', async navigator => {
@@ -171,6 +312,42 @@ describe('device notification lifecycle', () => {
     const service = setup(); await tick(); expect(service.state()).toBe('enabled'); expect(setDoc).not.toHaveBeenCalled();
     await service.sendTest(); expect(functions.call).toHaveBeenCalledWith('sendTestPushNotification', { installationId: id }, expect.any(Object));
     expect(service.message()).toContain('Test notification sent');
+  });
+  it('enriches a legacy registration without replacing consent, and identifies only this site', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const { device, ...legacy } = registration;
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => legacy } as never);
+    const service = setup(); await tick();
+    expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { device, updatedAt: expect.anything() });
+    expect(setDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(true);
+    expect(service.isCurrentDevice(id, 'https://beta.quantified-self.io')).toBe(false);
+  });
+  it.each(['pending', 'failed'])('keeps a valid subscription usable when optional device metadata is %s', async mode => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const { device, ...legacy } = registration;
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => legacy } as never);
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    vi.mocked(updateDoc).mockImplementation(() => mode === 'failed' ? Promise.reject(new Error('Write unavailable')) : pending);
+    try {
+      const service = setup(); await tick();
+      expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { device, updatedAt: expect.anything() });
+      expect(service.state()).toBe('enabled'); expect(service.canTest()).toBe(true);
+      expect(service.registered()).toBe(true); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    } finally { finish(); await tick(); }
+  });
+  it('reconciles remote disable without restoring consent or requesting permission', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false, data: () => undefined } as never);
+    await service.refreshRegistration();
+    expect(subscription.unsubscribe).toHaveBeenCalledOnce(); expect(service.state()).toBe('disabled');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(false);
+    expect(setDoc).not.toHaveBeenCalled(); expect(notifications.requestPermission).not.toHaveBeenCalled();
   });
   it('revokes stale subscriptions after key rotation', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
@@ -349,14 +526,18 @@ describe('one-import notification device consent', () => {
     config.webPushDeliveryEnabled.set(true); categoryEnabled.set(false);
     await expect(service.deliveryNotificationTarget('owner')).rejects.toThrow('Activity delivery');
   });
-  it('keeps beta and a disabled history switch out of automatic notification consent', async () => {
+  it('allows beta while retaining the independent history switch', async () => {
     const service = await enabled(); config.webPushHistoryEnabled.set(false);
     expect(service.historyNotificationsAvailable()).toBe(false);
     await expect(service.historyNotificationTarget('owner')).rejects.toThrow();
     config.webPushHistoryEnabled.set(true);
     Object.defineProperty(windows, 'location', { value: { origin: 'https://beta.quantified-self.io' }, configurable: true });
     config.webPushEnabled.set(false); config.webPushEnabled.set(true);
-    expect(service.historyNotificationsAvailable()).toBe(false);
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, origin: 'https://beta.quantified-self.io' }) } as never);
+    expect(service.historyNotificationsAvailable()).toBe(true);
+    expect(service.deliveryNotificationsAvailable()).toBe(true);
+    expect(await service.historyNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
+    expect(await service.deliveryNotificationTarget('owner')).toEqual({ installationId: id, generation: id });
   });
   it('keeps category opt-out separate from device permission and self-tests', async () => {
     const service = await enabled(); categoryEnabled.set(false);

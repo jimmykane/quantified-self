@@ -57,7 +57,7 @@ export function createDayWorkoutStore(db: () => FirebaseFirestore.Firestore = ()
   }
   return {
     begin: (uid, request) => transaction<{ token: string } | { response: GenerateDayWorkoutResponse }>(uid, (state, now) => {
-      const fingerprint = createHash('sha256').update(JSON.stringify(request.controls)).digest('hex');
+      const fingerprint = createHash('sha256').update(JSON.stringify(request.replaceWorkout ? { controls: request.controls, replaceWorkout: request.replaceWorkout } : request.controls)).digest('hex');
       const receipt = state.replayReceipts.find(item => item.requestId === request.requestId);
       if (receipt) {
         if (receipt.fingerprint !== fingerprint) throw new HttpsError('invalid-argument', 'This request identifier belongs to different controls.');
