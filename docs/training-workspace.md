@@ -5263,7 +5263,9 @@ No standard percentage system, athlete FTP, target watts, adherence or Training 
 
 Calendar generation and daily preferences offer explicit **Garmin power zones** for these two sports. Auto and Power
 retain their source-aware snapshot behavior; selecting a connected service does not select native zones. The private
-model schema permits the new variant only for the explicit preference. Validation requires at least one primary native
+model schema permits only native-zone targets and time/distance/manual endings for the explicit preference, without
+relative/absolute targets, pool length or early-Lap flags. Retry guidance explicitly retains a zone without requiring
+an athlete reference. Validation requires at least one primary native
 zone in a workout and rejects other target modes, invalid zones and sport changes; warmup/rest/cooldown can be targetless.
 The power-context loader performs no QS power-settings read and clears manual source attribution on this path. Daily
 routine sport selection must retain a sport supporting the selected target. Normal rest advice, quota, review, Add,
@@ -5281,7 +5283,9 @@ MCP uses additive `get_planned_workout_v4`, `get_saved_workout_v3`, `preview_pla
 `preview_planned_workout_v4_changes` (1–25) and `preview_saved_workout_v3_change`. All retain existing independent
 planning read/write grants and preview/native-approval/idempotent-Apply boundaries. Old recipe schemas remain frozen;
 old detail reads and full replacements fail with latest-tool guidance instead of losing zones. Preview discloses
-unknown watts and explicit removal; Assistant remains prepare-only with complete app-owned before/after review.
+the distinct before/after zone numbers used, unknown watts and explicit removal; this compact set is not a substitute
+for the full recipe's per-step assignments. Assistant remains prepare-only: scheduled changes show complete app-owned
+before/after recipes, while saved-library proposals use their existing compact review and full-recipe read-back.
 Private power profiles and provider credentials remain excluded. Shared instructions and bundled Training/cross-domain
 skills distinguish symbolic zones from fixed prescriptions. Backend release and registered-client refresh/rescan are
 separate approved operations; no baseline/history promotion is performed by implementation.

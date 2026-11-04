@@ -701,13 +701,15 @@ Lap, pool length and existing native approval/Apply, owner, revision, expiry and
 mutation kind, delivery consent or provider action is granted. Older recipe schemas stay frozen; old reads and full
 replacement previews fail with latest-tool guidance when they cannot preserve native zones. Summaries, saved placements,
 analysis timing and existing delivery compatibility reads use the same safe projections; no private athlete power
-profile, credential or Garmin zone table is exposed. Analysis never estimates watts or speed from the zone number.
+profile, credential or Garmin zone table is exposed. Analysis never estimates watts or speed from the zone number. Compact zone-effect text lists the distinct
+before/after zone numbers used; full recipes retain the per-step assignments.
 
 A device-zone request requires explicit intent; do not infer it from a bare zone label or convert an authored span.
 These instructions use Garmin's sport/device settings and require compatible native Running Power for running.
 QS cannot verify zone watts or when Garmin resolves later settings changes. Other providers and secondary placement
 are unsupported; fixed watts and stored FTP/CP snapshots keep their original semantics. Assistant uses latest full
-recipes and remains prepare-only, with complete app review. Source guidance lives in
+recipes and remains prepare-only. Scheduled changes have full before/after app review; saved-library changes retain
+their compact proposal review and require full-recipe read-back. Source guidance lives in
 [Training workspace](training-workspace.md#single-garmin-power-zone-targets).
 
 This is local implementation pending a separately approved backend release and exact digest-bound developer refresh/

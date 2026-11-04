@@ -2287,6 +2287,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     await expect(previewPlannedWorkoutV4Change({ ...input, scopes: [TRAINING_PLANS_SCOPE], arguments: args }, deps)).rejects.toThrow('permission');
     const preview = await previewPlannedWorkoutV4Change({ ...input, arguments: args }, deps);
     expect(preview.changes[0].summary).toContain('watts are unknown in QS');
+    expect(preview.changes[0].summary).toContain('none → Z2');
     const apply = { ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } };
     const created = await applyTrainingChanges(apply, deps);
     expect(await applyTrainingChanges(apply, deps)).toEqual(created);
@@ -2294,6 +2295,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
     expect(saved.get('structure')).toEqual(native);
     expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(native);
+    const retargeted = structuredClone(native); retargeted.nodes[0].steps[0].targets[0].zone = 3;
+    const retargetPreview = await previewPlannedWorkoutV4Change({ ...input, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: created.createdReferences[0].reference }, plan: null, localDate: '2026-09-18',
+        title: 'Native zone', structure: retargeted } } }, deps);
+    expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
+    expect((await saved.ref.get()).get('structure')).toEqual(native);
     const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
       plan: null, localDate: '2026-09-19', title: 'Explicit numeric replacement', structure };
     const update = { expectedScheduleRevision: created.scheduleRevision, change };

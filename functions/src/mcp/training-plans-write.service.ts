@@ -6,7 +6,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
+import { describeGarminPowerZoneRecipeEffect, describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
 import { findTrainingPrescriptionConflict } from './training-prescription-consistency';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { readSuuntoGuideUnitSettings } from '../training-plans/delivery/store';
@@ -507,12 +507,6 @@ function describeScheduleEffects(
     }
   }
   return [describeOperation(operation), ...details].join(' ');
-}
-
-export function describeGarminPowerZoneRecipeEffect(before: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined,
-  after: import('../../../shared/planned-workout').WorkoutStructureV1): string {
-  if (hasGarminPowerZoneTargetV1(after)) return ' Garmin power zones use Garmin sport/device settings; watts are unknown in QS. Running requires native Running Power support.';
-  return before && hasGarminPowerZoneTargetV1(before) ? ' Garmin power zones removed; targets no longer use Garmin zone settings.' : '';
 }
 
 export function describeEarlyLapRecipeEffect(

@@ -340,10 +340,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('MCP workout library propo
     const preview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 0,
       change: { kind: 'create', title: 'Native zone', structure: native } }), deps, 'v3');
     expect(preview.changes[0].summary).toContain('watts are unknown in QS');
+    expect(preview.changes[0].summary).toContain('none → Z2');
     const apply = input({ proposalRef: preview.proposalRef, permissionMode: 'schedule' });
     const saved = await applySavedWorkoutChange(apply, deps);
     expect(await applySavedWorkoutChange(apply, deps)).toEqual(saved);
     const id = decodeOpaqueValue('training_read', saved.savedWorkoutRef!, uid, 'connection', 'Saved workout').id as string;
+    expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(native);
+    const retargeted = structuredClone(native); retargeted.nodes[0].targets[0].zone = 3;
+    const retargetPreview = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 1,
+      change: { kind: 'update', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1,
+        title: 'Native zone', structure: retargeted } }), deps, 'v3');
+    expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
     expect((await user.collection('workoutLibrary').doc(id).get()).get('structure')).toEqual(native);
     const placement = await previewSavedWorkoutChange(input({ expectedScheduleRevision: 0, expectedLibraryRevision: 1,
       change: { kind: 'place', savedWorkoutRef: saved.savedWorkoutRef, expectedRevision: 1, planRef: null,

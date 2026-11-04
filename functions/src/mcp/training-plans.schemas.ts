@@ -248,9 +248,9 @@ export const TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA = z.strictObject({ ...TRAININ
 }).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
 
 /** Additive wire v4: explicit Garmin zone identity without a fabricated watt snapshot. */
-const garminZoneTarget = z.strictObject({ kind: z.literal('power'), mode: z.literal('garmin-zone'),
+export const TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA = z.strictObject({ kind: z.literal('power'), mode: z.literal('garmin-zone'),
   zone: z.number().int().min(1).max(7) });
-const garminZoneStep = earlyLapStep.extend({ targets: z.array(z.union([...target.options, garminZoneTarget]))
+const garminZoneStep = earlyLapStep.extend({ targets: z.array(z.union([...target.options, TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA]))
   .max(WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP) });
 export const TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA = z.strictObject({ ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape,
   nodes: z.array(z.union([garminZoneStep, z.strictObject({ kind: z.literal('repeat'), id: nodeId,

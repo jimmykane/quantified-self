@@ -21,7 +21,8 @@ import { TrainingScheduleMutationError } from '../training-plans/mutation';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_WRITE_INPUTS,
   TRAINING_WRITE_OUTPUTS } from './training-plans.schemas';
-import { describeGarminPowerZoneRecipeEffect, describeEarlyLapRecipeEffect, assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
+import { describeGarminPowerZoneRecipeEffect } from './training-recipe-review';
+import { describeEarlyLapRecipeEffect, assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
 
 const PROPOSALS = 'trainingMcpLibraryProposals';
 const PROPOSAL_TTL_MS = 15 * 60 * 1000;

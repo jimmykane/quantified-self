@@ -142,6 +142,49 @@ describe('generateDayWorkout callable', () => {
     expect(DAY_WORKOUT_SYSTEM).toContain('conditional on rechecking recovery');
     expect(DAY_WORKOUT_SYSTEM).toContain('do not claim an unavailable signal');
   });
+  it('advertises only supported native-zone generation fields without widening the ordinary decoder', async () => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    for (const target of ['garmin-power-zone', 'auto'] as const) {
+      vi.mocked(assistantGenkit.generate).mockReset().mockResolvedValueOnce({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
+      await generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target } }, evidence);
+      const options = vi.mocked(assistantGenkit.generate).mock.calls.at(-1)![0] as { output: { jsonSchema: object } };
+      const schema = JSON.stringify(options.output.jsonSchema);
+      if (target === 'garmin-power-zone') {
+        expect(schema).toContain('garmin-zone');
+        for (const forbidden of ['minimumWatts', 'minimumPercent', 'reference', 'allowEarlyLap', 'kilojoules', 'repetitions', 'poolLength']) {
+          expect(schema).not.toContain(`"${forbidden}"`);
+        }
+      } else {
+        expect(schema).not.toContain('garmin-zone');
+        expect(schema).toContain('minimumPercent');
+      }
+    }
+  });
+  it('corrects a native-zone reply without demanding an FTP reference or dropping its target', async () => {
+    const reply = { kind: 'workout', title: 'Garmin zone run', rationale: 'Use your Garmin sport zones.',
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'set', count: 2,
+        steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+          targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] }] } };
+    const invalid = structuredClone(reply); invalid.structure.nodes[0].steps[0].targets[0].zone = 8;
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(reply));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    const generationRequest = { ...request, controls: { ...request.controls, target: 'garmin-power-zone' as const } };
+    try {
+      const response = await runGenerateDayWorkout(generationRequest, auth, deps);
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).not.toContain('omit targets without available references');
+      expect(correction).toContain('one primary Garmin power zone from 1 to 7');
+      expect(correction).toContain('no athlete reference');
+      expect(response.draft?.structure).toEqual(reply.structure);
+      expect(response).not.toHaveProperty('powerReference');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(deps.release).not.toHaveBeenCalled();
+      vi.mocked(deps.store.begin).mockResolvedValue({ response });
+      await expect(runGenerateDayWorkout(generationRequest, auth, deps)).resolves.toEqual(response);
+      expect(provider).toHaveBeenCalledTimes(2);
+    } finally { generate.mockReset(); }
+  });
   it('checks authentication, App Check and legal acceptance before any context/model call', async () => {
     const deps = dependencies();
     await expect(runGenerateDayWorkout(request, {}, deps)).rejects.toThrow(/Sign in/);

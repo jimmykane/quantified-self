@@ -33,3 +33,18 @@ export function describeTrainingRecipeSteps(structure: WorkoutStructureV1,
   }
   return ''; // Existing shape summary remains; do not displace lifecycle/range/Lap consent disclosures.
 }
+
+
+/** Distinct zones, not per-step assignments or inferred watt boundaries. */
+export function describeGarminPowerZoneRecipeEffect(before: WorkoutStructureV1 | undefined, after: WorkoutStructureV1): string {
+  const zones = (structure?: WorkoutStructureV1) => [...new Set(structure?.nodes
+    .flatMap(node => node.kind === 'step' ? [node] : node.steps)
+    .flatMap(step => step.targets.flatMap(target => target.mode === 'garmin-zone' ? [target.zone] : [])) ?? [])]
+    .sort((a, b) => a - b);
+  const previous = zones(before), current = zones(after);
+  if (!previous.length && !current.length) return '';
+  const label = (values: number[]) => values.length ? values.map(value => `Z${value}`).join(', ') : 'none';
+  return current.length
+    ? ` Garmin power zones used: ${label(previous)} → ${label(current)}; watts are unknown in QS (Garmin settings).`
+    : ` Garmin power zones removed: ${label(previous)} → none; targets no longer use Garmin zone settings.`;
+}
