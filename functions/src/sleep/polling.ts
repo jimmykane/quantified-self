@@ -10,6 +10,8 @@ import {
     SUUNTO_SLEEP_MAX_WINDOW_DAYS,
 } from './constants';
 import { addSleepSyncQueueItem } from './queue';
+import { enqueueCOROSDailyPoll } from './coros-polling';
+import { recordHealthSleepDispatch } from './monitoring';
 import {
     getAllowedSleepSyncUserIds,
     isSleepProviderEnabled,
@@ -18,7 +20,7 @@ import {
 } from './provider-flags';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
+import { isProviderQueueSkippedWithoutRetryError, isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
@@ -43,6 +45,7 @@ const SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT = 'suuntoHealthPolling';
 const SUUNTO_HEALTH_POLL_CURSOR_SCOPE = 'global-v1';
 interface ProviderTokenSnapshotPage {
     snapshots: PollingTokenSnapshot[];
+    failedLookups?: number;
     commitCursor?: () => Promise<void>;
 }
 
@@ -72,7 +75,9 @@ function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.
 
 type PollingTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
-async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly string[]): Promise<PollingTokenSnapshot[]> {
+async function resolveActiveCOROSTokenSnapshots(
+    candidateUserIDs: readonly string[], onLookupFailure?: () => void,
+): Promise<PollingTokenSnapshot[]> {
     const activeTokens: Array<PollingTokenSnapshot | null> = [];
     for (let index = 0; index < candidateUserIDs.length; index += COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY) {
         const userIDChunk = candidateUserIDs.slice(index, index + COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY);
@@ -80,7 +85,16 @@ async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly strin
             try {
                 return await getActiveCOROSTokenSnapshot(userID);
             } catch (error) {
-                logger.warn(`[SleepSync][${SLEEP_PROVIDERS.COROSAPI}] Could not resolve the active COROS account for user ${userID}; skipping polling.`, error);
+                const code = (error as { code?: unknown })?.code;
+                // Active-account lookup uses failed-precondition when a legacy
+                // account cannot be pinned because its owner is being deleted.
+                if (!['unauthenticated', 'functions/unauthenticated', 'failed-precondition', 'functions/failed-precondition'].includes(String(code))
+                    && !(error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError')) {
+                    onLookupFailure?.();
+                    logger.warn('[SleepSync][COROS] Could not resolve an active account for polling.', {
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    });
+                }
                 return null;
             }
         })));
@@ -251,7 +265,9 @@ async function getProviderTokenSnapshots(
                 .filter((userID): userID is string => !!userID)));
         }
 
-        return { snapshots: await resolveActiveCOROSTokenSnapshots(candidateUserIDs) };
+        let failedLookups = 0;
+        const snapshots = await resolveActiveCOROSTokenSnapshots(candidateUserIDs, () => { failedLookups++; });
+        return { snapshots, failedLookups };
     }
 
     if (allowedUserIDs.length > 0) {
@@ -365,10 +381,26 @@ async function enqueueProviderPolls(
     const deletionGuardCache = new Map<string, Promise<boolean>>();
     const unavailableForSyncCache = new Map<string, Promise<boolean>>();
     let queued = 0;
+    let failed = tokenPage.failedLookups ?? 0;
     for (const tokenSnapshot of tokenPage.snapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot);
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
+            continue;
+        }
+        if (provider === SLEEP_PROVIDERS.COROSAPI) {
+            // Admission atomically checks deletion and connection state; a
+            // best-effort precheck would duplicate reads and hide read failures.
+            try {
+                if (await enqueueCOROSDailyPoll(userID, providerUserId, nowMs)) queued += 1;
+            } catch (error) {
+                if (!isProviderQueueSkippedWithoutRetryError(error)) {
+                    failed += 1;
+                    logger.warn('[SleepSync][COROS] Could not admit or dispatch an hourly poll.', {
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    });
+                }
+            }
             continue;
         }
         let pendingDeletionSkip = deletionGuardCache.get(userID);
@@ -392,7 +424,7 @@ async function enqueueProviderPolls(
         for (const window of windows) {
             try {
                 await addSleepSyncQueueItem({
-                    type: provider === SLEEP_PROVIDERS.SuuntoApp ? 'suunto_poll' : 'coros_poll',
+                    type: 'suunto_poll',
                     provider,
                     userID,
                     providerUserId,
@@ -411,6 +443,7 @@ async function enqueueProviderPolls(
         }
     }
     await tokenPage.commitCursor?.();
+    if (failed) throw new Error(`Could not admit or dispatch ${failed} COROS hourly polls.`);
     return queued;
 }
 
@@ -505,16 +538,23 @@ export const scheduleSuuntoSleepSync = onSchedule({
 
 export const scheduleCOROSSleepSync = onSchedule({
     region: 'europe-west2',
-    schedule: 'every 24 hours',
+    schedule: 'every 60 minutes',
     timeoutSeconds: 300,
     memory: '512MiB',
 }, async () => {
-    const queued = await enqueueProviderPolls(
-        SLEEP_PROVIDERS.COROSAPI,
-        ServiceNames.COROSAPI,
-        COROS_DAILY_MAX_WINDOW_DAYS,
-    );
-    logger.info(`[SleepSync][COROS] Scheduled ${queued} sleep poll queue items`);
+    const workload = { provider: SLEEP_PROVIDERS.COROSAPI, type: 'coros_poll' };
+    try {
+        const queued = await enqueueProviderPolls(
+            SLEEP_PROVIDERS.COROSAPI,
+            ServiceNames.COROSAPI,
+            COROS_DAILY_MAX_WINDOW_DAYS,
+        );
+        logger.info(`[SleepSync][COROS] Scheduled ${queued} sleep poll queue items`);
+        recordHealthSleepDispatch(workload, 'completed');
+    } catch (error) {
+        recordHealthSleepDispatch(workload, 'failed');
+        throw error;
+    }
 });
 
 export const scheduleSuuntoHealthSync = onSchedule({

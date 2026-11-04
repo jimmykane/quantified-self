@@ -149,7 +149,7 @@ describe('shared history import surfaces', () => {
     expect(host.textContent).not.toContain('items or requests');
     expect(host.textContent).toContain('Counts describe scheduled requests, not records received');
     expect(host.textContent).toContain('Garmin sends records separately after accepting requests');
-    expect(host.textContent).toContain('Delivery may take hours or days; delivery completion is not tracked here');
+    expect(host.textContent).toContain('Request acceptance does not confirm delivery; delivery completion is not tracked here');
   });
   it.each(['queued', 'requesting', 'retrying'])('labels Garmin %s progress as requests across shared surfaces', async status => {
     const state = await setup(); state.sources.set([{serviceName: ServiceNames.GarminAPI, projection: projection(status, true, 1)}]);
@@ -217,6 +217,24 @@ describe('shared history import surfaces', () => {
     }
     expect(state.progress.dismissResult).not.toHaveBeenCalled();
     expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+  it.each([
+    {serviceName: ServiceNames.COROSAPI, status: 'processed'},
+    {serviceName: ServiceNames.GarminAPI, status: 'requested'},
+    {serviceName: ServiceNames.GarminAPI, status: 'processed'},
+  ])('dismisses a successful $serviceName $status result without presenting it as an issue', async ({serviceName, status}) => {
+    const state = await setup(); state.sources.set([{serviceName, projection: projection(status, false)}]);
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.coverage-note')?.textContent).not.toContain('finished with issues');
+    expect(host.querySelector('.provider-status')?.classList.contains('needs-attention')).toBe(false);
+    expect(host.querySelector('mat-progress-bar')).toBeNull();
+    expect(host.querySelector('mat-progress-spinner')).toBeNull();
+    const button = host.querySelector('button[aria-label^="Dismiss "]') as HTMLButtonElement;
+    expect(button).not.toBeNull(); button.click(); fixture.detectChanges();
+    expect(host.querySelector('mat-card')).toBeNull();
+    expect(host.querySelector('.history-import-header-action')).toBeNull();
+    expect(state.haptics.selection).toHaveBeenCalledOnce();
   });
   it('does not expose current-owner cards on another account dashboard', async () => {
     await setup(); const fixture = TestBed.createComponent(HistoryImportCardsComponent);

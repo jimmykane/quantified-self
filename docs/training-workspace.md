@@ -5973,6 +5973,49 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Pro daily workout suggestion
 
+**Explicit regeneration (2026-11-04).** Today offers Regenerate for a ready workout/rest suggestion, and for exactly
+one planned, supported-sport workout. It opens the existing options/review dialog; opening alone never invokes the model.
+Event-day guidance, recorded activity and authored rest coverage are unchanged. A ready suggestion uses the new strict
+first-party `daily-suggestion/regenerate` action on `generateDayWorkout`. It calls the ordinary manual generator with its
+request receipt, bounded lease and Assistant billing-period quota. The private daily store compares the previous result ID
+and current saved preferences before replacing the result. Same-request retries reuse the completed manual response;
+concurrent/stale replacements, dismissals, account deletion and date/zone changes cannot overwrite newer intent.
+Failures preserve the previous daily result. The charged daily receipt is never reset. Refreshed result IDs survive the
+existing validated session cache. Late regeneration responses cannot overwrite a newer cache epoch after schedule/rest
+changes or dismissal. Fresh status reads also take precedence when they discover coverage, dismissal or a different
+regeneration result without a listener revision; reads of the previous result or this same request remain compatible.
+Regeneration adds no focus listener, polling or background generation.
+Opening a ready-suggestion review and its editor handoff reuse `DayWorkoutService`’s existing `canExecute` checks,
+bound to the Today view, owner, enabled preference, local date and zone. A same-day cache update after successful
+regeneration does not discard a valid Edit workout handoff. These client checks add no reads or MCP contract changes.
+
+Saved-workout regeneration includes an optional strict `replaceWorkout` identity/revision in the private manual request,
+bound into its fingerprint. The bounded Training context reader verifies owner, date, plan, sport, planned lifecycle,
+revision and absence of a completion record before model admission. The identity-free replacement summary tells the model
+to propose an alternative to that one session while still considering other training. Options lock sport/date/plan and
+Training context. Approval reuses `update-workout` with both schedule and workout revisions, retaining workout ID,
+history, strength companion semantics and existing sync settings. It never deletes/recreates the workout or adds new
+provider consent. The replacement review reuses the exact-workout completion reader and blocks generation/approval while
+its first read is pending, unavailable or completed. This listener exists only while the review is open. The first-party
+save envelope sets `requireUncompletedWorkout: true` on the existing `mutateTrainingSchedule` callable; its transaction
+checks planned lifecycle and completion absence before writing. It checks successful receipts first, so lost-save retries
+recover the same result even when completion arrives afterwards. During an uncertain save the review keeps Retry
+replacement available and suppresses conflicting close/reopen guidance. Ordinary editing and MCP updates remain unchanged.
+The dialog keeps the newer save acknowledgement visible until the independent workout listener catches up by revision.
+Rest advice leaves the saved workout intact. Multiple planned
+workouts offer Open instead of guessing a replacement target. Regular replacement updates may reconcile existing provider
+sync; the review discloses this and saved-state Review sync remains available.
+
+Regenerated daily suggestions retain saved provider-format context and the existing Add & send envelope; per-review
+Skip sending today remains ephemeral. Saved-workout replacement omits that create-only envelope. No new delivery path,
+queue or provider contract is introduced. MCP impact: no exposed recipe, tool, scope or proposal change; replacements use
+existing revision-bound workout updates and read projections. Emulator coverage reads updated strength/endurance recipes
+through the strict MCP read schemas, verifies same-ID save/replay, rejects stale/completed replacements without writing,
+and preserves ordinary edits after completion. The optional first-party completion guard does not change any MCP proposal,
+confirmation, recipe or read projection. This change requires the existing `generateDayWorkout` and
+`mutateTrainingSchedule` functions to be deployed with the frontend; no Rules, indexes or plugin refresh.
+
+
 Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
 provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
 generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing

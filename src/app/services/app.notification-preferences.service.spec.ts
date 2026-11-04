@@ -39,6 +39,47 @@ beforeEach(() => {
 });
 afterEach(() => TestBed.resetTestingModule());
 describe('account notification categories', () => {
+  it('enables every category atomically using fresh revisions, including choices changed on another device', async () => {
+    const service = setup(); await tick(); emit(undefined);
+    tx.get.mockImplementation(async ref => ({ data: () => preference(false, ref.path.endsWith('activity_sync') ? 8 : 2) }));
+    tx.set.mockImplementation(() => expect(tx.get).toHaveBeenCalledTimes(3));
+    expect(await service.enableAll()).toBe(true);
+    expect(tx.set).toHaveBeenCalledTimes(3);
+    expect(tx.set).toHaveBeenCalledWith({ path: 'users/owner/notificationPreferences/activity_sync' },
+      { ...preference(true, 9), updatedAt: 'server-time' });
+    expect(service.categories().every(category => category.enabled)).toBe(true);
+    emit(preference(false, 2)); expect(service.isEnabled('activity_sync')).toBe(true);
+  });
+  it.each(['malformed', 'overflow'])('does not write any category if one server preference is %s', async reason => {
+    const service = setup(); await tick(); emit(preference(false, 1));
+    tx.get.mockImplementation(async ref => ({ data: () => ref.path.endsWith('activity_delivery')
+      ? reason === 'malformed' ? {} : preference(false, Number.MAX_SAFE_INTEGER) : preference(false, 1) }));
+    await expect(service.enableAll()).rejects.toThrow('Could not turn on all');
+    expect(tx.set).not.toHaveBeenCalled(); expect(service.categories()[0].enabled).toBe(false);
+    expect(service.saving()).toBeNull();
+  });
+  it('accepts already enabled categories without creating or rewriting preference documents', async () => {
+    const service = setup(); await tick(); emit(undefined);
+    expect(await service.enableAll()).toBe(true); expect(tx.set).not.toHaveBeenCalled();
+  });
+  it('cancels master On before writing if the account changes during its reads', async () => {
+    const service = setup(); await tick(); emit(preference(false, 1));
+    tx.get.mockImplementation(async () => {
+      auth.currentUser = null; owners.next(null); return { data: () => preference(false, 1) };
+    });
+    expect(await service.enableAll()).toBe(false); expect(tx.set).not.toHaveBeenCalled();
+    expect(service.status()).toBe('signed-out');
+  });
+  it('serializes master On with individual category writes and leaves failed saves unchanged', async () => {
+    const service = setup(); await tick(); emit(preference(false, 1));
+    let reject!: (error: Error) => void;
+    vi.mocked(runTransaction).mockImplementationOnce(() => new Promise((_done, fail) => { reject = fail; }));
+    const pending = service.enableAll();
+    expect(service.saving()).toBe('all');
+    expect(await service.enableAll()).toBe(false); expect(await service.setEnabled('activity_sync', true)).toBe(false);
+    reject(new Error('Offline')); await expect(pending).rejects.toThrow('Could not turn on all');
+    expect(service.categories()[0].enabled).toBe(false); expect(service.saving()).toBeNull();
+  });
   it('waits for all categories and saves their independent choices to separate documents', async () => {
     const service = setup(); await tick();
     emit(undefined, { fromCache: false, hasPendingWrites: false }, 0);

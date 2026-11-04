@@ -325,7 +325,7 @@ describe('HistoryImportFormComponent', () => {
             fixture.detectChanges();
             if (provider === ServiceNames.GarminAPI) {
                 expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History requested');
-                expect(fixture.nativeElement.textContent).toContain('Delivery may take hours or days');
+                expect(fixture.nativeElement.textContent).toContain('Garmin sends available records separately');
                 expect(fixture.nativeElement.textContent).not.toContain('Your selected history has been processed.');
             } else expect(fixture.nativeElement.textContent).toContain('Your selected history has been processed.');
             expect(component.formGroup.enabled).toBe(true);
@@ -2279,7 +2279,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isAllowedToDoHistoryImport).toBe(true);
             expect(component.formGroup.enabled).toBe(true);
-            expect(fixture.nativeElement.textContent).toContain('I understand this may take hours to days.');
+            expect(fixture.nativeElement.textContent).toContain('I understand this import continues in the background.');
         });
 
         it('disables a repeated import during the activity-based cooldown and renders its status', () => {

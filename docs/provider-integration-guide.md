@@ -95,6 +95,17 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+COROS Sleep/Health polling is hourly with immediate dispatch and private per-account successful-range tracking.
+Routine windows overlap the last successful observation date by one UTC calendar day and include the next UTC date
+only when needed to cover users as far ahead as UTC+14; the coverage watermark remains the observation time, not that future date. A daily
+reconciliation retains the seven-day past horizon. Pending retries never create parallel polls or advance coverage.
+Routine jobs carry admission-time credential/connection fences through worker execution, and monitoring independently
+checks hourly scheduler liveness as well as queue health. Duplicate admissions preserve live state and dead-letter
+receipts inside the queue transaction. COROS relies on atomic lifecycle checks rather than redundant best-effort
+prechecks, keeping backend failures visible while treating account deletion as an expected skip. See
+[COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) for the transactional account/deletion
+fences, exact committed-success receipt, unchanged MCP contract, monitoring coverage and separately approved release.
+
 Provider overview cards must name combined history imports consistently with their focused tools. COROS uses **Sleep & daily Health history** and **Import history** because its daily-data replay always queues both domains. Garmin and Suunto use their corresponding combined labels while Health is available, with availability-aware fallback wording where those providers support a Sleep-only path.
 
 Connection-history status distinguishes **Requested range** from the first retained Sleep/Health dates read for the
@@ -1072,7 +1083,8 @@ not records received or confirmed HTTP submissions. The shared card explicitly s
 and delivery completion is not tracked here. Older processed Garmin projections describe finished request processing.
 All finished results, including failures/skips,
 stay prominent for 24 hours. Finished failures/skips say **Finished with issues**, with no active spinner;
-counts are not failure totals. **Dismiss this result** acknowledges only that provider/run/result timestamp on this
+counts are not failure totals. Every finished result, including **Processed** and **History requested**, offers
+**Dismiss this result**. It acknowledges only that provider/run/result timestamp on this
 browser and clears it from the shared header/panel/Dashboard. Logout retains only validated dismissal receipt fields,
 so they survive signing out and back in while other browser data and Firestore persistence are cleared. Details and
 retry controls remain in Connections after notification dismissal or expiry.

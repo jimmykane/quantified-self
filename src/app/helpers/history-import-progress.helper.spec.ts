@@ -26,7 +26,7 @@ describe('history import progress presentation', () => {
     const result = view(projection('requested', false), ServiceNames.GarminAPI);
     expect(result.active).toBe(false);
     expect(result.label).toBe('History requested');
-    expect(result.items[0].steps[0].description).toContain('delivery may take hours or days');
+    expect(result.items[0].steps[0].description).toContain('delivery is not confirmed');
     expect(result.items[0].kind).toBe('requested');
     expect(result.items[0].requestOnly).toBe(true);
     expect(result.items[0].steps[0].countLabel).toBe('requests scheduled');
@@ -100,10 +100,10 @@ describe('history import progress presentation', () => {
     expect(result.items[0].kind).toBe('attention');
     expect(result.nextExpiryAtMs).toBe(now + HISTORY_IMPORT_RECENT_MS);
   });
-  it('dismisses only the exact finished result and keeps other providers and resumed work visible', () => {
+  it.each(['failed', 'skipped', 'processed', 'requested'])('dismisses only the exact finished %s result and keeps other providers and resumed work visible', status => {
     const dismissed = [{serviceName: ServiceNames.SuuntoApp, runId: 'run', updatedAtMs: now}];
     const result = buildHistoryImportProgress([
-      {serviceName: ServiceNames.SuuntoApp, projection: projection('failed', false)},
+      {serviceName: ServiceNames.SuuntoApp, projection: projection(status, false)},
       {serviceName: ServiceNames.COROSAPI, projection: projection('failed', false)},
     ], now, dismissed);
     expect(result.items.map(item => item.serviceName)).toEqual([ServiceNames.COROSAPI]);

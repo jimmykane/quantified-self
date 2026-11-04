@@ -240,7 +240,8 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
     expect(content).toContain('exact UTC times');
-    expect(content).toContain('No measurements can be added, edited or deleted');
+    expect(content).toContain('This read permission cannot add, edit or delete measurements');
+    expect(content).toContain('Managing manual entries requires the separate Manage manual Health measurements permission');
     expect(content).toContain('Read bounded identity-free body-measurement history such as weight');
     expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');

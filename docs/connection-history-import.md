@@ -78,12 +78,13 @@ Garmin cards say **Requesting history** or **Waiting
 to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
 Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
 accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
-separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
+separately after accepting requests; request acceptance does not confirm delivery and completion is not tracked here. Submitted
 requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
 processing finished**, never that records have finished importing. All terminal context, including failed/skipped results,
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
 does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
-**Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
+**Dismiss this result** is available for every finished result, including **Processed** and **History requested**.
+It clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
 current account on this browser, including after signing out and back in. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
 is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
 timestamp from a retry is a new result. Logout preserves only validated account/provider-scoped receipts (provider, opaque
@@ -277,7 +278,7 @@ retry code until accepted runs drain. Do not roll back the manual cursor/retry s
 
 | Provider | Shared operations used by manual and connection imports | Completion |
 | --- | --- | --- |
-| Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery can take hours or days |
+| Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery is not confirmed |
 | Suunto | Activity history queue admission, Sleep windows, 24/7 Health windows, explicitly included saved-route library | Processed by existing ingestion workers |
 | COROS | Activity history queue admission, combined daily Sleep/Health requests | Processed by existing ingestion workers |
 | Wahoo | Paginated eligible FIT-backed workout history | Processed by existing ingestion workers |
@@ -300,7 +301,8 @@ New connection-history Sleep/Health children use the canonical queue's immediate
 rather than waiting for each half-hour scan. The coordinator still admits only one bounded unit per invocation and
 waits at least a minute before advancing a batch with children; no worker concurrency or provider retry setting changes.
 Deterministic run/window identities and `preserveExisting` keep completed, dispatched, leased and retrying children
-unchanged. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
+unchanged. The same queue transaction checks a missing child's retained dead-letter receipt, preventing a delayed
+admission from recreating a permanently failed child after its queue-to-DLQ transition. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
 retries do not reset the child's revision or accelerate its backoff. Already-waiting children can wait for that recovery
 once; subsequent newly admitted batches use immediate dispatch. Manual bulk backfills retain their existing dispatch
 behavior, and Garmin's separate single-task Health request pacing is unchanged.

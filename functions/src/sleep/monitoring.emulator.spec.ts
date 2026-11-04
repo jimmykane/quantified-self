@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ vi.mock('firebase-functions/logger', () => ({ info: vi.fn() }));
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded observations in isolated Firestore', () => {
     if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw new Error('Loopback emulator required.');
     let db: Firestore;
+    const metaId = (provider: string) => provider === 'COROSAPI' ? ServiceNames.COROSAPI : provider;
     beforeEach(() => { vi.clearAllMocks(); db = new Firestore({ projectId: `demo-health-monitor-${randomUUID().slice(0, 8)}` }); });
     afterEach(async () => { await db.terminate(); });
     async function seed(id = 'qa', provider = 'GarminAPI', type = 'garmin_ping') {
@@ -16,7 +18,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
         const identity = provider === 'GarminAPI' ? 'userID' : provider === 'SuuntoApp' ? 'userName' : 'openId';
         const user = db.collection('users').doc(id);
         await user.set({ private: 'PRIVATE_OWNER' });
-        await user.collection('meta').doc(provider).set({ connectionState: 'connected' });
+        await user.collection('meta').doc(metaId(provider)).set({ connectionState: 'connected' });
         await db.collection(root).doc(id).set({ private: 'PRIVATE_ROOT' });
         await db.collection(root).doc(id).collection('tokens').doc('account').set({ [identity]: 'account', accessToken: 'PRIVATE_TOKEN' });
         const ref = db.collection('sleepSyncQueue').doc(id);
@@ -71,7 +73,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
         await seed('disconnected'); await db.doc('users/disconnected/meta/GarminAPI').update({ connectionState: 'disconnect_pending' });
         await seed('token-missing'); await db.doc('garminAPITokens/token-missing/tokens/account').update({ userID: 'other' });
         await seed('orphan'); await db.doc('garminAPITokens/orphan').delete();
-        await seed('pinned', 'COROSAPI', 'coros_poll'); await db.doc('users/pinned/meta/COROSAPI').update({ providerUserId: 'different' });
+        await seed('pinned', 'COROSAPI', 'coros_poll'); await db.doc(`users/pinned/meta/${ServiceNames.COROSAPI}`).update({ providerUserId: 'different' });
         await observeHealthSleepQueue(db, 0);
         expect(sample()).toMatchObject({ dueSample: 0, excludedSample: 5, unknownSample: 0 });
         expect(sample('COROSAPI')).toMatchObject({ dueSample: 0, excludedSample: 1 });
@@ -124,15 +126,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
         ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthTokenCredentialGeneration', 'token'],
         ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthRootOAuthCredentialGeneration', 'root'],
         ['SuuntoApp', 'suunto_health_poll', 'suuntoHealthConnectionStateGeneration', 'meta'],
+        ['COROSAPI', 'coros_poll', 'corosTokenCredentialGeneration', 'token'],
+        ['COROSAPI', 'coros_poll', 'corosRootOAuthCredentialGeneration', 'root'],
+        ['COROSAPI', 'coros_poll', 'corosConnectionStateGeneration', 'meta'],
     ])('excludes superseded %s %s %s without borrowing old queue age', async (provider, type, field, target) => {
         const ref = await seed('qa', provider, type);
-        const root = provider === 'GarminAPI' ? 'garminAPITokens' : 'suuntoAppAccessTokens';
+        const root = provider === 'GarminAPI' ? 'garminAPITokens' : provider === 'SuuntoApp' ? 'suuntoAppAccessTokens' : 'COROSAPIAccessTokens';
         await ref.update({ [field]: 'OLD_GENERATION' });
         if (target === 'token' || target === 'root') {
             await db.doc(`${root}/qa/tokens/account`).update({ tokenCredentialGeneration: 'NEW_GENERATION' });
             await db.doc(`${root}/qa`).update({ activeOAuthCredentialGeneration: 'NEW_GENERATION' });
         }
-        if (target === 'meta') await db.doc(`users/qa/meta/${provider}`).update({ connectionStateGeneration: 'NEW_GENERATION' });
+        if (target === 'meta') await db.doc(`users/qa/meta/${metaId(provider)}`).update({ connectionStateGeneration: 'NEW_GENERATION' });
         await observeHealthSleepQueue(db, 0, (await ref.get()).updateTime!.toMillis() + 86_400_000);
         expect(sample(provider, type === 'garmin_health_backfill' ? 'garmin_health_backfill' : 'sleep_sync'))
             .toMatchObject({ dueSample: 0, excludedSample: 1, unknownSample: 0 });
@@ -140,7 +145,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
     });
     it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'])('excludes mismatched pinned %s accounts', async provider => {
         await seed('qa', provider, provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll');
-        await db.doc(`users/qa/meta/${provider}`).update({ providerUserId: 'other-account' });
+        await db.doc(`users/qa/meta/${metaId(provider)}`).update({ providerUserId: 'other-account' });
         await observeHealthSleepQueue(db, 0);
         expect(sample(provider)).toMatchObject({ dueSample: 0, excludedSample: 1 });
     });
@@ -164,6 +169,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Health/Sleep bounded obse
         await ref.update({ suuntoHealthTokenCredentialGeneration: null, suuntoHealthRootOAuthCredentialGeneration: null, suuntoHealthConnectionStateGeneration: null });
         await observeHealthSleepQueue(db, 0);
         expect(sample('SuuntoApp')).toMatchObject({ dueSample: 2, unknownSample: 0 });
+    });
+    it('observes matching COROS fences and excludes disconnects using the canonical metadata document', async () => {
+        const ref = await seed('qa', 'COROSAPI', 'coros_poll');
+        await ref.update({ corosTokenCredentialGeneration: null, corosRootOAuthCredentialGeneration: null,
+            corosConnectionStateGeneration: 'CONNECTION' });
+        const meta = db.doc(`users/qa/meta/${ServiceNames.COROSAPI}`);
+        await meta.update({ connectionStateGeneration: 'CONNECTION' });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('COROSAPI')).toMatchObject({ dueSample: 1, unknownSample: 0 });
+        vi.clearAllMocks(); await meta.update({ connectionState: 'disconnect_pending' });
+        await observeHealthSleepQueue(db, 0);
+        expect(sample('COROSAPI')).toMatchObject({ dueSample: 0, excludedSample: 1, unknownSample: 0 });
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toMatch(/CONNECTION|PRIVATE/);
     });
     it.each([
         ['sleepSyncQueue/qa', 'suuntoHealthTokenCredentialGeneration', ''],

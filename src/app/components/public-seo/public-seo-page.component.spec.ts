@@ -142,7 +142,11 @@ describe('PublicSeoPageComponent', () => {
     expect(root.querySelector('h1')?.textContent).toBe('Sync Garmin activities to Wahoo');
     expect(root.textContent).toContain('activity sync require Pro');
     expect(root.textContent).toContain('Preview sends nothing');
-    expect(root.textContent).toContain('Scheduling complete confirms queueing, not delivery');
+    expect(root.textContent).toContain('Confirmation starts queueing, not delivery');
+    expect(root.textContent).toContain('Saved activities');
+    expect(root.textContent).toContain('Activity sources');
+    expect(root.textContent).toContain('Preview saved activities');
+    expect(root.textContent).toContain('Recent sends');
     expect(root.querySelectorAll('.how-to-list li')).toHaveLength(4);
     expect(root.querySelector('.action-row a')?.getAttribute('href')).toBe('/pricing');
     expect(root.querySelector('a[href="/services"]')).toBeTruthy();

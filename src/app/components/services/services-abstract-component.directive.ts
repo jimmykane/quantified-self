@@ -411,7 +411,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     return this.activeSyncRoutesUsingService.length > 0;
   }
 
-  get activeSyncRouteWarningLabel(): string {
+  get activeSyncRouteUsageLabel(): string {
     const activeRouteCount = this.activeSyncRoutesUsingService.length;
     return activeRouteCount === 1
       ? 'Used by automatic sync'

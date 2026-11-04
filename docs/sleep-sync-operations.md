@@ -16,8 +16,21 @@ live callback pulls use the ordinary Sleep worker, while user-requested historic
 single-concurrency Cloud Tasks worker. Garmin Health is production-wide behind an independent operational
 switch, and enabling either Health adapter does not change provider Sleep behavior.
 
-COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
-poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
+COROS runs `scheduleCOROSSleepSync` hourly and immediately dispatches one eligible poll per connected account.
+Routine requests overlap the last successful observation date by one UTC calendar day and end at the UTC date of the observation
+time plus 14 hours, covering users ahead of UTC. Normal requests cover yesterday and today, adding tomorrow from
+10:00 UTC. Coverage advances only to the hourly observation time, never the timezone-adjusted request end. The first
+poll and a successful-reconciliation interval of at least 24 hours request the existing rolling
+seven-day past window plus the same local-date allowance. Outage recovery remains bounded to that horizon. The private per-user
+`system/corosDailyPolling` cursor observes exact whole-job success receipts; it does not infer completeness from a
+stored sleep record or `lastPollAtMs`. Pending retries keep their original task and backoff. Admission preserves
+live rows and dead-letter receipts transactionally, including a competing transition after the duplicate preflight.
+COROS deletion/connection checks use the reservation transaction; failed reads propagate rather than becoming a
+healthy skipped poll. A deleted legacy owner that cannot be pinned remains an expected lifecycle skip. Failed immediate dispatch
+is recovered by the existing 30-minute reconciler. See [COROS polling](coros-integration.md#daily-health-and-sleep-ingestion)
+for account/generation fences, idempotency, private-state cleanup and release scope.
+
+The documented COROS endpoint provides sleep start/end
 times, average sleep heart rate, resting heart rate, overnight HRV, steps, a provider-native
 calorie value, and optional detailed HRV/interval-heart-rate samples.
 The live endpoint may represent a successful range with no daily records as an exact empty
@@ -422,9 +435,23 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
 
 Update the provider flag tests and deploy or restart the Functions runtime. Restore the empty
 list to re-enable it. Queued items skipped while disabled are intentionally not retried; the
-next daily COROS poll will request the rolling recent window again.
+next eligible hourly COROS poll will request the incremental or reconciliation window again.
 
 ## Cloud Monitoring (#830)
+
+Hourly COROS polling follow-up (4 November 2026): local definitions extend the existing dispatch-failure metric to
+`cloud_run_revision` as well as `cloud_function`, add a COROS-only three-failures-in-four-hours admission/dispatch
+condition to the existing policy, and show that series in the dashboard. A twelfth metric, `coros_poll_runs`,
+tracks the hourly scheduler independently of the queue scanner and adds a three-hour absence condition to the
+existing heartbeat policy. Pending/retrying work and expected lifecycle skips are healthy scheduler runs; unexpected
+account lookup failures fail the run while other accounts continue. The bounded probe uses the canonical COROS
+metadata document and excludes superseded routine-job credential/connection fences. Existing committed retry/DLQ
+and unknown-observation signals remain applicable. The admission-race and lifecycle-read corrections preserve
+existing monitoring coverage: retries/dead letters are not reset or recreated, unexpected reads fail the run, and
+account deletion stays excluded from failure alerts. No metric, label, threshold or scheduler changes accompany
+these corrections. This update needs a separately approved owned-bundle apply and readback; the activation
+evidence below describes the prior deployed bundle, not this local update. No monitor or scheduler was activated
+during implementation, and no new monitoring scanner or queue was introduced.
 
 Status: **activated in production on 7 October 2026**, after the separately approved
 three-Function deployment and configuration apply. The existing Alerts email channel
@@ -435,7 +462,7 @@ provider/workload lanes were verified on 8 October 2026; raw pre-creation logs w
 used as retrospective metric samples. This completes #830's activation evidence.
 The #829 Activity Import dashboard and #655 Training dashboard do not provide this area's coverage.
 
-`tools/health-sleep-monitoring/definitions.mjs` owns **QS Health & Sleep**, 11 versioned
+`tools/health-sleep-monitoring/definitions.mjs` now owns **QS Health & Sleep**, 12 versioned
 log-based metrics and six alert policies, tagged `qs-health-sleep-monitoring-v1`.
 Provisioning reuses `tools/monitoring/`, checks ownership and inventories before writing,
 preserves dashboard etags/policy condition IDs on reapplication, and never deletes or
@@ -469,6 +496,9 @@ this does not use the mail extension or create another notification channel.
   contention, stale tasks, already-processed work, deferrals and skips are excluded.
   `dispatch_failures` covers failed/unconfirmed enqueue attempts and scheduler failures,
   not a refused stale marker after a confirmed enqueue.
+- `coros_poll_runs` observes completed or failed runs of `scheduleCOROSSleepSync`, including idle runs and
+  pending/lifecycle skips. Its independent heartbeat detects stopped account discovery even when the queue scanner
+  is healthy; missing new sleep measurements do not trigger it.
 - Garmin backfill `completed` means its terminal request cursor committed. Requests
   are intentionally serialized and paced; asynchronous Garmin callbacks are ingested
   later by the ordinary worker. Completion is **not** historical-data coverage.
@@ -532,11 +562,11 @@ absence is a separate condition. Normal lack of new provider measurements never 
 | Policy | Ordinary ingestion | Serialized Garmin backfill |
 | --- | --- | --- |
 | Sustained undispatched work | Two observations at least 1h old in 90m | Two observations at least 6h old in 4h, while native task depth is zero |
-| Repeated dispatch failures | Three attempts in 90m | Three attempts in 6h |
+| Repeated dispatch failures | Three attempts in 90m; hourly COROS discovery/admission: three in 4h | Three attempts in 6h |
 | Repeated processing failures | Ten failures/retries in 15m | Three failures/retries in 6h |
 | New permanent failures | Three new DLQ commits in 30m | One new DLQ commit in 6h |
 | Observations unavailable | Two unknown/unavailable samples per provider/lane in 90m | Same |
-| Required observation heartbeat missing | Heartbeat absent for 2h per provider/lane | Same |
+| Required observation heartbeat missing | Queue observation absent for 2h per provider/lane; hourly COROS scheduler absent for 3h | Queue observation absent for 2h |
 
 Policies group provider/workload independently, open/close notifications on the selected
 existing channel, and auto-close after two hours without evidence. Absence needs an
@@ -552,7 +582,7 @@ Worst-case probe document reads per invocation are 21 + (20 × 5) + 20 = **141**
 or **6,768/day** at the unchanged 30-minute cadence. Empty-query minimums and billing
 depend on actual results; the bound excludes existing dispatch reads and any platform
 index-read charges. No extra Cloud Tasks depth request is added. Four probe heartbeats
-per invocation mean 192/day, plus bounded transition/attempt logs. Eleven log-based
+per invocation mean 192/day, plus 24 hourly COROS scheduler observations/day and bounded transition/attempt logs. Twelve log-based
 metrics (including distributions) can incur Logging/Monitoring ingestion/storage costs;
 measure billed volume/cardinality rather than assuming alerts are free. No new Function,
 queue, scheduler, dependencies, Health/Sleep data storage or email-extension work is added.
@@ -575,19 +605,19 @@ node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io
 ```
 
 The last command is offline preview only: no credential access, network or cloud writes.
-After **separate explicit approval**, deploy exactly the three affected Functions, then
-apply the owned resources using the already approved existing email channel:
+For the hourly COROS follow-up, after **separate explicit approval**, deploy the scheduler, ordinary worker,
+existing queue probe and connection-history worker (which consumes the shared admission guard), then apply the owned resources using the selected existing email channel:
 
 ```bash
-firebase deploy --project quantified-self-io --only functions:processSleepSyncTask,functions:processGarminHealthBackfillTask,functions:dispatchSleepSyncQueue
+npm run firebase -- deploy --project quantified-self-io --only functions:scheduleCOROSSleepSync,functions:processSleepSyncTask,functions:dispatchSleepSyncQueue,functions:processConnectionHistoryTask
 node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/EXISTING_CHANNEL_ID --apply --confirm-project=quantified-self-io
 ```
 
-Before marking #830 Done, record deployed options/generations, all 11 metric filters and
+For follow-up activation, record deployed options/generations, all 12 metric filters and
 dimensions, one owned dashboard, six enabled policies and the exact existing channel
 without its private labels. Reapply serially to prove no duplicates/unrelated changes;
 read back each chart and alert query, including native queue scopes and distribution
-aggregation. Wait for four natural heartbeats and distinguish raw logs from aligned
+aggregation. Wait for the four natural queue heartbeats and the independent hourly COROS heartbeat; distinguish raw logs from aligned
 counter interpolation. Verify representative threshold/missing-data behavior against
 safe aggregate samples and reuse #655's same-channel delivery proof only if that channel
 is unchanged. No fault injection, test email, provider call or temporary resource deletion

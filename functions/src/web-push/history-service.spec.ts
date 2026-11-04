@@ -51,6 +51,17 @@ function harness() {
   return { run, registration, rows, deps, hooks, seed, send: () => sendHistoryCompletion(run.id, structuredClone(run), deps) };
 }
 describe('history completion notification policy', () => {
+  it('accepts beta import consent and sends its result back to beta', async () => {
+    const h = harness(), beta = 'https://beta.quantified-self.io';
+    h.registration.origin = beta; h.run.notification!.origin = beta;
+    const target = { installationId: id, generation };
+    expect(readHistoryNotificationConsent(target, beta, undefined)).toEqual({ ...target, origin: beta });
+    await h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', h.run.serviceName, { ...target, origin: beta }, publicKey));
+    await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+    const payload = JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]);
+    expect(payload.notification.navigate).toBe(beta + payload.notification.data.onActionClick.default.url);
+    expect(payload.notification.icon).toBe(beta + '/assets/favicons/android-chrome-192x192.png');
+  });
   it.each([1, 3])('does not replay an ambiguous transaction acknowledgement after commit %s', async commit => {
     const h = harness();
     h.hooks.afterCommit = count => { if (count === commit) throw new Error('Commit acknowledgement lost'); };
@@ -79,7 +90,7 @@ describe('history completion notification policy', () => {
     await h.send(); expect(vi.mocked(h.deps.send).mock.calls[0][1]).toContain('needs attention');
   });
   it.each(['unconsented', 'active', 'pending child', 'automatic history', 'Garmin', 'stale event', 'deleted run', 'deleted user', 'missing user',
-    'revoked', 'rotated', 'beta', 'wrong key', 'disconnected', 'reconnected', 'newer run', 'expired', 'future'])('suppresses %s', async reason => {
+    'revoked', 'rotated', 'mismatched site', 'wrong key', 'disconnected', 'reconnected', 'newer run', 'expired', 'future'])('suppresses %s', async reason => {
     const h = harness(); const expected = structuredClone(h.run);
     if (reason === 'unconsented') { delete h.run.notification; delete expected.notification; }
     if (reason === 'active') h.run.processed = false;
@@ -92,7 +103,7 @@ describe('history completion notification policy', () => {
     if (reason === 'missing user') h.rows.delete('users/owner');
     if (reason === 'revoked') h.rows.delete(`users/owner/pushSubscriptions/${id}`);
     if (reason === 'rotated') h.registration.generation = runId;
-    if (reason === 'beta') h.registration.origin = 'https://beta.quantified-self.io';
+    if (reason === 'mismatched site') h.registration.origin = 'https://beta.quantified-self.io';
     if (reason === 'wrong key') h.registration.vapidPublicKey = 'B' + 'Z'.repeat(86);
     const meta = h.rows.get(`users/owner/meta/${ServiceNames.SuuntoApp}`);
     if (reason === 'disconnected') meta.connectionState = 'disconnect-pending';
@@ -165,7 +176,7 @@ describe('history completion notification policy', () => {
   });
 });
 describe('one-import consent boundary', () => {
-  it('accepts only an exact target from a production owner request', async () => {
+  it('accepts only an exact target from a supported owner request', async () => {
     const h = harness(); const target = { installationId: id, generation };
     expect(readHistoryNotificationConsent(target, origin, undefined)).toEqual({ ...target, origin });
     expect(readHistoryNotificationConsent(undefined, undefined, 'admin')).toBeUndefined();
@@ -173,12 +184,12 @@ describe('one-import consent boundary', () => {
       expect(isHistoryNotificationTarget(value)).toBe(false);
       expect(() => readHistoryNotificationConsent(value, origin, undefined)).toThrow();
     }
-    expect(() => readHistoryNotificationConsent(target, 'https://beta.quantified-self.io', undefined)).toThrow();
+    expect(() => readHistoryNotificationConsent(target, 'https://evil.example', undefined)).toThrow();
     expect(() => readHistoryNotificationConsent(target, origin, 'admin')).toThrow();
     await h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', h.run.serviceName, { ...target, origin }, publicKey));
     await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'other', h.run.serviceName, { ...target, origin }, publicKey))).rejects.toThrow();
     await expect(h.deps.db.runTransaction(tx => validateHistoryNotificationConsent(h.deps.db, tx, 'owner', ServiceNames.GarminAPI, { ...target, origin }, publicKey))).rejects.toThrow();
-    expect(() => buildHistoryNotificationPayload('https://beta.quantified-self.io', h.run.serviceName, 'finished')).toThrow();
+    expect(() => buildHistoryNotificationPayload('https://evil.example', h.run.serviceName, 'finished')).toThrow();
   });
   it('requires both unconditional switches; absent or targeted configuration stays off', async () => {
     const parameters = { web_push_enabled: { defaultValue: { value: 'true' } }, web_push_history_import_enabled: { defaultValue: { value: 'true' } },

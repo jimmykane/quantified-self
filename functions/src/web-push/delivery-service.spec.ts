@@ -62,6 +62,29 @@ function harness() {
 }
 
 describe('activity delivery notifications', () => {
+  it('sends a beta manual result only to the initiating beta device', async () => {
+    const h = harness(); const beta = 'https://beta.quantified-self.io';
+    h.rows.get(`users/owner/pushSubscriptions/${id}`).origin = beta;
+    h.operation().deliveryNotification.origin = beta;
+    h.register('00000000-0000-4000-8000-000000000003');
+    await h.admit(); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]).notification.navigate).toBe(beta + '/send-activities/suunto?batch=batch&source=files');
+  });
+  it('sends automatic failures to both sites using one shared attempt', async () => {
+    const h = harness(), betaId = '00000000-0000-4000-8000-000000000003'; h.register(betaId);
+    h.rows.get(`users/owner/pushSubscriptions/${betaId}`).origin = 'https://beta.quantified-self.io';
+    await h.admit(h.seed('automatic')); h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledTimes(2); expect(h.state().attempts).toHaveLength(1);
+    for (const [registration, body] of vi.mocked(h.deps.send).mock.calls) {
+      expect(JSON.parse(body).notification.navigate).toBe(registration.origin + '/services?serviceName=Suunto%20app');
+    }
+  });
+  it('cancels a manual result when its registration changes site after admission', async () => {
+    const h = harness(); await h.admit();
+    h.rows.get(`users/owner/pushSubscriptions/${id}`).origin = 'https://beta.quantified-self.io';
+    h.advance(); await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
+  });
   it('sends one explicit batch result for twenty files, only to its chosen device', async () => {
     const h = harness(); h.register('00000000-0000-4000-8000-000000000003');
     await Promise.all([h.admit(), h.admit()]); await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
@@ -98,7 +121,7 @@ describe('activity delivery notifications', () => {
     const payload = vi.mocked(h.deps.send).mock.calls[0][1]; expect(payload).toContain('needs attention');
     expect(payload).not.toMatch(/job\d|private-canary|heart|pace|distance/); expect(JSON.parse(payload).notification.navigate).toBe(origin + '/services');
   });
-  it.each(['off', 'disabled', 'unchecked', 'pending', 'stopped', 'wrong category revision', 'wrong device', 'beta', 'wrong connection', 'wrong account', 'deleted', 'old'])('suppresses %s manual results', async reason => {
+  it.each(['off', 'disabled', 'unchecked', 'pending', 'stopped', 'wrong category revision', 'wrong device', 'mismatched site', 'wrong connection', 'wrong account', 'deleted', 'old'])('suppresses %s manual results', async reason => {
     const h = harness();
     if (reason === 'off') h.preference(false);
     if (reason === 'disabled') vi.mocked(h.deps.configuration).mockResolvedValue({ enabled: false, publicKey: key });
@@ -107,7 +130,7 @@ describe('activity delivery notifications', () => {
     if (reason === 'stopped') h.operation().stopped = true;
     if (reason === 'wrong category revision') h.preference(true, 2);
     if (reason === 'wrong device') h.operation().deliveryNotification.generation = '00000000-0000-4000-8000-000000000099';
-    if (reason === 'beta') h.operation().deliveryNotification.origin = 'https://beta.quantified-self.io';
+    if (reason === 'mismatched site') h.operation().deliveryNotification.origin = 'https://beta.quantified-self.io';
     if (reason === 'wrong connection') h.meta.connectionStateGeneration = 'different';
     if (reason === 'wrong account') h.meta.providerUserId = 'other';
     if (reason === 'deleted') h.rows.set('userDeletionTombstones/owner', {});

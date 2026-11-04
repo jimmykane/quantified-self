@@ -249,9 +249,10 @@ describe('HistoryImportProgressService', () => {
     expect(service.setDashboardHidden(false, service.owner())).toBe(true);
     expect(service.dashboardHidden()).toBe(false);
   });
-  it('remembers one dismissed result across reload without hiding future imports or changing metadata', () => {
+  it.each(['failed', 'skipped', 'processed', 'requested'])('remembers a dismissed %s result across reload without hiding future imports or changing metadata', terminalStatus => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
-    const metadata = {connectionState: 'connected', connectionHistoryImport: failedStatus()};
+    const projection = {...failedStatus(), steps: [{...failedStatus().steps[0], status: terminalStatus}]};
+    const metadata = {connectionState: 'connected', connectionHistoryImport: projection};
     stream('a').next(metadata);
     expect(service.dismissResult(service.view().items[0], service.owner())).toBe(true);
     expect(service.view().items).toEqual([]);

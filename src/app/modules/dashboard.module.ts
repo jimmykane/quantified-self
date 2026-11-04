@@ -1,3 +1,4 @@
+import { NotificationOfferComponent } from '../components/notification-offer/notification-offer.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { EventTableModule } from './event-table.module';
@@ -12,7 +13,7 @@ import { HistoryImportCardsComponent } from '../components/history-import-progre
 @NgModule({
   imports: [
     CommonModule, SharedModule, MaterialModule, DashboardLibraryModule,
-    DashboardRoutingModule, UploadActivitiesComponent, EventTableModule, HistoryImportCardsComponent,
+    NotificationOfferComponent, DashboardRoutingModule, UploadActivitiesComponent, EventTableModule, HistoryImportCardsComponent,
   ],
   declarations: [DashboardComponent, DashboardActionPromptsComponent],
 })
