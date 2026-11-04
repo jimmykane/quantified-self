@@ -37,6 +37,22 @@ describe('TrainingLoadService', () => {
     service = TestBed.inject(TrainingLoadService);
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('releases private policy listeners and clears values when the account changes', () => {
+    const users = TestBed.inject(AppUserService) as unknown as { user$: BehaviorSubject<{ uid: string } | null> };
+    users.user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'u' });
+    const policies = new BehaviorSubject([{ id: 'cycling', revision: 1, functionalThresholdPower: 220 }]);
+    vi.mocked(collectionData).mockReturnValue(policies);
+    const values: unknown[] = [];
+    const subscription = service.watchPolicies('u').subscribe(value => values.push(value));
+    expect(values.at(-1)).toEqual(policies.value);
+    expect(policies.observed).toBe(true);
+    users.user$.next({ uid: 'other' });
+    expect(values.at(-1)).toEqual([]); expect(policies.observed).toBe(false);
+    users.user$.next(null);
+    expect(values.at(-1)).toEqual([]);
+    expect(collectionData).toHaveBeenCalledTimes(1);
+    subscription.unsubscribe();
+  });
   it('uses the backend source fingerprint in the browser and preserves explicit exclusion while sources update', async () => {
     const data = { startDate: new Date(1000), endDate: new Date(3601000), stats: { 'Training Stress Score': 9 } };
     const metadata = { version: 1 as const, revision: 1, excluded: false, controls: {},

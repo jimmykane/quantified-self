@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
+  validTrainingLoadPolicy, trainingLoadThresholds, sameTrainingLoadCalibration,
   type TrainingLoadMetadata } from '@shared/training-load-policy';
 
 const activities = [
@@ -14,6 +15,34 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('validates separate FTP families and projects only explicit threshold settings', () => {
+    const policy = { method: 'AUTOMATIC' as const, included: true, functionalThresholdPower: 220, lactateThresholdHR: 165 };
+    expect(validTrainingLoadPolicy('running', policy)).toBe(true);
+    expect(validTrainingLoadPolicy('cycling', policy)).toBe(true);
+    expect(validTrainingLoadPolicy('swimming', policy)).toBe(false);
+    for (const value of [0, -1, Infinity, NaN])
+      expect(validTrainingLoadPolicy('running', { ...policy, lactateThresholdHR: value })).toBe(false);
+    expect(trainingLoadThresholds(policy)).toEqual({ functionalThresholdPower: 220, lactateThresholdHR: 165 });
+    expect(validTrainingLoadPolicy('running', { ...policy, swimThresholdSpeed: 1 })).toBe(false);
+  });
+  it('requires reparse after reassociation of any different saved calibration', () => {
+    const data = metadata();
+    data.legs!.old = { ...data.legs!.walk, activityId: null,
+      policy: { ...data.legs!.walk.policy, lactateThresholdHR: 165 } };
+    data.controls.old = { activityId: 'walk' };
+    expect(sameTrainingLoadCalibration(data.legs!.old, data.legs!.walk)).toBe(false);
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    data.controls.old.override = 0;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+    expect(sameTrainingLoadCalibration(data.legs!.walk, { ...data.legs!.walk,
+      policy: { ...data.legs!.walk.policy, method: 'HR', included: false, revision: 99 } })).toBe(true);
+  });
+  it.each(['missing', 'toString'])('keeps an orphaned association %s unavailable instead of crashing or borrowing calibration', key => {
+    const data = metadata(); data.controls[key] = { activityId: 'walk' };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    data.controls[key].override = 0;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+  });
   it('requires reparse when explicit reassociation changes CSS, while still honoring zero overrides', () => {
     const data = metadata();
     data.legs!.old = { ...data.legs!.walk, activityId: null,

@@ -735,7 +735,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'lock',
             title: 'Focused, approval-gated writes',
-            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. The independent Manage manual Health measurements permission allows logging, correcting, and permanently deleting manual entries through the client’s approval controls; imported Health readings remain unchanged. These permissions cannot change recorded activity data, routes, sleep records, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
+            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. The independent Manage manual Health measurements permission allows logging, correcting, and permanently deleting manual entries through the client’s approval controls; imported Health readings remain unchanged. These permissions cannot change recorded activity data, routes, sleep records, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call. Independent Training threshold permissions can read FTP, threshold HR and CSS, then preview and separately apply explicit changes for future workouts; existing workouts and Health history stay unchanged.',
           },
           {
             icon: 'shield',

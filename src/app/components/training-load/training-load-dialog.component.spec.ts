@@ -12,7 +12,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits,
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits, WeightUnits,
   convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -51,6 +51,22 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('shows saved threshold and prior weight inputs with units without revealing private provenance', () => {
+    const leg: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 10 * 86400000, endMs: 10 * 86400000 + 3600000,
+      type: 'Walking', duration: 3600, distance: null }, recordedTss: 9, evaluations: null,
+      policy: { ...defaultAppliedTrainingLoadPolicy('Walking'), lactateThresholdHR: 165 },
+      calibration: { version: 2, weight: { status: 'available', kilograms: 70, observedAtMs: 0,
+        sourceRecordId: 'PRIVATE-RECORD', sourceRevision: 'PRIVATE-REVISION' } } };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: leg } });
+    expect(component.savedThresholdLabels).toEqual([{ label: 'Saved threshold HR fallback', value: '165 bpm' }]);
+    expect(component.savedHealthWeightLabel).toContain('70.0 kg');
+    expect(component.savedHealthWeightLabel).toContain('10 days before this workout');
+    component.data.unitSettings = normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds });
+    expect(component.savedHealthWeightLabel).toContain('154.3'); expect(component.savedHealthWeightLabel).toContain('lb');
+    expect(component.savedHealthWeightLabel).not.toContain('PRIVATE');
+    delete leg.calibration;
+    expect(component.savedHealthWeightLabel).toBeNull();
+  });
   it('uses one modeled score and activity wording for a single-activity workout', async () => {
     const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
     fixture.detectChanges();
@@ -374,7 +390,8 @@ describe('Training load editor', () => {
     } } } }));
     await component.ngOnInit();
     expect(component.legModel).toMatchObject({ status: 'available', score: 9, method: 'MET', estimated: true });
-    expect(component.explanation).toContain('Estimate from file calories, body mass and duration');
+    expect(component.explanation).toContain('Estimate from file calories and duration');
+    expect(component.explanation).toContain('frozen prior Health weight');
     expect(component.reasonText).toContain('No usable swim threshold is available');
     expect(component.reasonText).not.toContain('MET requires');
 

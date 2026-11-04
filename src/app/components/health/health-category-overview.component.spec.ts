@@ -12,6 +12,7 @@ import { DashboardHealthService } from '../../services/dashboard-health.service'
 import { Subject } from 'rxjs';
 import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
 import { opaqueHealthSeriesId } from '../../helpers/health-workspace.helper';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({ selector: 'app-dashboard-health-chart', standalone: true, template: '' })
 class HealthChartStubComponent {
@@ -31,11 +32,13 @@ class HealthChartStubComponent {
 
 describe('Health category overview', () => {
   const haptics = { selection: vi.fn() };
+  const dialog = { open: vi.fn() };
   beforeEach(async () => {
     vi.clearAllMocks();
     await TestBed.configureTestingModule({ imports: [HealthCategoryOverviewComponent, NoopAnimationsModule], providers: [
       { provide: AppHapticsService, useValue: haptics },
-    ] }).overrideComponent(HealthCategoryOverviewComponent, {
+      { provide: MatDialog, useValue: dialog },
+    ] }).overrideProvider(MatDialog, { useValue: dialog }).overrideComponent(HealthCategoryOverviewComponent, {
       remove: { imports: [DashboardHealthChartComponent] }, add: { imports: [HealthChartStubComponent] },
     }).compileComponents();
   });
@@ -54,6 +57,21 @@ describe('Health category overview', () => {
       health: null, history: null, activities: null, sessions: [], errors: [],
     }, settings);
   }
+  it('offers the shared threshold editor in Fitness even without recorded Health data', async () => {
+    const fixture = create();
+    fixture.componentRef.setInput('groups', []); fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
+    fixture.componentInstance.selectCategory('fitness'); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) =>
+      item.textContent?.includes('Manage FTP, threshold HR and CSS')) as HTMLButtonElement;
+    const open = vi.spyOn(fixture.componentInstance, 'openTrainingThresholds');
+    expect(button).toBeDefined(); button.click();
+    expect(open).toHaveBeenCalledOnce(); await open.mock.results[0].value;
+    expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ data: { uid: 'owner' } }));
+    expect(haptics.selection).toHaveBeenCalled(); dialog.open.mockClear();
+    fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
+    await fixture.componentInstance.openTrainingThresholds();
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
   it('names the actual HR measurement and hands the default reading to history without requiring a source change', () => {
     const fixture = create(), component = fixture.componentInstance;
     component.selectCategory('vitals'); fixture.detectChanges();

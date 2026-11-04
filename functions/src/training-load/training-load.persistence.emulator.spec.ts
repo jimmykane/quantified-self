@@ -7,7 +7,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, DataPower, DataWeight, DataTrainingStressScore, DataTrainingStressScoreMethod, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -62,6 +62,81 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
+  it('uses dated independent FTP and HR while preserving source statistics and saved inputs on reparse', async () => {
+    const uid = setup();
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)),
+      functionalThresholdPower: 200, lactateThresholdHR: 165 });
+    const make = (id = 'leg') => {
+      const event = workout(id); const activity = event.getActivities()[0]; activity.type = ActivityTypes.Cycling;
+      const stream = activity.createStream(DataPower.type); stream.setData(Array(3601).fill(200)); activity.addStream(stream);
+      const hr = activity.createStream(DataHeartRate.type); hr.setData(Array(3601).fill(165)); activity.addStream(hr);
+      ActivityUtilities.evaluateTrainingStressScore(activity);
+      return event;
+    };
+    const original = make(); const before = JSON.stringify(original.toJSON());
+    await importWorkout(uid, original);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ calibration: { version: 2 }, policy: { functionalThresholdPower: 200 },
+      evaluations: { automatic: { score: 100, method: 'POWER' }, hr: { score: 100, hrAlgorithm: 'THRESHOLD', estimated: true } } });
+    expect(JSON.stringify(original.toJSON())).toBe(before);
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/later`).set({ revision: 2,
+      method: 'HR', included: false, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), functionalThresholdPower: 300, lactateThresholdHR: 190 });
+    const next = make('changed-id'); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ activityId: 'changed-id', policy: { revision: 1, functionalThresholdPower: 200 },
+      evaluations: { automatic: { score: 100 }, hr: { score: 100 } } });
+  });
+  it('freezes actual prior Health weight and never adopts later edits or adds Weight to recorded data', async () => {
+    const uid = setup();
+    const weight = db.doc(`users/${uid}/healthSourceRecords/actual-weight`);
+    const measurement = (kg: number) => ({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: `weight-${kg}` } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: kg, unit: 'kg' } }] });
+    await weight.set(measurement(70));
+    const make = () => {
+      const event = workout(); const activity = event.getActivities()[0];
+      activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type); activity.removeStat(DataTrainingStressScoreMethod.type);
+      ActivityUtilities.evaluateTrainingStressScore(activity); return event;
+    };
+    const original = make(); const before = JSON.stringify(original.toJSON()); await importWorkout(uid, original);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ status: 'available', kilograms: 70, observedAtMs: Date.UTC(2020, 0, 1) });
+    expect(saved.legs!.leg.evaluations?.met).toMatchObject({ score: 9, method: 'MET' });
+    expect(JSON.stringify(original.toJSON())).toBe(before);
+    await weight.set(measurement(90));
+    const next = make(); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ kilograms: 70, sourceRevision: 'weight-70' });
+    expect(saved.legs!.leg.evaluations?.met.score).toBe(9);
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).get('stats.Weight')).toBeUndefined();
+    await weight.delete();
+    const retry = make(); const finalize = await prepareTrainingLoadMetadata(uid, retry); await source(uid, retry); await finalize();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ kilograms: 70 });
+    expect(saved.legs!.leg.evaluations?.met.score).toBe(9);
+  });
+  it('keeps legacy CSS precedence on reparse while new legs prefer independent file CSS', async () => {
+    const uid = setup();
+    await db.doc(`users/${uid}/trainingLoadPolicies/swimming/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), swimThresholdSpeed: 1.25 });
+    const make = () => {
+      const event = EventImporterJSON.getEventFromJSON({ name: 'Swim', startDate: Date.UTC(2026, 0, 2), endDate: Date.UTC(2026, 0, 2) + 3600000,
+        activities: [{ startDate: Date.UTC(2026, 0, 2), endDate: Date.UTC(2026, 0, 2) + 3600000, type: ActivityTypes.Swimming,
+          creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [], stats: { 'Average Speed': 1, 'Timer time': 3600 } }] } as any);
+      event.setID('workout'); const activity = event.getActivities()[0]; activity.setID('leg');
+      activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { thresholdSwimSpeed: 1 } } });
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity); return event;
+    };
+    await importWorkout(uid, make());
+    const ref = db.doc(metadataPath(uid));
+    expect((await ref.get()).get('legs.leg.evaluations.automatic.score')).toBe(100);
+    await ref.update({ 'legs.leg.calibration': FieldValue.delete() }); // A metadata snapshot saved before this feature.
+    const next = make(); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    expect((await ref.get()).get('legs.leg.calibration')).toBeUndefined();
+    expect((await ref.get()).get('legs.leg.evaluations.automatic.score')).toBe(51.2);
+  });
   function reuploadWriter(uid: string, providerMetadata?: Record<string, unknown>) {
     const guard = new TrainingLoadSourceWrite(uid, event => prepareImportedEventWrite(uid, event, undefined, providerMetadata));
     const setDoc = vi.fn(async (path: string[], data: unknown) => db.runTransaction(async transaction => {

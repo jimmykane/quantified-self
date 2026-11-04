@@ -439,6 +439,24 @@ describe('Firestore Security Rules', () => {
             next.set(head, backdated); next.set(head.collection('revisions').doc('r2'), backdated);
             await assertFails(next.commit());
         });
+        it('validates independent FTP and HR thresholds without granting metadata writes', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (family: string, thresholds: Record<string, unknown>) => {
+                const head = owner.doc(`users/owner/trainingLoadPolicies/${family}`);
+                const data = { revision: 1, revisionId: 'thresholds', method: 'AUTOMATIC', included: true,
+                    effectiveAt: serverTimestamp(), ...thresholds };
+                const batch = owner.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('thresholds'), data);
+                return batch.commit();
+            };
+            for (const value of [0, -1, Infinity, NaN, '165'])
+                await assertFails(write('running', { lactateThresholdHR: value }));
+            await assertFails(write('swimming', { functionalThresholdPower: 220 }));
+            await assertSucceeds(write('running', { functionalThresholdPower: 220, lactateThresholdHR: 165 }));
+            await assertSucceeds(write('cycling', { functionalThresholdPower: 225 }));
+            await assertSucceeds(write('team-sports', { lactateThresholdHR: 165 }));
+        });
     });
 
     describe('Account deletion fences for existing client sessions', () => {

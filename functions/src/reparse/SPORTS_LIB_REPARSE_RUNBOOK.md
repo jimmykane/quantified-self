@@ -1,5 +1,15 @@
 # Sports-Lib Reparse Runbook
 
+## Dated threshold calibration compatibility
+
+Training threshold settings do not require a historical reparse campaign. Existing legs retain their saved policy and
+legacy CSS precedence, with no new FTP, threshold-HR or Health-weight adoption. New legs privately record calibration
+version 2 and any selected prior actual Health weight, including frozen unavailability; reparse/duplicate import/retry
+preserves that snapshot. It refreshes candidates from the original file plus the saved inputs, never current settings
+or later/backfilled Health records. Imported TSS, controls, exclusions, identity and deletion/write fences keep priority.
+An explicit multisport reassociation with different saved calibration requires source reparse before calculated load
+can be merged. Routes are unchanged. See [dated thresholds](../../../docs/training-workspace.md#dated-training-thresholds-and-swimming-css).
+
 ## Purpose
 This pipeline reparses existing events and activities from stored original files so event/activity data is upgraded to a fixed sports-lib target version.
 

@@ -4,6 +4,7 @@ import { collection, collectionData, doc, docData, Firestore, runTransaction, se
 import type { EventRead } from '@shared/event-read';
 import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, validTrainingLoadPolicy, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
+  trainingLoadThresholds,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
@@ -29,7 +30,9 @@ export class TrainingLoadService {
   }
 
   watchPolicies(uid: string): Observable<TrainingLoadPolicyHead[]> {
-    return collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>;
+    return this.users.user$.pipe(switchMap(user => user?.uid === uid
+      ? collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>
+      : of([])));
   }
 
   watchEffective(uid: string, events: readonly EventRead[]): Observable<Map<string, TrainingLoadView>> {
@@ -108,9 +111,9 @@ export class TrainingLoadService {
         else transaction.set(ref, patch);
       }
       if (future && policyRef) {
-        const swimThresholdSpeed = policySnapshot?.data()?.['swimThresholdSpeed'];
+        const thresholds = trainingLoadThresholds((policySnapshot?.data() ?? {}) as TrainingLoadPolicy);
         const policy = { method: future.policy.method, included: future.policy.included,
-          ...(future.family === 'swimming' && swimThresholdSpeed !== undefined ? { swimThresholdSpeed } : {}), revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
+          ...thresholds, revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
         transaction.set(policyRef, policy);
         transaction.set(doc(policyRef, 'revisions', revisionId), policy);
       }

@@ -7243,59 +7243,62 @@ Read-only hydration consumes the saved association without changing Firestore. N
 or provider fetch is required to adopt these associations. See the [provider lifecycle](provider-integration-guide.md)
 and [reparse runbook](../functions/src/reparse/SPORTS_LIB_REPARSE_RUNBOOK.md) for operational boundaries.
 
-### Swimming CSS and explicit pace preference
+### Dated Training thresholds and Swimming CSS
 
-Settings → Training load defaults → Swimming accepts an optional independently measured CSS as `mm:ss` per
-100 metres or 100 yards. Store only canonical `swimThresholdSpeed` in metres/second on the existing private policy
-head and immutable revision. Unit conversion is a display concern; switching units or saving another preference
-must not quantize an unchanged canonical value. CSS labels round to the nearest second after unit conversion;
-this display-only precision does not change saved CSS, calculations or ordinary pace statistics.
-Blank removes CSS from the new revision. CSS is not inferred from
-ordinary swim speed, guessed Garmin fields, or the workout's average pace.
+Settings → Training load defaults accepts independent FTP in watts for Running and Cycling, threshold HR in bpm
+per sport family, and Swimming CSS as `mm:ss` per 100 metres or 100 yards. Health → Fitness opens the same editor,
+restricted to thresholds; it preserves method and inclusion. These are calibration settings, not Health observations:
+there is one policy head/history, no duplicate measurement or inferred threshold. Empty input removes that fallback
+from the next revision. Values must be positive and finite; existing sport eligibility is unchanged. FTP settings for
+Running and Cycling are independent. CSS is stored as metres/second; unchanged unit round trips preserve full precision.
+Display rounds CSS to the nearest second after conversion without changing calculations.
 
-`SWIM_PACE` is an explicit preferred method for pool and open-water swimming. Imported valid scores, including zero,
-still win. Swimming Automatic uses imported → CSS pace → calibrated HR → MET → unavailable. Calculated power TSS
-is ineligible for swimming; recorded power data and ordinary power statistics remain intact. Explicit Swim pace
-also prefers CSS, while explicit HR/MET selects its available candidate first. Other sports keep their existing
-Automatic order. The existing Sports Lib swim formula is
-`100 × activeHours × (averageSwimSpeed / CSS)^3`. Missing speed/duration or rejected calculations fall back with reasons.
-The preference and CSS do not change recorded TSS, activity statistics, source fingerprints or original files.
+Each save uses the existing owner transaction, revision check, deletion fence, server timestamp and immutable revision.
+First import selects the policy at each leg's recorded start time, so delayed uploads cannot borrow a later setting.
+Imported nonnegative TSS, including zero, wins for every method. Valid independent file calibration comes next; saved
+thresholds only fill missing or rejected calibration for new legs. A saved threshold HR uses the existing sports-lib
+threshold-band estimate, never a guessed or mixed resting/max/threshold Banister tuple. A complete valid file tuple
+retains Banister priority. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
 
-At first import, select the immutable policy effective at the leg's recorded start time. During source finalization,
-apply its CSS with `ActivityUtilities.evaluateTrainingStressScoreWithSwimThreshold` after ordinary parse-time
-candidates are cached. This side-effect-free library API returns private modeled evaluations and preserves the cached
-file-only evaluations. Matched legs reuse the saved policy during duplicate uploads, resync, retries and reparse.
-Legacy policies without CSS stay without CSS. New settings cannot retroactively calibrate old or delayed swims.
-No historical correction editor, migration, bulk reparse, new collection, trigger, index or policy-history read is added.
-Saved routes and planned-workout relative targets are outside this feature.
-Stored evaluations keep their saved values until reparse. Reparse refreshes swimming Automatic with the new order
-using the saved policy and source calibration; it never borrows today's CSS. File-calculated swim TSS may also change
-when an independent file threshold now wins over HR, or previously selected calculated power is no longer eligible.
-Imported scores remain unchanged. Normal source/metadata invalidation refreshes modeled Training summaries.
+New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
+This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
+changing recorded stats, parse options, original files or the file-only cache. Swimming Automatic is imported → CSS pace
+→ calibrated HR → MET → unavailable, with no calculated power TSS. Explicit Swim pace (CSS), HR or MET prefers its
+available candidate, then falls back through Automatic. Other sports retain their existing order. Swim pace TSS remains
+`100 × activeHours × (averageSwimSpeed / CSS)^3`. Workout average pace is never its own CSS.
 
-The owner event editor offers Swim pace only for Swimming legs, and only when that evaluation exists. If reparse
-corrects a swim to another sport, the saved Swim pace choice remains visible but disabled, with the actual fallback
-and its reason. Copying preferences to that sport's future defaults requires choosing a supported method first;
-the saved policy and calculated candidates remain unchanged. Old metadata
-without the additive candidate asks for the existing original-file reimport action. Reimport retains the old policy;
-it does not adopt today's CSS. Numeric override and exclusion retain priority, and reset restores the saved policy.
-“Also use these preferences for future workouts” copies method/inclusion only and preserves the current policy head's
-CSS in the same revision-checked transaction. It never copies an old workout's CSS or numeric override. If an explicit
-multisport reassociation brings different CSS, calculated load requires source reparse before using that calibration;
-overrides and exclusions remain available, and imported scores remain authoritative. The editor also withholds
-Automatic TSS calculated with different CSS, even when an override or exclusion resolves modeled load.
-Merging must not remove that calibration check: refresh the source candidates before merging.
-Merge retries retain the original CSS and its
-matching candidate snapshot together only for unchanged source fingerprints; different source data requires review.
-Ambiguous legs retain the existing review requirement.
+For calorie-derived MET, file body mass has priority. Only a new leg with usable file energy and no usable file mass
+looks up actual manual/device Health Weight point measurements at or before its start. There is no age expiry. The
+latest valid point wins; different valid weights at the same newest instant are unavailable, never averaged or
+provider-selected. A bounded descending query reads two records first, then pages of eight up to 64; unresolved scans
+are unavailable and transient query failures retry the import. The composite index covers kind, metric and recorded
+instant. No Health-history scan is added to Training rebuilds. Freeze the chosen kg, measurement instant and private
+source revision, or unavailable status, in the leg's owner-only calibration. Reparse never consults today's weight,
+backfilled records or later edits/deletions. Removing the Health point does not remove an already frozen workout
+input; workout/account deletion removes that private snapshot. Help and Policies disclose this retention.
+The owner editor displays the saved fallback's units, date and age at the workout.
+MET remains `100 × hours × (kcal / (kg × hours) / 10)^2`, labelled estimated; no invented mass or resting-energy adjustment.
 
-MCP impact review: existing recorded-stat queries keep their meaning; Training and impact use the shared modeled-load
-resolver. CSS, policy history and candidates stay owner-only and absent from MCP output. No new metric token, schema,
-permission, consent, planning mutation, provider action or bundled-skill change is introduced. Existing strict output
-contracts remain frozen. Root and Functions pin the same published Sports Lib 23.8.0 artifact, which supplies the
-CSS evaluation API and swimming selection order. Runtime version detection and activity/route reparse targets follow
-that installed version; strict mismatch checks and scanner settings stay unchanged. Local packed builds are validation
-only. No deployment or historical reparse is authorized by this feature.
+The small private per-leg `calibration.version: 2` distinguishes this file-first/frozen-weight behavior. Absence is the
+legacy behavior: existing workouts keep the original CSS-first wrapper and no new FTP/HR/Health fallback. Matched legs,
+duplicate uploads, interrupted imports, resync, reparse and benchmark merges preserve that absence or saved calibration.
+No historical migration or automatic reparse is introduced. Reset removes controls and restores the saved policy,
+not today's defaults. Future-preference copies change method/inclusion only and preserve the current head's thresholds.
+
+Numeric overrides and exclusions retain priority. Multisport legs keep separate policies and inputs, summed once.
+Reassociation with different saved calibration needs an original-file reparse before calculated load or merging; the
+editor withholds stale Automatic comparisons too. Imported scores remain authoritative and overrides/exclusion stay
+available. Merge/retry retains the associated policy and calibration together, even when an imported score masks a
+difference. Ambiguous identity requires explicit review. Recorded statistics, volume and event identities stay unchanged.
+
+MCP adds independent `training-thresholds:read` and dependent `training-thresholds:write`, not Health/measurement or
+planning grants. Narrow reads expose safe canonical/display thresholds, effective dates and opaque current references;
+dated reads are not editable. A revision-bound preview shows before/after values; separately approved Apply appends one
+server-dated revision for future workouts. No policy controls, frozen weight/provenance, activity rewrite or provider
+action is exposed. Existing tool schemas remain frozen. The Assistant's independent default-off choice permits reads
+and preparation only; app Apply rechecks generation, proposal, expiry and authority. New chat turns it off. See
+`docs/mcp-server.md` and `docs/assistant.md`. Companion library publication, dependency adoption, deployed-server update,
+registered-app rescan and plugin refresh are separate rollout steps; this work authorizes none of them.
 
 ### Sports Lib 23.9.0 R–R heart-rate adoption
 
@@ -7351,8 +7354,8 @@ review. No bulk rewrite, automatic scan, new storage operation or provider reque
 Banister HR uses continuous threshold-normalized TRIMP and requires explicit file calibration satisfying `0 < resting HR <
 threshold HR < maximum HR`. Session-matched FIT `time_in_zone` settings take priority over unambiguous
 `zones_target` and applicable profile settings. Walking uses general maximum HR, never the running-specific
-setting. Observed peak HR and guessed threshold ratios are ineligible calibration. QS supplies no athlete
-settings. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
+setting. Observed peak HR and guessed threshold ratios are ineligible calibration. QS never supplies guessed
+resting or maximum HR; the dated threshold extension above adds only independent fallbacks for new legs. The synthetic one-hour recovery walk with calibration 190/55/165 produces approximately 7.6 HR TSS.
 
 Sports Lib 23.1.0 adds the threshold-HR fallback for every sport already eligible for calculated TSS (262 of the
 284 canonical types), including walking/hiking, pool/open-water swimming and strength training. The existing 22
@@ -7361,7 +7364,8 @@ maximum HR is missing. Full valid calibration still selects Banister. Imported s
 Automatic priority. Complete rejected calibration cannot use the fallback.
 Only this threshold candidate treats numeric zero FIT rest/max settings as unused; threshold zero, conflicting
 selected settings, ambiguous session references and malformed values remain rejected. No athlete settings, zone-derived
-thresholds or observed-peak maximums are supplied by QS. Unmapped source thresholds remain unavailable.
+thresholds or observed-peak maximums are inferred by QS. New legs may use an explicitly saved dated threshold as
+described above; without that fallback, unmapped source thresholds remain unavailable.
 
 The fallback uses the sports-lib threshold bands over the same observed timer-active intervals, with no extrapolation
 outside observations or through invalid readings. It is explicitly estimated and is not interchangeable with normalized

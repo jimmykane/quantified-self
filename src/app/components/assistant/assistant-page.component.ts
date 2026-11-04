@@ -95,6 +95,7 @@ function contentProposalTitle(kind: AssistantContentProposalKind): string {
   if (kind === 'create_manual_measurement') return 'Review new manual measurement';
   if (kind === 'update_manual_measurement') return 'Review manual measurement changes';
   if (kind === 'delete_manual_measurement') return 'Review permanent measurement deletion';
+  if (kind === 'apply_training_threshold_change') return 'Review Training thresholds';
   if (kind === 'update_event_tags') return 'Review event tag change';
   if (kind === 'delete_timeline_note') return 'Review permanent note deletion';
   if (kind === 'create_timeline_note') return 'Review new Timeline note';
@@ -109,6 +110,16 @@ function isSavedWorkoutProposal(proposal: AssistantTrainingProposalPreview): boo
 }
 
 function contentProposalDetails(proposal: AssistantContentProposalPreview): string[] {
+  if (proposal.kind === 'apply_training_threshold_change') {
+    const review = proposal.thresholdReview;
+    if (!review) return [];
+    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS' } as const;
+    const text = (value: import('@shared/training-thresholds').TrainingThresholdValue | null) => value ? `${value.displayValue} ${value.displayUnit}` : 'Not set';
+    return [review.familyLabel, ...Object.entries(labels).map(([key, label]) => {
+      const metric = key as keyof typeof labels;
+      return `${label}: ${text(review.before[metric])} → ${text(review.after[metric])}`;
+    }), 'Applies to future workouts only. Imported TSS and valid file calibration keep priority.'];
+  }
   const args = proposal.arguments as Record<string, unknown>;
   if (proposal.kind === 'update_event_tags') {
     const before = Array.isArray(args['expectedTags']) ? args['expectedTags'].join(', ') || 'No tags' : 'No tags';
@@ -206,6 +217,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly activityTagChangesEnabled = signal(false);
   readonly timelineNoteChangesEnabled = signal(false);
   readonly measurementChangesEnabled = signal(true);
+  readonly trainingThresholdsEnabled = signal(false);
   readonly reflectionChangesEnabled = signal(true);
   readonly trainingPlansEnabled = signal(false);
   readonly trainingPlanChangesEnabled = signal(false);
@@ -251,6 +263,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly contentAccessStatus = computed(() => {
     const labels = [
       ...(this.measurementChangesEnabled() ? ['Manual measurements'] : []),
+      ...(this.trainingThresholdsEnabled() ? ['Training thresholds'] : []),
       ...(this.reflectionChangesEnabled() ? ['Private workout reflections'] : []),
       ...(this.activityTagChangesEnabled() ? ['Tag changes'] : []),
       ...(this.timelineNotesEnabled()
@@ -337,6 +350,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.conversation.set(state.conversation);
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
       this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+      this.trainingThresholdsEnabled.set(state.trainingThresholdsEnabled === true);
       this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true
@@ -425,7 +439,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!request || this.planRequestBusy() || !this.canApplyAccountResult(session?.uid ?? null)) return;
     if (this.auth.currentUser !== session) { this.planRequest.set(null); return; }
     const replaced = await this.replaceConversation('coordinate_free', false, request.timelineNotesEnabled,
-      true, true, false, false, false, false, false);
+      true, true, false, false, false, false, false, false);
     if (replaced && !this.destroyed && this.auth.currentUser === session && this.planRequest() === request) {
       this.useStarterPrompt(request.prompt);
       this.planRequest.set(null);
@@ -456,6 +470,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         activityTagChangesEnabled: this.activityTagChangesEnabled(),
         timelineNoteChangesEnabled: this.timelineNoteChangesEnabled(),
         measurementChangesEnabled: this.measurementChangesEnabled(),
+        trainingThresholdsEnabled: this.trainingThresholdsEnabled(),
         reflectionChangesEnabled: this.reflectionChangesEnabled(),
         trainingPlansEnabled: this.trainingPlansEnabled(), trainingPlanChangesEnabled: this.trainingPlanChangesEnabled(),
         trainingDeliveryEnabled: this.trainingDeliveryEnabled() },
@@ -500,6 +515,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
             this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
             this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled(), this.measurementChangesEnabled(), result.enabled);
+        } else if (result?.kind === 'training_thresholds') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled(), this.measurementChangesEnabled(), this.reflectionChangesEnabled(), result.enabled);
         } else if (result?.kind === 'measurement_changes') {
           void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
             this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
@@ -577,6 +596,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       && (retryRequest.activityTagChangesEnabled === true) === this.activityTagChangesEnabled()
       && (retryRequest.timelineNoteChangesEnabled === true) === this.timelineNoteChangesEnabled()
       && (retryRequest.measurementChangesEnabled === true) === this.measurementChangesEnabled()
+      && (retryRequest.trainingThresholdsEnabled === true) === this.trainingThresholdsEnabled()
       && (retryRequest.reflectionChangesEnabled === true) === this.reflectionChangesEnabled()
       && (retryRequest.trainingPlansEnabled === true) === this.trainingPlansEnabled()
       && (retryRequest.trainingPlanChangesEnabled === true) === this.trainingPlanChangesEnabled()
@@ -599,6 +619,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(this.activityTagChangesEnabled() ? { activityTagChangesEnabled: true } : {}),
         ...(this.timelineNoteChangesEnabled() ? { timelineNoteChangesEnabled: true } : {}),
         ...(this.measurementChangesEnabled() ? { measurementChangesEnabled: true } : {}),
+        ...(this.trainingThresholdsEnabled() ? { trainingThresholdsEnabled: true } : {}),
         ...(this.reflectionChangesEnabled() ? { reflectionChangesEnabled: true } : {}),
         ...(this.trainingPlansEnabled() ? { trainingPlansEnabled: true } : {}),
         ...(this.trainingPlanChangesEnabled() ? { trainingPlanChangesEnabled: true } : {}),
@@ -631,6 +652,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(request.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(request.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(request.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(request.trainingThresholdsEnabled ? { trainingThresholdsEnabled: true } : {}),
         ...(request.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(request.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(request.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
@@ -666,6 +688,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.timelineNotesEnabled.set(refreshedState.timelineNotesEnabled === true);
         this.activityTagChangesEnabled.set(refreshedState.activityTagChangesEnabled === true);
         this.timelineNoteChangesEnabled.set(refreshedState.timelineNoteChangesEnabled === true);
+        this.trainingThresholdsEnabled.set(refreshedState.trainingThresholdsEnabled === true);
         this.measurementChangesEnabled.set(refreshedState.conversation ? refreshedState.measurementChangesEnabled === true : true);
         this.reflectionChangesEnabled.set(refreshedState.conversation ? refreshedState.reflectionChangesEnabled === true
           : request.reflectionChangesEnabled === true);
@@ -744,7 +767,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
-    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, true);
+    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, true, false);
   }
 
   async applyPendingTrainingProposal(): Promise<void> {
@@ -890,6 +913,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     timelineNoteChangesEnabled = false,
     measurementChangesEnabled = this.measurementChangesEnabled(),
     reflectionChangesEnabled = this.reflectionChangesEnabled(),
+    trainingThresholdsEnabled = this.trainingThresholdsEnabled(),
   ): Promise<boolean> {
     if (this.loadingConversation()
       || this.conversationLoadError()
@@ -909,7 +933,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     try {
       const conversation = await this.assistantService.resetConversation(
         locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null, trainingPlansEnabled,
-        trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled,
+        trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled, trainingThresholdsEnabled,
       );
       if (!current()) return false;
       this.conversation.set(conversation);
@@ -919,6 +943,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.timelineNoteChangesEnabled.set(timelineNoteChangesEnabled);
       this.measurementChangesEnabled.set(measurementChangesEnabled);
       this.reflectionChangesEnabled.set(reflectionChangesEnabled);
+      this.trainingThresholdsEnabled.set(trainingThresholdsEnabled);
       this.trainingPlansEnabled.set(trainingPlansEnabled);
       this.trainingPlanChangesEnabled.set(trainingPlanChangesEnabled);
       this.trainingDeliveryEnabled.set(trainingDeliveryEnabled);
@@ -943,6 +968,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           this.conversation.set(state.conversation);
           this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
           this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+      this.trainingThresholdsEnabled.set(state.trainingThresholdsEnabled === true);
           this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
           this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
           this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
@@ -1038,6 +1064,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.conversation.set(state.conversation);
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
       this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+      this.trainingThresholdsEnabled.set(state.trainingThresholdsEnabled === true);
       this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
       this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
       this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
@@ -1149,6 +1176,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.activityTagChangesEnabled.set(false);
     this.timelineNoteChangesEnabled.set(false);
     this.measurementChangesEnabled.set(false);
+    this.trainingThresholdsEnabled.set(false);
     this.reflectionChangesEnabled.set(false);
     this.trainingPlansEnabled.set(false);
     this.trainingPlanChangesEnabled.set(false);
@@ -1299,6 +1327,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       if (data.reflectionChangesEnabled !== undefined && typeof data.reflectionChangesEnabled !== 'boolean') {
         this.clearRememberedPendingRequest(); return null;
       }
+      if (data.trainingThresholdsEnabled !== undefined && typeof data.trainingThresholdsEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest(); return null;
+      }
       if (data.measurementChangesEnabled !== undefined && typeof data.measurementChangesEnabled !== 'boolean') {
         this.clearRememberedPendingRequest();
         return null;
@@ -1331,6 +1362,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...(data.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
         ...(data.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(data.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(data.trainingThresholdsEnabled ? { trainingThresholdsEnabled: true } : {}),
         ...(data.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
         ...(data.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(data.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
@@ -1382,6 +1414,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       || (request.activityTagChangesEnabled === true) !== this.activityTagChangesEnabled()
       || (request.timelineNoteChangesEnabled === true) !== this.timelineNoteChangesEnabled()
       || (request.measurementChangesEnabled === true) !== this.measurementChangesEnabled()
+      || (request.trainingThresholdsEnabled === true) !== this.trainingThresholdsEnabled()
       || (request.reflectionChangesEnabled === true) !== this.reflectionChangesEnabled()
       || (request.trainingPlansEnabled === true) !== this.trainingPlansEnabled()
       || (request.trainingPlanChangesEnabled === true) !== this.trainingPlanChangesEnabled()

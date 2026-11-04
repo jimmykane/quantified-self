@@ -1,4 +1,5 @@
 import { GOAL_INPUTS, GOAL_READ_TOOLS, GOAL_TOOLS } from './training-goals.schemas';
+import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_INPUTS } from './training-thresholds.schemas';
 import { MCP_ACTIVITY_CHART_METRICS, resolveMetric } from './activity-stream.service';
 import type { AssistantPromptWorkflow } from '../../../shared/assistant.prompts';
 import { MCP_WORKOUT_REFLECTION_INPUTS, type McpWorkoutReflectionTool } from './workout-reflections.schemas';
@@ -994,7 +995,7 @@ export function createMcpServer(
     }
   };
   const runContentWriteTool = async (
-    name: Exclude<McpContentWriteTool, 'query_editable_timeline_notes' | 'get_event_title'> | McpManualMeasurementWriteTool | Exclude<McpWorkoutReflectionTool, 'get_workout_reflection'>,
+    name: Exclude<McpContentWriteTool, 'query_editable_timeline_notes' | 'get_event_title'> | McpManualMeasurementWriteTool | Exclude<McpWorkoutReflectionTool, 'get_workout_reflection'> | 'preview_training_threshold_change' | 'apply_training_threshold_change',
     operation: () => Promise<unknown>,
   ) => {
     try {
@@ -1483,6 +1484,26 @@ export function createMcpServer(
         arguments: input, uid: auth.uid, connectionId: auth.connectionId,
         grantId: auth.grantId, assistantConversationId: auth.assistantConversationId, scopes: auth.scopes,
       })));
+    }
+  }
+
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsRead)) {
+    const copy = {
+      get_training_thresholds: ['Read training thresholds', 'Read current FTP, threshold HR and CSS settings for one sport family, or discover all supported families when omitted. Optional asOf reads the dated policy and returns no editable reference. Values are calibration settings, not proof of which file inputs a workout used. Imported scores and valid file calibration win; existing workouts keep saved inputs. No Health history or private source metadata is returned.'],
+      preview_training_threshold_change: ['Preview training threshold changes', 'Prepare explicit threshold set/clear changes from the current policyRef. Supply a stable mutationId UUID; retain it on retries. FTP is watts for Running/Cycling, threshold HR is bpm, CSS accepts seconds per 100 metres or yards. Null clears a fallback. Show before/after values and the future-workout effect. Method, inclusion, existing workouts and Health measurements stay unchanged. Only separately approved apply_training_threshold_change saves the dated policy.'],
+      apply_training_threshold_change: ['Apply training threshold changes', 'Apply one reviewed threshold proposal through the client native approval controls. Rechecks owner, connection grant, current policy revision, expiry and deletion guards. Retries of the same proposal are idempotent. Appends a server-dated immutable revision for future workouts; cannot backdate settings, rewrite activities, change Health measurements or send to providers.'],
+    } as const;
+    for (const name of TRAINING_THRESHOLD_TOOLS) {
+      if (name !== 'get_training_thresholds' && !auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsWrite)) continue;
+      registerMcpTool(server, name, { title: copy[name][0], description: copy[name][1],
+        inputSchema: TRAINING_THRESHOLD_INPUTS[name] as z.ZodType, outputSchema: outputSchemas[name],
+        annotations: name === 'get_training_thresholds' ? READ_ONLY_TOOL_ANNOTATIONS
+          : name === 'preview_training_threshold_change' ? CONTENT_CREATE_TOOL_ANNOTATIONS : CONTENT_UPDATE_TOOL_ANNOTATIONS },
+      input => {
+        const operation = () => dataService.trainingThresholds(name, { arguments: input, uid: auth.uid,
+          connectionId: auth.connectionId, grantId: auth.grantId, assistantConversationId: auth.assistantConversationId, scopes: auth.scopes });
+        return name === 'get_training_thresholds' ? runReadOnlyTool(name, operation) : runContentWriteTool(name, operation);
+      });
     }
   }
 
@@ -2583,6 +2604,8 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     ? (params as Record<string, unknown>).arguments as Record<string, unknown>
     : {};
   if (toolName === 'get_hrv_personal_range') return [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead];
+  if ((TRAINING_THRESHOLD_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.TrainingThresholdsRead,
+    ...(toolName === 'get_training_thresholds' ? [] : [MCP_OAUTH_SCOPES.TrainingThresholdsWrite])];
   if ((MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.MeasurementsWrite];
   if (toolName === 'list_health_metrics' || toolName === 'query_health_metric') {
     return toolName === 'query_health_metric' && isMcpHealthBodyMetric(toolArguments.metricId)

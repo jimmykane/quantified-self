@@ -24,6 +24,8 @@
       @if (showActivityLoad()) { <div><dt>Modeled activity TSS</dt><dd>{{ score(legModel.score) }}</dd></div> }
       <div><dt>Actual method</dt><dd>{{ actualMethodLabel }}</dd></div>
       @if (savedCssLabel) { <div><dt>Saved CSS</dt><dd>{{ savedCssLabel }}</dd></div> }
+      @for (threshold of savedThresholdLabels; track threshold.label) { <div><dt>{{ threshold.label }}</dt><dd>{{ threshold.value }}</dd></div> }
+      @if (savedHealthWeightLabel) { <div><dt>Saved Health weight fallback</dt><dd>{{ savedHealthWeightLabel }}</dd></div> }
     </dl>
     <p role="status">{{ explanation }} {{ reasonText }}</p>
     <div [formGroup]="form" class="load-fields">
@@ -47,7 +49,7 @@
           <p class="hint">Choose a method supported by this sport before copying preferences to future workouts.</p>
         } @else {
           <mat-checkbox formControlName="future" (change)="selection()">Also use these preferences for future {{ familyLabel }} workouts</mat-checkbox>
-          <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity. Your current CSS setting stays unchanged.</p>
+          <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity. Your current FTP, threshold HR and CSS settings stay unchanged.</p>
         }
       }
     </div>

@@ -1,13 +1,21 @@
-<h4>Training load defaults</h4>
+<h4>{{ thresholdsOnly ? 'Training thresholds' : 'Training load defaults' }}</h4>
 <p>Choose how each sport contributes to fitness and fatigue. These preferences apply to workouts starting from the time you save them, including delayed uploads. Existing workouts keep their saved policy.</p>
-<p>Automatic uses the eligible methods available in the file. HR needs file calibration; MET estimates load from file calories, body mass and duration. A missing preferred method falls back to Automatic. Imported TSS takes precedence.</p>
+<p>Imported TSS takes precedence. Valid file calibration is used first; saved thresholds fill missing calibration for new workouts. MET uses file calories and duration, with file weight or a saved prior Health measurement. Existing workouts keep their saved inputs.</p>
+@if (thresholdsOnly) {
+  <mat-form-field appearance="outline"><mat-label>Sport family</mat-label>
+    <mat-select [value]="selectedFamily()" [disabled]="!!busy()" (selectionChange)="selectFamily($event.value)">
+      @for (row of rows; track row.id) { <mat-option [value]="row.id">{{ row.label }}</mat-option> }
+    </mat-select>
+  </mat-form-field>
+}
 @if (message()) { <p role="status" aria-live="polite">{{ message() }}</p> }
 @if (busy()) { <p role="status">Saving sport preferences…</p> }
 @if (loaded()) {
-  <div class="load-settings-grid">
-    @for (row of rows; track row.id) {
+  <div class="load-settings-grid" [class.thresholds-only]="thresholdsOnly">
+    @for (row of visibleRows; track row.id) {
       <section class="load-settings-family" [formGroup]="row.form" [attr.aria-label]="row.label">
         <h5>{{ row.label }}</h5>
+        @if (!thresholdsOnly) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Preferred calculation</mat-label>
           <mat-select formControlName="method" (selectionChange)="selection()">
@@ -16,6 +24,21 @@
             @if (row.id === 'swimming') { <mat-option value="SWIM_PACE">Swim pace (CSS)</mat-option> }
             <mat-option value="MET">Calories (MET estimate)</mat-option>
           </mat-select>
+        </mat-form-field>
+        }
+        @if (row.id === 'running' || row.id === 'cycling') {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>FTP (optional)</mat-label>
+            <input matInput formControlName="ftp" inputmode="decimal" aria-label="Independent FTP">
+            <span matTextSuffix>{{ ftpUnit }}</span>
+            <mat-hint>{{ row.label }} FTP is saved independently from other sports.</mat-hint>
+          </mat-form-field>
+        }
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Threshold heart rate (optional)</mat-label>
+          <input matInput formControlName="thresholdHr" inputmode="decimal" aria-label="Threshold heart rate">
+          <span matTextSuffix>{{ hrUnit }}</span>
+          <mat-hint>Use your independently measured threshold; resting or maximum HR is not assumed.</mat-hint>
         </mat-form-field>
         @if (row.id === 'swimming') {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -33,8 +56,9 @@
           <p id="css-help">Use your independently measured CSS. Applies to pool and open-water swims starting after you save. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS. Imported scores take precedence. Clearing CSS affects future swims only.</p>
           @if (!validCss(row)) { <p role="alert">Enter a positive pace as mm:ss, for example 1:53, or leave blank.</p> }
         }
-        <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle>
-        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validCss(row)" (click)="save(row)">Save {{ row.label }} preferences</button>
+        @if (!validThresholds(row) && validCss(row)) { <p role="alert">Enter positive finite thresholds, or leave them blank to remove the fallback for future workouts.</p> }
+        @if (!thresholdsOnly) { <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle> }
+        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validThresholds(row)" (click)="save(row)">Save {{ row.label }} {{ thresholdsOnly ? 'thresholds' : 'preferences' }}</button>
       </section>
     }
   </div>
