@@ -477,8 +477,8 @@ describe('Firebase Hosting configuration', () => {
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
-    // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
+    // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');

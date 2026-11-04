@@ -135,3 +135,155 @@
   .provider-compatibility .partner-logo { width: 56px; height: 24px; }
   .provider-compatibility .partner-logo.wide { width: 62px; }
 }
+
+// Local hero concept: the shipped chart components remain responsible for their data and visuals.
+.landing-page { max-width: 1440px; }
+.landing-page > :not(.hero-section) { width: min(100%, 1104px); margin-inline: auto; }
+.hero-section { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); align-items: center; gap: 2rem 1.5rem; padding-block: 3rem 1.5rem; text-align: left; }
+.hero-content { width: 100%; margin: 0; }
+.brand-badge, .hero-actions, .trust-indicators { justify-content: flex-start; }
+.brand-logo { width: 32px; height: 32px; }
+.brand-name { font: var(--mat-sys-title-medium); }
+.hero-eyebrow { margin-top: 2rem; color: var(--mat-sys-primary); font-size: .7rem; }
+.hero-content h1 { margin-block: 1rem 1.5rem; font-size: clamp(2.2rem, 3.65vw, 3.5rem); line-height: 1.12; letter-spacing: -.04em; }
+.hero-content h1 span { margin-top: .15rem; }
+.hero-subtitle { margin-inline: 0; max-width: 32rem; line-height: 1.7; }
+.hero-actions { gap: .75rem; margin-block: 1.5rem 1rem; }
+.hero-actions a { padding-inline: 1.25rem; }
+.hero-access-note { margin-inline: 0; font: var(--mat-sys-body-small); line-height: 1.6; max-width: 30rem; }
+.trust-indicators { margin-top: 1rem; gap: .6rem 1rem; }
+.hero-product { min-width: 0; padding: 1.25rem; background: var(--mat-sys-surface-container-low); }
+.hero-product-header, .hero-product-title { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.hero-product-header { justify-content: space-between; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.hero-product-title mat-icon { width: 25px; height: 25px; flex-shrink: 0; }
+.hero-product-title h2 { margin: 0; font: var(--mat-sys-title-small); font-weight: 600; }
+.hero-sample-label { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-small); }
+.hero-product-caption { margin: .75rem 0 0; padding-top: .75rem; border-top: 1px solid var(--mat-sys-outline-variant); font: var(--mat-sys-body-small); }
+.provider-compatibility { grid-column: 1 / -1; max-width: none; width: 100%; margin: .75rem 0 0; padding-block: 1.25rem .25rem; text-align: center; }
+.provider-compatibility h2 { font: var(--mat-sys-title-medium); }
+.provider-compatibility__copy { max-width: 48rem; margin-inline: auto; }
+@media (max-width: 1050px) {
+  .hero-section { gap: 2rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 799.98px) {
+  .hero-section { grid-template-columns: minmax(0, 1fr); padding-top: 1.75rem; gap: 1.75rem; }
+  .hero-content { max-width: 38rem; }
+  .hero-content h1 { font-size: clamp(1.65rem, 8.2vw, 3.25rem); }
+  .hero-eyebrow { margin-top: 1.5rem; }
+  .hero-product { padding: 1rem; }
+  .provider-compatibility { margin-top: 0; }
+}
+
+// The provider paths are a decorative illustration, not a second chart implementation.
+.hero-visual { --hero-flow-color: var(--mat-sys-primary); position: relative; isolation: isolate; display: grid; grid-template-columns: 228px minmax(0, 1fr); align-items: center; min-width: 0; padding-block: 2.5rem; }
+.hero-product { position: relative; --qs-glass-panel-radius: 16px; }
+@property --qs-hero-border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.hero-border-glow {
+  --hero-entry-angle: 270deg;
+  position: absolute;
+  inset: -1px;
+  padding: 1.25px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from calc(var(--qs-hero-border-angle) + var(--hero-entry-angle)),
+    transparent 0deg 314deg,
+    color-mix(in srgb, var(--hero-flow-color) 8%, transparent) 334deg,
+    color-mix(in srgb, var(--hero-flow-color) 45%, transparent) 350deg,
+    var(--hero-flow-color) 358deg, transparent 360deg);
+  // Only the card outline receives the light; its content remains untouched.
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.hero-provider-flow { position: relative; z-index: 1; display: grid; grid-template-columns: 92px 136px; align-items: center; min-width: 0; }
+.hero-providers.logos-container { --hero-logo-width: 72px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
+.hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; }
+.hero-provider .partner-logo { width: var(--hero-logo-width); height: 25px; }
+@media (min-width: 700.01px) {
+  // Center the lettering on each dot, excluding the emblems above Garmin/Suunto.
+  // Optical offsets come from the SVG wordmark bounds and scale with logo width.
+  .hero-provider[data-provider='garmin'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.064)); }
+  .hero-provider[data-provider='suunto'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.074)); }
+  .hero-provider[data-provider='coros'] .partner-logo { transform: translateY(calc(var(--hero-logo-width) * -.0085)); }
+}
+.hero-connection-field { position: relative; min-width: 0; }
+.hero-provider-wires { display: block; width: 136px; height: 336px; color: var(--hero-flow-color); overflow: visible; pointer-events: none; }
+.hero-provider-wires--desktop { clip-path: inset(-8px 0 -8px -8px); }
+.hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hero-connection-track { opacity: .35; }
+:host-context(.dark-theme) .hero-visual { --hero-flow-color: var(--qs-theme-accent); }
+.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 114; }
+.hero-provider-wires .hero-connection-halo { stroke-width: 9; stroke: color-mix(in srgb, var(--hero-flow-color) 18%, transparent); }
+.hero-aggregation-point {
+  position: absolute;
+  left: calc(100% * 84 / 136);
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--hero-flow-color) 0 2.5px, color-mix(in srgb, var(--hero-flow-color) 26%, transparent) 3px 5px, transparent 6px);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--hero-flow-color) 14%, transparent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.hero-aggregate .hero-connection-track { stroke-width: 1.5; opacity: .6; }
+.hero-connection-port { fill: var(--mat-sys-surface); stroke: currentColor; stroke-width: 1.25; }
+.hero-provider-wires--mobile { display: none; }
+.hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
+.hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
+@keyframes heroConnectionFlow {
+  0% { stroke-dashoffset: 8; opacity: 0; }
+  6% { opacity: 1; }
+  78% { stroke-dashoffset: -100; opacity: 1; }
+  79%, 100% { stroke-dashoffset: -100; opacity: 0; }
+}
+@keyframes heroBorderTravel {
+  0% { --qs-hero-border-angle: 0deg; opacity: 0; }
+  5%, 90% { opacity: .45; }
+  100% { --qs-hero-border-angle: 360deg; opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  // Normalize whole paths so arrivals stay synchronized at every viewport size.
+  .hero-connection { --hero-flow-delay: 0s; }
+  .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
+  .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
+  .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
+  .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
+  // Two quiet traces take 4.8s per lap, acknowledging every other 1.2s arrival.
+  // Both still start at the connection point as an incoming leading edge arrives.
+  .hero-border-glow { animation: heroBorderTravel 4.8s linear -.064s infinite; }
+  .hero-border-glow--following { animation-delay: -2.464s; }
+  .hero-motion-toggle { display: inline-flex; }
+  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
+}
+@media (min-width: 1200px) and (max-width: 1320px) {
+  .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
+  .hero-provider-flow { grid-template-columns: 80px 104px; }
+  .hero-provider-wires--desktop { width: 104px; }
+  .hero-providers.logos-container { --hero-logo-width: 64px; }
+}
+@media (max-width: 1199.98px) {
+  .hero-section { grid-template-columns: minmax(0, 1fr); }
+  .hero-content { max-width: 40rem; }
+  .hero-actions { flex-direction: row; align-items: center; }
+  .hero-visual { width: 100%; max-width: 54rem; justify-self: center; }
+}
+@media (max-width: 700px) {
+  .hero-visual { grid-template-columns: minmax(0, 1fr); padding-block: 0; }
+  .hero-provider-flow { grid-template-columns: minmax(0, 1fr); }
+  .hero-providers.logos-container { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; width: 100%; }
+  .hero-provider { height: 44px; width: 100%; }
+  .hero-provider .partner-logo { width: 64px; height: 22px; max-width: 84%; }
+  .hero-provider-wires--desktop { display: none; }
+  .hero-provider-wires--mobile { display: block; width: 100%; height: 88px; clip-path: inset(-8px -8px 0 -8px); }
+  .hero-aggregation-point { left: 50%; top: calc(100% * 64 / 104); }
+  .hero-border-glow { --hero-entry-angle: 0deg; }
+  .hero-product { padding: 1rem; }
+  .hero-product-header { gap: .25rem; }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+}
