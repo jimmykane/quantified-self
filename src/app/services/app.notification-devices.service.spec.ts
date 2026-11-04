@@ -37,7 +37,7 @@ beforeEach(() => {
   push.isCurrentDevice.mockReturnValue(false); push.refreshRegistration.mockResolvedValue(undefined);
   owner = { uid: 'owner', getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }) };
   auth = { currentUser: owner }; owner$ = new BehaviorSubject(owner); vi.mocked(user).mockReturnValue(owner$ as never);
-  vi.mocked(getDocsFromServer).mockResolvedValue(snapshot());
+  vi.mocked(getDocsFromServer).mockReset().mockResolvedValue(snapshot());
   tx = { get: vi.fn().mockResolvedValue({ exists: () => true, data: () => data }), delete: vi.fn() };
   vi.mocked(runTransaction).mockImplementation(async (_db, update) => update(tx as never));
 });
@@ -49,7 +49,7 @@ describe('notification device management', () => {
     const service = setup(); await tick();
     expect(service.devices()).toEqual([
       { id, generation: id, origin, site: 'Production', label: 'Chrome on macOS', registeredAt: new Date(1000), current: true },
-      { id: betaId, generation: id, origin: 'https://beta.quantified-self.io', site: 'Beta', label: 'Browser device · 00000002', registeredAt: new Date(1000), current: false },
+      { id: betaId, generation: id, origin: 'https://beta.quantified-self.io', site: 'Beta', label: 'Browser device', registeredAt: new Date(1000), current: false },
     ]);
     expect(getDocsFromServer).toHaveBeenCalledWith({ path: 'users/owner/pushSubscriptions', constraints: [{ orderBy: '__name__' }, { limit: 26 }] });
     expect(JSON.stringify(service.devices())).not.toMatch(/private-|endpoint|keys/);
@@ -73,6 +73,28 @@ describe('notification device management', () => {
     await service.reload(); expect(service.status()).toBe('error'); expect(service.devices()).toHaveLength(1);
     expect(await service.disable(service.devices()[0])).toBe(false); expect(runTransaction).not.toHaveBeenCalled();
     await service.reload(); expect(service.canManage()).toBe(true);
+  });
+  it('supersedes an initial read when a completed device change requests a fresh list', async () => {
+    let finish!: (value: never) => void;
+    vi.mocked(getDocsFromServer).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(snapshot([row(betaId)]));
+    const service = setup(); await tick(); expect(service.status()).toBe('loading');
+    await service.reload();
+    finish(snapshot([])); await tick();
+    expect(service.devices().map(device => device.id)).toEqual([betaId]);
+    expect(service.status()).toBe('ready');
+  });
+  it('drops an obsolete pagination result after refreshing for a local device change', async () => {
+    const rows = Array.from({ length: 26 }, (_, index) => row(`00000000-0000-4000-8000-${String(index).padStart(12, '0')}`));
+    let finish!: (value: never) => void;
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce(snapshot(rows))
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(snapshot([row(betaId)]));
+    const service = setup(); await tick();
+    const loading = service.loadMore(); await tick(); expect(service.loadingMore()).toBe(true);
+    await service.reload(); finish(snapshot([rows[25]])); await loading;
+    expect(service.devices().map(device => device.id)).toEqual([betaId]);
+    expect(service.loadingMore()).toBe(false); expect(service.hasMore()).toBe(false);
   });
   it('removes only the chosen site registration and reconciles this browser after server acknowledgement', async () => {
     vi.mocked(getDocsFromServer).mockResolvedValue(snapshot([row(), row(betaId, { ...data, origin: 'https://beta.quantified-self.io' })]));
@@ -116,5 +138,12 @@ describe('notification device management', () => {
     vi.mocked(getDocsFromServer).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
     const service = setup(); await tick(); TestBed.resetTestingModule(); resolve(snapshot()); await tick();
     expect(service.devices()).toEqual([]);
+  });
+  it('does not restart reads when a device action completes after Settings is closed', async () => {
+    const service = setup(); await tick(); TestBed.resetTestingModule();
+    await service.reload();
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
+    expect(await service.disable(service.devices()[0])).toBe(false);
+    expect(runTransaction).not.toHaveBeenCalled();
   });
 });

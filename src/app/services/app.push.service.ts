@@ -197,8 +197,8 @@ export class AppPushService {
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
         await this.persist(owner, local.installationId, subscription, epoch, true);
       } else if (!isPushDeviceInfo(saved.device)) {
-        // Enrich legacy registrations without rotating consent or recreating a removed document.
-        await updateDoc(ref, { device: pushDeviceInfo(window.navigator), updatedAt: serverTimestamp() });
+        // Optional labels must not block a valid subscription. Update-only cannot recreate a removed document.
+        void updateDoc(ref, { device: pushDeviceInfo(window.navigator), updatedAt: serverTimestamp() }).catch(() => undefined);
       }
       if (this.current(owner, epoch)) this.state.set('enabled');
     } catch { if (this.epoch === epoch) this.state.set('unavailable'); }

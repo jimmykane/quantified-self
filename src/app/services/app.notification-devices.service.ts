@@ -38,17 +38,19 @@ export class AppNotificationDevicesService {
   });
   private owner: FirebaseUserType | null = null;
   private epoch = 0;
+  private destroyed = false;
   private cursor: string | null = null;
 
   constructor() {
-    this.destroy.onDestroy(() => { this.epoch++; });
+    this.destroy.onDestroy(() => { this.destroyed = true; this.epoch++; });
     if (!this.browser) { this.status.set('signed-out'); return; }
     user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => { void this.observe(owner); });
   }
   private current(owner: FirebaseUserType, epoch: number): boolean {
-    return this.owner === owner && this.auth.currentUser === owner && this.epoch === epoch;
+    return !this.destroyed && this.owner === owner && this.auth.currentUser === owner && this.epoch === epoch;
   }
   private async observe(owner: FirebaseUserType | null): Promise<void> {
+    if (this.destroyed) return;
     const epoch = ++this.epoch;
     if (this.owner !== owner) this.records.set([]);
     this.owner = owner; this.cursor = null; this.hasMore.set(false); this.saving.set(null);
@@ -66,7 +68,9 @@ export class AppNotificationDevicesService {
     this.status.set('error'); this.message.set('Could not load notification devices. Refresh the list to try again.');
   }
   async reload(): Promise<void> {
-    if (this.browser && this.canReload()) await this.observe(this.auth.currentUser);
+    // A completed local enable/disable must supersede any older list or pagination read.
+    if (this.browser && !this.saving() && !this.push.operation()
+      && ['loading', 'ready', 'error'].includes(this.status())) await this.observe(this.auth.currentUser);
   }
   async loadMore(): Promise<void> {
     const owner = this.owner, epoch = this.epoch;
@@ -87,7 +91,7 @@ export class AppNotificationDevicesService {
       if (!isPushId(item.id) || !isPushId(data.generation) || !isPushOrigin(data.origin)) continue;
       const device: PushDeviceInfo | null = isPushDeviceInfo(data.device) ? data.device : null;
       devices.push({ id: item.id, generation: data.generation, origin: data.origin,
-        label: device ? `${device.browser} on ${device.platform}` : `Browser device · ${item.id.slice(-8)}`,
+        label: device ? `${device.browser} on ${device.platform}` : 'Browser device',
         site: data.origin === 'https://quantified-self.io' ? 'Production' : 'Beta',
         registeredAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : null });
     }

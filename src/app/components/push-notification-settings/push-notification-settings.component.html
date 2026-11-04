@@ -38,7 +38,7 @@
     }
   </ul>
   @if (devices.status() === 'loading') { <p class="notification-loading" role="status"><mat-spinner diameter="20" aria-hidden="true" />Loading notification devices…</p> }
-  @if (devices.status() === 'ready' && !devices.devices().length) { <p>No notification devices registered.</p> }
+  @if (devices.status() === 'ready' && !devices.devices().length && !devices.hasMore()) { <p>No notification devices registered.</p> }
   @if (devices.status() === 'signed-out') { <p>Sign in to see your notification devices.</p> }
   @if (devices.status() === 'impersonating') { <p>Devices cannot be managed while viewing another account.</p> }
   @if (devices.message()) { <p role="status" aria-live="polite">{{ devices.message() }}</p> }

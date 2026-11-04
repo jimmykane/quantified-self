@@ -50,8 +50,9 @@ subscription keys must never be rendered, logged or added to analytics.
 Both sites display the same list, with Production/Beta labels and a This browser marker only for the exact local
 installation and origin. These are registered destinations, not proof of current browser permission, online presence
 or OS display. No device model or user-assigned computer name is inferred. Older registrations use a generic label
-and short identifier until their browser opens QS; metadata enrichment is update-only and does not rotate the
-registration generation or transfer pending consent. The displayed timestamp is registration updated, not last seen.
+and short identifier until their browser opens QS; metadata enrichment is update-only, best-effort and does not
+block a working subscription, rotate its generation or transfer pending consent. The displayed timestamp is
+registration updated, not last seen.
 
 Disable removes only the selected leaf in an owner transaction that rechecks its exact generation and origin. A
 replacement registration is preserved and the user is asked to refresh. Successful current-browser removal invokes
@@ -60,6 +61,8 @@ registrations before transport, so a remotely removed device stops receiving fut
 Permission at the other browser remains unchanged; re-enabling requires an explicit action there. An already
 accepted push cannot be recalled. Account changes and component teardown invalidate pending reads and mutations.
 List errors retain prior rows but block removal until a fresh server read succeeds. Refresh and pagination are explicit.
+Completed local enable/disable actions refresh the list and invalidate older in-flight list or pagination results.
+A callback finishing after Settings closes cannot restart its device-list service.
 
 After separate deployment authorization, deploy Rules before releasing the frontend: old Rules reject device metadata
 and listing. Beta automatic delivery also requires redeploying the three senders, two delivery admission triggers,

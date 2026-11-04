@@ -184,6 +184,21 @@ describe('device notification lifecycle', () => {
     expect(service.isCurrentDevice(id, registration.origin)).toBe(true);
     expect(service.isCurrentDevice(id, 'https://beta.quantified-self.io')).toBe(false);
   });
+  it.each(['pending', 'failed'])('keeps a valid subscription usable when optional device metadata is %s', async mode => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const { device, ...legacy } = registration;
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => legacy } as never);
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    vi.mocked(updateDoc).mockImplementation(() => mode === 'failed' ? Promise.reject(new Error('Write unavailable')) : pending);
+    try {
+      const service = setup(); await tick();
+      expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { device, updatedAt: expect.anything() });
+      expect(service.state()).toBe('enabled'); expect(service.canTest()).toBe(true);
+      expect(service.registered()).toBe(true); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    } finally { finish(); await tick(); }
+  });
   it('reconciles remote disable without restoring consent or requesting permission', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));

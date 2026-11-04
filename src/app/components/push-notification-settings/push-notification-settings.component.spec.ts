@@ -130,4 +130,12 @@ describe('notification Settings', () => {
     await fixture.componentInstance.loadDevices(); expect(devices.reload).toHaveBeenCalledOnce();
     devices.hasMore.set(true); await fixture.componentInstance.loadDevices(true); expect(devices.loadMore).toHaveBeenCalledOnce();
   });
+  it('does not claim the account has no devices when another page is available', () => {
+    const fixture = TestBed.createComponent(PushNotificationSettingsComponent);
+    devices.devices.set([]); devices.hasMore.set(true); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('No notification devices registered');
+    expect(fixture.nativeElement.textContent).toContain('Show more devices');
+    devices.hasMore.set(false); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No notification devices registered');
+  });
 });
