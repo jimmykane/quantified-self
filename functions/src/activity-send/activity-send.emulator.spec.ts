@@ -12,6 +12,8 @@ import { queueRetiredSendSourceCleanup } from './source-cleanup';
 import { SEND_UPLOAD_CLEANUP_COLLECTION, SEND_UPLOAD_RESERVATION_MS, cleanupSendUploadReservations, sendUploadCleanupRef } from './upload-cleanup';
 import { enqueueActivitySyncQueueItem } from '../activity-sync/queue';
 import { getHistoricalActivityRouteId } from '../../../shared/activity-sync-routes';
+import { admitDeliveryNotification, sendDeliveryNotification, type DeliveryPushDependencies } from '../web-push/delivery-service';
+import { DELIVERY_PUSH, type DeliveryCandidate } from '../web-push/delivery-policy';
 
 const state = vi.hoisted(() => ({ pro: true, account: 'reviewed-account', enqueue: vi.fn(async () => true), failDeleteOnce: false, failMetadataOnce: false, downloadFailure: undefined as undefined | { path: string; code: number }, downloaded: [] as string[], beforeSave: undefined as undefined | (() => Promise<void>), afterSave: undefined as undefined | (() => Promise<void>), afterDelete: undefined as undefined | (() => Promise<void>), files: new Map<string, { bytes: Buffer; metadata: Record<string, string>; generation?: string }>() }));
 const cleanupState = vi.hoisted(() => ({ failPrefixOnce: false }));
@@ -74,6 +76,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     const visible = (await batchRef(uid, id).get()).data();
     expect(visible?.notificationRequested).toBe(true); expect(visible).not.toHaveProperty('deliveryNotification');
     expect(JSON.stringify(visible)).not.toMatch(/installationId|categoryRevision|connectionGeneration|endpoint|p256dh/);
+  });
+  it.each([
+    ['retry', 'before admission'], ['retry', 'after admission'],
+    ['check', 'before admission'], ['check', 'after admission'],
+  ] as const)('invalidates a completed notification on %s %s before asynchronous result projection', async (action, phase) => {
+    const reviewed = await prepare();
+    const installationId = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
+    const origin = 'https://quantified-self.io', publicKey = 'B' + 'A'.repeat(86);
+    await db.doc(`users/${uid}/meta/${ServiceNames.COROSAPI}`).set({ connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: state.account });
+    await db.doc(`users/${uid}/pushSubscriptions/${installationId}`).set({ schemaVersion: 1, generation, origin, vapidPublicKey: publicKey,
+      endpoint: 'https://web.push.apple.com/synthetic', keys: { p256dh: publicKey, auth: 'A'.repeat(22) } });
+    await runSendCommand(uid, { version: 1, action: 'confirm', batchId: id, revision: reviewed.revision, notification: { installationId, generation } }, { origin });
+    await admitSendRows(uid, id);
+    const queue = (await db.collection('activitySyncQueue').get()).docs[0].ref;
+    await queue.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: action === 'retry', destinationUploadID: 'synthetic-operation', providerOperationStartedAt: 1 });
+    await projectSendDelivery(queue);
+    const completed = (await batchRef(uid, id).get()).data()!;
+    expect(completed.state).toBe('complete');
+    const candidate: DeliveryCandidate = { kind: 'manual', id, createdAt: completed.createdAt, completedAt: completed.updatedAt };
+    let now = completed.updatedAt;
+    const deps: DeliveryPushDependencies = { db, now: () => now, configuration: async () => ({ enabled: true, publicKey }), send: vi.fn(async () => ({})), outcome: vi.fn() };
+    if (phase === 'after admission') await admitDeliveryNotification(uid, candidate, deps);
+    // Even a resume in the same millisecond must invalidate the completed result atomically.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(completed.updatedAt);
+    try { await runSendCommand(uid, { version: 1, action, batchId: id, rowId: 'row-one' }); }
+    finally { clock.mockRestore(); }
+    expect((await queue.get()).data()?.processed).toBe(false);
+    // Deliberately leave the public result unprojected to reproduce the trigger-delay window.
+    expect((await batchRef(uid, id).get()).data()?.state).toBe('complete');
+    if (phase === 'before admission') await admitDeliveryNotification(uid, candidate, deps);
+    now += DELIVERY_PUSH.groupMs; await sendDeliveryNotification(uid, deps);
+    expect(deps.send).not.toHaveBeenCalled();
+    expect((await batchRef(uid, id).get()).data()!.updatedAt).toBeGreaterThan(completed.updatedAt);
   });
   it('projects a committed exhausted send as one terminal issue, including concurrent deletion events', async () => {
     const queue = await confirm(); const expected = queue.data();

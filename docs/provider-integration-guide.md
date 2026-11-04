@@ -1643,6 +1643,8 @@ owner/origin/device/category/destination-bound consent privately. Results use co
 unaccepted queue failures now project into Needs action so a batch can finish. No notification claims provider success
 from an HTTP acknowledgement. Automatic successes and intermediate retries remain silent; history imports cannot
 create activity-delivery alerts. Upload authorization, retry budgets and transport are unchanged.
+Explicit Retry and Check status retire any completed notification snapshot atomically with resuming queue work,
+before asynchronous public-result projection. This prevents a stale completion alert during that projection gap.
 The [Web Push runbook](web-push-notifications.md#activity-delivery-notifications) owns the bounded grouping, category
 and device cancellation, shared delivery cap, exact runtime release/rollback commands and cost/limitations.
 Monitoring definitions are covered in the existing Web Push bundle; provider delivery monitoring is unchanged.

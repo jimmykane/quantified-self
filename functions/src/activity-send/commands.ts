@@ -122,6 +122,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand, 
       if (request.action === 'check' && queue.processed && recovery !== 'check_status') throw new HttpsError('failed-precondition', 'This delivery has a final result; there is no pending status to check.');
       if (request.action === 'check' && !queue.destinationUploadID) throw new HttpsError('failed-precondition', 'Check the provider directly; no safe operation identifier is available.');
       if (request.action === 'check' && !queue.processed) return null;
+      const notificationBatch = operation?.deliveryNotification ? await tx.get(batchRef(uid, id)) : undefined;
       const dateCreated = Math.max(Date.now(), Number(queue.dateCreated) + 1);
       if (request.action === 'retry') {
         const currentSource = await tx.get(sourceRef);
@@ -133,6 +134,11 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand, 
         tx.update(sourceRef, { priorAttempts });
       }
       tx.update(queueRef, { dateCreated, processed: false, resultStatus: null, skippedReason: null, deferredReason: null, dispatchedToCloudTask: null, ...(request.action === 'retry' ? { destinationUploadID: null, destinationProviderUserID: null, destinationWorkoutKey: null, destinationInfoCode: null, providerOperationStartedAt: null, destinationUploadContinuation: null, destinationExpectedWorkoutTypeID: FieldValue.delete(), retryCount: 0, sendConfirmedFailure: false } : {}) });
+      // Result projection is asynchronous. Retire its completed notification snapshot atomically
+      // with resumed work, even when the command and completion share a millisecond.
+      if (notificationBatch?.exists) tx.update(notificationBatch.ref, {
+        updatedAt: Math.max(dateCreated, Number(notificationBatch.data()?.updatedAt || 0) + 1),
+      });
       return dateCreated;
     });
     if (dispatch !== null) await enqueueActivitySyncTask(source.queueId, dispatch);

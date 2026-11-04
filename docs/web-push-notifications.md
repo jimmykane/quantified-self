@@ -223,6 +223,9 @@ The result says **finished** or **needs attention**, never that all recordings w
 ended. Twenty files produce at most one result for their batch. The initiating device is the only target. One result
 opens its exact Send activities batch; grouped manual results open Recent sends. Stop cancels pending notification work.
 An explicit retry of the same batch does not create another notification after admission/attempt.
+Retry and Check status invalidate the completed notification snapshot in the same transaction that resumes queue
+work. The batch timestamp advances strictly, including same-millisecond resumes, so a delayed projection cannot
+leave an old result eligible for admission or sending. Ordinary sends without notification consent add no read/write.
 
 The existing `projectActivitySendDelivery` also handles queue deletion backed by an exact matching committed
 `failed_jobs` record. Previously an unaccepted exhausted upload could leave its batch unfinished; it now projects
@@ -316,9 +319,10 @@ in 15 minutes, two overdue observations in five minutes, or no completed sweep f
 emit heartbeats; failures report unknown health, never healthy zero. The post-sweep probe reads only the oldest due
 field. Verify an initial heartbeat metric series during activation: absence policies cannot detect a never-seen series.
 Expected histories, duplicates, category/lifecycle skips, rate caps and expired registrations are not service failures.
-There are five metrics, three policies and seven charts in the combined bundle; it reuses the existing verified channel.
+With Activity delivery included, the combined bundle has eight metrics, four policies and ten charts; it reuses the
+existing verified channel. Delivery has its own fixed outcome, overdue and idle/disabled heartbeat coverage.
 
-History and activity sender coverage is **covered in source** by the extended bundle and offline ownership/reapplication/privacy tests. Live activation and readback are **deferred** to [#1011](https://github.com/jimmykane/quantified-self/issues/1011); passing these tests does not establish live coverage. Existing import/provider processing coverage is **unchanged** because its schedules, leases, retries and outcomes are unchanged; new post-persistence admission failures are covered by the activity push bundle. Foundation physical-device verification remains tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
+History, activity-sync and activity-delivery sender coverage is **covered in source** by the extended bundle and offline ownership/reapplication/privacy tests. Live activation and readback are **deferred** to [#1011](https://github.com/jimmykane/quantified-self/issues/1011); passing these tests does not establish live coverage. Existing import/provider processing coverage is **unchanged** because its schedules, leases, retries and outcomes are unchanged; notification invalidation uses the existing cancelled outcome and does not change alert filters or thresholds. New post-persistence admission failures are covered by the activity push bundle. Foundation physical-device verification remains tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
 
 ## MCP and Training impact
 
