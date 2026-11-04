@@ -29,6 +29,12 @@ describe('Training MET Health weight fallback', () => {
       record('foreign', 50, 70, { userID: 'someone-else' }), record('context', 50, 70, { kind: 'activity' }),
       record('zero', 50, 0), record('nan', 50, NaN)])).toEqual([]);
   });
+  it('ignores unrelated or malformed metrics in a weight measurement record', () => {
+    const weight = record('mixed', 50, 70);
+    const mixed = record('mixed', 50, 70, { metrics: [null, { metricId: 'body_fat', sportsLibData: 'invalid' },
+      ...weight.data().metrics] });
+    expect(trainingLoadWeightCandidates('owner', 100, [mixed])).toMatchObject([{ kilograms: 70 }]);
+  });
   it('uses the latest prior measurement and checks equal-time source conflicts', async () => {
     const run = reader([[record('latest', 100, 70), record('older', 99, 71)]]);
     expect(await run.read()).toMatchObject({ status: 'available', kilograms: 70, observedAtMs: 100 });

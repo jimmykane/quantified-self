@@ -17,6 +17,7 @@ export function trainingLoadWeightCandidates(uid: string, atMs: number,
       || record.endTimeMs > atMs || !Array.isArray(record.metrics)
       || typeof record.source?.revision?.digest !== 'string') continue;
     for (const stored of record.metrics) {
+      if (stored?.metricId !== HEALTH_METRIC_IDS.BodyWeight) continue;
       let entry;
       try { entry = decodeHealthMetricSportsLibData(stored); }
       catch (error) { if (error instanceof SportsLibDataValidationError) continue; throw error; }
@@ -48,7 +49,6 @@ export async function readTrainingLoadWeight(db: Firestore, transaction: Transac
     const page = await transaction.get((cursor ? base.startAfter(cursor) : base).limit(limit));
     scanned += page.size;
     for (const candidate of trainingLoadWeightCandidates(uid, atMs, page.docs)) {
-      if (candidate.status !== 'available') continue;
       if (!latest || candidate.observedAtMs > latest.observedAtMs) latest = candidate;
       else if (candidate.observedAtMs === latest.observedAtMs && candidate.kilograms !== latest.kilograms)
         return { status: 'unavailable', reason: 'conflicting' };

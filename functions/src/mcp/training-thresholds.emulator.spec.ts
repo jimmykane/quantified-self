@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore, Timestamp } from 'firebase-admin/firestore';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { Firestore, Query, Timestamp, Transaction } from 'firebase-admin/firestore';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { runMcpTrainingThresholds } from './training-thresholds.service';
 import { TRAINING_THRESHOLD_OUTPUTS, type TrainingThresholdTool } from './training-thresholds.schemas';
 import type { McpContentWriteInput } from './content-write.service';
@@ -36,6 +37,36 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP trans
       await db.doc(`userDeletionTombstones/${owner}`).delete();
     }
     await db.terminate();
+  });
+  it('reads sparse current heads with one bounded query and fills missing families with defaults', async () => {
+    const policies = db.collection(`users/${uid}/trainingLoadPolicies`);
+    await policies.doc('cycling').set({ revision: 1, method: 'AUTOMATIC', included: true,
+      effectiveAt: Timestamp.fromMillis(0), functionalThresholdPower: 220 });
+    await policies.doc('swimming').set({ revision: 2, method: 'HR', included: true,
+      effectiveAt: Timestamp.fromMillis(0), swimThresholdSpeed: 1 });
+    const reads = vi.spyOn(Transaction.prototype, 'get');
+    try {
+      const result = TRAINING_THRESHOLD_OUTPUTS.get_training_thresholds.parse(await call('get_training_thresholds', {}));
+      expect(result.policies).toHaveLength(TRAINING_SPORT_DEFINITIONS.length);
+      expect(result.policies.find(row => row.family === 'cycling')?.thresholds.functionalThresholdPower?.value).toBe(220);
+      expect(result.policies.find(row => row.family === 'swimming')?.thresholds.swimThresholdSpeed?.value).toBe(1);
+      expect(result.policies.find(row => row.family === 'running')).toMatchObject({ revision: 0,
+        thresholds: { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null } });
+      const queries = reads.mock.calls.map(([ref]) => ref).filter(ref => ref instanceof Query);
+      expect(queries).toHaveLength(1);
+      expect(queries[0].isEqual(policies.limit(TRAINING_SPORT_DEFINITIONS.length + 1))).toBe(true);
+    } finally { reads.mockRestore(); }
+  });
+  it('returns defaults for an empty current collection and rejects an overflowing policy collection', async () => {
+    const result = TRAINING_THRESHOLD_OUTPUTS.get_training_thresholds.parse(await call('get_training_thresholds', {}));
+    expect(result.policies.every(row => row.revision === 0 && row.policyRef !== null)).toBe(true);
+    const batch = db.batch();
+    for (let i = 0; i <= TRAINING_SPORT_DEFINITIONS.length; i++)
+      batch.set(db.doc(`users/${uid}/trainingLoadPolicies/unknown-${i}`), { fixture: true });
+    await batch.commit();
+    await expect(call('get_training_thresholds', {})).rejects.toThrow(/policies need review/);
+    // A targeted read does not scan unrelated heads.
+    expect((await read('cycling')).revision).toBe(0);
   });
   it('appends one dated revision, preserves unrelated preferences and retries idempotently', async () => {
     const head = db.doc(`users/${uid}/trainingLoadPolicies/cycling`);

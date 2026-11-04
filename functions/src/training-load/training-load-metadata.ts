@@ -234,7 +234,9 @@ async function finalizeTrainingLoadMetadata(
         leg.calibration = { version: 2, weight: null };
         const energy = activity.getStat(DataEnergy.type)?.getValue();
         const mass = activity.getStat(DataWeight.type)?.getValue();
-        if (leg.evaluations?.automatic.provenance !== 'imported' && typeof energy === 'number' && energy > 0
+        if (leg.evaluations?.automatic.provenance !== 'imported'
+          && !leg.evaluations?.automatic.reasons.includes('unsupported-sport')
+          && typeof energy === 'number' && energy > 0
           && Number.isFinite(energy) && !(typeof mass === 'number' && mass > 0 && Number.isFinite(mass))
           && leg.identity.startMs !== null && Number.isSafeInteger(leg.identity.startMs)
           && (leg.identity.duration === null || leg.identity.duration > 0)) {

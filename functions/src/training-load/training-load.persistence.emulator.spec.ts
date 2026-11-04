@@ -62,6 +62,41 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
+  it.each([
+    { type: ActivityTypes.VideoGaming, importedTss: undefined },
+    { type: ActivityTypes.Walking, importedTss: 0 },
+  ])('skips Health weight reads when MET cannot affect the result: $type / $importedTss', async ({ type, importedTss }) => {
+    const uid = setup(); const event = workout(); const activity = event.getFirstActivity();
+    activity.type = type; activity.removeStat(DataWeight.type);
+    activity.removeStat(DataTrainingStressScore.type); activity.removeStat(DataTrainingStressScoreMethod.type);
+    if (importedTss !== undefined) activity.addStat(new DataTrainingStressScore(importedTss));
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      await importWorkout(uid, event);
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration).toEqual({ version: 2, weight: null });
+      expect(saved.legs!.leg.evaluations?.automatic.score).toBe(importedTss ?? null);
+    } finally { collections.mockRestore(); }
+  });
+  it('still prepares the explicit MET candidate when Automatic already has usable HR', async () => {
+    const uid = setup(); const event = workout(); const activity = event.getFirstActivity();
+    activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
+    activity.removeStat(DataTrainingStressScoreMethod.type);
+    activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { lactateThresholdHR: 165 } } });
+    const hr = activity.createStream(DataHeartRate.type); hr.setData(Array(3601).fill(100)); activity.addStream(hr);
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    expect(ActivityUtilities.getTrainingStressScoreEvaluations(activity).automatic.method).toBe('HR');
+    await db.doc(`users/${uid}/healthSourceRecords/prior-weight`).set({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: 'weight-70' } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: 70, unit: 'kg' } }] });
+    await importWorkout(uid, event);
+    const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.evaluations).toMatchObject({ automatic: { method: 'HR', score: 40 }, met: { method: 'MET', score: 9 } });
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ status: 'available', kilograms: 70 });
+  });
   it('uses dated independent FTP and HR while preserving source statistics and saved inputs on reparse', async () => {
     const uid = setup();
     await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/original`).set({ revision: 1,

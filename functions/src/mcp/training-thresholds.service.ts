@@ -84,10 +84,16 @@ export async function runMcpTrainingThresholds(tool: TrainingThresholdTool, inpu
       const generation = await authorize(deps, tx, input, [READ]);
       const settings = (await tx.get(user.collection('config').doc('settings'))).get('unitSettings');
       const families = TRAINING_SPORT_DEFINITIONS.filter(row => !args.family || row.id === args.family);
+      // Current heads are sparse. One bounded query avoids reading a missing
+      // document for every family, while historical reads still query revisions.
+      const heads = !args.family && !args.asOf
+        ? await tx.get(user.collection('trainingLoadPolicies').limit(families.length + 1)) : null;
+      if (heads && heads.size > families.length) invalid('The saved sport policies need review before reading all thresholds.');
+      const current = heads ? new Map(heads.docs.map(doc => [doc.id, doc.data()])) : null;
       const policies = await Promise.all(families.map(async family => {
         const ref = user.collection('trainingLoadPolicies').doc(family.id);
         const data = args.asOf ? (await tx.get(ref.collection('revisions').where('effectiveAt', '<=', Timestamp.fromMillis(asOf))
-          .orderBy('effectiveAt', 'desc').limit(1))).docs[0]?.data() : (await tx.get(ref)).data();
+          .orderBy('effectiveAt', 'desc').limit(1))).docs[0]?.data() : current ? current.get(family.id) : (await tx.get(ref)).data();
         return projectPolicy(input, family.id, data, settings, generation, now, !args.asOf);
       }));
       return TRAINING_THRESHOLD_OUTPUTS[tool].parse({ asOf: new Date(asOf).toISOString(), policies });

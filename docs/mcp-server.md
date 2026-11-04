@@ -7,6 +7,8 @@ an immutable policy effective by that instant, with no editable reference. Outpu
 revision/effective instant and three nullable canonical/display quantities: FTP in watts (Running/Cycling), threshold
 HR in bpm and CSS in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
 calibration a workout used. No method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
+Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
+reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
 
 `preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
 `policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an

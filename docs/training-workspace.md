@@ -7267,7 +7267,7 @@ changing recorded stats, parse options, original files or the file-only cache. S
 available candidate, then falls back through Automatic. Other sports retain their existing order. Swim pace TSS remains
 `100 × activeHours × (averageSwimSpeed / CSS)^3`. Workout average pace is never its own CSS.
 
-For calorie-derived MET, file body mass has priority. Only a new leg with usable file energy and no usable file mass
+For calorie-derived MET, file body mass has priority. Only an eligible new leg without imported TSS, with usable file energy and no usable file mass
 looks up actual manual/device Health Weight point measurements at or before its start. There is no age expiry. The
 latest valid point wins; different valid weights at the same newest instant are unavailable, never averaged or
 provider-selected. A bounded descending query reads two records first, then pages of eight up to 64; unresolved scans
@@ -7278,6 +7278,7 @@ backfilled records or later edits/deletions. Removing the Health point does not 
 input; workout/account deletion removes that private snapshot. Help and Policies disclose this retention.
 The owner editor displays the saved fallback's units, date and age at the workout.
 MET remains `100 × hours × (kcal / (kg × hours) / 10)^2`, labelled estimated; no invented mass or resting-energy adjustment.
+An available Automatic HR/power candidate does not suppress this lookup: explicit MET still needs its own candidate.
 
 The small private per-leg `calibration.version: 2` distinguishes this file-first/frozen-weight behavior. Absence is the
 legacy behavior: existing workouts keep the original CSS-first wrapper and no new FTP/HR/Health fallback. Matched legs,
@@ -7297,7 +7298,10 @@ MCP adds independent `training-thresholds:read` and dependent `training-threshol
 planning grants. Narrow reads expose safe canonical/display thresholds, effective dates and opaque current references;
 dated reads are not editable. A revision-bound preview shows before/after values; separately approved Apply appends one
 server-dated revision for future workouts. No policy controls, frozen weight/provenance, activity rewrite or provider
-action is exposed. Existing tool schemas remain frozen. The Assistant's independent default-off choice permits reads
+action is exposed. Reading all current thresholds uses one bounded policy-head query and fills missing families with
+the same defaults, instead of a separate document read for every family. One-family reads remain direct; dated reads
+still query immutable revisions even when the current head is absent. No persistent cache or extra writes are added.
+Existing tool schemas remain frozen. The Assistant's independent default-off choice permits reads
 and preparation only; app Apply rechecks generation, proposal, expiry and authority. New chat turns it off. See
 `docs/mcp-server.md` and `docs/assistant.md`. Companion library publication, dependency adoption, deployed-server update,
 registered-app rescan and plugin refresh are separate rollout steps; this work authorizes none of them.
