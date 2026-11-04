@@ -71,6 +71,34 @@ beforeEach(() => {
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
+  it('allows an explicit enable retry after the worker was initially unavailable, requesting permission before waiting', async () => {
+    delete windows.pushManager;
+    const service = setup(); await tick();
+    expect(service.state()).toBe('unavailable'); expect(service.canEnable()).toBe(true);
+    expect(service.canInvite()).toBe(false); expect(service.unavailableReason()).toContain('not ready');
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+    windows.pushManager = manager; manager.getSubscription.mockResolvedValue(subscription);
+    notifications.requestPermission.mockImplementation(() => { notifications.permission = 'granted'; return Promise.resolve('granted'); });
+    const enabling = service.enable();
+    expect(notifications.requestPermission).toHaveBeenCalledOnce();
+    await enabling; await tick();
+    expect(manager.subscribe).toHaveBeenCalledOnce(); expect(service.state()).toBe('enabled');
+  });
+  it('recovers from a failed device check through an explicit enable gesture', async () => {
+    manager.getSubscription.mockRejectedValue(new Error('Temporary browser failure'));
+    const service = setup(); await tick();
+    expect(service.canEnable()).toBe(true); expect(service.unavailableReason()).toContain('Turn On to retry');
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    await service.enable(); await tick();
+    expect(service.state()).toBe('enabled'); expect(setDoc).toHaveBeenCalled();
+  });
+  it('does not make unsupported site configuration actionable as an enable retry', async () => {
+    config.webPushEnabled.set(false);
+    const service = setup(); await tick();
+    expect(service.state()).toBe('unavailable'); expect(service.canEnable()).toBe(false);
+    expect(service.unavailableReason()).toContain('not available from this site');
+    await service.enable(); expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
   it('invites only unasked devices and records explicit decisions without inviting after expiry', async () => {
     const service = setup(); await tick(); expect(service.canInvite()).toBe(true);
     notifications.permission = 'granted'; await service.refreshRegistration();
@@ -150,12 +178,11 @@ describe('device notification lifecycle', () => {
     expect(updateDoc).not.toHaveBeenCalled();
     expect(service.state()).toBe('enabled');
   });
-  it.each(['flag', 'key', 'origin', 'browser', 'worker'])('does not prompt when %s is unavailable', async missing => {
+  it.each(['flag', 'key', 'origin', 'browser'])('does not prompt when %s is unavailable', async missing => {
     if (missing === 'flag') config.webPushEnabled.set(false);
     if (missing === 'key') config.webPushPublicKey.set('');
     if (missing === 'origin') Object.assign(windows.location, { origin: 'https://evil.example' });
     if (missing === 'browser') support.checkPushSupport.mockReturnValue(false);
-    if (missing === 'worker') delete windows.pushManager;
     const service = setup(); await tick(); expect(service.canEnable()).toBe(false); await service.enable(); expect(notifications.requestPermission).not.toHaveBeenCalled();
   });
   it.each([{ userAgent: 'iPhone' }, { userAgent: 'Mac desktop', platform: 'MacIntel', maxTouchPoints: 5 }])('explains mobile Apple installation and blocked permissions %j', async navigator => {

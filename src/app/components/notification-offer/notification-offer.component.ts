@@ -6,6 +6,7 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { AppRemoteConfigService } from '../../services/app.remote-config.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import type { DashboardActionPromptViewModel } from '../../helpers/dashboard-action-prompt.helper';
+import type { MatSlideToggleChange } from '@angular/material/slide-toggle';
 
 @Component({
   selector: 'app-notification-offer', standalone: true, imports: [SharedModule],
@@ -25,7 +26,16 @@ export class NotificationOfferComponent {
   private readonly workingFor = signal<string | null>(null);
   readonly error = signal('');
   readonly instructionsOpen = signal(false);
-  readonly busy = computed(() => !!this.push.operation() || this.invitation.saving() || !!this.workingFor());
+  readonly busy = computed(() => !!this.push.operation() || this.invitation.saving() || !!this.preferences.saving() || !!this.workingFor());
+  readonly checking = computed(() => this.push.state() === 'loading' || this.preferences.status() === 'loading');
+  readonly allOn = computed(() => this.push.state() === 'enabled' && this.preferences.status() === 'ready'
+    && this.preferences.categories().every(category => category.enabled));
+  readonly notificationsOn = computed(() => this.push.state() === 'enabled'
+    && this.preferences.categories().some(category => category.enabled));
+  readonly canTurnOn = computed(() => this.preferences.canEdit() && this.preferences.status() === 'ready'
+    && (this.push.state() === 'enabled' || this.push.canEnable()));
+  readonly canRetry = computed(() => !this.push.operation() && (this.preferences.status() === 'error'
+    || this.push.state() === 'unavailable' && !this.push.canEnable()));
   readonly visible = computed(() => {
     const uid = this.invitation.uid();
     if (!uid || this.push.state() === 'impersonating' || this.push.state() === 'signed-out') return false;
@@ -39,15 +49,19 @@ export class NotificationOfferComponent {
       && this.push.canInvite() && this.invitation.due();
   });
   readonly status = computed(() => {
+    if (this.push.operation() === 'enable') return 'Turning notifications on…';
+    if (this.push.operation() === 'disable') return 'Turning notifications off…';
+    if (this.preferences.saving() === 'all') return 'Turning on all notification categories…';
     switch (this.push.state()) {
       case 'enabled': return this.preferences.status() === 'error' ? 'Enabled on this device. Could not load your notification categories.'
         : this.preferences.status() !== 'ready' ? 'Enabled on this device. Checking categories…'
-        : this.preferences.categories().some(category => category.enabled) ? 'Enabled on this device.' : 'Your notification categories are off.';
+        : this.allOn() ? 'All notification categories are on for this device.'
+        : this.preferences.categories().some(category => category.enabled) ? 'Notifications are on. Some categories are off.' : 'Your notification categories are off.';
       case 'disabled': return 'Notifications are off on this device.';
       case 'denied': return 'Notifications are blocked by your browser.';
       case 'install-required': return 'Open QS from your Home Screen to enable notifications.';
       case 'unsupported': return 'This browser does not support device notifications.';
-      case 'unavailable': return 'Notifications are currently unavailable. Please try again later.';
+      case 'unavailable': return this.push.unavailableReason() || 'Could not check this device. Retry to check again.';
       default: return 'Checking notification support…';
     }
   });
@@ -71,13 +85,47 @@ export class NotificationOfferComponent {
   }
 
   private current(uid: string): boolean { return !this.destroy.destroyed && this.invitation.uid() === uid; }
+  onToggle(event: MatSlideToggleChange): void {
+    const enabled = event.checked;
+    // Show confirmed state while the asynchronous device and category changes run.
+    event.source.checked = this.notificationsOn();
+    void this.setAllOn(enabled);
+  }
+  async setAllOn(enabled: boolean): Promise<void> {
+    const uid = this.invitation.uid();
+    if (!uid || this.busy() || (enabled ? !this.canTurnOn() : !this.push.canDisable())) return;
+    this.error.set(''); this.workingFor.set(uid); this.haptics.selection();
+    try {
+      if (enabled) {
+        // Start permission synchronously in the toggle gesture, before category writes.
+        if (this.push.state() !== 'enabled') await this.push.enable(uid);
+        if (!this.current(uid)) return;
+        if (!await this.preferences.enableAll(uid)) throw new Error('Account or preferences changed.');
+      } else await this.push.disable(uid);
+      if (this.current(uid)) this.haptics.success();
+    } catch {
+      if (this.current(uid)) {
+        this.error.set(enabled ? 'Could not turn on all notifications. Please try again.' : 'Could not turn off this device. Please try again.');
+        this.haptics.error();
+      }
+    } finally { if (!this.destroy.destroyed && this.workingFor() === uid) this.workingFor.set(null); }
+  }
+  async retry(): Promise<void> {
+    const uid = this.invitation.uid();
+    if (!uid || this.busy()) return;
+    this.error.set(''); this.workingFor.set(uid); this.haptics.selection();
+    try {
+      this.preferences.reload();
+      await this.push.refreshRegistration();
+    } finally { if (!this.destroy.destroyed && this.workingFor() === uid) this.workingFor.set(null); }
+  }
   async enable(): Promise<void> {
     const uid = this.invitation.uid();
     if (!uid || !this.push.canEnable() || this.busy()) return;
     this.error.set(''); this.workingFor.set(uid); this.haptics.selection();
     try {
       // Keep the permission request in this click's synchronous call stack.
-      await this.push.enable();
+      await this.push.enable(uid);
       if (this.current(uid)) this.haptics.success();
     } catch {
       if (this.current(uid)) { this.error.set('Could not enable notifications. Check permission and try again.'); this.haptics.error(); }

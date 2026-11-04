@@ -141,9 +141,19 @@ The owner Dashboard reuses the action-prompt area above Today for a notification
 connected activity service, no empty-account/setup prompts, an enabled activity-sync category and the frontend
 `web_push_activity_sync_enabled` switch. Browser permission must still be `default`, with no retained subscription
 or installation. Previously granted but unregistered browsers use the permanent tray/Settings entry points rather
-than being treated as never opted in. The header's **Updates & notifications** tray includes device status, explicit
-enable, blocked/Home Screen instructions and a Settings link; its badge still counts release notes only. Public and
+than being treated as never opted in. The header's **Updates & notifications** tray includes device status, an **On**
+switch, blocked/Home Screen instructions and a Settings link; its badge still counts release notes only. Public and
 impersonated sessions do not receive a device offer. Opening either surface never requests permission or sends a test.
+
+Turning the tray switch On requests device permission synchronously and enables every known notification category
+in one owner-scoped transaction after registration succeeds. The transaction reads current revisions before any writes
+and preserves already enabled categories. This explicit master action may re-enable categories the account previously
+turned off. Turning the switch off revokes only the current device; other devices and category preferences stay active.
+The switch remains On while any category is active on an enabled device, so a partial category selection is never
+presented as a silent device. Existing per-request history/delivery intent and sender throttles still apply.
+The switch can retry temporary worker/device-check failures after support, account and site configuration checks succeed.
+Permission remains in the original user gesture, before worker waits or category writes. Non-retryable configuration/read
+states offer a support Retry action; blocked permissions and installation requirements retain their browser instructions.
 
 `users/{uid}/config/settings.appSettings.notificationInvitation` is a client-owned versioned UI preference under
 existing private Settings Rules, separate from sender/category consent. A first snooze lasts 30 days; another snooze

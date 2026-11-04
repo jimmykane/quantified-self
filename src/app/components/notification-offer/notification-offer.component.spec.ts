@@ -10,14 +10,18 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { AppRemoteConfigService } from '../../services/app.remote-config.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
-const push = { state: signal('disabled'), operation: signal(null), canEnable: signal(true), canInvite: signal(true), enable: vi.fn() };
+const push = { state: signal('disabled'), operation: signal(null), canEnable: signal(true), canInvite: signal(true), canDisable: signal(false),
+  unavailableReason: signal(''), enable: vi.fn(), disable: vi.fn(), refreshRegistration: vi.fn() };
 const invitation = { uid: signal<string | null>('owner'), due: signal(true), saving: signal(false), choose: vi.fn() };
-const preferences = { status: signal('ready'), categories: signal([{ enabled: true }]), isEnabled: vi.fn() };
+const preferences = { status: signal('ready'), categories: signal([{ enabled: true }]), isEnabled: vi.fn(),
+  saving: signal(null), canEdit: signal(true), enableAll: vi.fn(), reload: vi.fn() };
 const config = { webPushActivitySyncEnabled: signal(true) };
 const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 beforeEach(async () => {
   vi.clearAllMocks(); push.state.set('disabled'); push.operation.set(null); push.canEnable.set(true); push.canInvite.set(true);
-  push.enable.mockResolvedValue(undefined); invitation.uid.set('owner'); invitation.due.set(true); invitation.saving.set(false);
+  push.enable.mockResolvedValue(undefined); push.disable.mockResolvedValue(undefined); push.refreshRegistration.mockResolvedValue(undefined);
+  push.canDisable.set(false); push.unavailableReason.set(''); preferences.saving.set(null); preferences.canEdit.set(true); preferences.enableAll.mockResolvedValue(true);
+  invitation.uid.set('owner'); invitation.due.set(true); invitation.saving.set(false);
   invitation.choose.mockResolvedValue(true); preferences.status.set('ready'); preferences.categories.set([{ enabled: true }]);
   preferences.isEnabled.mockReturnValue(true); config.webPushActivitySyncEnabled.set(true);
   await TestBed.configureTestingModule({ imports: [NotificationOfferComponent], providers: [provideRouter([]), provideNoopAnimations(),
@@ -34,7 +38,64 @@ function render(placement: 'tray' | 'dashboard' = 'tray') {
 function button(fixture, label: string): HTMLButtonElement {
   return Array.from(fixture.nativeElement.querySelectorAll('button')).find((element: HTMLElement) => element.textContent.includes(label)) as HTMLButtonElement;
 }
+function toggle(fixture): HTMLButtonElement { return fixture.nativeElement.querySelector('button[role="switch"]'); }
 describe('notification discovery surfaces', () => {
+  it('turns on the device and every category through one toggle, keeping permission in the original gesture', async () => {
+    let finish!: () => void;
+    push.enable.mockImplementation(() => new Promise<void>(resolve => { finish = () => {
+      push.state.set('enabled'); push.canDisable.set(true); resolve();
+    }; }));
+    preferences.categories.set([{ enabled: false }, { enabled: false }, { enabled: false }]);
+    preferences.enableAll.mockImplementation(async () => { preferences.categories.set([{ enabled: true }, { enabled: true }, { enabled: true }]); return true; });
+    const fixture = render();
+    const action = vi.spyOn(fixture.componentInstance, 'setAllOn');
+    toggle(fixture).click(); expect(push.enable).toHaveBeenCalledWith('owner');
+    expect(preferences.enableAll).not.toHaveBeenCalled(); fixture.detectChanges();
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('false'); expect(toggle(fixture).disabled).toBe(true);
+    finish(); await action.mock.results[0].value; await fixture.whenStable(); fixture.detectChanges();
+    expect(preferences.enableAll).toHaveBeenCalledWith('owner');
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('true'); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('keeps active partial categories visibly On and turns off only this device', async () => {
+    push.state.set('enabled'); push.canDisable.set(true); preferences.categories.set([{ enabled: true }, { enabled: false }]);
+    push.disable.mockImplementation(async () => { push.state.set('disabled'); push.canDisable.set(false); });
+    const fixture = render();
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('Some categories are off');
+    toggle(fixture).click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(push.disable).toHaveBeenCalledWith('owner'); expect(preferences.enableAll).not.toHaveBeenCalled();
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('false'); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('can enable every category for an already registered but silent device without re-requesting permission', async () => {
+    push.state.set('enabled'); preferences.categories.set([{ enabled: false }]);
+    const fixture = render(); toggle(fixture).click(); await fixture.whenStable();
+    expect(push.enable).not.toHaveBeenCalled(); expect(preferences.enableAll).toHaveBeenCalledWith('owner');
+  });
+  it('leaves failed master On unchecked and reports category save failures', async () => {
+    push.state.set('enabled'); preferences.categories.set([{ enabled: false }]);
+    preferences.enableAll.mockRejectedValue(new Error('Offline'));
+    const fixture = render(); toggle(fixture).click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('false'); expect(toggle(fixture).disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Could not turn on all notifications');
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('offers On directly for retryable unavailable devices and a support retry when they cannot yet enable', async () => {
+    push.state.set('unavailable'); push.unavailableReason.set('Turn On to retry.');
+    const fixture = render(); expect(toggle(fixture).disabled).toBe(false);
+    const action = vi.spyOn(fixture.componentInstance, 'setAllOn');
+    toggle(fixture).click(); await action.mock.results[0].value; await fixture.whenStable(); expect(push.enable).toHaveBeenCalledOnce();
+    push.canEnable.set(false); preferences.status.set('error'); fixture.detectChanges();
+    expect(toggle(fixture).disabled).toBe(true); button(fixture, 'Retry').click(); await fixture.whenStable();
+    expect(push.refreshRegistration).toHaveBeenCalledOnce(); expect(preferences.reload).toHaveBeenCalledOnce();
+  });
+  it('does not turn on categories if permission was declined or the account changed while enabling', async () => {
+    push.enable.mockRejectedValueOnce(new Error('Permission denied'));
+    const fixture = render(); toggle(fixture).click(); await fixture.whenStable();
+    expect(preferences.enableAll).not.toHaveBeenCalled();
+    push.enable.mockImplementation(async () => { invitation.uid.set('next'); });
+    toggle(fixture).click(); await fixture.whenStable();
+    expect(preferences.enableAll).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+  });
   it('renders the shared dashboard prompt silently and invokes enable directly from its button', async () => {
     const fixture = render('dashboard');
     expect(fixture.nativeElement.querySelector('app-dashboard-action-prompt')).toBeTruthy();
@@ -55,7 +116,7 @@ describe('notification discovery surfaces', () => {
   });
   it('keeps permanent tray access after a dashboard dismissal', () => {
     invitation.due.set(false); push.canInvite.set(false);
-    const fixture = render(); expect(button(fixture, 'Enable on this device')).toBeTruthy();
+    const fixture = render(); expect(toggle(fixture)).toBeTruthy(); expect(toggle(fixture).disabled).toBe(false);
   });
   it('stores a snooze or permanent dismissal without changing browser/category permission', async () => {
     const fixture = render('dashboard');
@@ -123,7 +184,7 @@ describe('notification discovery surfaces', () => {
   });
   it('does not play completion feedback for an account that changed during a permission request', async () => {
     let finish!: () => void; push.enable.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
-    const fixture = render(); button(fixture, 'Enable on this device').click(); invitation.uid.set('next'); finish();
+    const fixture = render(); toggle(fixture).click(); invitation.uid.set('next'); finish();
     await fixture.whenStable(); expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
   it('explains category read failures without presenting a false off state or endless loading', () => {
