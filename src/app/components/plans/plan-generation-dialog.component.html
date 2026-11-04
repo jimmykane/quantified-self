@@ -31,7 +31,7 @@
     </mat-form-field>
   </div>
   <app-activity-filter-picker label="Sport" [allLabel]="automaticSportLabel()" searchLabel="Search sports"
-    [options]="sportOptions" [multiple]="false" [selectedValues]="selectedSports()" (selectionChange)="update('sport', $event[0] ?? null, true)" />
+    [options]="sportOptions()" [multiple]="false" [selectedValues]="selectedSports()" (selectionChange)="update('sport', $event[0] || null, true)" />
   <mat-checkbox [checked]="options().days === null" (change)="useRoutine($event.checked)">Use my recorded weekday routine</mat-checkbox>
   @if (options().days !== null) {
     <div class="weekdays" role="group" aria-label="Training days">

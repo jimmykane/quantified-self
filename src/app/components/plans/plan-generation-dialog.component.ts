@@ -47,9 +47,10 @@ export class PlanGenerationDialogComponent {
   readonly goalOptions = computed(() => this.goalState().goals.filter(goal => goal.lifecycle === 'active'
     && (!goal.targetLocalDate || goal.targetLocalDate >= this.today)).sort((a, b) =>
     TRAINING_GOAL_PRIORITIES.indexOf(a.priority) - TRAINING_GOAL_PRIORITIES.indexOf(b.priority) || a.name.localeCompare(b.name)));
-  readonly sportOptions = DAY_WORKOUT_SPORTS.map(value => ({ value, label: value, activityType: value }));
   readonly automaticSportLabel = computed(() => this.goalIds().length ? 'Suggest from goals & routine' : 'Suggest from recorded routine');
-  readonly selectedSports = computed(() => this.options().sport ? [this.options().sport!] : []);
+  readonly sportOptions = computed(() => [{ value: '', label: this.automaticSportLabel(), icon: 'auto_awesome' },
+    ...DAY_WORKOUT_SPORTS.map(value => ({ value, label: value, activityType: value }))]);
+  readonly selectedSports = computed(() => [this.options().sport ?? '']);
   readonly weekdays = PLAN_WEEKDAYS;
   readonly more = signal(false);
   readonly quota = signal<AssistantQuotaStatus | null>(null);

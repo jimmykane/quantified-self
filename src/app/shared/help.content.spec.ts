@@ -20,6 +20,7 @@ describe('help.content', () => {
   it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',
+      '**Suggest from goals & routine**', '**Suggest from recorded routine**',
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 

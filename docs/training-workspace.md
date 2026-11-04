@@ -10038,6 +10038,8 @@ the highest-priority active, unexpired goal starts selected. A new goal is saved
 then selected in setup. Changing the goal list never reselects goals the user intentionally cleared. **Retry goals**
 reconnects the shared read without closing setup or losing choices. Switching between routine and manual days retains
 manual selections. Clearing a manual time field keeps it visible and invalid, never silently switching to automatic.
+The shared sport picker includes **Suggest from goals & routine** (or **Suggest from recorded routine** without goals)
+as a selectable option, so a manual sport can be returned to automatic selection without reopening setup.
 At phone widths the footer keeps the shorter **Open Assistant** action; date and length only stack at 360px and below.
 
 `shared/training-plan-generation.ts` validates options and builds a bounded editable Assistant request. Selected goal

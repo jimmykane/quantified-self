@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatCheckbox } from '@angular/material/checkbox';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { provideRouter } from '@angular/router';
@@ -11,12 +12,13 @@ import { Auth } from 'app/firebase/auth';
 import type { TrainingGoalV1 } from '@shared/training-goals';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { TrainingGoalsService, type TrainingGoalsState } from '../../services/training-goals.service';
 import { PlanGenerationDialogComponent } from './plan-generation-dialog.component';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 const sdk = vi.hoisted(() => ({ authState: vi.fn() }));
-vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState }));
+vi.mock('app/firebase/auth', original => original<typeof import('app/firebase/auth')>().then(module => Object.assign({}, module, { authState: sdk.authState })));
 const goal: TrainingGoalV1 = { id: 'race', name: 'Spring race', schemaVersion: 1, revision: 1, kind: 'event', lifecycle: 'active',
   priority: 'high', startLocalDate: '2026-11-04', targetLocalDate: '2027-03-01', sportScope: 'all', sport: null, objective: '',
   planId: null, weeklyTarget: null, createdAtMs: 1, updatedAtMs: 1 };
@@ -30,6 +32,7 @@ async function setup(goals: TrainingGoalV1[] = [], remaining = 88, notes = true)
     { provide: Auth, useValue: auth }, { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner' } }, { provide: MatDialogRef, useValue: { close } },
     { provide: AppUserService, useValue: { user: signal({ uid: 'owner', settings: { appSettings: { dailyWorkoutSuggestion: { controls: { timelineContext: notes } } } } }) } },
     { provide: TrainingGoalsService, useValue: { watch, open } }, { provide: AppHapticsService, useValue: haptics },
+    { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '' } },
     { provide: AssistantQuotaService, useValue: { loadQuotaStatus: vi.fn().mockResolvedValue({ remainingCount: remaining, limit: 100, isEligible: true }) } },
   ] }).compileComponents();
   const fixture = TestBed.createComponent(PlanGenerationDialogComponent); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
@@ -62,6 +65,30 @@ describe('PlanGenerationDialogComponent', () => {
     expect(component.goalIds()).toEqual([]);
     component.selectGoals(['race']); state.next({ status: 'error', goals: [] });
     expect(component.canContinue()).toBe(false);
+  });
+  it('lets the shared sport picker return to automatic selection without closing setup', async () => {
+    const { fixture, component, close, haptics } = await setup([goal]);
+    const picker = fixture.debugElement.query(By.directive(ActivityFilterPickerComponent)).componentInstance as ActivityFilterPickerComponent;
+    const choose = async (label: string, changesSelection = true) => {
+      picker.openPicker(); fixture.detectChanges(); await fixture.whenStable();
+      const option = [...TestBed.inject(OverlayContainer).getContainerElement().querySelectorAll('mat-list-option')]
+        .find(element => element.getAttribute('aria-label') === label) as HTMLElement | undefined;
+      expect(option, `Sport option: ${label}`).toBeDefined();
+      option!.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(picker.pickerOpen(), label).toBe(!changesSelection);
+      expect(close).not.toHaveBeenCalled();
+    };
+    await choose('Running');
+    expect(component.options().sport).toBe('Running');
+    await choose('Suggest from goals & routine');
+    expect(component.options().sport).toBeNull();
+    expect(component.validation().request?.prompt).toContain('Sport: suggest from my selected goals and recorded routine.');
+    expect(haptics.selection).toHaveBeenCalledTimes(4); // One opening and one accepted change per choice.
+    await choose('Suggest from goals & routine', false);
+    expect(haptics.selection).toHaveBeenCalledTimes(5); // Reopening gives feedback; an unchanged choice does not.
+    picker.closePicker(); await fixture.whenStable();
+    component.selectGoals([]); fixture.detectChanges();
+    expect(picker.summary()).toBe('Suggest from recorded routine');
   });
   it('validates manual days and respects the Timeline notes choice', async () => {
     const { fixture, component, close } = await setup([], 88, false);
