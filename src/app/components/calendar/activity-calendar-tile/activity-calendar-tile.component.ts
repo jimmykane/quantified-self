@@ -26,6 +26,7 @@ import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-no
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate, calendarTimelineNoteRangesEqual } from '../../../helpers/calendar-timeline-notes.helper';
 import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
+import { formatActivityCalendarPeriodTotals } from '../../../helpers/activity-calendar-period-totals.helper';
 import {
   type ActivityCalendarDayViewModel,
   type ActivityCalendarPeriodContext,
@@ -141,6 +142,7 @@ export class ActivityCalendarTileComponent {
   readonly fillHeight = input(true);
   readonly showNavigation = input(false);
   readonly dayContextEnabled = input(false);
+  readonly showPeriodTotals = input(false);
   /** Keep the Today sheet's month cells in step with the dashboard and Calendar route. */
   readonly calmMonth = input(false);
   readonly privateHealthEnabled = input(true);
@@ -226,9 +228,15 @@ export class ActivityCalendarTileComponent {
     view: this.mode(),
     anchorDate: this.anchorDate(),
     startOfWeek: this.user()?.settings?.unitSettings?.startOfTheWeek,
+    summariesSettings: this.user()?.settings?.summariesSettings,
     locale: this.locale,
     now: this.today(),
   }));
+  readonly periodTotals = computed(() => this.showPeriodTotals() ? formatActivityCalendarPeriodTotals(
+    this.eventState().status === 'ready' ? this.calendarModel() : null,
+    this.user()?.settings?.unitSettings,
+    this.locale,
+  ) : []);
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly selectedDay = computed(() => this.calendarModel().months.flatMap(month => month.days)
     .find(day => day.dateKey === this.selectedDateKey())

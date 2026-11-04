@@ -448,6 +448,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
+  it('records the GPX comparison copy update in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-04');
+  });
+
   it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
@@ -473,8 +477,8 @@ describe('Firebase Hosting configuration', () => {
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
-    // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
+    // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');

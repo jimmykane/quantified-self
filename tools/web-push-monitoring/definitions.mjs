@@ -113,7 +113,7 @@ export function buildWebPushMonitoring(project, channel) {
   bundle.policies.push({ displayName: 'QS Web Push: Activity-delivery sender health', userLabels: { managed_by: OWNER, policy_id: 'delivery-sender' },
     enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
     conditions: [failureCondition('Repeated delivery notification admission or send failures', `${deliveryFilter} metric.labels.outcome="failed"`),
-      failureCondition('Repeated delivery notification runtime failures', `metric.type="run.googleapis.com/request_count" ${deliveryBase} resource.labels.service_name=("sendactivitydeliverynotifications" OR "queueactivitysendnotification" OR "queueautomaticdeliverynotification") metric.labels.response_code_class="5xx"`),
+      failureCondition('Repeated delivery notification runtime failures', `metric.type="run.googleapis.com/request_count" ${deliveryBase} resource.labels.service_name=one_of("sendactivitydeliverynotifications", "queueactivitysendnotification", "queueautomaticdeliverynotification") metric.labels.response_code_class="5xx"`),
       { displayName: 'Two overdue delivery observations in five minutes', conditionThreshold: { filter: deliveryOverdueFilter,
         aggregations: [{ ...aggregate, alignmentPeriod: '300s' }], comparison: 'COMPARISON_GT', thresholdValue: 1,
         duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } },

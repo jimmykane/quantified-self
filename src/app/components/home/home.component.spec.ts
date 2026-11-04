@@ -64,17 +64,20 @@ describe('HomeComponent', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('restores the branded hero and keeps the shared Training overview in its feature section', async () => {
+  it('pairs the branded hero with a deferred chart preview and retains the detailed Training overview', async () => {
     renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('h1')?.textContent).toBe('Your Training Data, Connected. One Dashboard. Every Activity in Context.');
+    expect(hero.querySelector('h1')?.textContent).toBe('All your training data. Across your devices. Under your control.');
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
-    expect(hero.querySelector('app-public-feature-preview')).toBeNull();
+    expect(hero.querySelector('app-public-feature-preview')).toBeTruthy();
+    expect(hero.textContent).toContain('Sample data');
+    expect(hero.querySelector('#hero-preview-title')?.textContent).toBe('Your training, together.');
+    expect(hero.querySelector('.preview-placeholder--hero')).toBeTruthy();
     const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
     expect(training.textContent).toContain('Sample data');
     expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
     expect(training.querySelector('app-training-summary-cards')).toBeNull();
-    const [trainingBlock] = await fixture.getDeferBlocks();
+    const [, trainingBlock] = await fixture.getDeferBlocks();
     expect(trainingBlock).toBeTruthy();
     await trainingBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
@@ -113,15 +116,60 @@ describe('HomeComponent', () => {
     expect(providerIntro.querySelector('h2')?.textContent).toBe('Bring It In. Keep It Moving.');
     expect(providerIntro.querySelector('.provider-compatibility__copy')?.textContent)
       .toBe('Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.');
-    const logos = Array.from(providerIntro.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    const logos = Array.from(fixture.nativeElement.querySelectorAll('.hero-visual .logos-container [role="img"]')) as HTMLElement[];
     expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
+    expect(providerIntro.querySelector('.logos-container')).toBeNull();
+    const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
+    expect(visual.querySelector('.hero-provider-wires')?.getAttribute('aria-hidden')).toBe('true');
+    expect(visual.querySelector('app-public-feature-preview')).toBeTruthy();
+    const borderTraces = Array.from(visual.querySelectorAll('.hero-product .hero-border-glow'));
+    expect(borderTraces).toHaveLength(2);
+    expect(borderTraces.every(trace => trace.getAttribute('aria-hidden') === 'true')).toBe(true);
+    for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
+      expect(svg.querySelectorAll('.hero-connection .hero-connection-pulse')).toHaveLength(4);
+      expect(svg.querySelectorAll('.hero-aggregate')).toHaveLength(1);
+      expect(svg.querySelector('.hero-aggregate .hero-connection-pulse')).toBeNull();
+      const trunk = svg.querySelector('.hero-aggregate .hero-connection-track')!;
+      const endpoint = trunk.getAttribute('d')?.match(/^M (\d+ \d+)/)?.[1];
+      expect(endpoint).toBeTruthy();
+      expect(Array.from(svg.querySelectorAll('.hero-connection-track')).slice(0, 4)
+        .every(path => path.getAttribute('d')?.endsWith(endpoint))).toBe(true);
+      for (const connection of svg.querySelectorAll('.hero-connection')) {
+        const branch = connection.querySelector('.hero-connection-track')!.getAttribute('d');
+        const pulse = connection.querySelector('.hero-connection-pulse')!;
+        expect(pulse.getAttribute('d')?.startsWith(`${branch} `)).toBe(true);
+        expect(pulse.getAttribute('d')).toMatch(svg.classList.contains('hero-provider-wires--mobile') ? /V 104$/ : /H 136$/);
+        expect(pulse.getAttribute('pathLength')).toBe('100');
+      }
+    }
+    expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
+  });
+
+  it('lets visitors pause and resume decorative motion with one haptic per action', () => {
+    renderHome();
+    const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
+    const toggle = visual.querySelector('.hero-motion-toggle') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(selection).not.toHaveBeenCalled();
+    toggle.click();
+    fixture.detectChanges();
+    expect(visual.classList.contains('hero-motion-paused')).toBe(true);
+    expect(toggle.getAttribute('aria-label')).toBe('Play connection animation');
+    expect(selection).toHaveBeenCalledTimes(1);
+    toggle.click();
+    fixture.detectChanges();
+    expect(visual.classList.contains('hero-motion-paused')).toBe(false);
+    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(selection).toHaveBeenCalledTimes(2);
   });
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
     renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your activities, sleep and health data together. See how your training is changing and plan what comes next.');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your Garmin, Suunto, COROS and Wahoo activities together. Understand your training, explore insights with AI, and keep your original files under your control.');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
@@ -184,7 +232,7 @@ describe('HomeComponent', () => {
       'integrations-section', 'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
+      .toEqual(['training-hero', 'training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'daily-workout', 'training-plans',
         'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
         'activity-map', 'reviewer-benchmark', 'provider-flow']);

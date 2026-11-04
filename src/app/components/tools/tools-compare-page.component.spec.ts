@@ -392,14 +392,17 @@ describe('ToolsComparePageComponent', () => {
   it('renders the public compare tool and guest sign-in state', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Compare FIT, GPX, TCX, JSON, and SML files');
+    expect(text).toContain('Compare GPX and FIT files');
     expect(text).toContain('Sign in to compare files');
-    expect(text).toContain('Benchmark comparisons are saved to your account');
-    expect(text).toContain('Comparison files are handled after sign-in');
-    expect(text).toContain('Review file recordings without rebuilding a dashboard');
-    expect(text).toContain('File-based comparisons');
-    expect(text).toContain('Reviewer metrics');
-    expect(text).toContain('Device review notes');
+    expect(text).toContain('File comparison is available on Starter');
+    expect(text).toContain('Uploads and new comparisons use your activity allowance');
+    expect(text).toContain('Compare GPX tracks from the same workout');
+    expect(text).toContain('timestamped recordings with overlapping times');
+    expect(text).toContain('FIT, TCX, JSON and SML recordings are supported too');
+    expect(text).toContain('Choose two or more recordings');
+    expect(text).toContain('Review tracks and recorded differences');
+    expect(text).toContain('measurements available in both recordings');
+    expect(text).toContain('Save comparisons for later review');
     expect(text).not.toContain('New comparison');
     expect(text).not.toContain('Saved comparisons');
     expect(text).not.toContain('Select Files');

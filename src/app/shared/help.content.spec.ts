@@ -1754,6 +1754,10 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('planned workouts never contribute');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
     expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
+    expect(calendarSection?.content).toContain('compact totals strip below its date controls');
+    expect(calendarSection?.content).toContain('**Month** or **30 days** period, excluding adjacent grid dates');
+    expect(calendarSection?.content).toContain('**Recorded TSS** sums available activity TSS, not estimated training load');
+    expect(calendarSection?.content).toContain('partial metric coverage');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
     expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({

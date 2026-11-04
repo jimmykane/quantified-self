@@ -10083,8 +10083,9 @@ The goal dialog uses the shared plan-only reader for optional links, without sub
 Weekly progress is subscribed only in the current-goal list, stops during editing or archive browsing, and follows
 live changes to the saved calendar week start.
 Calendar and Dashboard share the flag legend for visible goals and keep loading/failed goal coverage distinct from
-an empty selected day. The Dashboard Goals action shares the existing view-controls row; it and the full-day toolbar
-wrap at narrow widths. Goals follows the adjacent Timeline notes icon-only action on phones, retaining a 44px touch
+an empty selected day. The Dashboard Goals action shares the existing view-controls row, above the optional recorded
+period-totals strip; enabling totals preserves the single owner-only Goals action and selected-day panel. The controls
+and full-day toolbar wrap at narrow widths. Goals follows the adjacent Timeline notes icon-only action on phones, retaining a 44px touch
 target and accessible name. These presentation rules reuse the shared Material surfaces and do not change MCP reads,
 mutations, permissions or daily generation.
 

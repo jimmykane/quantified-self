@@ -4,6 +4,7 @@
     "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/components/shared/reviewer-benchmark-preview/reviewer-benchmark-rr-preview.data.spec.ts",
     "src/app/helpers/activity-ascent.helper.spec.ts",
+    "src/app/helpers/activity-calendar-period-totals.helper.spec.ts",
     "src/app/helpers/activity-calendar-volume.helper.spec.ts",
     "src/app/helpers/activity-calendar.helper.spec.ts",
     "src/app/helpers/activity-explorer.helper.spec.ts",
