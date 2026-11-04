@@ -81,6 +81,8 @@ describe('help.content', () => {
     expect(content).toContain('do not start a payment, upload, or provider connection');
     expect(content).toContain('provider connections require Pro');
     expect(content).toContain('file choice opens **Dashboard**');
+    expect(content).toContain('Your starting point is kept when you reload or return from checkout');
+    expect(content).toContain('canceling checkout returns you to the membership step');
   });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;

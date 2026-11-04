@@ -143,6 +143,7 @@
     "src/app/helpers/metric-semantics.helper.spec.ts",
     "src/app/helpers/notification-invitation.helper.spec.ts",
     "src/app/helpers/number-format.helper.spec.ts",
+    "src/app/helpers/onboarding-navigation.helper.spec.ts",
     "src/app/helpers/pace-axis.helper.spec.ts",
     "src/app/helpers/personal-metric-range.helper.spec.ts",
     "src/app/helpers/plan-generation.helper.spec.ts",

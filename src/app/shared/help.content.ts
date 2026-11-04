@@ -583,7 +583,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 **Field guide** works on desktop and mobile. **Skip the intro** is available on every introductory chapter; it skips only the tour, not required account setup. Choose **Connect my watch**, **Start with an activity file**, or **Let me look around**. These choices do not start a payment, upload, or provider connection.
 
-Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. After saving your choices, the membership step shows current plans and offers. Starter includes manual uploads; provider connections require Pro. You can go back to change your starting point or privacy choices before finishing.
+Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. After saving your choices, the membership step shows current plans and offers. Starter includes manual uploads; provider connections require Pro. You can go back to change your starting point or privacy choices before finishing. Your starting point is kept when you reload or return from checkout. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.
 
 After setup, the watch choice opens **Connections**, where you select a provider and review its permissions. The file choice opens **Dashboard**; choose **Upload** to select your activity file. **Let me look around** also opens Dashboard so you can add data later. Existing checkout, connection, upload, and error-recovery screens handle the next steps.
 

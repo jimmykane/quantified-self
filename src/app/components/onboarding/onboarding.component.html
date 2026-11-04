@@ -100,7 +100,7 @@
                         @case ('plan') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">A little room to grow.</h1>
                             <p class="lead">{{ completionHint() }}</p>
-                            <app-pricing [isOnboarding]="true" [onboardingUser]="user"
+                            <app-pricing [isOnboarding]="true" [onboardingUser]="user" [onboardingBusy]="isLoading" [onboardingResumeUrl]="checkoutResumeUrl()"
                                 (loadingStateChange)="onPricingLoadingChange($event)" (planSelected)="onPlanSelected()"></app-pricing>
                             <div class="onboarding-actions">
                                 <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="back()">Back</button>

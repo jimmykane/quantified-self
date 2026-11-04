@@ -1,3 +1,5 @@
+import { safeOnboardingResumeUrl } from '../../helpers/onboarding-navigation.helper';
+import { AppWindowService } from '../../services/app.window.service';
 import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
 import { DAILY_WORKOUT_PRO_BENEFIT } from '../public-seo/workout-generation.content';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
@@ -66,6 +68,9 @@ export class PricingComponent implements OnInit, OnDestroy {
     readonly dailyWorkoutBenefit = DAILY_WORKOUT_PRO_BENEFIT;
     @Input() isOnboarding = false;
     @Input() onboardingUser: User | null = null;
+    @Input() onboardingBusy = false;
+    @Input() onboardingResumeUrl: string | null = null;
+    private readonly windowService = inject(AppWindowService);
     @Output() planSelected = new EventEmitter<void>();
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
@@ -511,7 +516,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async subscribe(price: any) {
-        if (this.isLoading) {
+        if (this.isLoading || this.onboardingBusy) {
             return;
         }
 
@@ -522,7 +527,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies(priceId);
-        if (!userWithRequiredPolicies || this.isLoading || this.destroyed) {
+        if (!userWithRequiredPolicies || this.onboardingBusy || this.isLoading || this.destroyed) {
             return;
         }
 
@@ -551,7 +556,11 @@ export class PricingComponent implements OnInit, OnDestroy {
                 typeof price !== 'string' ? price.currency : undefined,
                 typeof price !== 'string' ? price.unit_amount / 100 : undefined
             );
-            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed, () => {
+            const resume = this.isOnboarding ? safeOnboardingResumeUrl(this.onboardingResumeUrl) : null;
+            const successUrl = resume
+                ? `${this.windowService.currentDomain}/payment/success?onboarding=${encodeURIComponent(resume)}` : undefined;
+            const cancelUrl = resume ? `${this.windowService.currentDomain}${resume}` : undefined;
+            await this.paymentService.appendCheckoutSession(price, successUrl, cancelUrl, () => !this.destroyed, () => {
                 if (!this.destroyed) this.checkoutProgress.set('Updating your checkout…');
             });
         } catch (error) {
@@ -576,6 +585,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async manageSubscription() {
+        if (this.onboardingBusy || this.isLoading || this.destroyed) return;
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             const isPro = this.currentRole === 'pro';
             const htmlMessage = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
@@ -593,7 +603,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                     }
                 }).afterClosed()
             );
-            if (!confirmed) {
+            if (!confirmed || this.onboardingBusy || this.destroyed) {
                 return;
             }
         }
@@ -613,6 +623,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async changePlanAndBilling() {
+        if (this.onboardingBusy || this.isLoading || this.destroyed) return;
         if (this.currentRole !== 'basic' && this.currentRole !== 'pro') {
             await this.manageSubscription();
             return;
@@ -633,7 +644,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             }).afterClosed()
         );
 
-        if (!confirmed) {
+        if (!confirmed || this.onboardingBusy || this.destroyed) {
             return;
         }
 
@@ -652,7 +663,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async selectFreeTier(priceId: string = FREE_PRICE_ID) {
-        if (this.isLoading) {
+        if (this.isLoading || this.onboardingBusy) {
             return;
         }
 
@@ -662,7 +673,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies || this.isLoading) {
+        if (!userWithRequiredPolicies || this.onboardingBusy || this.isLoading || this.destroyed) {
             return;
         }
 
@@ -672,6 +683,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             this.analyticsService.logSelectFreeTier();
             await this.userService.setFreeTier(userWithRequiredPolicies);
+            if (this.destroyed) return;
             this.haptics.success();
             this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
             this.planSelected.emit();
@@ -685,6 +697,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async restorePurchases() {
+        if (this.onboardingBusy || this.isLoading || this.destroyed) return;
         if (!this.auth.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
