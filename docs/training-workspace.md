@@ -5878,6 +5878,9 @@ existing validated session cache. Late regeneration responses cannot overwrite a
 changes or dismissal. Fresh status reads also take precedence when they discover coverage, dismissal or a different
 regeneration result without a listener revision; reads of the previous result or this same request remain compatible.
 Regeneration adds no focus listener, polling or background generation.
+Opening a ready-suggestion review and its editor handoff reuse `DayWorkoutService`’s existing `canExecute` checks,
+bound to the Today view, owner, enabled preference, local date and zone. A same-day cache update after successful
+regeneration does not discard a valid Edit workout handoff. These client checks add no reads or MCP contract changes.
 
 Saved-workout regeneration includes an optional strict `replaceWorkout` identity/revision in the private manual request,
 bound into its fingerprint. The bounded Training context reader verifies owner, date, plan, sport, planned lifecycle,

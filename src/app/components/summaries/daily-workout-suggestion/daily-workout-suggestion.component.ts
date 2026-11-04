@@ -276,7 +276,13 @@ export class DailyWorkoutSuggestionComponent {
       return;
     }
     let expectedRequestId = value.result.requestId;
+    const reviewZone = value.controls.timeZone;
+    // A successful regeneration changes the cache sequence while the reviewed draft can still be edited.
+    const reviewCurrent = () => !this.destroy.destroyed && this.ownerUid() === uid && this.daily.eligible(uid)
+      && this.preferences().enabled && this.preferences().controls.localDate === value.localDate
+      && this.preferences().controls.timeZone === reviewZone;
     await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls,
+      canExecute: reviewCurrent,
       ...(regenerate ? {} : { initialResult: value.result }),
       regenerateSuggestion: async (request, current) => {
         const status = await this.daily.regenerate(uid, expectedRequestId, request, current);

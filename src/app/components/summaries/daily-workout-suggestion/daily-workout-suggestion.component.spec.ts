@@ -137,6 +137,28 @@ describe('compact daily workout in Today', () => {
     open.mockClear(); request.mockResolvedValue({ localDate: '2026-10-30', state: 'completed' });
     await fixture.componentInstance.review(true); expect(open).not.toHaveBeenCalled();
   });
+  it.each(['view', 'disabled', 'day', 'zone'] as const)('retires a ready review when its %s changes, but keeps same-day cache updates valid', async change => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready',
+      controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), result: { requestId: 'daily-suggestion:2026-10-30',
+        kind: 'rest', observedAt: '2026-10-30T07:00Z', rationale: 'Rest.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } };
+    const { fixture, request, open, preferences, cached, cacheRevision } = setup(true, ready);
+    request.mockResolvedValue(ready);
+    await fixture.componentInstance.review(true);
+    const canExecute = open.mock.calls[0][3].canExecute;
+    expect(canExecute).toBeTypeOf('function'); expect(canExecute()).toBe(true);
+    // Regeneration publishes a new cache revision before an Edit workout handoff can close the review.
+    cached.mockReturnValue({ status: { ...ready, result: { ...ready.result!, requestId: 'regenerated-result' } }, sleepKey: 'night-a' });
+    cacheRevision.update(value => value + 1); fixture.detectChanges();
+    expect(canExecute()).toBe(true);
+    if (change === 'view') fixture.destroy();
+    else {
+      preferences.update(value => ({ ...value, enabled: change !== 'disabled', controls: { ...value.controls,
+        ...(change === 'day' ? { localDate: '2026-10-31' } : {}), ...(change === 'zone' ? { timeZone: 'UTC' } : {}) } }));
+      fixture.detectChanges();
+    }
+    expect(canExecute()).toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+  });
   it('shows import deferral and resumes once from shared import completion without refreshing a ready result', async () => {
     const { fixture, importActive, request, setVisible } = setup(true, { localDate: '2026-10-30', state: 'waiting-import' });
     importActive.set(true); fixture.detectChanges();
