@@ -128,12 +128,19 @@ describe('HomeComponent', () => {
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
       expect(svg.querySelectorAll('.hero-connection .hero-connection-pulse')).toHaveLength(4);
       expect(svg.querySelectorAll('.hero-aggregate')).toHaveLength(1);
-      expect(svg.querySelectorAll('.hero-aggregate .hero-connection-pulse')).toHaveLength(1);
+      expect(svg.querySelector('.hero-aggregate .hero-connection-pulse')).toBeNull();
       const trunk = svg.querySelector('.hero-aggregate .hero-connection-track')!;
       const endpoint = trunk.getAttribute('d')?.match(/^M (\d+ \d+)/)?.[1];
       expect(endpoint).toBeTruthy();
       expect(Array.from(svg.querySelectorAll('.hero-connection-track')).slice(0, 4)
         .every(path => path.getAttribute('d')?.endsWith(endpoint))).toBe(true);
+      for (const connection of svg.querySelectorAll('.hero-connection')) {
+        const branch = connection.querySelector('.hero-connection-track')!.getAttribute('d');
+        const pulse = connection.querySelector('.hero-connection-pulse')!;
+        expect(pulse.getAttribute('d')?.startsWith(`${branch} `)).toBe(true);
+        expect(pulse.getAttribute('d')).toMatch(svg.classList.contains('hero-provider-wires--mobile') ? /V 120$/ : /H 154$/);
+        expect(pulse.hasAttribute('pathLength')).toBe(false);
+      }
     }
     expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
   });

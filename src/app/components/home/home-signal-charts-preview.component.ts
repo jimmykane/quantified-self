@@ -15,6 +15,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import {
   HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
   buildHomeSignalChartsPreviewData,
+  buildHomeHeroPreviewData,
   buildHomeHeroSummaryMetrics,
 } from './home-signal-charts-preview-data.helper';
 
@@ -40,7 +41,7 @@ export class HomeSignalChartsPreviewComponent {
   // This hero is viewport-deferred on the client. Keep its synthetic history current:
   // the production Form chart correctly decays old observations through today's date.
   readonly heroPreviewData = computed(() => this.hero()
-    ? buildHomeSignalChartsPreviewData(Date.now())
+    ? buildHomeHeroPreviewData(Date.now())
     : this.previewData);
   readonly heroSummaryMetrics = buildHomeHeroSummaryMetrics();
   readonly freshnessForecast = this.previewData.freshnessForecast;

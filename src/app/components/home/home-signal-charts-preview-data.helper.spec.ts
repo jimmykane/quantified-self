@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
   buildHomeSignalChartsPreviewData,
+  buildHomeHeroPreviewData,
   buildHomeHeroSummaryMetrics,
 } from './home-signal-charts-preview-data.helper';
 
@@ -45,11 +46,25 @@ describe('buildHomeSignalChartsPreviewData', () => {
 });
 
 describe('home hero summary examples', () => {
+  it('shows established fitness, build/recovery weeks and rest days in a repeatable current window', () => {
+    const anchor = Date.UTC(2026, 10, 4, 18, 30);
+    const data = buildHomeHeroPreviewData(anchor);
+    expect(data).toEqual(buildHomeHeroPreviewData(anchor));
+    expect(data.latestFormPoint?.time).toBe(Date.UTC(2026, 10, 4));
+    const visible = data.formTimeline.slice(-84);
+    expect(visible[0].ctl).toBeGreaterThan(40);
+    expect(visible.some(point => point.trainingStressScore === 0 && point.activityCount === 0)).toBe(true);
+    expect(Math.min(...visible.map(point => point.formSameDay))).toBeLessThan(-15);
+    expect(Math.max(...visible.map(point => point.formSameDay))).toBeGreaterThan(10);
+    expect(visible.every(point => point.formSameDay === point.ctl - point.atl)).toBe(true);
+    expect(data.formTimeline.slice(-7).reduce((sum, point) => sum + point.activityCount, 0)).toBe(6);
+  });
+
   it('keeps training volume separate from the imported recovery estimate', () => {
     const cards = buildHomeHeroSummaryMetrics();
     expect(cards.map(card => [card.label, card.valueText, card.detailText])).toEqual([
-      ['Training volume', '09h 42m', 'Last 7 days'],
-      ['Recovery left', '08h 20m', 'Imported post-workout estimate'],
+      ['Training volume', '08h 20m', 'Last 7 days'],
+      ['Recovery left', '14h 30m', 'Example post-workout estimate'],
     ]);
   });
 });

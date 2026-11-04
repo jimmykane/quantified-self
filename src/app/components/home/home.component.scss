@@ -187,40 +187,20 @@
 .hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .hero-connection-track { opacity: .35; }
 :host-context(.dark-theme) .hero-visual { --hero-flow-color: var(--qs-theme-accent); }
-.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 94; }
+.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 10 600; }
 .hero-provider-wires .hero-connection-halo { stroke-width: 9; stroke: color-mix(in srgb, var(--hero-flow-color) 18%, transparent); }
-.hero-connection-arrival { opacity: 0; fill: none; stroke: currentColor; stroke-width: 1; }
 .hero-aggregation-point {
   position: absolute;
   left: calc(100% * 84 / 136);
   top: 50%;
-  display: grid;
-  place-items: center;
   width: 14px;
   height: 14px;
   box-sizing: border-box;
   border: 1px solid var(--hero-flow-color);
   border-radius: 50%;
-  background: var(--mat-sys-surface);
+  background: transparent;
   transform: translate(-50%, -50%);
   pointer-events: none;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border: 1px solid var(--hero-flow-color);
-    border-radius: 50%;
-    opacity: 0;
-  }
-
-  &::after {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--hero-flow-color);
-  }
 }
 .hero-aggregate .hero-connection-track { stroke-width: 1.5; opacity: .6; }
 .hero-connection-port { fill: var(--mat-sys-surface); stroke: currentColor; stroke-width: 1.25; }
@@ -228,33 +208,23 @@
 .hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
 .hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
 @keyframes heroConnectionFlow {
-  0% { stroke-dashoffset: 8; opacity: 0; }
-  6% { opacity: 1; }
-  78% { stroke-dashoffset: -100; opacity: 1; }
-  79%, 100% { stroke-dashoffset: -100; opacity: 0; }
-}
-@keyframes heroConnectionArrival {
-  0%, 76% { r: 3px; opacity: 0; }
-  80% { r: 3px; opacity: .8; }
-  100% { r: 13px; opacity: 0; }
-}
-@keyframes heroAggregationRipple {
-  from { transform: scale(1); opacity: .55; }
-  to { transform: scale(2); opacity: 0; }
+  from { stroke-dashoffset: 12; opacity: 1; }
+  to { stroke-dashoffset: -324; opacity: 1; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .hero-connection { --hero-flow-delay: 0s; }
-  .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
-  .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
-  .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
+  // Fixed dash travel keeps speed unchanged through the circle and along the trunk.
+  // Phase offsets account for the longer outer branches, spacing junction arrivals.
+  .hero-connection { --hero-flow-delay: -2.452s; }
+  .hero-connection:nth-child(2) { --hero-flow-delay: -.276s; }
+  .hero-connection:nth-child(3) { --hero-flow-delay: -3.876s; }
+  .hero-connection:nth-child(4) { --hero-flow-delay: -3.652s; }
+  .hero-provider-wires--mobile .hero-connection { --hero-flow-delay: -2.567s; }
+  .hero-provider-wires--mobile .hero-connection:nth-child(2) { --hero-flow-delay: -.108s; }
+  .hero-provider-wires--mobile .hero-connection:nth-child(3) { --hero-flow-delay: -3.708s; }
+  .hero-provider-wires--mobile .hero-connection:nth-child(4) { --hero-flow-delay: -3.767s; }
   .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
-  .hero-connection-arrival { animation: heroConnectionArrival 4.8s linear var(--hero-flow-delay) infinite; }
-  // A branch arrives every 1.2 seconds: 78% of 4.8s, staggered by 1.2s.
-  .hero-aggregate .hero-connection-pulse, .hero-aggregate .hero-connection-halo { animation: heroConnectionFlow 1.2s linear .144s infinite; }
-  .hero-aggregate .hero-connection-arrival { animation: heroConnectionArrival 1.2s linear .144s infinite; }
-  .hero-aggregation-point::before { animation: heroAggregationRipple 1.2s linear .144s infinite; }
   .hero-motion-toggle { display: inline-flex; }
-  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-connection-arrival, .hero-motion-paused .hero-aggregation-point::before { animation-play-state: paused; }
+  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo { animation-play-state: paused; }
 }
 @media (min-width: 1200px) and (max-width: 1320px) {
   .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
