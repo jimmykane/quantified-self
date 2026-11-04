@@ -2317,4 +2317,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
+  it.each(['single', 'batch'] as const)('keeps long Garmin %s reviews within the output bound without losing execution disclosures', async mode => {
+    const native = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [{
+      kind: 'repeat', id: 'set', count: 2, steps: Array.from({ length: 7 }, (_, index) => ({
+        kind: 'step', id: `zone-${index}`, purpose: 'work', ending: { kind: 'time', seconds: 60, allowEarlyLap: true },
+        targets: [{ kind: 'power', mode: 'garmin-zone', zone: index + 1, garminPowerAveragingSeconds: [3, 10, 30][index % 3] }],
+      })),
+    }] });
+    const input = { uid, connectionId: 'connection', scopes };
+    const planPreview = await previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: 1, changes: [{
+      kind: 'create-plan', localKey: 'plan', name: 'Native plan', startDate: '2026-09-18', endDate: '2026-09-18', activate: false,
+    }] } }, deps);
+    const planResult = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: planPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const plan = { ref: planResult.createdReferences[0].reference };
+    const createdPreview = await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: planResult.scheduleRevision,
+      change: { kind: 'create-workout', localKey: 'native', plan, localDate: '2026-09-18', title: 'Native zones', structure: native } } }, deps);
+    const created = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const updated = structuredClone(native);
+    for (const node of updated.nodes) for (const step of node.kind === 'step' ? [node] : node.steps) {
+      if (step.ending.kind === 'time') step.ending.allowEarlyLap = false;
+    }
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference }, plan,
+      localDate: '2026-09-19', title: 'A'.repeat(120), structure: updated };
+    const preview = mode === 'single'
+      ? await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, change } }, deps)
+      : await previewPlannedWorkoutV4Changes({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
+    const summary = preview.changes[0].summary;
+    expect(summary.length).toBeLessThanOrEqual(500);
+    expect(summary).toContain('Update');
+    expect(summary).toContain('on 2026-09-19');
+    expect(summary).toContain('Extend plan range: 2026-09-18 to 2026-09-19.');
+    expect(summary).toContain('Removed from 7 previously enabled steps.');
+    expect(summary).toContain('3s/10s/30s → 3s/10s/30s; device support varies.');
+    expect(summary).toContain('Z1, Z2, Z3, Z4, Z5, Z6, Z7 → Z1, Z2, Z3, Z4, Z5, Z6, Z7');
+    expect(summary).toContain('watts are unknown in QS (Garmin settings).');
+    await applyTrainingChanges({ ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('title')).toBe(change.title);
+    expect(saved.get('structure')).toEqual(updated);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
 });

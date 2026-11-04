@@ -5274,7 +5274,9 @@ or evidence about actual gauge/alert/device execution. Those outcomes require se
 MCP impact: extend only the unregistered pending Garmin scheduled v4/saved v3 recipe tools from the parent PR.
 Their names are absent from the registered baseline; all registered legacy schemas remain frozen. Older full readers
 and recipe replacements reject averaging with current-tool guidance. Pending previews disclose distinct before/after
-windows, including removal to default; full recipes retain exact per-step assignments. Existing read/write grants,
+windows, including removal to default; full recipes retain exact per-step assignments. Long scheduled previews omit
+optional recipe definition counts when needed to retain the complete title, date-range, early-Lap, averaging and
+native-zone disclosures within the unchanged 500-character change-summary bound. Existing read/write grants,
 revision/deletion checks, host approval and prepare-only Assistant boundaries remain. The pending digest and bundled
 Training/cross-domain guidance are updated; backend release, developer rescan and plugin/client refresh remain
 separate operations. No baseline/history promotion is performed.
