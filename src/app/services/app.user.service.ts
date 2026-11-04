@@ -119,7 +119,7 @@ import {
   isReconnectRequiredServiceConnection,
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
-  SERVICE_CONNECTION_STATES,
+  serviceConnectionAccountsFromMeta,
   type ServiceOAuthCompletionResult,
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
@@ -1099,18 +1099,7 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.GarminAPI:
       case ServiceNames.WahooAPI:
         return this.getUserMetaForService(user, serviceName).pipe(
-          switchMap(serviceMeta => {
-            const accounts = Array.isArray(serviceMeta?.connectionAccounts)
-              ? serviceMeta.connectionAccounts
-              : [];
-            if (accounts.length > 0) return of(accounts);
-            if (serviceName !== ServiceNames.WahooAPI
-              || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
-              return of([]);
-            }
-            const providerUserId = `${serviceMeta.providerUserId || ''}`.trim();
-            return of(providerUserId ? [{ providerUserId }] : [{}]);
-          }),
+          map(serviceMeta => serviceConnectionAccountsFromMeta(serviceMeta, serviceName === ServiceNames.WahooAPI)),
           catchError(() => of([])),
         );
     }
@@ -1259,9 +1248,14 @@ export class AppUserService implements OnDestroy {
     this.applyRouteDeliverySyncRouteSettingsToUser(user, routeDeliverySyncRoutes);
   }
 
-  public getUserMetaForService(user: User, serviceName: string): Observable<AppUserServiceMetaInterface | undefined> {
+  public getUserMetaForService(
+    user: User,
+    serviceName: string,
+    options?: { waitForServer: boolean },
+  ): Observable<AppUserServiceMetaInterface | undefined> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
-    return docData(metaDoc).pipe(map((d) => {
+    const metadata = options?.waitForServer ? docData(metaDoc, { waitForServer: true }) : docData(metaDoc);
+    return metadata.pipe(map((d) => {
       return d as AppUserServiceMetaInterface | undefined;
     }));
   }

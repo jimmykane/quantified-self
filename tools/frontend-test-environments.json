@@ -161,6 +161,7 @@
     "src/app/helpers/route-provenance.helper.spec.ts",
     "src/app/helpers/route-waypoint-presentation.helper.spec.ts",
     "src/app/helpers/sentry-oauth-url.helper.spec.ts",
+    "src/app/helpers/service-connection-accounts.helper.spec.ts",
     "src/app/helpers/service-setup-redirect.helper.spec.ts",
     "src/app/helpers/sports-lib-metric-semantics.spec.ts",
     "src/app/helpers/stat-label.helper.spec.ts",

@@ -199,6 +199,70 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('uses one authoritative metadata snapshot even when the old token stream would say disconnected', async () => {
+        const account = { providerUserId: 'garmin-account', permissions: ['ACTIVITY_EXPORT'] };
+        mockUserService.getServiceToken.mockReturnValue(of([]));
+        mockUserService.getUserMetaForService.mockReturnValue(of({ connectionState: 'connected', connectionAccounts: [account] }));
+        component.user = { uid: 'owner', settings: {} } as typeof component.user;
+        await component.ngOnChanges(); fixture.detectChanges();
+        expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(component.user, component.serviceName, { waitForServer: true });
+        expect(mockUserService.getServiceToken).not.toHaveBeenCalled();
+        expect(component.isConnectedToService()).toBe(true);
+        expect(component.serviceTokens).toEqual([account]);
+        expect(fixture.nativeElement.textContent).toContain('Garmin Connect');
+        expect(fixture.nativeElement.textContent).not.toContain('Not connected');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('honors a fresh empty projection instead of retaining a cached token connection', async () => {
+        mockUserService.getServiceToken.mockReturnValue(of([{ providerUserId: 'stale' }]));
+        mockUserService.getUserMetaForService.mockReturnValue(of({ connectionAccounts: [] }));
+        component.user = { uid: 'owner', settings: {} } as typeof component.user;
+        await component.ngOnChanges();
+        expect(component.isConnectedToService()).toBe(false);
+        expect(component.serviceTokens).toEqual([]);
+    });
+
+    it('keeps connection actions unavailable until metadata is confirmed and permits an explicit read retry', async () => {
+        const metadata = new Subject<import('../../../models/app-user.interface').AppUserServiceMetaInterface | undefined>();
+        mockUserService.getUserMetaForService.mockReturnValueOnce(metadata).mockReturnValueOnce(of({
+            connectionState: 'connected', connectionAccounts: [{ providerUserId: 'garmin-account' }],
+        }));
+        component.user = { uid: 'owner', settings: {} } as typeof component.user;
+        await component.ngOnChanges(); fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Checking connection');
+        expect(component.shouldShowConnectAction).toBe(false);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        metadata.error(new Error('Metadata unavailable'));
+        fixture.detectChanges();
+        expect(component.connectionReadError).toBe(true);
+        expect(fixture.nativeElement.textContent).toContain("We couldn't check your Garmin connection");
+        expect(fixture.nativeElement.textContent).not.toContain('Connect Account First');
+        expect(fixture.nativeElement.textContent).not.toContain('Not connected');
+        const retry = [...fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>]
+            .find(button => button.textContent?.trim() === 'Retry')!;
+        retry.click(); fixture.detectChanges();
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(component.connectionReadError).toBe(false);
+        expect(component.isConnectedToService()).toBe(true);
+        expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('bounds a stalled metadata read without showing a disconnected account or starting OAuth', async () => {
+        vi.useFakeTimers();
+        try {
+            mockUserService.getUserMetaForService.mockReturnValue(new Subject());
+            component.user = { uid: 'owner', settings: {} } as typeof component.user;
+            await component.ngOnChanges();
+            vi.advanceTimersByTime(15_000); fixture.detectChanges();
+            expect(component.connectionReadError).toBe(true);
+            expect(component.isLoading).toBe(false);
+            expect(fixture.nativeElement.textContent).not.toContain('Not connected');
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+            expect(haptics.selection).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
     it('explains Training permission without promising public availability or automatic delivery', () => {
         expect(component.permissionExplanations['WORKOUT_IMPORT']).toBe(
             'Send planned workouts when available for your account. Requires explicit opt-in.');
@@ -959,8 +1023,8 @@ describe('ServicesGarminComponent', () => {
             await component.ngOnChanges();
             await new Promise(resolve => setTimeout(resolve, 0));
 
-            expect(mockUserService.getServiceToken).toHaveBeenCalledWith(user, component.serviceName);
-            expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(user, component.serviceName);
+            expect(mockUserService.getServiceToken).not.toHaveBeenCalled();
+            expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(user, component.serviceName, { waitForServer: true });
             expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledWith('state-token', 'auth-code');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('connected_to_service', { serviceName: component.serviceName });
             expect(snackBarSpy).toHaveBeenCalledWith(
@@ -1199,7 +1263,7 @@ describe('ServicesGarminComponent', () => {
         it('should show route toggle when Garmin and Suunto are connected', async () => {
             component.hasProAccess = true;
             component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
-            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'garmin-token', userID: 'garmin-user', permissions: [] }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ connectionAccounts: [{ providerUserId: 'garmin-user', permissions: [] }] }));
             mockUserService.watchSuuntoServiceConnectionView.mockReturnValueOnce(of(buildSuuntoServiceConnectionViewModel({
                 hasToken: true,
                 serviceMeta: null,

@@ -1842,6 +1842,14 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
+        it('supports server-confirmed service metadata without treating cached absence as disconnected', async () => {
+            const metadata = { connectionAccounts: [{ providerUserId: 'garmin-account' }] };
+            (docData as any).mockReturnValueOnce(of(metadata));
+            expect(await firstValueFrom(service.getUserMetaForService({ uid: 'owner' } as any,
+                ServiceNames.GarminAPI, { waitForServer: true }))).toEqual(metadata);
+            expect(docData).toHaveBeenCalledWith(expect.anything(), { waitForServer: true });
+        });
+
         it('getServiceToken should read Suunto accounts from safe service metadata', async () => {
             const user = { uid: 'u1' } as any;
             const accounts = [{ providerUserId: 'suunto-user' }];

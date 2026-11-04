@@ -344,6 +344,11 @@ are disabled during saving, duplicate submissions are ignored, and failed saves 
 
 ### Connection feature cards
 
+Provider connection overviews derive account summaries and lifecycle state from one server-confirmed metadata
+snapshot. A cached missing document must not settle the connection as disconnected. Provider widgets show a bounded
+read failure with Retry instead of Connect when verification fails; retry observes metadata without starting OAuth.
+This presentation change adds no provider calls, writes, MCP surface or queue-monitoring changes.
+
 Connections feature cards keep one title, description and action. They do not repeat a promotional checkmark line or a generic cooldown duration. History import keeps actual last-requested and next-available dates together as quiet metadata, with activity and Sleep/Health timings separate. A request date is not a completed-delivery date. Existing pending/error states, provider limits, eligibility checks and exact expiry timers remain unchanged; presentation reuses already-loaded metadata without new provider reads or mutations. Monitoring and MCP contracts are unchanged.
 
 Connections uses one Material tab-navigation header for provider selection. Full-size labels and entitlement chips keep their natural width; Material pagination and keyboard focus reveal overflow instead of squeezing five controls onto a phone. The active query-linked provider remains selected. Non-Pro connection overviews may show one benefit preview before the existing tool summaries; Pro accounts keep their data-flow overview above the tabs. Trial copy uses a current active Pro price and confirmed absence of paid history, with Get Pro on unknown or failed billing reads. The exact price is a display selection on Membership, never authorization for checkout. Connected, loading, detailed and attention/recovery states retain their existing controls. Selection haptics belong to accepted tab/disclosure changes and membership/dashboard navigation, not hydration or unchanged selections.

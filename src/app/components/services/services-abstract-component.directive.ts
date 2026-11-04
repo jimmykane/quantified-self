@@ -12,7 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { LoggerService } from '../../services/logger.service';
 import { HttpClient } from '@angular/common/http';
-import { combineLatest, firstValueFrom, Subscription } from 'rxjs';
+import { firstValueFrom, Subscription, timeout } from 'rxjs';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { distinctUntilChanged, tap } from 'rxjs/operators';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -31,6 +31,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 import equal from 'fast-deep-equal';
 import {
   SERVICE_OAUTH_COMPLETION_OUTCOMES,
+  serviceConnectionAccountsFromMeta,
   SUUNTO_OAUTH_RESTART_REQUIRED_REASON,
   ServiceConnectionAccountProjection,
   ServiceOAuthCompletionResult,
@@ -55,6 +56,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   @Input() showOnlyActiveProviderTool = false;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
+  public connectionReadError = false;
   /** Browser-safe account summaries sourced from service metadata. */
   public serviceTokens: ServiceConnectionAccountProjection[] | undefined;
   public serviceMeta: AppUserServiceMetaInterface | undefined;
@@ -95,6 +97,7 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
 
   async ngOnChanges() {
     if (this.connectionViewDestroyed) return;
+    this.connectionReadError = false;
     if (this.connectionViewUserId !== this.user?.uid) {
       this.connectionViewUserId = this.user?.uid;
       this.connectionViewRevision++;
@@ -123,27 +126,18 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
     }
     this.isLoading = true;
     const isCurrentView = this.captureConnectionView();
-    this.serviceDataSubscription = combineLatest([
-      this.userService.getServiceToken(this.user, this.serviceName),
-      this.userService
-        .getUserMetaForService(this.user, this.serviceName),
-    ]).pipe(
+    this.serviceDataSubscription = this.userService
+      .getUserMetaForService(this.user, this.serviceName, { waitForServer: true }).pipe(
+      timeout({ first: 15_000 }),
       distinctUntilChanged((previous, current) => equal(previous, current)),
-      tap((results) => {
+      tap((metadata) => {
         if (!isCurrentView()) return;
-        if (!results) {
-          this.serviceTokens = undefined;
-          this.serviceMeta = undefined;
-          this.onServiceDataChanged();
-          this.emitConnectionState();
-          return;
-        }
-        this.serviceTokens = results[0];
-        this.serviceMeta = results[1];
+        this.serviceTokens = serviceConnectionAccountsFromMeta(metadata, this.serviceName === ServiceNames.WahooAPI);
+        this.serviceMeta = metadata;
         this.onServiceDataChanged();
         this.emitConnectionState();
       }),
-    ).subscribe(async () => {
+    ).subscribe({ next: async () => {
       if (!isCurrentView()) return;
       // Only the main connection view owns OAuth completion. A tools dialog is
       // a second instance of this provider and must only observe its metadata.
@@ -263,7 +257,20 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
           }
         }
       }
-    });
+    }, error: () => {
+      if (!isCurrentView()) return;
+      this.isLoading = false;
+      this.connectionReadError = true;
+      this.logger.error('Service connection status unavailable', { serviceName: this.serviceName },
+        new Error('Service connection status unavailable'));
+    } });
+  }
+
+  public retryConnectionRead(): void {
+    if (this.connectionViewDestroyed || !this.user || this.isLoading || this.isConnecting
+      || this.isDisconnecting || !this.connectionReadError) return;
+    this.hapticsService.selection();
+    void this.ngOnChanges();
   }
 
   async ngOnInit() {

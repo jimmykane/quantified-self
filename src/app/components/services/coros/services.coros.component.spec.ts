@@ -36,7 +36,7 @@ import { ServiceConnectionStatusComponent } from '../service-connection-status/s
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 import { AppUserInterface, AppUserServiceMetaInterface } from '../../../models/app-user.interface';
-import { ServiceConnectionAccountProjection, ServiceOAuthCompletionResult } from '@shared/service-connection';
+import { ServiceOAuthCompletionResult } from '@shared/service-connection';
 
 describe('ServicesCorosComponent', () => {
     let component: ServicesCorosComponent;
@@ -298,9 +298,7 @@ describe('ServicesCorosComponent', () => {
     });
 
     it.each(['existing connection', 'new connection'] as const)('pauses and resumes binding checks around OAuth for the %s', async connection => {
-        const accounts$ = new Subject<ServiceConnectionAccountProjection[]>();
         const meta$ = new Subject<AppUserServiceMetaInterface | undefined>();
-        mockUserService.getServiceToken.mockReturnValue(accounts$);
         mockUserService.getUserMetaForService.mockReturnValue(meta$);
         let completeOAuth!: (result: ServiceOAuthCompletionResult) => void;
         mockUserService.requestAndSetCurrentUserCOROSAPIAccessToken.mockReturnValueOnce(
@@ -315,16 +313,16 @@ describe('ServicesCorosComponent', () => {
         });
         component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
         await component.ngOnChanges();
-        accounts$.next(connection === 'existing connection' ? [{ providerUserId: 'coros-user' }] : []);
         meta$.next(connection === 'existing connection'
-            ? { connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'old-generation' }
+            ? { connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'old-generation',
+                connectionAccounts: [{ providerUserId: 'coros-user' }] }
             : undefined);
 
         expect(component.isConnecting).toBe(true);
         expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
 
-        accounts$.next([{ providerUserId: 'coros-user' }]);
-        meta$.next({ connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'new-generation' });
+        meta$.next({ connectionState: 'connected', providerUserId: 'coros-user', connectionStateGeneration: 'new-generation',
+            connectionAccounts: [{ providerUserId: 'coros-user' }] });
         expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
         completeOAuth({ connected: true, outcome: 'connected' });
 

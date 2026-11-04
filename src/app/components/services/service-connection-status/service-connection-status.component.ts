@@ -42,6 +42,7 @@ export class ServiceConnectionStatusComponent {
         if (this.statusLabelOverride) {
             return this.statusLabelOverride;
         }
+        if (this.loading && !this.connected) return 'Checking connection…';
         return this.connected ? 'Connected' : 'Not connected';
     }
 
@@ -49,6 +50,7 @@ export class ServiceConnectionStatusComponent {
         if (this.statusIconOverride) {
             return this.statusIconOverride;
         }
+        if (this.loading && !this.connected) return 'sync';
         return this.connected ? 'check_circle' : 'link_off';
     }
 }

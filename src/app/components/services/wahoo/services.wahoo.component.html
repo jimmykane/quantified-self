@@ -1,3 +1,10 @@
+@if (connectionReadError) {
+<app-status-info type="warning" title="Connection status unavailable" role="alert">
+  We couldn't check your Wahoo connection. Retry before reconnecting your account.
+  <button mat-button type="button" [disabled]="isLoading || isConnecting || isDisconnecting"
+    (click)="retryConnectionRead()">Retry</button>
+</app-status-info>
+} @else {
 <div
   class="service-container"
   [class.service-container--advanced]="showAdvancedTools"
@@ -220,3 +227,4 @@
   }
   }
 </div>
+}
