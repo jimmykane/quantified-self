@@ -59,8 +59,9 @@ export class PushNotificationSettingsComponent {
     try {
       const accepted = await (action === 'test' ? this.push.sendTest() : this.push[action]());
       if (accepted === false) this.haptics.error(); else this.haptics.success();
-      if (action !== 'test') await this.devices.reload();
     }
     catch { this.haptics.error(); }
+    // Tests can expire registrations, and a failed browser cleanup can follow a successful server removal.
+    finally { await this.devices.reload(); }
   }
 }

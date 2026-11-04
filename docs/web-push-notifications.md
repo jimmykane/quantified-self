@@ -61,7 +61,8 @@ registrations before transport, so a remotely removed device stops receiving fut
 Permission at the other browser remains unchanged; re-enabling requires an explicit action there. An already
 accepted push cannot be recalled. Account changes and component teardown invalidate pending reads and mutations.
 List errors retain prior rows but block removal until a fresh server read succeeds. Refresh and pagination are explicit.
-Completed local enable/disable actions refresh the list and invalidate older in-flight list or pagination results.
+Completed local enable/disable/test actions refresh the list and invalidate older in-flight list or pagination results,
+including expired self-tests and partial failures where the server registration was removed before browser cleanup failed.
 A callback finishing after Settings closes cannot restart its device-list service.
 
 After separate deployment authorization, deploy Rules before releasing the frontend: old Rules reject device metadata

@@ -87,8 +87,24 @@ describe('notification Settings', () => {
   });
   it('does not give success feedback for an expired self-test registration', async () => {
     push.canTest.set(true); push.sendTest.mockResolvedValueOnce(false);
+    devices.reload.mockImplementationOnce(async () => { devices.devices.set([]); });
     const fixture = TestBed.createComponent(PushNotificationSettingsComponent);
+    fixture.detectChanges(); expect(fixture.nativeElement.querySelectorAll('.notification-device-row')).toHaveLength(1);
     await fixture.componentInstance.act('test');
+    fixture.detectChanges(); expect(fixture.nativeElement.querySelectorAll('.notification-device-row')).toHaveLength(0);
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('reconciles the device list when server removal succeeds but browser cleanup fails', async () => {
+    push.canDisable.set(true);
+    let fail!: (error: Error) => void;
+    push.disable.mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    devices.reload.mockImplementationOnce(async () => { devices.devices.set([]); });
+    const fixture = TestBed.createComponent(PushNotificationSettingsComponent);
+    const pending = fixture.componentInstance.act('disable');
+    expect(devices.reload).not.toHaveBeenCalled();
+    fail(new Error('Browser cleanup failed after server removal')); await pending;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.notification-device-row')).toHaveLength(0);
     expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
   });
   it('renders pending and blocked states with accessible status', () => {
