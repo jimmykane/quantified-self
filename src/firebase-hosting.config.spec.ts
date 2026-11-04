@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Field guide help covers the skippable intro, separate consent and existing plan/provider/upload handoffs.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
   });
 

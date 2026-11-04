@@ -533,8 +533,14 @@ export const HELP_SECTIONS: HelpSection[] = [
     content: `## Start in three steps
 
 1. Sign in with an email magic link, Google, or GitHub.
-2. Complete onboarding and accept the required policies.
+2. Follow the optional **Field guide** introduction, choose a starting point, and accept the required policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
+
+**Field guide** works on desktop and mobile. **Skip the intro** is available on every introductory chapter; it skips only the tour, not required account setup. Choose **Connect my watch**, **Start with an activity file**, or **Let me look around**. These choices do not start a payment, upload, or provider connection.
+
+Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. After saving your choices, the membership step shows current plans and offers. Starter includes manual uploads; provider connections require Pro. You can go back to change your starting point or privacy choices before finishing.
+
+After setup, the watch choice opens **Connections**, where you select a provider and review its permissions. The file choice opens **Dashboard**; choose **Upload** to select your activity file. **Let me look around** also opens Dashboard so you can add data later. Existing checkout, connection, upload, and error-recovery screens handle the next steps.
 
 The sync guides' **Start Setup** action opens Connections. If sign-in or onboarding is required, complete it and choose **Continue to Connections** to resume setup. Provider connections require Pro. Opening setup does not connect a provider or enable automatic sync; you choose those actions in Connections.
 

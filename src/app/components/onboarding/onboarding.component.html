@@ -1,93 +1,118 @@
-<div class="onboarding-container">
-    <mat-card class="onboarding-card">
-        <mat-horizontal-stepper [linear]="true" [disableRipple]="true" #stepper
-            (animationDone)="navigationEffects.scrollToTop()">
-            <!-- Step 1: Terms & Conditions -->
-            <mat-step [stepControl]="termsFormGroup" label="Legal consent">
-                <form [formGroup]="termsFormGroup" class="qs-form onboarding-form">
-                    <div class="step-content">
-                        <div class="step-intro">
-                            <h2 class="step-title">Step 1 of 2: Legal consent</h2>
-                            <p class="step-subtitle">Takes ~30 seconds. Review key points, then confirm your choices.</p>
-                        </div>
+<main class="qs-workspace-page field-guide-page" aria-labelledby="field-guide-title">
+    <mat-card appearance="outlined" class="field-guide" [class.field-guide--intro]="stage() === 'intro'"
+        [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
+        <aside class="field-guide-hero" aria-label="A runner on a mountain trail">
+            <img class="hero-image" src="assets/onboarding/field-guide.jpg" alt="" width="1024" height="1536" fetchpriority="high">
+            <div class="hero-copy">
+                <span class="eyebrow">A field guide to your training</span>
+                <p>{{ heroTitle() }}</p>
+                <span class="hero-caption">Quantified Self</span>
+            </div>
+        </aside>
 
-                        <section class="policy-summary" aria-labelledby="policy-summary-title">
-                            <h3 id="policy-summary-title">What you agree to</h3>
-                            <ul>
-                                <li>Your account starts private by default, and you control what becomes public.</li>
-                                <li>Subscription and retention rules apply, including a grace period after expiry.</li>
-                                <li>Optional analytics and marketing consent can be changed later in settings.</li>
-                            </ul>
-                        </section>
+        <div class="field-guide-body">
+            <header class="field-guide-header">
+                <div class="brand"><img src="assets/logos/app/logo-100x100.png" width="32" height="32" alt=""><span>Quantified Self</span></div>
+                @if (stage() === 'intro') {
+                    <button mat-button type="button" (click)="skipIntro()">Skip the intro <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                } @else {
+                    <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="logout()">Sign out</button>
+                }
+            </header>
 
-                        <div class="checkbox-group">
-                            <span class="mat-subheader">Confirm your choices</span>
-
-                            <ng-container *ngFor="let policy of policies; let last = last">
-                                <section class="policy-item">
-                                    <div class="policy-item-copy">
-                                        <h3>{{policy.title}}</h3>
-                                        <p *ngIf="policy.subtitle">{{policy.subtitle}}</p>
-                                    </div>
-
-                                    <mat-checkbox [formControlName]="policy.formControlName"
-                                        (change)="onPolicyCheckboxChange(policy.id, $event.checked)">
-                                        {{policy.checkboxLabel}}
-                                        <span class="policy-required-label" *ngIf="!policy.isOptional">(Required)</span>
-                                        <span class="policy-optional-label" *ngIf="policy.isOptional">(Optional)</span>
-                                    </mat-checkbox>
-
-                                    <button mat-button type="button" class="policy-read-more" (click)="togglePolicyDetails(policy.id)">
-                                        @if (expandedPolicyId === policy.id) {
-                                        Hide details
-                                        } @else {
-                                        Read more
-                                        }
+            @if (stage() === 'intro') {
+                <section class="guide-content intro-content">
+                    <p class="eyebrow">Meet your new perspective</p>
+                    <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ chapter().title }}</h1>
+                    <p class="lead">{{ chapter().description }}</p>
+                    <ul class="chapter-points">
+                        @for (point of chapter().points; track point.title) {
+                            <li><mat-icon aria-hidden="true">{{ point.icon }}</mat-icon><div><h2>{{ point.title }}</h2><p>{{ point.description }}</p></div></li>
+                        }
+                    </ul>
+                    <div class="intro-progress" role="status" [attr.aria-label]="'Introduction ' + (chapterIndex() + 1) + ' of ' + chapters.length">
+                        <span class="chapter-dots" aria-hidden="true">
+                            @for (item of chapters; track $index) { <span [class.active]="$index === chapterIndex()"></span> }
+                        </span>
+                        <span>{{ chapterIndex() + 1 }} of {{ chapters.length }}</span>
+                    </div>
+                    <div class="onboarding-actions intro-actions">
+                        @if (chapterIndex() > 0) { <button mat-button type="button" (click)="previousChapter()">Back</button> }
+                        <button mat-flat-button type="button" class="next-action" (click)="nextChapter()">{{ chapterIndex() === chapters.length - 1 ? 'Find my starting point' : 'Next' }} <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                    </div>
+                </section>
+            } @else {
+                <section class="guide-content" [class.plan-content]="stage() === 'plan'">
+                    <p class="eyebrow">{{ setupProgress() }}</p>
+                    @switch (stage()) {
+                        @case ('start') {
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">Where does your story start?</h1>
+                            <p class="lead">Choose a starting point. You can always add more later.</p>
+                            <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
+                                <mat-radio-button value="connect">
+                                    <span class="choice-title">Connect my watch</span>
+                                    <span class="choice-description">Bring activities in from Garmin, Suunto, COROS or Wahoo.</span>
+                                    <span class="choice-detail">Provider connections require Pro</span>
+                                </mat-radio-button>
+                                <mat-radio-button value="upload">
+                                    <span class="choice-title">Start with an activity file</span>
+                                    <span class="choice-description">Upload a FIT, GPX or TCX file from your Dashboard.</span>
+                                    <span class="choice-detail">Included with Starter</span>
+                                </mat-radio-button>
+                                <mat-radio-button value="explore">
+                                    <span class="choice-title">Let me look around</span>
+                                    <span class="choice-description">Explore your workspace and add your data when you’re ready.</span>
+                                    <span class="choice-detail">Start free</span>
+                                </mat-radio-button>
+                            </mat-radio-group>
+                            <div class="onboarding-actions">
+                                <button mat-button type="button" (click)="back()">Back</button>
+                                <button mat-flat-button type="button" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                            </div>
+                        }
+                        @case ('privacy') {
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">A little trust goes a long way.</h1>
+                            <p class="lead">Review your privacy choices before we set up your account. Optional choices are yours to make.</p>
+                            <form [formGroup]="termsFormGroup" class="onboarding-form" (ngSubmit)="onTermsSubmit()">
+                                <div class="policy-list">
+                                    @for (policy of policies; track policy.id; let last = $last) {
+                                        <section class="policy-item">
+                                            <h2>{{ policy.title }} <span class="policy-requirement">{{ policy.isOptional ? 'Optional' : 'Required' }}</span></h2>
+                                            @if (policy.subtitle) { <p class="policy-subtitle">{{ policy.subtitle }}</p> }
+                                            <mat-checkbox [required]="!policy.isOptional" [formControlName]="policy.formControlName" (change)="onPolicyCheckboxChange(policy.id, $event.checked)">{{ policy.checkboxLabel }}</mat-checkbox>
+                                            <button mat-button type="button" class="policy-read-more" [attr.aria-expanded]="expandedPolicyId === policy.id" [attr.aria-controls]="'policy-details-' + policy.id" (click)="togglePolicyDetails(policy.id)">{{ expandedPolicyId === policy.id ? 'Hide details' : 'Read more' }}</button>
+                                            <div class="policy-details" [id]="'policy-details-' + policy.id" [hidden]="expandedPolicyId !== policy.id">
+                                                @for (item of policy.content; track $index) { <div [innerHTML]="item"></div> }
+                                            </div>
+                                        </section>
+                                        @if (!last) { <mat-divider></mat-divider> }
+                                    }
+                                </div>
+                                <p class="setup-note">You can change optional analytics and marketing choices in Settings.</p>
+                                <div class="onboarding-actions">
+                                    <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
+                                    <button mat-flat-button type="submit" [disabled]="!termsFormGroup.valid || isLoading || !user">
+                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : 'Save and continue' }}</span></span>
                                     </button>
-
-                                    <mat-expansion-panel class="policy-details-panel" [expanded]="expandedPolicyId === policy.id"
-                                        (opened)="expandedPolicyId = policy.id"
-                                        (closed)="expandedPolicyId = expandedPolicyId === policy.id ? null : expandedPolicyId">
-                                        <ng-container *ngFor="let item of policy.content">
-                                            <div [innerHTML]="item"></div>
-                                        </ng-container>
-                                    </mat-expansion-panel>
-                                </section>
-                                <mat-divider *ngIf="!last"></mat-divider>
-                            </ng-container>
-                        </div>
-
-                        <div class="qs-form-actions onboarding-actions">
-                            <button mat-stroked-button type="button" class="qs-mat-warn" [disabled]="isLoading" (click)="logout()">Logout</button>
-                            <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading"
-                                (click)="onTermsSubmit()">
-                                @if (isLoading) {
-                                Processing...
-                                } @else {
-                                Next
-                                }
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </mat-step>
-
-            <!-- Step 2: Pricing -->
-            <mat-step label="Plan">
-                <div class="step-content pricing-step">
-                    <app-pricing
-                        [isOnboarding]="true"
-                        [onboardingUser]="user"
-                        (loadingStateChange)="onPricingLoadingChange($event)"
-                        (planSelected)="onPlanSelected()"></app-pricing>
-
-                    <div class="qs-form-actions onboarding-actions">
-                        <button mat-stroked-button type="button" class="qs-mat-primary" matStepperPrevious [disabled]="isLoading || isPricingLoading">Back</button>
-                        <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading || isPricingLoading" (click)="finishOnboarding()">Continue to
-                            {{ completionLabel }}</button>
-                    </div>
-                </div>
-            </mat-step>
-        </mat-horizontal-stepper>
+                                </div>
+                            </form>
+                        }
+                        @case ('plan') {
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">A little room to grow.</h1>
+                            <p class="lead">{{ completionHint() }}</p>
+                            <app-pricing [isOnboarding]="true" [onboardingUser]="user"
+                                (loadingStateChange)="onPricingLoadingChange($event)" (planSelected)="onPlanSelected()"></app-pricing>
+                            <div class="onboarding-actions">
+                                <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="back()">Back</button>
+                                <button mat-flat-button type="button" [disabled]="isLoading || isPricingLoading || !user" (click)="finishOnboarding()">
+                                    <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Finishing setup…' : 'Continue to ' + completionLabel }}</span></span>
+                                </button>
+                            </div>
+                        }
+                    }
+                </section>
+            }
+            @if (errorMessage()) { <p class="onboarding-error" role="alert">{{ errorMessage() }}</p> }
+        </div>
     </mat-card>
-</div>
+</main>
