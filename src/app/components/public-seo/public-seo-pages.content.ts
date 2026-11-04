@@ -1299,7 +1299,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'history',
             title: 'Import older Garmin history first',
-            copy: 'For workouts missing from Quantified Self, request Garmin history before sending them to Suunto. Garmin allows the latest rolling five years, with one history request every 30 days. Imports can arrive over hours or days.',
+            copy: 'For workouts missing from Quantified Self, request Garmin history before sending them to Suunto. Garmin allows the latest rolling five years, with one history request every 30 days. Garmin sends available records separately after accepting history requests.',
           },
           {
             icon: 'description',
@@ -1321,7 +1321,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does Garmin to Suunto sync include my old Garmin history?',
-        answer: 'Enabling automatic sync does not send workouts already saved in Quantified Self. Use Send past activities under Suunto in Services for those workouts. If older workouts are missing, import Garmin history first; the available window is the latest rolling five years and imports can take hours or days.',
+        answer: 'Enabling automatic sync does not send workouts already saved in Quantified Self. Use Send past activities under Suunto in Services for those workouts. If older workouts are missing, import Garmin history first; the available window is the latest rolling five years. Garmin sends available records separately; request acceptance does not confirm delivery.',
       },
       {
         question: 'Can I sync past activities while automatic sync is off?',

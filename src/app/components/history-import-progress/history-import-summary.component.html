@@ -20,11 +20,11 @@
       @if (progress.requestOnly) {
         @if (progress.canDismiss) { Request processing has finished with issues. Counts are not failure totals. }
         Counts describe scheduled requests, not records received. Garmin sends records separately after accepting requests.
-        Delivery may take hours or days; delivery completion is not tracked here.
+        Request acceptance does not confirm delivery; delivery completion is not tracked here.
       } @else if (progress.canDismiss) {
         Processing has finished with issues. Counts shown are items or requests, not failure totals.
       } @else if (progress.kind === 'requested') {
-        History requested. Provider delivery may take hours or days.
+        History requested. Available records are delivered separately.
       } @else {
         Counts describe processing, not complete data coverage.
       }

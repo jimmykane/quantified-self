@@ -506,8 +506,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-coros`)).toBe('2026-11-01');
-    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
+    // History wording separates request acceptance from delivery without a duration estimate.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-11-03');
     // COROS guide clarifies the history limit and keeps its setup tab through signup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');

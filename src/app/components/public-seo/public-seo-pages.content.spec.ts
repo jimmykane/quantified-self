@@ -564,6 +564,8 @@ describe('public-seo-pages.content', () => {
     expect(garminGuideCopy).toContain('Send past activities');
     expect(garminGuideCopy).toContain('Preview sends nothing');
     expect(garminGuideCopy).toContain('latest rolling five years');
+    expect(garminGuideCopy).toContain('Garmin sends available records separately');
+    expect(garminGuideCopy).not.toMatch(/hours\s+(?:or|to)\s+days/i);
     expect(garminGuideCopy).toContain('Retained FIT activities only');
     expect(garminGuideCopy).toContain('Scheduling complete confirms queueing, not delivery');
     expect(garminGuideCopy).toContain('Scheduled and Could not schedule');

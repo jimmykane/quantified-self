@@ -26,7 +26,7 @@ describe('history import progress presentation', () => {
     const result = view(projection('requested', false), ServiceNames.GarminAPI);
     expect(result.active).toBe(false);
     expect(result.label).toBe('History requested');
-    expect(result.items[0].steps[0].description).toContain('delivery may take hours or days');
+    expect(result.items[0].steps[0].description).toContain('delivery is not confirmed');
     expect(result.items[0].kind).toBe('requested');
     expect(result.items[0].requestOnly).toBe(true);
     expect(result.items[0].steps[0].countLabel).toBe('requests scheduled');

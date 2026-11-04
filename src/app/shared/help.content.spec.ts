@@ -122,6 +122,8 @@ describe('help.content', () => {
     expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
     expect(copy).toContain('QS does not promise a completion time from those counts');
     expect(copy).toContain('not an expected finish date');
+    expect(copy).toContain('Garmin sends available records separately; request acceptance does not confirm delivery');
+    expect(HELP_SECTIONS.map(section => section.content).join('\n')).not.toMatch(/hours\s+(?:or|to)\s+days/i);
   });
 
   it('explains shared provider import progress and distinguishes requests from delivery', () => {

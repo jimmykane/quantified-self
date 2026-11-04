@@ -78,7 +78,7 @@ Garmin cards say **Requesting history** or **Waiting
 to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
 Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
 accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
-separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
+separately after accepting requests; request acceptance does not confirm delivery and completion is not tracked here. Submitted
 requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
 processing finished**, never that records have finished importing. All terminal context, including failed/skipped results,
 expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
@@ -277,7 +277,7 @@ retry code until accepted runs drain. Do not roll back the manual cursor/retry s
 
 | Provider | Shared operations used by manual and connection imports | Completion |
 | --- | --- | --- |
-| Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery can take hours or days |
+| Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery is not confirmed |
 | Suunto | Activity history queue admission, Sleep windows, 24/7 Health windows, explicitly included saved-route library | Processed by existing ingestion workers |
 | COROS | Activity history queue admission, combined daily Sleep/Health requests | Processed by existing ingestion workers |
 | Wahoo | Paginated eligible FIT-backed workout history | Processed by existing ingestion workers |

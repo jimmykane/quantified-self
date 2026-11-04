@@ -26,7 +26,7 @@
     } @else if (backgroundImportNeedsAttention) {
     Some history could not be imported. Check History import in Connections for details and retry options.
     } @else if (garminRequests) {
-    History requests have been sent to Garmin. Delivery may take hours or days; this status does not confirm all activities have arrived.
+    History requests have been sent to Garmin. Garmin sends available records separately; this status does not confirm all activities have arrived.
     } @else {
     Your selected history has been processed.
     }
@@ -229,7 +229,7 @@
     <mat-checkbox formControlName="accepted" class="qs-checkbox-primary" (change)="onHistoryConfirmationChange()">
       <span class="checkbox-label">
         @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
-        I understand this may take hours to days.
+        I understand this import continues in the background.
         }
         @if (serviceName === serviceNames.GarminAPI) {
         I understand I can only import once every {{garminCooldownDays}} days (Garmin API limit).

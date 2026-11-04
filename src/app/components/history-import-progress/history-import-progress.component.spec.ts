@@ -149,7 +149,7 @@ describe('shared history import surfaces', () => {
     expect(host.textContent).not.toContain('items or requests');
     expect(host.textContent).toContain('Counts describe scheduled requests, not records received');
     expect(host.textContent).toContain('Garmin sends records separately after accepting requests');
-    expect(host.textContent).toContain('Delivery may take hours or days; delivery completion is not tracked here');
+    expect(host.textContent).toContain('Request acceptance does not confirm delivery; delivery completion is not tracked here');
   });
   it.each(['queued', 'requesting', 'retrying'])('labels Garmin %s progress as requests across shared surfaces', async status => {
     const state = await setup(); state.sources.set([{serviceName: ServiceNames.GarminAPI, projection: projection(status, true, 1)}]);
