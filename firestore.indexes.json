@@ -1789,6 +1789,16 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "pushState",
+      "fieldPath": "dueAt",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
+    },
+    {
+      "collectionGroup": "pushState",
+      "fieldPath": "deliveryDueAt",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
+    },
     { "collectionGroup": "stripeBillingJobs", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     {"collectionGroup": "events", "fieldPath": "stats", "indexes": []},
     {"collectionGroup": "activities", "fieldPath": "stats", "indexes": []},

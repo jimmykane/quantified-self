@@ -31,6 +31,8 @@ export const FUNCTIONS_MANIFEST = {
     grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
     sendTestPushNotification: { name: 'sendTestPushNotification', region: 'europe-west2' },
+    sendHistoryImportNotification: { name: 'sendHistoryImportNotification', region: 'europe-west2' },
+    sendActivitySyncNotifications: { name: 'sendActivitySyncNotifications', region: 'europe-west2' },
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },

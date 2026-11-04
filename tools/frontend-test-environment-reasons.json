@@ -131,6 +131,10 @@
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
   },
+  "src/app/services/app.notification-preferences.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed, injected Auth/Firestore, signals and DestroyRef to verify account-scoped category listeners, transaction retries and stale-session cancellation."
+  },
   "src/app/services/app.push.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection, Angular effects and DestroyRef to verify owner-isolated device subscriptions, browser permissions, key rotation and Auth cleanup with mocked Firebase boundaries."

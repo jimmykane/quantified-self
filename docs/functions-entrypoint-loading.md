@@ -39,6 +39,44 @@ when the updated email is not part of a marketing campaign. Its existing 256 MiB
 change needs a separately approved deployment and production memory check. The former `projectEventTagCatalog` endpoint
 has since been retired and is excluded from discovery. Targets absent from the map use the complete entrypoint.
 
+## History-import notification isolation
+
+`sendHistoryImportNotification` loads directly from `web-push/history` and is the 193rd discovery export.
+Its Gen 2 Firestore written trigger observes `connectionHistoryImports/{runId}` with retry enabled, 256 MiB,
+30 seconds, concurrency 20, maximum two instances, zero minimum instances and `europe-west2`. This sender, the activity-sync sender
+and the existing self-test sender bind `WEB_PUSH_VAPID_KEYPAIR`; admission callables/workers do not bind it.
+The compiled check verifies exact descriptor equality with full discovery and these resource/trigger options.
+
+Three isolated Node 22.23.3 cold imports on 2026-11-03 measured a median 239 ms, 88.1 MiB RSS and one export
+(1,017 loaded modules). These are local import measurements, not deployed latency or delivery guarantees.
+No provider worker, task queue or schedule changes. See the [Web Push runbook](web-push-notifications.md#manual-history-import-completion)
+for durable at-most-once attempts, lifecycle fences, monitoring and separately authorized deployment/activation.
+
+## Activity-sync notification isolation
+
+`sendActivitySyncNotifications` is the 194th discovery export and loads directly from `web-push/activity`.
+It is a Gen 2 UTC minute scheduler in `europe-west2`, 256 MiB, timeout 120 seconds, concurrency one,
+maximum one instance, zero minimum instances, Scheduler retry count zero and only `WEB_PUSH_VAPID_KEYPAIR`.
+The compiled check compares its full-discovery descriptor and resource/trigger options. It queries bounded private
+pending batches; provider imports call the admission helper without loading the sender or binding a signing secret.
+Three isolated Node 22.23.3 cold imports on 2026-11-03 measured median 202 ms, 88.1 MiB RSS, 990 modules and one export;
+these local startup measurements do not establish deployed latency.
+The [Web Push runbook](web-push-notifications.md#activity-rollout-and-rollback) lists all changed runtime owners and
+requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
+
+## Activity-delivery notification isolation
+
+`queueActivitySendNotification` and `queueAutomaticDeliveryNotification` load from `web-push/delivery-admission`;
+`sendActivityDeliveryNotifications` loads from `web-push/delivery`. Full discovery adds three exports. The admission
+triggers retain retry-enabled Firestore written descriptors (activitySends and failed_jobs), 256 MiB, 60 seconds,
+concurrency ten, max two and min zero, with no secret. The UTC minute scheduler uses 256 MiB, 120 seconds,
+concurrency/max one, min zero, zero schedule retries and only the existing VAPID secret. All run in europe-west2.
+Three isolated Node 22.23.3 samples per target on 2026-11-04 measured median startup of 223 ms / 87.3 MiB RSS
+for each admission trigger and 217 ms / 88.6 MiB for the sender, each exposing exactly one endpoint. These local
+measurements do not establish deployed latency. Full compiled verification covers 197 endpoints.
+The compiled descriptor check covers isolated equivalence; the [delivery runbook](web-push-notifications.md#delivery-rollout-and-rollback)
+requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
+
 ## Derived-metrics observer isolation
 
 `observeDerivedMetricsHealth` loads directly from `derived-metrics/monitoring-schedule`. This new Gen 2 read-only

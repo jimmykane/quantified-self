@@ -114,6 +114,7 @@ export const wahooAPIWebhook = functions.region('europe-west2').runWith({
       ...parsed,
       id,
       firebaseUserID,
+      activityNotificationOrigin: 'live',
     }, 'immediate');
     res.status(200).send();
   } catch (error) {

@@ -143,7 +143,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       description: 'Route rendering defaults',
       icon: 'map',
     },
-    { id: 'notifications', label: 'Notifications', description: 'Device permissions and test notifications', icon: 'notifications' },
+    { id: 'notifications', label: 'Notifications', description: 'Categories, device permissions and test notifications', icon: 'notifications' },
     {
       id: 'privacy',
       label: 'Privacy & emails',

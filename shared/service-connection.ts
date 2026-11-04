@@ -61,6 +61,9 @@ export interface ServiceDisconnectRetryDetails {
 }
 
 export interface ServiceConnectionMetaFields {
+  /** Server-owned cutoffs for recent live-sync notifications, never history catch-up. */
+  activityNotificationConnectedAtMs?: number;
+  activityNotificationHistoryEndMs?: number;
   /** Garmin's server-owned lower bound for automatic recorded-activity sending. */
   activitySyncCutoffMs?: number;
   connectionHistoryImport?: ConnectionHistoryStatusProjection;

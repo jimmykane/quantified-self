@@ -59,6 +59,20 @@ describe('Suunto History to Queue', () => {
     });
 
     describe('addSuuntoAppHistoryToQueue', () => {
+    it.each(['valid', 'beta', 'impersonated', 'legacy', 'forged origin'])('handles %s notification consent at the callable boundary', async kind => {
+      const target = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002' };
+      const input: any = { ...createMockRequest(), data: { startDate: '2026-10-01', endDate: '2026-10-02' } };
+      input.auth = { ...input.auth, token: kind === 'impersonated' ? { impersonatedBy: 'admin' } : {} };
+      input.rawRequest = { get: () => kind === 'beta' ? 'https://beta.quantified-self.io' : 'https://quantified-self.io' };
+      input.data = { ...input.data, background: kind !== 'legacy', notification: { ...target, ...(kind === 'forged origin' ? { origin: 'https://quantified-self.io' } : {}) } };
+      if (kind === 'valid') {
+        await addSuuntoAppHistoryToQueue(input as any);
+        expect(vi.mocked(startManualActivityHistory).mock.calls[0][4]).toEqual({ ...target, origin: 'https://quantified-self.io' });
+      } else {
+        await expect(addSuuntoAppHistoryToQueue(input as any)).rejects.toMatchObject({ code: ['beta', 'impersonated'].includes(kind) ? 'permission-denied' : 'invalid-argument' });
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+      }
+    });
         it('accepts a background request without scanning provider history in the callable', async () => {
             const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
             vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
