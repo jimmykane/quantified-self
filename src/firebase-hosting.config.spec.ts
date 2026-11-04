@@ -448,6 +448,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
+  it('records the GPX comparison copy update in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-04');
+  });
+
   it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');

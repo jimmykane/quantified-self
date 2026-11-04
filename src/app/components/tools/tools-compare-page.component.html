@@ -11,9 +11,9 @@
   } @else if (showGuestExperience()) {
   <section class="hero-section" aria-labelledby="tools-compare-title">
     <p class="eyebrow">Tools / Compare</p>
-    <h1 id="tools-compare-title">Compare FIT, GPX, TCX, JSON, and SML files</h1>
+    <h1 id="tools-compare-title">Compare GPX and FIT files</h1>
     <p class="hero-copy">
-      Create one saved benchmark event from multiple source files and open benchmark reports on the compare page.
+      Compare two or more recordings of the same workout to review GPS tracks and recorded measurements. Save the comparison to your account for later review.
     </p>
   </section>
 
@@ -24,12 +24,12 @@
           <mat-icon>lock</mat-icon>
         </div>
         <mat-card-title id="tools-compare-sign-in-title">Sign in to compare files</mat-card-title>
-        <mat-card-subtitle>Benchmark comparisons are saved to your account</mat-card-subtitle>
+        <mat-card-subtitle>File comparison is available on Starter</mat-card-subtitle>
       </mat-card-header>
 
       <mat-card-content>
         <p class="guest-auth-copy">
-          Comparison files are handled after sign-in so saved events, reports, and source metadata stay attached to your account.
+          Sign in to upload your recordings and save a comparison. Uploads and new comparisons use your activity allowance.
         </p>
         <div class="guest-auth-actions">
           <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn(guestSignInRedirectUrl, 'guest_cta')">
@@ -44,9 +44,9 @@
   <section class="guest-workflow-panel" aria-labelledby="tools-compare-workflow-title">
     <div class="section-heading">
       <p class="eyebrow">Benchmark workflow</p>
-      <h2 id="tools-compare-workflow-title">Review file recordings without rebuilding a dashboard</h2>
+      <h2 id="tools-compare-workflow-title">Compare GPX tracks from the same workout</h2>
       <p class="section-copy">
-        Use the compare tool for device reviews, firmware checks, coaching notes, and repeatable FIT, GPX, TCX, JSON, or SML file tests.
+        For benchmark reports, use timestamped recordings with overlapping times. FIT, TCX, JSON and SML recordings are supported too.
       </p>
     </div>
 
@@ -56,10 +56,10 @@
           <div mat-card-avatar class="tool-avatar">
             <mat-icon>upload_file</mat-icon>
           </div>
-          <mat-card-title>File-based comparisons</mat-card-title>
+          <mat-card-title>Choose two or more recordings</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Upload two or more FIT, GPX, TCX, JSON, or SML recordings after sign-in and create one saved benchmark event.</p>
+          <p>For example, compare GPX recordings from two devices used on the same ride or run. You can also compare GPX with supported FIT, TCX, JSON or SML recordings.</p>
         </mat-card-content>
       </mat-card>
 
@@ -68,10 +68,10 @@
           <div mat-card-avatar class="tool-avatar">
             <mat-icon>query_stats</mat-icon>
           </div>
-          <mat-card-title>Reviewer metrics</mat-card-title>
+          <mat-card-title>Review tracks and recorded differences</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Comparison rows can show devices, activity type, distance, ascent, descent, and GNSS, heart-rate, and altitude benchmark error metrics.</p>
+          <p>Review GPS tracks and compare measurements available in both recordings. Heart-rate and altitude comparisons depend on the data the files contain.</p>
         </mat-card-content>
       </mat-card>
 
@@ -80,10 +80,10 @@
           <div mat-card-avatar class="tool-avatar">
             <mat-icon>rate_review</mat-icon>
           </div>
-          <mat-card-title>Device review notes</mat-card-title>
+          <mat-card-title>Save comparisons for later review</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Open benchmark reports on this page, add comparison notes, and keep stable device colors for reviewer tables.</p>
+          <p>Reopen saved comparisons and benchmark reports, add review notes and keep consistent device colors.</p>
         </mat-card-content>
       </mat-card>
     </div>
