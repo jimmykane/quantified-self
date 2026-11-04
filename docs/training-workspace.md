@@ -2422,7 +2422,10 @@ exit. A successful workout save selects its destination scope, including standal
 native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. The workout
 date uses the app's localized Material date picker while persisting the unchanged `YYYY-MM-DD` calendar label; clearing or
 typing an invalid value blocks saving instead of retaining the previous date. Save/Cancel
-stay in a sticky, safe-area-aware footer for long mobile editors. Plan/workout forms are unboxed sections, and editable
+stay in a sticky, safe-area-aware footer for long mobile editors. The footer uses the app shell's shared Material
+surface, backed by the theme's lowest surface to stay opaque while scrolling in light and dark mode. Visual fixtures
+include the app shell rather than the differently colored document body. This presentation-only change has no MCP
+read, mutation, consent, schema, or provider-delivery impact. Plan/workout forms are unboxed sections, and editable
 steps and repeat blocks reuse the same compact-row primitive with labelled headings and projected remove controls.
 The revision-history section also uses that primitive, while destructive plan confirmation retains its Material card.
 Fieldsets, grid children, and repeat rows allow shrinking

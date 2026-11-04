@@ -539,7 +539,9 @@
   z-index: 2;
   gap: 8px;
   padding: 12px 0 max(12px, env(safe-area-inset-bottom));
-  background: var(--mat-sys-surface);
+  // Match the app shell; back its translucent light surface so scrolled fields cannot bleed through.
+  background: linear-gradient(var(--mat-sys-surface), var(--mat-sys-surface)),
+    var(--mat-sys-surface-container-lowest);
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
