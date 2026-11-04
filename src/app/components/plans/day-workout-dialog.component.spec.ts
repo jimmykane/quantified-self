@@ -133,6 +133,65 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+  it('reviews a replacement, saves the same workout with revision guards and preserves provider preferences', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    const original = { schemaVersion: 1 as const, id: 'existing-workout', planId: null, localDate: '2026-10-28',
+      title: 'Original strength', structure: response('original').draft!.structure, lifecycle: 'planned' as const,
+      revision: 3, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(data, { initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining),
+      replacement: { id: original.id, revision: original.revision, title: original.title }, dailyDelivery: { enabled: true, providers: ['garmin'] } });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('only after approval');
+    component.set('sport', ActivityTypes.Running); expect(component.controls().sport).toBe(ActivityTypes.StrengthTraining);
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(generate.mock.calls[0][1].replaceWorkout).toEqual({ id: original.id, revision: 3 });
+    expect(mutate).not.toHaveBeenCalled(); expect(component.primaryLabel()).toBe('Replace workout');
+    expect(component.showDailyDelivery()).toBe(false);
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'replacement-review');
+    mutate.mockRejectedValueOnce(Error('Response lost')).mockResolvedValue({ mutationId: 'saved', state: { ...schedule.value.state, revision: 8 },
+      plans: [], workouts: [{ ...original, title: 'Replacement strength', revision: 4 }], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
+    await component.add(); expect(component.saveUncertain()).toBe(true);
+    expect(component.primaryLabel()).toBe('Retry replacement');
+    await component.add(); fixture.detectChanges();
+    expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
+    expect(mutate.mock.calls[0][0]).toMatchObject({ expectedRevisions: expect.arrayContaining([
+      { scope: 'state', id: 'current', revision: 7 }, { scope: 'workout', id: original.id, revision: 3 }]),
+      operation: { kind: 'update-workout', workoutId: original.id, planId: null, localDate: original.localDate } });
+    expect(mutateWithDelivery).not.toHaveBeenCalled();
+    expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
+    expect(component.savedWorkoutId()).toBe(original.id);
+    expect(fixture.nativeElement.textContent).toContain('Workout replaced');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'regenerated-saved');
+  });
+  it('blocks a changed replacement and keeps the original when AI recommends rest', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA), original = { schemaVersion: 1 as const, id: 'existing-workout', planId: null,
+      localDate: '2026-10-28', title: 'Original strength', structure: response('original').draft!.structure,
+      lifecycle: 'planned' as const, revision: 3, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(data, { initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining),
+      replacement: { id: original.id, revision: 3, title: original.title } });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    generate.mockImplementation(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null }));
+    await component.generate(); expect(component.primaryLabel()).toBe('Keep current workout');
+    await component.primaryAction(); expect(close).toHaveBeenCalled(); expect(setCalendarRestDay).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 4 }] });
+    expect(component.replacementCurrent()).toBe(false); expect(component.approvalValid()).toBe(false);
+    generate.mockClear(); await component.generate(); expect(generate).not.toHaveBeenCalled();
+  });
+  it('uses persistent daily regeneration without claiming an included allowance', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    const regenerateSuggestion = vi.fn(async request => response(request.requestId));
+    Object.assign(data, { regenerateSuggestion, dailyDelivery: { enabled: true, providers: ['garmin'] }, initialControls: defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining) });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(regenerateSuggestion).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(component.primaryLabel()).toBe('Add & send'); component.setSkipSendingToday(true);
+    expect(component.primaryLabel()).toBe('Add workout'); expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
+    expect(fixture.nativeElement.textContent).not.toContain('Assistant allowance unchanged');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'regenerated-review');
+  });
   it('explains a standalone calendar rest day and keeps the rest result without another generation', async () => {
     TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => of({ schemaVersion: 1, localDate: '2026-10-28', isRestDay: true, revision: 1 });
     const fixture = await render(); const component = fixture.componentInstance;

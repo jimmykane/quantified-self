@@ -1,8 +1,8 @@
 @if (eligible()) {
   <section aria-label="Daily workout suggestion" class="daily-row">
-    <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false" [mobileActionFullWidth]="!!plannedWorkout()">
+    <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false" [mobileActionFullWidth]="!!plannedWorkout() || canRegenerate()">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
-      @if (status()?.state === 'ready') { <small>Included with Pro · {{ status()?.result?.kind === 'event-advice' ? 'guidance only' : 'review before adding' }}</small> }
+      @if (status()?.state === 'ready') { <small>{{ includedSuggestion() ? 'Included with Pro' : 'Regenerated' }} · {{ status()?.result?.kind === 'event-advice' ? 'guidance only' : 'review before adding' }}</small> }
       @if (status()?.state === 'ready' && status()?.result?.kind === 'workout' && deliveryPreferences().enabled) {
         <div class="delivery-preference"><small>After approval · {{ deliveryLabel() }}</small><button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Change</button></div>
       }
@@ -22,6 +22,7 @@
         <button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Set up</button>
       } @else {
         @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">{{ status()?.result?.kind === 'event-advice' ? 'View guidance' : 'Review' }}</button> }
+        @if (canRegenerate()) { <button mat-button appHapticTap [disabled]="busy()" (click)="review(true)">Regenerate</button> }
         @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }
         @if (waitingForData()) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button> }
         @if (status()?.state !== 'ready' && !waitingForData() && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }

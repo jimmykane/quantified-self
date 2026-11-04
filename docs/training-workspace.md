@@ -5866,6 +5866,34 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Pro daily workout suggestion
 
+**Explicit regeneration (2026-11-04).** Today offers Regenerate for a ready workout/rest suggestion, and for exactly
+one planned, supported-sport workout. It opens the existing options/review dialog; opening alone never invokes the model.
+Event-day guidance, recorded activity and authored rest coverage are unchanged. A ready suggestion uses the new strict
+first-party `daily-suggestion/regenerate` action on `generateDayWorkout`. It calls the ordinary manual generator with its
+request receipt, bounded lease and Assistant billing-period quota. The private daily store compares the previous result ID
+and current saved preferences before replacing the result. Same-request retries reuse the completed manual response;
+concurrent/stale replacements, dismissals, account deletion and date/zone changes cannot overwrite newer intent.
+Failures preserve the previous daily result. The charged daily receipt is never reset. Refreshed result IDs survive the
+existing validated session cache, and regeneration adds no focus listener, polling or background generation.
+
+Saved-workout regeneration includes an optional strict `replaceWorkout` identity/revision in the private manual request,
+bound into its fingerprint. The bounded Training context reader verifies owner, date, plan, sport, planned lifecycle,
+revision and absence of a completion record before model admission. The identity-free replacement summary tells the model
+to propose an alternative to that one session while still considering other training. Options lock sport/date/plan and
+Training context. Approval reuses `update-workout` with both schedule and workout revisions, retaining workout ID,
+history, strength companion semantics and existing sync settings. It never deletes/recreates the workout or adds new
+provider consent. Lost-save retries keep the same mutation. Rest advice leaves the saved workout intact. Multiple planned
+workouts offer Open instead of guessing a replacement target. Regular replacement updates may reconcile existing provider
+sync; the review discloses this and saved-state Review sync remains available.
+
+Regenerated daily suggestions retain saved provider-format context and the existing Add & send envelope; per-review
+Skip sending today remains ephemeral. Saved-workout replacement omits that create-only envelope. No new delivery path,
+queue or provider contract is introduced. MCP impact: no exposed recipe, tool, scope or proposal change; replacements use
+existing revision-bound workout updates and read projections. Emulator coverage reads updated strength/endurance recipes
+through the strict MCP read schemas, verifies same-ID save/replay and rejects stale updates. This change requires only
+the existing `generateDayWorkout` function to be deployed with the frontend; no Rules, indexes or plugin refresh.
+
+
 Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
 provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
 generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing

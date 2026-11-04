@@ -110,6 +110,33 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
+  it('offers Regenerate for one saved workout and opens an explicit replacement review without generating immediately', async () => {
+    const { fixture, request, open, workouts } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    workouts.next([savedWorkout()]); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(0); fixture.detectChanges();
+    request.mockResolvedValue({ localDate: '2026-10-30', state: 'planned' });
+    expect(fixture.nativeElement.textContent).toContain('Regenerate');
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList.contains('compact-row-host--mobile-action-full')).toBe(true);
+    await fixture.componentInstance.review(true);
+    expect(open).toHaveBeenCalledWith('owner', '2026-10-30', ActivityTypes.Running, expect.objectContaining({
+      replacement: { id: 'saved-workout', revision: 1, title: 'Saved easy run' },
+      initialControls: expect.objectContaining({ destinationPlanId: null, sport: ActivityTypes.Running }) }));
+    expect(request.mock.calls.every(([, action]) => action === 'status')).toBe(true);
+    workouts.next([savedWorkout(), savedWorkout({ id: 'second' })]); fixture.detectChanges();
+    expect(fixture.componentInstance.canRegenerate()).toBe(false);
+  });
+  it('opens regeneration options from a ready suggestion and stops if fresh coverage now blocks it', async () => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready',
+      controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), result: { requestId: 'daily-suggestion:2026-10-30',
+        kind: 'rest', observedAt: new Date().toISOString(), rationale: 'Rest.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } };
+    const { fixture, request, open } = setup(true, ready); request.mockResolvedValue(ready);
+    await fixture.componentInstance.review(true);
+    expect(open.mock.calls[0][3]).toMatchObject({ initialControls: ready.controls, regenerateSuggestion: expect.any(Function) });
+    expect(open.mock.calls[0][3]).not.toHaveProperty('initialResult');
+    fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, requestId: 'day-workout:replacement' } }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Regenerated'); expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
+    open.mockClear(); request.mockResolvedValue({ localDate: '2026-10-30', state: 'completed' });
+    await fixture.componentInstance.review(true); expect(open).not.toHaveBeenCalled();
+  });
   it('shows import deferral and resumes once from shared import completion without refreshing a ready result', async () => {
     const { fixture, importActive, request, setVisible } = setup(true, { localDate: '2026-10-30', state: 'waiting-import' });
     importActive.set(true); fixture.detectChanges();

@@ -929,6 +929,10 @@ describe('help.content', () => {
 
   it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Regenerate** beside a ready suggestion');
+    expect(content).toContain('a failure keeps the previous one');
+    expect(content).toContain('**Replace workout**');
+    expect(content).toContain('Existing workout sync settings still apply');
     expect(content).toContain('blocks automatic generation');
     expect(content).toContain('does not reset the daily allowance');
     expect(content).toContain('reuses the daily status across navigation and reloads');

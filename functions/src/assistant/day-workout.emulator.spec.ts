@@ -1,3 +1,5 @@
+import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
+import { runGenerateDayWorkout } from './day-workout-callable';
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -20,6 +22,102 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('replaces %s in place and reads the new recipe through existing MCP contracts', async sport => {
+    const uid = `replacement-mcp-${randomUUID()}`, user = db.doc(`users/${uid}`), nowMs = Date.parse('2026-10-28T12:00Z');
+    await user.set({}); await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });
+    const strength = sport === ActivityTypes.StrengthTraining ? { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: [
+      { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 } }] }] } : undefined;
+    const structure = strength ? projectStrengthWorkoutToV1({ ...strength, workoutId: 'same-workout', revision: 1 }) : {
+      version: 1 as const, sport, nodes: [{ kind: 'step' as const, id: 'easy', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 1200 }, targets: [] }] };
+    const workout = { workoutId: 'same-workout', planId: null, localDate: controls.localDate, title: 'Original', structure,
+      ...(strength ? { strength } : {}), confirmPlanRangeExtension: false };
+    try {
+      await mutateTrainingScheduleForUser(uid, { mutationId: randomUUID(), expectedRevisions: [{ scope: 'state', id: 'current', revision: 0 }],
+        operation: { kind: 'create-workout', ...workout } }, { db, nowMs });
+      const request = { mutationId: randomUUID(), expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 1 },
+        { scope: 'workout' as const, id: workout.workoutId, revision: 1 }], operation: { kind: 'update-workout' as const, ...workout, title: 'Replacement',
+        ...(strength ? { strength: { ...strength, exercises: [{ ...strength.exercises[0], sets: [{ ...strength.exercises[0].sets[0], ending: { kind: 'repetitions' as const, repetitions: 10 } }] }] } }
+          : { structure: { ...structure, nodes: [{ kind: 'step' as const, id: 'easy', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 1800 }, targets: [] }] } }) } };
+      if (request.operation.strength) request.operation.structure = projectStrengthWorkoutToV1({ ...request.operation.strength, workoutId: workout.workoutId, revision: 2 });
+      const replaced = await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 1 });
+      expect(await mutateTrainingScheduleForUser(uid, request, { db, nowMs: nowMs + 2 })).toEqual(replaced);
+      expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
+      await expect(mutateTrainingScheduleForUser(uid, { ...request, mutationId: randomUUID() }, { db, nowMs: nowMs + 3 })).rejects.toThrow();
+      const workoutRef = JSON.stringify({ kind: 'workout', id: workout.workoutId, createdAtMs: nowMs });
+      const run = (tool: TrainingReadTool) => readTrainingPlans({ tool, arguments: { workoutRef }, uid, connectionId: 'connection', scopes: ['training-plans:read'] },
+        createFirestoreTrainingReads(() => db), { encode: JSON.stringify, decode: JSON.parse });
+      const detail = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse(await run('get_planned_workout_v3'));
+      expect(detail.workout.title).toBe('Replacement'); expect(detail.workout.structure).toEqual(replaced.workouts[0].structure);
+      if (strength) expect(TRAINING_READ_OUTPUTS.get_strength_workout_details.parse(await run('get_strength_workout_details')).details.exercises[0].sets[0].ending)
+        .toEqual({ kind: 'repetitions', repetitions: 10 });
+    } finally { await db.recursiveDelete(user); }
+  }, 30_000);
+  it('uses the real manual receipt to charge explicit daily regeneration once across a lost-response retry', async () => {
+    const uid = `regeneration-quota-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const preferences = { enabled: true, followRoutine: true, controls };
+    await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    try {
+      const store = createDailyWorkoutSuggestionStore(() => db, () => now), token = await store.begin(uid, preferences);
+      const original = response('daily-suggestion:2026-10-28');
+      await store.charge(uid, controls.localDate, token!); await store.finish(uid, controls.localDate, token!, 'ready', controls, original);
+      const finalize = vi.fn(), generate = vi.fn(async () => ({ kind: 'rest', rationale: 'Recovery remains appropriate.' }));
+      const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+        coverage: async () => null, importActive: async () => false, selectSport: async () => controls, context: vi.fn(), generate: vi.fn(), log: vi.fn(),
+        regenerate: (request, identity, defaults) => runGenerateDayWorkout(request, identity, { ...defaults!, now: () => now,
+          store: createDayWorkoutStore(() => db, () => now.getTime()), legal: vi.fn(), reserve: vi.fn(async () => ({ reservationID: 'test' } as never)),
+          finalize, release: vi.fn(), context: async () => ({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], references: [] }), generate }) };
+      const request = { mode: 'daily-suggestion', action: 'regenerate', expectedRequestId: original.requestId,
+        request: { requestId: 'explicit-regeneration', controls } };
+      const first = await runDailyWorkoutSuggestion(request, { auth: { uid }, app: {} }, deps);
+      expect(await runDailyWorkoutSuggestion(request, { auth: { uid }, app: {} }, deps)).toEqual(first);
+      expect(generate).toHaveBeenCalledOnce(); expect(finalize).toHaveBeenCalledOnce();
+      expect(first.result?.requestId).toBe('explicit-regeneration'); expect(await store.begin(uid, preferences)).toBeNull();
+    } finally { await db.recursiveDelete(user); }
+  }, 30_000);
+  it('replaces a daily draft atomically, replays safely, and never reopens the automatic allowance', async () => {
+    const uid = `daily-replace-${randomUUID()}`, user = db.doc(`users/${uid}`);
+    const now = new Date('2026-10-28T12:00Z'), preferences = { enabled: true, followRoutine: true, controls };
+    await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    try {
+      const store = createDailyWorkoutSuggestionStore(() => db, () => now), token = await store.begin(uid, preferences);
+      const original = response('daily-suggestion:2026-10-28'), next = response('replacement-request');
+      await store.charge(uid, controls.localDate, token!);
+      await store.finish(uid, controls.localDate, token!, 'ready', controls, original);
+      await store.replace(uid, preferences, original.requestId, controls, next);
+      expect((await store.read(uid)).status.result).toEqual(next);
+      await store.replace(uid, preferences, original.requestId, controls, next);
+      await expect(store.replace(uid, preferences, original.requestId, controls, response('stale-replacement'))).rejects.toMatchObject({ code: 'aborted' });
+      expect(await store.begin(uid, preferences)).toBeNull();
+      const contenders = await Promise.allSettled(['competing-one', 'competing-two'].map(id => store.replace(uid, preferences, next.requestId, controls, response(id))));
+      expect(contenders.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+      await store.dismiss(uid, controls.localDate);
+      await expect(store.replace(uid, preferences, next.requestId, controls, response('after-dismiss'))).rejects.toMatchObject({ code: 'aborted' });
+      expect((await store.read(uid)).status.state).toBe('dismissed');
+    } finally { await db.recursiveDelete(user); }
+  }, 30_000);
+  it('binds replacement generation to the owned workout, revision, sport, destination and completion state', async () => {
+    const uid = `replace-context-${randomUUID()}`, user = db.doc(`users/${uid}`);
+    await user.set({}); await user.collection('trainingPlanState').doc('current').set({ revision: 1, activePlanId: null });
+    const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1200 }, targets: [] }] };
+    const target = { schemaVersion: 1, planId: null, localDate: controls.localDate, title: 'Original run', lifecycle: 'planned',
+      revision: 2, createdAtMs: 1, updatedAtMs: 1, structure };
+    const ref = user.collection('scheduledWorkouts').doc('original'); await ref.set(target);
+    try {
+      const read = (replacement = { id: 'original', revision: 2 }) => readDayWorkoutTrainingContext(uid, controls, new Date('2026-10-28T12:00Z'), db, replacement);
+      expect((await read()).replacement).toEqual({ title: target.title, localDate: controls.localDate, sport: controls.sport });
+      await expect(read({ id: 'original', revision: 1 })).rejects.toThrow('changed');
+      await expect(read({ id: 'another-owner-workout', revision: 2 })).rejects.toThrow('changed');
+      await ref.update({ localDate: '2026-10-29' }); await expect(read()).rejects.toThrow('changed');
+      await ref.set(target); await user.collection('trainingWorkoutCompletions').doc('original').set({ workoutId: 'original' });
+      await expect(read()).rejects.toThrow('completed');
+      const store = createDayWorkoutStore(() => db), request = { requestId: 'replacement-replay', controls, replaceWorkout: { id: 'original', revision: 2 } };
+      const started = await store.begin(uid, request); if (!('token' in started)) throw Error('Expected lease');
+      await store.finish(uid, request.requestId, started.token, response(request.requestId));
+      expect(await store.begin(uid, request)).toHaveProperty('response');
+      await expect(store.begin(uid, { ...request, replaceWorkout: { id: 'another', revision: 2 } })).rejects.toMatchObject({ code: 'invalid-argument' });
+      await expect(store.begin(uid, { requestId: request.requestId, controls })).rejects.toMatchObject({ code: 'invalid-argument' });
+    } finally { await db.recursiveDelete(user); }
+  }, 30_000);
   it('keeps authored goals but omits recorded progress when Recent activities is turned off', async () => {
     const uid = `goal-source-${randomUUID()}`, user = db.collection('users').doc(uid);
     const now = new Date('2026-10-28T12:00Z');
@@ -50,7 +148,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const callTool: Pick<AssistantMcpSession, 'callTool'>['callTool'] = async (name, args = {}) => ({ structuredContent: name === 'query_activities'
       ? { scanComplete: true, activities: [] } : await read(name as TrainingReadTool, args) });
     const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'A recovery day.' }));
-    const deps: DailyWorkoutSuggestionDependencies = { store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+    const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
       importActive: id => readDailyWorkoutHistoryImportActive(id, db), legal: async () => undefined, pro: async () => true, selectSport: async () => selected,
       coverage: async () => collectDailyWorkoutSuggestionCoverage(selected, { callTool }),
       context: async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
@@ -240,7 +338,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const context = vi.fn(async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
       plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
       usedContext: [], missingContext: [], previousStrength: [], references: [] }));
-    const deps: DailyWorkoutSuggestionDependencies = { store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+    const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
       legal: async () => undefined, pro: async () => true, selectSport: async () => selected, coverage: async () => null,
       importActive: id => readDailyWorkoutHistoryImportActive(id, db), context, generate, log: () => undefined };
     const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };

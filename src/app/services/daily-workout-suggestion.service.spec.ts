@@ -58,6 +58,31 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('persists an explicit regenerated suggestion across reload without another model request', async () => {
+    const { service, call, saved, result } = setup();
+    const initial = result(); service.remember('owner', initial);
+    const next = { ...initial, result: { ...initial.result!, requestId: 'day-workout:regenerated' } };
+    call.mockResolvedValue({ data: next });
+    const request = { requestId: next.result.requestId, controls: initial.controls! };
+    expect(await service.regenerate('owner', initial.result!.requestId, request, () => true)).toEqual(next);
+    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'regenerate',
+      expectedRequestId: initial.result!.requestId, request }, expect.anything());
+    const recreated = setup(saved);
+    expect(recreated.service.cached('owner')?.status).toEqual(next);
+    expect(await recreated.service.request('owner', 'prepare', () => true)).toEqual(next);
+    expect(recreated.call).not.toHaveBeenCalled();
+  });
+  it('keeps the previous cached suggestion when regeneration fails or the account changes', async () => {
+    const { service, call, result, auth } = setup(); const previous = result(); service.remember('owner', previous);
+    call.mockRejectedValueOnce(Error('Unavailable'));
+    await expect(service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true)).rejects.toThrow('Unavailable');
+    expect(service.cached('owner')?.status).toEqual(previous);
+    auth.currentUser = { uid: 'other' };
+    await expect(service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true)).rejects.toThrow();
+    expect(call).toHaveBeenCalledOnce();
+  });
   it('retains versioned event guidance across recreation without another generation ', async () => {
     const { service, call, saved, result } = setup();
     const ready = { ...result(), result: { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-10-30',
