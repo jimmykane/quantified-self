@@ -187,14 +187,14 @@
   --hero-entry-angle: 270deg;
   position: absolute;
   inset: -1px;
-  padding: 1.5px;
+  padding: 1.25px;
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
   background: conic-gradient(from calc(var(--qs-hero-border-angle) + var(--hero-entry-angle)),
-    transparent 0deg 300deg,
-    color-mix(in srgb, var(--hero-flow-color) 12%, transparent) 324deg,
-    color-mix(in srgb, var(--hero-flow-color) 60%, transparent) 346deg,
+    transparent 0deg 314deg,
+    color-mix(in srgb, var(--hero-flow-color) 8%, transparent) 334deg,
+    color-mix(in srgb, var(--hero-flow-color) 45%, transparent) 350deg,
     var(--hero-flow-color) 358deg, transparent 360deg);
   // Only the card outline receives the light; its content remains untouched.
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -237,7 +237,7 @@
 }
 @keyframes heroBorderTravel {
   0% { --qs-hero-border-angle: 0deg; opacity: 0; }
-  5%, 90% { opacity: .9; }
+  5%, 90% { opacity: .45; }
   100% { --qs-hero-border-angle: 360deg; opacity: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -247,10 +247,10 @@
   .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
   .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
   .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
-  // Arrivals are 1.2s apart; two staggered traces each take 2.4s for a full lap.
-  // Both start at the connection point when the incoming leading edge arrives.
-  .hero-border-glow { animation: heroBorderTravel 2.4s linear -.064s infinite; }
-  .hero-border-glow--following { animation-delay: -1.264s; }
+  // Two quiet traces take 4.8s per lap, acknowledging every other 1.2s arrival.
+  // Both still start at the connection point as an incoming leading edge arrives.
+  .hero-border-glow { animation: heroBorderTravel 4.8s linear -.064s infinite; }
+  .hero-border-glow--following { animation-delay: -2.464s; }
   .hero-motion-toggle { display: inline-flex; }
   .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-border-glow { animation-play-state: paused; }
 }
