@@ -605,11 +605,11 @@ node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io
 ```
 
 The last command is offline preview only: no credential access, network or cloud writes.
-For the hourly COROS follow-up, after **separate explicit approval**, deploy the scheduler, ordinary worker and
-existing queue probe, then apply the owned resources using the selected existing email channel:
+For the hourly COROS follow-up, after **separate explicit approval**, deploy the scheduler, ordinary worker,
+existing queue probe and connection-history worker (which consumes the shared admission guard), then apply the owned resources using the selected existing email channel:
 
 ```bash
-npm run firebase -- deploy --project quantified-self-io --only functions:scheduleCOROSSleepSync,functions:processSleepSyncTask,functions:dispatchSleepSyncQueue
+npm run firebase -- deploy --project quantified-self-io --only functions:scheduleCOROSSleepSync,functions:processSleepSyncTask,functions:dispatchSleepSyncQueue,functions:processConnectionHistoryTask
 node tools/health-sleep-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/EXISTING_CHANNEL_ID --apply --confirm-project=quantified-self-io
 ```
 
