@@ -1,4 +1,4 @@
-import { TrainingGoalsService } from '../../../services/training-goals.service';
+import { TrainingGoalsService, type TrainingGoalsState } from '../../../services/training-goals.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { signal } from '@angular/core';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import { TestBed } from '@angular/core/testing';
 import { ViewportScroller } from '@angular/common';
 import { provideRouter, Router } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { vi, expect, it, describe } from 'vitest';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppUserService } from '../../../services/app.user.service';
@@ -43,7 +43,7 @@ const restDayProviders = () => [goalsProvider,
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
-  async function restDaySetup(testGoals?: unknown[]) {
+  async function restDaySetup(testGoals?: unknown[], goalSource?: BehaviorSubject<TrainingGoalsState>) {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const schedule = signal<CurrentTrainingScheduleV1>({
       state: { schemaVersion: 1, revision: 7, activePlanId: null, currentWorkoutCount: 0, updatedAtMs: 1 },
@@ -56,8 +56,8 @@ describe('CalendarDayContextComponent', () => {
       return record;
     });
     const open = vi.fn();
-    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]), testGoals ? { provide: TrainingGoalsService, useValue: { ...goalsProvider.useValue,
-        isOwner: (uid: string) => viewer()?.uid === uid, watch: () => of({ status: 'ready', goals: testGoals }) } } : goalsProvider,
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]), testGoals || goalSource ? { provide: TrainingGoalsService, useValue: { ...goalsProvider.useValue,
+        isOwner: (uid: string) => viewer()?.uid === uid, watch: () => goalSource ?? of({ status: 'ready', goals: testGoals }) } } : goalsProvider,
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, isOwner: (uid: string) => viewer()?.uid === uid } },
       { provide: TrainingPlansService, useValue: { setCalendarRestDay: write } },
       { provide: MatSnackBar, useValue: { open } },
@@ -80,6 +80,20 @@ describe('CalendarDayContextComponent', () => {
     expect(component.dashboardDayIsEmpty()).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('Race day');
     expect(fixture.nativeElement.textContent).not.toContain('Nothing recorded yet');
+  });
+  it.each([false, true])('keeps unknown goal coverage distinct from an empty day (dashboard: %s)', async dashboard => {
+    const goalSource = new BehaviorSubject<TrainingGoalsState>({ status: 'loading', goals: [] });
+    const { fixture, component } = await restDaySetup(undefined, goalSource);
+    fixture.componentRef.setInput('dashboardTile', dashboard); fixture.detectChanges();
+    expect(component.dashboardDayIsEmpty()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Loading goals');
+    expect(fixture.nativeElement.textContent).not.toContain('Nothing recorded yet');
+    goalSource.next({ status: 'error', goals: [] }); fixture.detectChanges();
+    expect(component.dashboardDayIsEmpty()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Goals are unavailable');
+    goalSource.next({ status: 'ready', goals: [] }); fixture.detectChanges();
+    expect(component.dashboardDayIsEmpty()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Nothing recorded yet');
   });
   it('marks and removes calendar rest without a plan, without changing schedule revisions or workouts', async () => {
     const { fixture, component, write, haptics, schedule } = await restDaySetup();

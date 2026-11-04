@@ -13,4 +13,5 @@ export class TrainingGoalsDayComponent {
   readonly isOwner = computed(() => this.goals.isOwner(this.uid()));
   readonly state = toSignal(toObservable(this.uid).pipe(switchMap(uid => this.goals.watch(uid))), { initialValue: { status: 'loading' as const, goals: [] } });
   readonly rows = computed(() => this.state().goals.filter(goal => goal.lifecycle !== 'archived' && trainingGoalMarkerDate(goal) === this.localDate()));
+  readonly isEmpty = computed(() => !this.isOwner() || (this.state().status === 'ready' && !this.rows().length));
 }

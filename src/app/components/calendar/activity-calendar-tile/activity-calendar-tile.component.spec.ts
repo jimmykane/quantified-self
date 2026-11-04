@@ -63,7 +63,7 @@ describe('ActivityCalendarTileComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
       providers: [
-        { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, invalidateProgress: vi.fn() } },
+        { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, open: vi.fn(), invalidateProgress: vi.fn() } },
         { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
@@ -80,6 +80,25 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
+  });
+
+  it.each([false, true])('offers one owner-only Goals action and opens the right account (day context: %s)', async dayContext => {
+    const goals = TestBed.inject(TrainingGoalsService);
+    vi.spyOn(goals, 'isOwner').mockImplementation(uid => uid === viewer()?.uid);
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', dayContext);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const buttons = fixture.nativeElement.querySelectorAll('app-training-goals-button button') as NodeListOf<HTMLButtonElement>;
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].getAttribute('aria-label')).toBe('Goals');
+    if (dayContext) expect(buttons[0].closest('.activity-calendar-view-controls')).toBeTruthy();
+    buttons[0].click(); fixture.detectChanges();
+    expect(goals.open).toHaveBeenCalledExactlyOnceWith(planningUserUid);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-training-goals-button button')).toBeNull();
   });
 
   it('switches the visible Month / 30 days buttons once and disables them during a preference save', async () => {

@@ -145,7 +145,7 @@ export class CalendarDayContextComponent {
     && this.activities().length === 0
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
-    && !(this.goalsDay()?.rows().length)
+    && this.goalsDay()?.isEmpty() === true
     && !this.planPhase()
     && !this.plannedRestDay()
     && (!this.canPlan() || (this.plannedWorkoutsComplete() && this.plannedRows().length === 0)));

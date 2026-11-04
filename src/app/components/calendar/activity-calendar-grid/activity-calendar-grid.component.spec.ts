@@ -10,6 +10,19 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it.each([false, true])('explains flags in the shared legend only when a goal is visible (compact: %s)', async compact => {
+    const fixture = await renderGrid('month', compact, []);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.componentRef.setInput('goalsByDate', { '2026-09-01': { label: 'Next month', count: 1, ariaLabel: '1 goal: Next month' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')).toBeNull();
+    fixture.componentRef.setInput('goalsByDate', { '2026-08-03': { label: 'Race', count: 1, ariaLabel: '1 goal: Race' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')?.textContent).toContain('Goal');
+    fixture.componentRef.setInput('goalsByDate', {}); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-goal')).toBeNull();
+  });
   it.each([false, true])('shows shared goal markers alongside activities with accessible full text (compact: %s)', async compact => {
     const fixture = await renderGrid('month', compact, [createEvent('run', new Date(2026, 7, 3, 8), ActivityTypes.Running, 1800)]);
     fixture.componentRef.setInput('calmMonth', true);

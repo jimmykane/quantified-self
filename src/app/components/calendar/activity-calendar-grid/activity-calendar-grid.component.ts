@@ -48,6 +48,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
   hasVisibleNotes = false;
   hasVisiblePlans = false;
   hasVisibleRestDays = false;
+  hasVisibleGoals = false;
   isMonthPicker = false;
   isDenseDashboardMonth = false;
 
@@ -63,6 +64,7 @@ export class ActivityCalendarGridComponent implements OnChanges {
     this.hasVisibleNotes = this.isCalmGrid && renderedDays.some(day => this.timelineNotesByDate.has(day.dateKey));
     this.hasVisiblePlans = this.isCalmGrid && renderedDays.some(day => !!this.plannedWorkoutsByDate?.[day.dateKey]?.entries.length);
     this.hasVisibleRestDays = this.isCalmGrid && renderedDays.some(day => !!this.plannedWorkoutsByDate?.[day.dateKey]?.restDay);
+    this.hasVisibleGoals = this.isCalmGrid && renderedDays.some(day => !!this.goalsByDate[day.dateKey]);
     this.visibleMonths = months.map(month => ({ ...month,
       weekendBackground: this.weekendColumnBackground(month.weekdays) }));
     this.isDenseDashboardMonth = this.calmMonth && this.compact && this.fillHeight

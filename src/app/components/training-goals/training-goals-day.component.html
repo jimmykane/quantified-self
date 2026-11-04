@@ -1,5 +1,6 @@
 @if (isOwner()) {
   <section aria-label="Calendar goals">
+    @if (state().status === 'loading') { <p class="goal-meta" role="status">Loading goals…</p> }
     @for (goal of rows(); track goal.id) {
       <div class="goal-row"><mat-icon aria-hidden="true">flag</mat-icon><div><p class="goal-title">{{ goal.name }}</p>
         <p class="goal-meta">{{ goal.kind === 'event' ? 'Event' : goal.kind === 'milestone' ? 'Milestone' : 'Ongoing goal starts' }} · {{ goal.priority }} priority · {{ goal.lifecycle }}</p>
@@ -7,7 +8,7 @@
         <button mat-icon-button appHapticTap type="button" [attr.aria-label]="'Edit goal ' + goal.name" (click)="goals.open(uid(), undefined, goal)"><mat-icon>edit</mat-icon></button>
       </div>
     }
-    @if (state().status === 'error') { <p class="goal-error" role="status">Goals are unavailable.</p> }
+    @if (state().status === 'error') { <p class="goal-error" role="status">Goals are unavailable. Open Goals to retry.</p> }
     <button mat-button appHapticTap type="button" (click)="goals.open(uid(), localDate())"><mat-icon>flag</mat-icon>Add goal</button>
   </section>
 }

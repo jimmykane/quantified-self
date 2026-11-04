@@ -126,7 +126,7 @@
     </section>
     }
   </div>
-  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans || hasVisibleRestDays)) {
+  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans || hasVisibleRestDays || hasVisibleGoals)) {
     <div class="activity-calendar-calm-legend" aria-label="Calendar markers">
       @for (family of legendFamilies; track family.id) {
         <span><i [style.background-color]="family.color" aria-hidden="true"></i>{{ family.label }}</span>
@@ -137,6 +137,7 @@
       @if (hasVisibleNotes) { <span><i class="activity-calendar-calm-legend-note" aria-hidden="true"></i>Timeline note</span> }
       @if (hasVisiblePlans) { <span><i class="activity-calendar-calm-legend-plan" aria-hidden="true"></i>Planned workout</span> }
       @if (hasVisibleRestDays) { <span><i class="activity-calendar-calm-legend-rest" aria-hidden="true"></i>Rest day</span> }
+      @if (hasVisibleGoals) { <span class="activity-calendar-calm-legend-goal"><mat-icon aria-hidden="true">flag</mat-icon>Goal</span> }
     </div>
   }
 </section>
