@@ -123,7 +123,6 @@ describe('HomeComponent', () => {
     const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
     expect(visual.querySelector('.hero-provider-wires')?.getAttribute('aria-hidden')).toBe('true');
     expect(visual.querySelector('app-public-feature-preview')).toBeTruthy();
-    expect(visual.querySelector('.hero-geometry')?.getAttribute('aria-hidden')).toBe('true');
     for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);

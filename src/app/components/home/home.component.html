@@ -21,21 +21,12 @@
     </div>
     <div class="hero-visual" [class.hero-motion-paused]="heroMotionPaused()" role="group" aria-label="Supported provider activities flow into Quantified Self">
       <!-- Decorative connection geometry; all data charts remain shared app components. -->
-      <svg class="hero-geometry" viewBox="0 0 760 640" aria-hidden="true" focusable="false">
-        <circle class="hero-geometry-ring" cx="452" cy="320" r="294"></circle>
-        <g class="hero-geometry-orbit">
-          <path d="M 452 18 L 742 320 L 452 622 L 162 320 Z"></path>
-          <path d="M 238 106 H 666 V 534 H 238 Z"></path>
-          <circle cx="452" cy="18" r="4"></circle>
-          <circle cx="162" cy="320" r="3"></circle>
-        </g>
-      </svg>
       <div class="hero-provider-flow">
         <div class="logos-container hero-providers" role="group" aria-label="Supported providers">
           @for (provider of heroProviders; track provider.icon) {
-            <mat-card appearance="outlined" class="hero-provider">
+            <div class="hero-provider">
               <mat-icon [svgIcon]="provider.icon" class="partner-logo" [matTooltip]="provider.tooltip" role="img" [attr.aria-label]="provider.name" aria-hidden="false"></mat-icon>
-            </mat-card>
+            </div>
           }
         </div>
         <svg class="hero-provider-wires hero-provider-wires--desktop" viewBox="0 0 136 336" preserveAspectRatio="none" aria-hidden="true" focusable="false">

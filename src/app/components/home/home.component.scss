@@ -180,7 +180,7 @@
 .hero-product { position: relative; --qs-glass-panel-radius: 16px; }
 .hero-provider-flow { position: relative; z-index: 1; display: grid; grid-template-columns: 92px 136px; align-items: center; min-width: 0; }
 .hero-providers.logos-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
-.hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; --qs-glass-panel-radius: 12px; background: var(--mat-sys-surface-container-lowest); }
+.hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; }
 .hero-provider .partner-logo { width: 72px; height: 25px; }
 .hero-provider-wires { display: block; width: 136px; height: 336px; color: var(--hero-flow-color); overflow: visible; pointer-events: none; }
 .hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -194,11 +194,6 @@
 .hero-aggregate .hero-connection-track { stroke-width: 1.5; opacity: .6; }
 .hero-connection-port { fill: var(--mat-sys-surface); stroke: currentColor; stroke-width: 1.25; }
 .hero-provider-wires--mobile { display: none; }
-.hero-geometry { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; color: var(--hero-flow-color); }
-.hero-geometry path, .hero-geometry-ring { fill: none; stroke: currentColor; stroke-width: .75; opacity: .2; }
-.hero-geometry-ring { stroke-dasharray: 2 9; opacity: .25; }
-.hero-geometry-orbit { transform-origin: 452px 320px; }
-.hero-geometry-orbit circle { fill: currentColor; opacity: .45; }
 .hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
 .hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
 @keyframes heroConnectionFlow {
@@ -216,7 +211,6 @@
   from { r: 5px; opacity: .65; }
   to { r: 14px; opacity: 0; }
 }
-@keyframes heroGeometryOrbit { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: no-preference) {
   .hero-connection { --hero-flow-delay: 0s; }
   .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
@@ -228,9 +222,8 @@
   .hero-aggregate .hero-connection-pulse, .hero-aggregate .hero-connection-halo { animation: heroConnectionFlow 1.2s linear .144s infinite; }
   .hero-aggregate .hero-connection-arrival { animation: heroConnectionArrival 1.2s linear .144s infinite; }
   .hero-aggregation-ripple { animation: heroAggregationRipple 1.2s linear .144s infinite; }
-  .hero-geometry-orbit { animation: heroGeometryOrbit 90s linear infinite; }
   .hero-motion-toggle { display: inline-flex; }
-  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-connection-arrival, .hero-motion-paused .hero-geometry-orbit, .hero-motion-paused .hero-aggregation-ripple { animation-play-state: paused; }
+  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-connection-arrival, .hero-motion-paused .hero-aggregation-ripple { animation-play-state: paused; }
 }
 @media (min-width: 1200px) and (max-width: 1320px) {
   .hero-visual { grid-template-columns: 184px minmax(0, 1fr); }
@@ -248,9 +241,9 @@
   .hero-visual { grid-template-columns: minmax(0, 1fr); padding-block: 0; }
   .hero-provider-flow { grid-template-columns: minmax(0, 1fr); }
   .hero-providers.logos-container { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; width: 100%; }
-  .hero-provider { height: 44px; width: 100%; --qs-glass-panel-radius: 10px; }
+  .hero-provider { height: 44px; width: 100%; }
   .hero-provider .partner-logo { width: 64px; height: 22px; max-width: 84%; }
-  .hero-provider-wires--desktop, .hero-geometry { display: none; }
+  .hero-provider-wires--desktop { display: none; }
   .hero-provider-wires--mobile { display: block; width: 100%; height: 88px; }
   .hero-product { padding: 1rem; }
   .hero-product-header { gap: .25rem; }
