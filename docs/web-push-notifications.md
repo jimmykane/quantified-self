@@ -158,6 +158,9 @@ write, an observed newer local installation from another tab supersedes the pend
 changes are checked again around asynchronous work.
 Permission remains in the original user gesture, before worker waits or category writes. Non-retryable configuration/read
 states offer a support Retry action; blocked permissions and installation requirements retain their browser instructions.
+If registration succeeds but enabling categories fails while others remain active, Retry repeats the incomplete On
+action without turning the device off or requesting permission again. When the switch is still off, On itself retries.
+The pending action is cleared after success, explicit Off, or an account change.
 
 `users/{uid}/config/settings.appSettings.notificationInvitation` is a client-owned versioned UI preference under
 existing private Settings Rules, separate from sender/category consent. A first snooze lasts 30 days; another snooze

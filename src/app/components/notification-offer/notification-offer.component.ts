@@ -24,6 +24,7 @@ export class NotificationOfferComponent {
   private readonly haptics = inject(AppHapticsService);
   private readonly destroy = inject(DestroyRef);
   private readonly workingFor = signal<string | null>(null);
+  private readonly failedOnFor = signal<string | null>(null);
   readonly error = signal('');
   readonly instructionsOpen = signal(false);
   readonly busy = computed(() => !!this.push.operation() || this.invitation.saving() || !!this.preferences.saving() || !!this.workingFor());
@@ -34,8 +35,9 @@ export class NotificationOfferComponent {
     && this.preferences.categories().some(category => category.enabled));
   readonly canTurnOn = computed(() => this.preferences.canEdit() && this.preferences.status() === 'ready'
     && (this.push.state() === 'enabled' || this.push.canEnable()));
-  readonly canRetry = computed(() => !this.push.operation() && (this.preferences.status() === 'error'
-    || this.push.state() === 'unavailable' && !this.push.canEnable()));
+  readonly canRetry = computed(() => !!this.failedOnFor() && this.failedOnFor() === this.invitation.uid() && this.notificationsOn()
+    || !this.push.operation() && (this.preferences.status() === 'error'
+      || this.push.state() === 'unavailable' && !this.push.canEnable()));
   readonly visible = computed(() => {
     const uid = this.invitation.uid();
     if (!uid || this.push.state() === 'impersonating' || this.push.state() === 'signed-out') return false;
@@ -79,7 +81,7 @@ export class NotificationOfferComponent {
     effect(() => {
       this.invitation.uid();
       untracked(() => {
-        this.error.set(''); this.instructionsOpen.set(false); this.workingFor.set(null);
+        this.error.set(''); this.instructionsOpen.set(false); this.workingFor.set(null); this.failedOnFor.set(null);
       });
     });
   }
@@ -94,6 +96,7 @@ export class NotificationOfferComponent {
   async setAllOn(enabled: boolean): Promise<void> {
     const uid = this.invitation.uid();
     if (!uid || this.busy() || (enabled ? !this.canTurnOn() : !this.push.canDisable())) return;
+    if (!enabled) this.failedOnFor.set(null);
     this.error.set(''); this.workingFor.set(uid); this.haptics.selection();
     try {
       if (enabled) {
@@ -102,9 +105,10 @@ export class NotificationOfferComponent {
         if (!this.current(uid)) return;
         if (!await this.preferences.enableAll(uid)) throw new Error('Account or preferences changed.');
       } else await this.push.disable(uid);
-      if (this.current(uid)) this.haptics.success();
+      if (this.current(uid)) { this.failedOnFor.set(null); this.haptics.success(); }
     } catch {
       if (this.current(uid)) {
+        this.failedOnFor.set(enabled ? uid : null);
         this.error.set(enabled ? 'Could not turn on all notifications. Please try again.' : 'Could not turn off this device. Please try again.');
         this.haptics.error();
       }
@@ -113,6 +117,12 @@ export class NotificationOfferComponent {
   async retry(): Promise<void> {
     const uid = this.invitation.uid();
     if (!uid || this.busy()) return;
+    if (this.failedOnFor() === uid && this.canTurnOn()) {
+      // Retry the incomplete On action directly in this button gesture. An already
+      // registered device only needs category writes, not another permission request.
+      await this.setAllOn(true);
+      return;
+    }
     this.error.set(''); this.workingFor.set(uid); this.haptics.selection();
     try {
       this.preferences.reload();

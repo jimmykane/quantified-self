@@ -79,6 +79,46 @@ describe('notification discovery surfaces', () => {
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Could not turn on all notifications');
     expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
   });
+  it('retries an incomplete master On while some categories are already active without disabling or registering the device again', async () => {
+    preferences.categories.set([{ enabled: true }, { enabled: false }]);
+    push.enable.mockImplementation(async () => { push.state.set('enabled'); push.canEnable.set(false); push.canDisable.set(true); });
+    preferences.enableAll.mockRejectedValueOnce(new Error('Offline'));
+    const fixture = render(); const action = vi.spyOn(fixture.componentInstance, 'setAllOn');
+    toggle(fixture).click(); await action.mock.results[0].value; fixture.detectChanges();
+    expect(toggle(fixture).getAttribute('aria-checked')).toBe('true');
+    expect(button(fixture, 'Retry')).toBeTruthy();
+    let finish!: () => void;
+    preferences.enableAll.mockImplementationOnce(() => new Promise<boolean>(resolve => { finish = () => {
+      preferences.categories.set([{ enabled: true }, { enabled: true }]); resolve(true);
+    }; }));
+    const retry = vi.spyOn(fixture.componentInstance, 'retry');
+    button(fixture, 'Retry').click(); fixture.detectChanges();
+    expect(button(fixture, 'Retry').disabled).toBe(true);
+    expect(push.enable).toHaveBeenCalledOnce(); expect(push.disable).not.toHaveBeenCalled();
+    finish(); await retry.mock.results[0].value; fixture.detectChanges();
+    expect(preferences.enableAll).toHaveBeenCalledTimes(2); expect(preferences.enableAll).toHaveBeenLastCalledWith('owner');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+    expect(button(fixture, 'Retry')).toBeUndefined(); expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+  it('does not carry a failed master On retry into a different account', async () => {
+    preferences.categories.set([{ enabled: true }, { enabled: false }]);
+    push.enable.mockImplementation(async () => { push.state.set('enabled'); push.canDisable.set(true); });
+    preferences.enableAll.mockRejectedValueOnce(new Error('Offline'));
+    const fixture = render(); await fixture.componentInstance.setAllOn(true); fixture.detectChanges();
+    expect(button(fixture, 'Retry')).toBeTruthy();
+    invitation.uid.set('next'); fixture.detectChanges();
+    expect(button(fixture, 'Retry')).toBeUndefined();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
+  it('shows browser instructions instead of retrying a denied permission request', async () => {
+    push.enable.mockImplementation(async () => {
+      push.state.set('denied'); push.canEnable.set(false); throw new Error('Permission denied');
+    });
+    const fixture = render(); await fixture.componentInstance.setAllOn(true); fixture.detectChanges();
+    expect(button(fixture, 'Retry')).toBeUndefined(); expect(button(fixture, 'Show instructions')).toBeTruthy();
+    expect(preferences.enableAll).not.toHaveBeenCalled(); expect(push.enable).toHaveBeenCalledOnce();
+  });
   it('offers On directly for retryable unavailable devices and a support retry when they cannot yet enable', async () => {
     push.state.set('unavailable'); push.unavailableReason.set('Turn On to retry.');
     const fixture = render(); expect(toggle(fixture).disabled).toBe(false);
