@@ -226,7 +226,7 @@ describe('HomeComponent', () => {
     renderHome();
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
-    expect(sections).toEqual(['hero-section', 'feature-section training-section',
+    expect(sections).toEqual(['hero-section', 'home-benefits', 'feature-section training-section',
       'feature-section workouts-section', 'feature-section training-plans-section', 'feature-section health-section',
       'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
       'integrations-section', 'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
