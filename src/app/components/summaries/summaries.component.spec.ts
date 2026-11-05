@@ -1962,7 +1962,9 @@ describe('SummariesComponent', () => {
   it.each([
     { label: 'Ready', score: 82, tone: 'positive', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'falling', ramp: 3, ratio: 0.978 },
     { label: 'Mixed', score: 61, tone: 'caution', current: 23, rangeTone: 'caution', reason: 'outside_range', trend: 'rising', ramp: -3, ratio: 1.03 },
-    { label: 'Recover', score: 30, tone: 'negative', current: 15, rangeTone: 'negative', reason: 'outside_range', trend: 'rising', ramp: 0, ratio: 1 },
+    { label: 'Recover', score: 30, tone: 'negative', current: 15, rangeTone: 'negative', reason: 'far_outside_range', trend: 'rising', ramp: 0, ratio: 1 },
+    { label: 'Ready', score: 82, tone: 'positive', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'stable', ramp: 0, ratio: 1, normalRange: { min: 33, max: 33 } },
+    { label: 'Mixed', score: 61, tone: 'caution', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'falling', ramp: 3, ratio: 0.978, normalRange: { min: -1, max: 70 } },
   ] as const)('keeps $label assessment colours independent of the HRV and ramp directions', scenario => {
     const nowMs = Date.UTC(2026, 6, 18, 12);
     vi.useFakeTimers();
@@ -1976,7 +1978,7 @@ describe('SummariesComponent', () => {
       id: `night-${index}`, sleepDate: new Date(nowMs - index * 86_400_000).toISOString().slice(0, 10),
       startTimeMs: nowMs - index * 86_400_000 - 9 * 3_600_000,
       endTimeMs: nowMs - index * 86_400_000 - 3_600_000, durationSeconds: 28_800,
-      vitals: { averageHrvMs: scenario.current + (scenario.trend === 'falling' ? index * 2 : -index * 2) },
+      vitals: { averageHrvMs: scenario.current + (scenario.trend === 'stable' ? 0 : scenario.trend === 'falling' ? index * 2 : -index * 2) },
       source: { provider: 'SuuntoApp', sourceSessionKey: `night-${index}`, providerUserId: 'direction-test-source' },
     })) as SleepSession[];
     const context = {
@@ -1984,7 +1986,7 @@ describe('SummariesComponent', () => {
       form: -1.7, rampRate: scenario.ramp, sleepScore: 79, latestSleepAtMs: nowMs - 3_600_000,
       overnightHeartRateRatio: scenario.ratio,
       hrvPersonalRange: { tone: scenario.rangeTone, reason: scenario.reason, currentAverage: scenario.current,
-        normalRange: { min: 28.4, max: 36.9 }, latestMs: scenario.current, latestAtMs: nowMs - 3_600_000 },
+        normalRange: 'normalRange' in scenario ? scenario.normalRange : { min: 28.4, max: 36.9 }, latestMs: scenario.current, latestAtMs: nowMs - 3_600_000 },
     } as readinessInsights.DashboardReadinessSignalsContext;
     const spy = vi.spyOn(readinessInsights, 'buildDashboardReadinessSignalsContext').mockReturnValue(context);
     component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
@@ -1993,6 +1995,10 @@ describe('SummariesComponent', () => {
     expect(native.querySelector('.dashboard-readiness-primary')?.getAttribute('data-cue-tone')).toBe(scenario.tone);
     expect(native.querySelector('.dashboard-readiness-hrv')?.getAttribute('data-cue-tone')).toBe(scenario.rangeTone);
     expect(native.querySelector('.dashboard-hrv-status .dashboard-direction-cue')?.textContent).toContain(scenario.trend);
+    if ('normalRange' in scenario) {
+      // Valid assessments need not have drawable range geometry. Do not invent a band.
+      expect(native.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
+    }
     expect(native.querySelector('.dashboard-today-load-value')?.textContent).toContain('-1.7 /');
     expect(native.querySelector('.dashboard-today-load')?.getAttribute('data-cue-tone'))
       .toBe(scenario.label === 'Recover' ? 'negative' : 'positive');
