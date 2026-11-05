@@ -12,6 +12,7 @@ import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/das
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
 
+import * as readinessInsights from '../../helpers/dashboard-training-insights.helper';
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -1752,6 +1753,25 @@ describe('SummariesComponent', () => {
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
+  it('puts the assistant suggestion inside the Today card and keeps it visible when metric details are collapsed', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+    mockUserService.user.set(component.user);
+    component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const details = host.querySelector<HTMLElement>('#dashboard-today-details')!;
+    const suggestion = host.querySelector<HTMLElement>('app-daily-workout-suggestion')!;
+    expect(suggestion).not.toBeNull();
+    expect(suggestion.parentElement).toBe(details.parentElement);
+    expect(suggestion.parentElement?.classList.contains('dashboard-today-card')).toBe(true);
+    expect(details.contains(suggestion)).toBe(false);
+    component.todayDetailsExpanded.set(false); fixture.detectChanges();
+    expect(details.hidden).toBe(true);
+    expect(suggestion.closest('[hidden]')).toBeNull();
+    expect(TestBed.inject(ActivityCalendarService).watchSummaryEvents).not.toHaveBeenCalled();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
   it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts', () => {
     const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
     const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
@@ -1885,7 +1905,8 @@ describe('SummariesComponent', () => {
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
-    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Within range · rising');
+    expect(nativeElement.querySelector('.dashboard-hrv-status small')?.textContent).toBe('Within range');
+    expect(nativeElement.querySelector('.dashboard-hrv-status .dashboard-direction-cue')?.textContent).toContain('rising');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV 55 ms · Today');
     const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
@@ -1898,7 +1919,8 @@ describe('SummariesComponent', () => {
     expect(hrvRange?.querySelector('.metric-indicator-range-marker')?.getAttribute('data-tone')).toBe('positive');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
-    expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
+    expect(overnightHeartRate?.getAttribute('data-cue-tone')).toBe('positive');
+    expect(overnightHeartRate?.querySelector('.dashboard-direction-cue')?.getAttribute('aria-label')).toContain('Below baseline');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
     expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
     expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
@@ -1935,6 +1957,64 @@ describe('SummariesComponent', () => {
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+  });
+
+  it.each([
+    { label: 'Ready', score: 82, tone: 'positive', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'falling', ramp: 3, ratio: 0.978 },
+    { label: 'Mixed', score: 61, tone: 'caution', current: 23, rangeTone: 'caution', reason: 'outside_range', trend: 'rising', ramp: -3, ratio: 1.03 },
+    { label: 'Recover', score: 30, tone: 'negative', current: 15, rangeTone: 'negative', reason: 'far_outside_range', trend: 'rising', ramp: 0, ratio: 1 },
+    { label: 'Ready', score: 82, tone: 'positive', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'stable', ramp: 0, ratio: 1, normalRange: { min: 33, max: 33 } },
+    { label: 'Mixed', score: 61, tone: 'caution', current: 33, rangeTone: 'positive', reason: 'within_range', trend: 'falling', ramp: 3, ratio: 0.978, normalRange: { min: -1, max: 70 } },
+  ] as const)('keeps $label assessment colours independent of the HRV and ramp directions', scenario => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    component.user = { settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as any;
+    component.showTodaySummary = true;
+    component.dashboardTodayTrainingState = scenario.label === 'Recover'
+      ? { label: 'Overload', caption: 'High strain', scalePosition: 5, scaleTone: 'negative' }
+      : { label: 'Building', caption: 'Productive load', scalePosition: 3, scaleTone: 'positive' };
+    component['readinessSleepSessions'] = Array.from({ length: 7 }, (_, index) => ({
+      id: `night-${index}`, sleepDate: new Date(nowMs - index * 86_400_000).toISOString().slice(0, 10),
+      startTimeMs: nowMs - index * 86_400_000 - 9 * 3_600_000,
+      endTimeMs: nowMs - index * 86_400_000 - 3_600_000, durationSeconds: 28_800,
+      vitals: { averageHrvMs: scenario.current + (scenario.trend === 'stable' ? 0 : scenario.trend === 'falling' ? index * 2 : -index * 2) },
+      source: { provider: 'SuuntoApp', sourceSessionKey: `night-${index}`, providerUserId: 'direction-test-source' },
+    })) as SleepSession[];
+    const context = {
+      score: scenario.score, label: scenario.label, confidence: 'high', availableSignalCount: 4, totalSignalCount: 4,
+      form: -1.7, rampRate: scenario.ramp, sleepScore: 79, latestSleepAtMs: nowMs - 3_600_000,
+      overnightHeartRateRatio: scenario.ratio,
+      hrvPersonalRange: { tone: scenario.rangeTone, reason: scenario.reason, currentAverage: scenario.current,
+        normalRange: 'normalRange' in scenario ? scenario.normalRange : { min: 28.4, max: 36.9 }, latestMs: scenario.current, latestAtMs: nowMs - 3_600_000 },
+    } as readinessInsights.DashboardReadinessSignalsContext;
+    const spy = vi.spyOn(readinessInsights, 'buildDashboardReadinessSignalsContext').mockReturnValue(context);
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    fixture.detectChanges();
+    const native = fixture.nativeElement as HTMLElement;
+    expect(native.querySelector('.dashboard-readiness-primary')?.getAttribute('data-cue-tone')).toBe(scenario.tone);
+    expect(native.querySelector('.dashboard-readiness-hrv')?.getAttribute('data-cue-tone')).toBe(scenario.rangeTone);
+    expect(native.querySelector('.dashboard-hrv-status .dashboard-direction-cue')?.textContent).toContain(scenario.trend);
+    if ('normalRange' in scenario) {
+      // Valid assessments need not have drawable range geometry. Do not invent a band.
+      expect(native.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
+    }
+    expect(native.querySelector('.dashboard-today-load-value')?.textContent).toContain('-1.7 /');
+    expect(native.querySelector('.dashboard-today-load')?.getAttribute('data-cue-tone'))
+      .toBe(scenario.label === 'Recover' ? 'negative' : 'positive');
+    expect(native.querySelector('.dashboard-today-load-value [role=img]')?.getAttribute('aria-label')).toContain('ramp');
+    expect(component.dashboardTodayReadiness.loadText).toBe(`-1.7 / ${scenario.ramp > 0 ? '+' : ''}${scenario.ramp}`);
+    expect(native.querySelector('.dashboard-today-overnight-hr')?.getAttribute('data-cue-tone'))
+      .toBe(scenario.ratio < 1 ? 'positive' : scenario.ratio > 1 ? 'negative' : 'neutral');
+    expect(native.querySelectorAll('.dashboard-direction-cue button')).toHaveLength(0);
+    // Insufficient range evidence and missing drivers must remove earlier colours and arrows.
+    spy.mockReturnValue({ ...context, score: null, form: null, rampRate: null, hrvPersonalRange: null, overnightHeartRateRatio: null } as any);
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(native.querySelector('.dashboard-readiness-primary')?.getAttribute('data-cue-tone')).toBe('neutral');
+    expect(native.querySelector('.dashboard-readiness-hrv')?.getAttribute('data-cue-tone')).toBe('neutral');
+    expect(native.querySelectorAll('.dashboard-direction-cue')).toHaveLength(0);
+    expect(native.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('No current HRV');
   });
 
   describe('Today readiness initial loading', () => {
@@ -3980,7 +4060,7 @@ describe('SummariesComponent', () => {
     const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(summaryHeading?.nextElementSibling).toBe(today);
+    expect(summaryHeading?.nextElementSibling).toBe(today?.parentElement);
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 

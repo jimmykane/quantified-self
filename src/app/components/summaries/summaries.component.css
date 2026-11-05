@@ -77,13 +77,20 @@
   margin: 0 0 0.85rem;
 }
 
-.dashboard-current-state-row {
+.dashboard-today-card {
   background: var(--qs-surface-raised, var(--mat-sys-surface-container-low));
   border: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   border-radius: 8px;
   margin: 0 0 0.85rem;
   min-width: 0;
   overflow: hidden;
+}
+
+.dashboard-current-state-row { min-width: 0; }
+
+.dashboard-today-card > app-daily-workout-suggestion {
+  display: block;
+  padding-inline: 0.85rem;
 }
 
 .dashboard-current-state-top {
@@ -158,7 +165,7 @@
 }
 
 .dashboard-training-state-scale > span.active[data-tone='positive'] {
-  background: var(--mat-sys-primary);
+  background: var(--qs-status-info);
 }
 
 .dashboard-training-state-scale > span.active[data-tone='negative'] {
@@ -175,7 +182,7 @@
 }
 
 .dashboard-training-state-scale > span.active[data-tone='positive'] {
-  outline-color: color-mix(in srgb, var(--mat-sys-primary) 32%, transparent);
+  outline-color: color-mix(in srgb, var(--qs-status-info) 32%, transparent);
 }
 
 .dashboard-training-state-scale > span.active[data-tone='negative'] {
@@ -329,7 +336,7 @@
 }
 
 .dashboard-today-history-bars > span.current[data-tone='positive'] {
-  background: var(--mat-sys-primary);
+  background: var(--qs-today-cue-color);
 }
 
 .dashboard-today-history-bars > span.current[data-tone='negative'] {
@@ -347,13 +354,48 @@
   opacity: 0.65;
 }
 
-.dashboard-current-state-row dd[data-tone='positive'] {
-  color: var(--mat-sys-primary);
+/* Cues inherit the existing assessment. Direction alone never sets a status colour. */
+.dashboard-current-state-row [data-cue-tone] {
+  --qs-today-cue-color: var(--mat-sys-on-surface-variant);
+  --qs-metric-indicator-color: var(--qs-today-cue-color);
 }
-
-.dashboard-current-state-row dd[data-tone='negative'] {
-  color: var(--mat-sys-error);
+.dashboard-current-state-row [data-cue-tone='positive'] { --qs-today-cue-color: var(--qs-status-positive); }
+.dashboard-current-state-row [data-cue-tone='caution'] { --qs-today-cue-color: var(--qs-status-caution); }
+.dashboard-current-state-row [data-cue-tone='negative'] { --qs-today-cue-color: var(--mat-sys-error); }
+.dashboard-current-state-row .dashboard-training-state-primary[data-cue-tone='positive'],
+.dashboard-current-state-row .dashboard-today-load[data-cue-tone='positive'] { --qs-today-cue-color: var(--qs-status-info); }
+.dashboard-training-state-primary > strong,
+.dashboard-readiness-primary-value,
+.dashboard-readiness-hrv dd,
+.dashboard-today-overnight-hr dd { color: var(--qs-today-cue-color); }
+.dashboard-today-sleep.has-score {
+  /* Recorded sleep keeps its chart-palette identity; it is not a separate assessment. */
+  --qs-today-sleep-color: color-mix(in srgb, var(--qs-today-sleep-base) 75%, var(--mat-sys-on-surface) 25%);
+  --qs-metric-indicator-color: var(--qs-today-sleep-color);
 }
+.dashboard-today-sleep.has-score dd { color: var(--qs-today-sleep-color); }
+.dashboard-readiness-hrv {
+  --qs-metric-indicator-range-color: color-mix(in srgb, var(--qs-status-positive) 26%, var(--mat-sys-surface-container));
+}
+.dashboard-today-load-value,
+.dashboard-hrv-status { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; }
+.dashboard-current-state-row .dashboard-hrv-status { margin-top: 0.15rem; }
+.dashboard-current-state-row .dashboard-hrv-status small { margin-top: 0; }
+.dashboard-direction-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  color: var(--qs-today-cue-color);
+  background: color-mix(in srgb, var(--qs-today-cue-color) 12%, transparent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.dashboard-direction-cue mat-icon { inline-size: 1em; block-size: 1em; font-size: 1em; }
+.dashboard-hrv-status .dashboard-direction-cue { font-size: 0.68rem; }
 
 .dashboard-derived-metrics-retry {
   margin-right: 0.5rem;

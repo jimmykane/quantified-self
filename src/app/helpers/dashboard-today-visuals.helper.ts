@@ -1,9 +1,16 @@
-import type { ReadinessHrvPersonalRange } from '@shared/readiness';
+import type { ReadinessHrvPersonalRange, ReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
 import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
+
+export type DashboardTodayCueTone = 'positive' | 'caution' | 'negative' | 'neutral';
+
+export interface DashboardTodayDirectionCue {
+  icon: 'trending_up' | 'trending_down' | 'trending_flat';
+  label: string;
+}
 
 export type DashboardTodayVisualTone = 'positive' | 'negative' | 'neutral';
 
@@ -114,6 +121,35 @@ export function resolveDashboardTodayTrainingStateScale(
     total: 6,
     tone: resolveTrainingStateTone(label),
   };
+}
+
+/** Presentation only: direction never determines whether a signal is supportive. */
+export function buildDashboardTodayRampCue(value: number | null | undefined): DashboardTodayDirectionCue | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  // Match the displayed one-decimal precision rather than showing a hidden change.
+  return Math.abs(value) < 0.05 ? { icon: 'trending_flat', label: 'Stable ramp' }
+    : value > 0 ? { icon: 'trending_up', label: 'Increasing ramp' }
+    : { icon: 'trending_down', label: 'Decreasing ramp' };
+}
+
+export function buildDashboardTodayBaselineCue(ratio: number | null | undefined): DashboardTodayDirectionCue | null {
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return null;
+  // Use the same neutral band as the existing overnight-HR assessment.
+  return Math.abs(ratio - 1) < 0.005 ? { icon: 'trending_flat', label: 'Near baseline' }
+    : ratio > 1 ? { icon: 'trending_up', label: 'Above baseline' }
+    : { icon: 'trending_down', label: 'Below baseline' };
+}
+
+export function buildDashboardTodayHrvCue(trend: ReadinessHrvRecentTrend | null): DashboardTodayDirectionCue | null {
+  return trend === null ? null : {
+    icon: trend === 'rising' ? 'trending_up' : trend === 'falling' ? 'trending_down' : 'trending_flat',
+    label: trend,
+  };
+}
+
+export function resolveDashboardTodayReadinessTone(label: string, score: number | null): DashboardTodayCueTone {
+  if (score === null || !Number.isFinite(score)) return 'neutral';
+  return label === 'Ready' ? 'positive' : label === 'Mixed' ? 'caution' : label === 'Recover' ? 'negative' : 'neutral';
 }
 
 function normalizeHistoryBars(

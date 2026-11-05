@@ -3,6 +3,10 @@ import type { ReadinessHrvPersonalRange } from '@shared/readiness';
 import type { DashboardFormPoint } from './dashboard-form.helper';
 import type { DashboardSleepTrendContext } from './dashboard-sleep-chart.helper';
 import {
+  buildDashboardTodayRampCue,
+  buildDashboardTodayBaselineCue,
+  buildDashboardTodayHrvCue,
+  resolveDashboardTodayReadinessTone,
   buildDashboardTodayLoadBars,
   buildDashboardTodayHrvRangeIndicator,
   buildDashboardTodayOvernightHeartRateBars,
@@ -10,6 +14,38 @@ import {
 } from './dashboard-today-visuals.helper';
 
 describe('dashboard Today visuals', () => {
+  it.each([
+    [3, 'trending_up'], [-3, 'trending_down'], [0, 'trending_flat'], [0.04, 'trending_flat'],
+    [null, null], [undefined, null], [NaN, null], [Infinity, null],
+  ])('shows ramp direction at displayed precision for %s without assigning an assessment', (value, icon) => {
+    expect(buildDashboardTodayRampCue(value)?.icon ?? null).toBe(icon);
+  });
+
+  it.each([
+    [0.978, 'Below baseline', 'trending_down'], [1.03, 'Above baseline', 'trending_up'],
+    [1, 'Near baseline', 'trending_flat'], [1.004, 'Near baseline', 'trending_flat'],
+    [null, null, null], [NaN, null, null],
+  ])('labels the HR comparison against baseline, not a time trend (%s)', (ratio, label, icon) => {
+    const cue = buildDashboardTodayBaselineCue(ratio);
+    expect(cue?.label ?? null).toBe(label);
+    expect(cue?.icon ?? null).toBe(icon);
+  });
+
+  it('only gives HRV a direction when its existing trend has evidence', () => {
+    expect(buildDashboardTodayHrvCue(null)).toBeNull();
+    expect(buildDashboardTodayHrvCue('rising')).toEqual({ icon: 'trending_up', label: 'rising' });
+    expect(buildDashboardTodayHrvCue('falling')).toEqual({ icon: 'trending_down', label: 'falling' });
+    expect(buildDashboardTodayHrvCue('stable')).toEqual({ icon: 'trending_flat', label: 'stable' });
+  });
+
+  it.each([
+    ['Ready', 82, 'positive'], ['Mixed', 61, 'caution'], ['Recover', 30, 'negative'],
+    ['Ready', null, 'neutral'], ['Ready', NaN, 'neutral'], ['Awaiting data', null, 'neutral'],
+    ['Unknown', 61, 'neutral'],
+  ])('uses the assessed readiness label and requires an available score (%s, %s)', (label, score, tone) => {
+    expect(resolveDashboardTodayReadinessTone(label, score)).toBe(tone);
+  });
+
   it('uses the latest seven real daily load values and highlights the current overload day', () => {
     const points = Array.from({ length: 9 }, (_, index): DashboardFormPoint => ({
       time: Date.UTC(2026, 8, 1 + index),
