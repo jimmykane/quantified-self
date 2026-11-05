@@ -210,8 +210,9 @@ describe('Training delivery summaries on the workspace', () => {
     expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
     view$.next({ settings: [setting], statuses: [{ ...status, status: 'approval_required', differsFromQS: true, updatedAtMs: 11 }] });
     await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
-      .toContain('1 needs approval'); });
-    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label')).toContain('needs approval');
+      .toContain('1 awaiting sync refresh'); });
+    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label')).not.toContain('needs approval');
+    expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
     expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
   });
   it('moves a workout from upcoming to earlier when the shared workspace clock crosses its saved-zone day', async () => {
