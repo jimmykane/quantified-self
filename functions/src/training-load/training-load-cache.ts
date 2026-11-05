@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { trainingLoadSourceFingerprint } from './training-load-source-fingerprint';
 export { trainingLoadSourceFingerprint, trainingLoadWriteTime } from './training-load-source-fingerprint';
 import { createHash } from 'node:crypto';
@@ -150,7 +151,7 @@ export async function refreshTrainingLoadSummary(uid: string, eventId: string): 
     }
     const write = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId, summary);
     if (metadata && metadata.revision !== originalRevision) transaction.update(snapshot.ref, {
-      legs: metadata.legs, revision: metadata.revision, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      legs: metadata.legs, revision: metadata.revision, updatedAt: FieldValue.serverTimestamp(),
     });
     write.write();
   });
