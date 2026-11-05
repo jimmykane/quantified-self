@@ -95,6 +95,22 @@ function sessionInput(overrides: Partial<McpTrainingImpactInput> = {}): McpTrain
 }
 
 describe('MCP Training impact service', () => {
+  it('keeps deferred MET unavailable until prepared without exposing its private weight state', async () => {
+    const loadReads = reads();
+    const hr = { preference: 'AUTOMATIC', method: 'HR', score: 40, estimated: true, provenance: 'calculated', reasons: [] };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: { saved: { method: 'MET' } }, legs: { saved: {
+        activityId: 'activity-1', policy: defaultAppliedTrainingLoadPolicy('Walking'), recordedTss: 42,
+        identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Walking', duration: 3600, distance: null },
+        calibration: { version: 2, weight: { status: 'deferred' } }, evaluations: { version: 1, automatic: hr,
+          hr: { ...hr, preference: 'HR' }, met: { ...hr, preference: 'MET', reasons: ['missing-met-inputs'] } },
+      } },
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'missing_tss', contribution: null });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/met-weight-pending|calibration|deferred|missing-met-inputs/);
+  });
   it.each([null, 9, 100])('projects Automatic swimming load %s without exposing private CSS or evaluation details', async score => {
     const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: score ?? 0 }]) });
     const evaluation = { preference: 'AUTOMATIC', method: score === null ? null : score === 100 ? 'SWIM_PACE' : 'MET', score,

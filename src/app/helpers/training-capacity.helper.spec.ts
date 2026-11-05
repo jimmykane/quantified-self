@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardTrainingCapacityContext } from './dashboard-derived-metrics.helper';
-import { buildTrainingCapacityViewModels } from './training-capacity.helper';
+import { buildRecentTrainingFtpSuggestions, buildTrainingCapacityViewModels } from './training-capacity.helper';
+import { WeightUnits } from '@sports-alliance/sports-lib/metrics';
 
 function buildContext(options: { ftp?: number; vo2Max?: number; referenceVo2Max?: number } = {}): DashboardTrainingCapacityContext {
   const importedMetric = (
@@ -49,6 +50,33 @@ function buildContext(options: { ftp?: number; vo2Max?: number; referenceVo2Max?
 }
 
 describe('training-capacity.helper', () => {
+  it('suggests the latest imported FTP separately for each discipline without averaging or mutating the snapshot', () => {
+    const context = buildContext({ ftp: 222.5 });
+    context.disciplines[0].ftpSetting = { ...context.disciplines[1].ftpSetting!, value: 190 };
+    const before = JSON.stringify(context);
+    const suggestions = buildRecentTrainingFtpSuggestions(context, context.asOfDayMs);
+    expect(suggestions.cycling).toMatchObject({ value: 222.5, displayText: '223 watt' });
+    expect(suggestions.cycling?.detailText).toContain('Garmin Connect');
+    expect(suggestions.cycling?.detailText).toContain('last seen');
+    expect(suggestions.running?.value).toBe(190);
+    expect(JSON.stringify(context)).toBe(before);
+    expect(buildRecentTrainingFtpSuggestions(context, context.asOfDayMs,
+      { weightUnits: [WeightUnits.Pounds] })).toEqual(suggestions);
+  });
+  it.each([
+    [0, true], [90 * 86400000, true], [90 * 86400000 + 1, false], [-1, false],
+  ] as const)('only suggests observations within the previous 90 days (age %s)', (age, included) => {
+    const context = buildContext({ ftp: 222 });
+    context.disciplines[1].ftpSetting!.lastSeenAtMs = context.asOfDayMs - age;
+    expect(!!buildRecentTrainingFtpSuggestions(context, context.asOfDayMs).cycling).toBe(included);
+  });
+  it('omits absent settings and snapshots from another UTC day', () => {
+    const context = buildContext({ ftp: 222 });
+    expect(buildRecentTrainingFtpSuggestions(null, context.asOfDayMs)).toEqual({});
+    expect(buildRecentTrainingFtpSuggestions(buildContext(), context.asOfDayMs)).toEqual({});
+    expect(buildRecentTrainingFtpSuggestions(context, context.asOfDayMs - 1)).toEqual({});
+    expect(buildRecentTrainingFtpSuggestions(context, context.asOfDayMs + 86400000)).toEqual({});
+  });
   it('labels imported FTP and VO2 max with their source provenance', () => {
     const cycling = buildTrainingCapacityViewModels(buildContext({ ftp: 222, vo2Max: 55.9 }))[1];
 

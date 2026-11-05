@@ -1,4 +1,5 @@
 import { hashTrainingScheduleRequestPayload } from '../persistence';
+import { deliveryContentDigest } from './intent';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { isAuthoritativeAbsenceKey, isInspectionPolicyValid, VERIFICATION_DAY_MS,
   type InspectionObservation, type InspectionPolicy, type VerificationEvidence } from './verification-contracts';
@@ -6,7 +7,9 @@ import { isAuthoritativeAbsenceKey, isInspectionPolicyValid, VERIFICATION_DAY_MS
 export function inspectionBinding(ledger: DeliveryLedgerV1, context: DeliveryContext, policy: InspectionPolicy): string {
   return hashTrainingScheduleRequestPayload({ destination: ledger.destinationKey, epoch: context.connection.epoch,
     connection: context.connection.generation, artifact: ledger.actual, policy,
-    desired: ledger.desiredDigest, scopeGeneration: context.scopeGeneration,
+    desired: ledger.desiredDigest,
+    content: deliveryContentDigest(context.workout, context.setting?.timeZone ?? ledger.timeZone, context.strength),
+    scopeGeneration: context.scopeGeneration,
     settings: context.setting, override: context.override });
 }
 export function observeInspection(previous: VerificationEvidence | undefined, binding: string,

@@ -22,11 +22,11 @@ describe('Training remote check labels', () => {
       }
     });
   it.each([
-    [false, null, null, 'Not sent · Needs review'],
-    [true, 1000, 1000, 'Update needs review'],
-    [true, null, 1000, 'Update needs review'],
-    [false, 1000, 1000, 'Update needs review'],
-    [false, null, 1000, 'Needs review'],
+    [false, null, null, 'Awaiting sync refresh'],
+    [true, 1000, 1000, 'Awaiting sync refresh'],
+    [true, null, 1000, 'Awaiting sync refresh'],
+    [false, 1000, 1000, 'Awaiting sync refresh'],
+    [false, null, 1000, 'Awaiting sync refresh'],
   ])('distinguishes initial review from updates and uncertain acceptance (%s, %s, %s)', (hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs, label) => {
     for (const state of ['present', 'restoring', 'unknown'] as const) {
       expect(trainingVerificationLabel({ status: 'approval_required', hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs } as TrainingDeliveryStatusV1,

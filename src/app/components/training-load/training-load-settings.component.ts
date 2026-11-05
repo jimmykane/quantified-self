@@ -2,17 +2,23 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, inject
 import { FormControl, FormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { TRAINING_SPORT_DEFINITIONS, type TrainingSportId } from '@shared/training-disciplines';
-import { convertSpeedToSwimPace, convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard, DataSwimPace } from '@sports-alliance/sports-lib';
-import { validSwimThresholdSpeed, type TrainingLoadPolicy, type TrainingLoadMethod } from '@shared/training-load-policy';
+import { convertSpeedToSwimPace, convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard, DataSwimPace, DataFTP, DataHeartRate } from '@sports-alliance/sports-lib';
+import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPolicy, type TrainingLoadMethod } from '@shared/training-load-policy';
 import { SharedModule } from '../../modules/shared.module';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import type { TrainingFtpSuggestions } from '../../helpers/training-capacity.helper';
 
 @Component({ selector: 'app-training-load-settings', standalone: true, imports: [SharedModule],
   templateUrl: './training-load-settings.component.html', styleUrls: ['./training-load-settings.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) uid!: string;
+  /** Health reuses this editor without exposing load-method or inclusion changes. */
+  @Input() thresholdsOnly = false;
+  readonly selectedFamily = signal<TrainingSportId>('cycling');
+  readonly ftpUnit = new DataFTP(1).getDisplayUnit();
+  readonly hrUnit = new DataHeartRate(1).getDisplayUnit();
   private readonly service = inject(TrainingLoadService);
   private readonly haptics = inject(AppHapticsService);
   private subscription?: Subscription;
@@ -21,11 +27,20 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   readonly loaded = signal(false);
   readonly busy = signal<TrainingSportId | null>(null);
   readonly message = signal('');
+  readonly ftpSuggestions = signal<TrainingFtpSuggestions>({});
   readonly rows = TRAINING_SPORT_DEFINITIONS.map(family => ({ ...family, revision: 0, cssUnit: 'm' as 'm' | 'yd', cssOriginalSpeed: undefined as number | undefined, cssOriginalText: '',
     form: new FormGroup({ method: new FormControl<TrainingLoadMethod>('AUTOMATIC', { nonNullable: true }),
-      included: new FormControl(true, { nonNullable: true }), cssPace: new FormControl('', { nonNullable: true }) }) }));
+      included: new FormControl(true, { nonNullable: true }), cssPace: new FormControl('', { nonNullable: true }),
+      ftp: new FormControl('', { nonNullable: true }), thresholdHr: new FormControl('', { nonNullable: true }) }) }));
+  get visibleRows() { return this.thresholdsOnly ? this.rows.filter(row => row.id === this.selectedFamily()) : this.rows; }
+  selectFamily(value: TrainingSportId): void { if (value !== this.selectedFamily()) { this.selectedFamily.set(value); this.selection(); } }
   ngOnChanges(): void {
     this.generation++; this.subscription?.unsubscribe(); this.policies = [];
+    const generation = this.generation;
+    this.ftpSuggestions.set({});
+    void this.service.readFtpSuggestions(this.uid).then(suggestions => {
+      if (generation === this.generation) this.ftpSuggestions.set(suggestions);
+    });
     this.loaded.set(false); this.message.set(''); this.busy.set(null);
     for (const row of this.rows) {
       row.revision = 0; row.cssUnit = 'm'; row.form.enable({ emitEvent: false }); this.loadPolicy(row, { method: 'AUTOMATIC', included: true });
@@ -43,6 +58,13 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   }
   ngOnDestroy(): void { this.generation++; this.subscription?.unsubscribe(); }
   selection(): void { this.haptics.selection(); }
+  useFtpSuggestion(row: typeof this.rows[number]): void {
+    const suggestion = this.ftpSuggestions()[row.id];
+    if (!suggestion || this.busy() || !this.loaded() || Number(row.form.controls.ftp.value) === suggestion.value) return;
+    row.form.controls.ftp.setValue(String(suggestion.value));
+    row.form.controls.ftp.markAsDirty();
+    this.haptics.selection();
+  }
   private cssSpeed(row: typeof this.rows[number]): number | undefined {
     const text = row.form.controls.cssPace.value.trim();
     if (!text) return undefined;
@@ -56,6 +78,14 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     const speed = this.cssSpeed(row);
     return row.id !== 'swimming' || speed === undefined || validSwimThresholdSpeed(speed);
   }
+  private policyDraft(row: typeof this.rows[number]): TrainingLoadPolicy {
+    const { method, included, ftp, thresholdHr } = row.form.getRawValue();
+    const speed = row.id === 'swimming' ? this.cssSpeed(row) : undefined;
+    return { method, included, ...(speed !== undefined ? { swimThresholdSpeed: speed } : {}),
+      ...((row.id === 'running' || row.id === 'cycling') && ftp.trim() ? { functionalThresholdPower: Number(ftp) } : {}),
+      ...(thresholdHr.trim() ? { lactateThresholdHR: Number(thresholdHr) } : {}) };
+  }
+  validThresholds(row: typeof this.rows[number]): boolean { return validTrainingLoadPolicy(row.id, this.policyDraft(row)); }
   private showCss(row: typeof this.rows[number], speed?: number): void {
     row.cssOriginalSpeed = speed;
     const pace = speed === undefined ? null : convertSpeedToSwimPace(speed);
@@ -64,7 +94,9 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     row.form.controls.cssPace.setValue(row.cssOriginalText, { emitEvent: false });
   }
   private loadPolicy(row: typeof this.rows[number], policy: TrainingLoadPolicy): void {
-    row.form.reset({ method: policy.method, included: policy.included, cssPace: '' });
+    row.form.reset({ method: policy.method, included: policy.included, cssPace: '',
+      ftp: policy.functionalThresholdPower === undefined ? '' : String(policy.functionalThresholdPower),
+      thresholdHr: policy.lactateThresholdHR === undefined ? '' : String(policy.lactateThresholdHR) });
     this.showCss(row, policy.swimThresholdSpeed);
   }
   changeCssUnit(row: typeof this.rows[number], unit: 'm' | 'yd'): void {
@@ -73,12 +105,10 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     row.cssUnit = unit; this.showCss(row, speed); this.selection();
   }
   async save(row: typeof this.rows[number]): Promise<void> {
-    if (this.busy() || !row.form.dirty || !this.validCss(row)) return;
+    if (this.busy() || !row.form.dirty || !this.validThresholds(row)) return;
     const generation = this.generation;
     const revision = row.revision + 1;
-    const { method, included } = row.form.getRawValue();
-    const speed = row.id === 'swimming' ? this.cssSpeed(row) : undefined;
-    const policy: TrainingLoadPolicy = { method, included, ...(speed !== undefined ? { swimThresholdSpeed: speed } : {}) };
+    const policy = this.policyDraft(row);
     this.busy.set(row.id); this.message.set(''); row.form.disable({ emitEvent: false });
     try {
       await this.service.savePolicy(this.uid, row.id, revision - 1, policy);

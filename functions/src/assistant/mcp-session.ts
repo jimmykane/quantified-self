@@ -68,6 +68,8 @@ export const ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES = [
 ] as const;
 
 export const ASSISTANT_MCP_TOOL_NAMES = [
+  'get_training_thresholds',
+  'preview_training_threshold_change',
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
   'get_workout_reflection',
@@ -413,8 +415,9 @@ export async function createAssistantMcpSession(
   measurementChangesEnabled = false,
   reflectionChangesEnabled = false,
   activityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'],
+  trainingThresholdsEnabled = false,
 ): Promise<AssistantMcpSession> {
-  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) && !conversationId) {
+  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled || trainingThresholdsEnabled) && !conversationId) {
     throw new Error('Assistant content changes require a current conversation.');
   }
   if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
@@ -423,6 +426,7 @@ export async function createAssistantMcpSession(
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
     ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+    ...(trainingThresholdsEnabled ? ['get_training_thresholds' as const, 'preview_training_threshold_change' as const] : []),
     ...(reflectionChangesEnabled ? ['get_workout_reflection' as const, 'prepare_workout_reflection_save' as const, 'prepare_workout_reflection_delete' as const] : []),
     ...(measurementChangesEnabled ? [...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
       'prepare_manual_measurement_create' as const, 'prepare_manual_measurement_update' as const,
@@ -450,6 +454,7 @@ export async function createAssistantMcpSession(
     scopes: [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
+      ...(trainingThresholdsEnabled ? [MCP_OAUTH_SCOPES.TrainingThresholdsRead, MCP_OAUTH_SCOPES.TrainingThresholdsWrite] : []),
       ...(measurementChangesEnabled ? [MCP_OAUTH_SCOPES.MeasurementsWrite] : []),
       ...(reflectionChangesEnabled ? [MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite] : []),
       MCP_OAUTH_SCOPES.SleepRead,
@@ -497,7 +502,7 @@ export async function createAssistantMcpSession(
         // The public preview describes native MCP approval. In this adapter the
         // same proposal is confirmed by the user in QS, never by a model tool.
         description: (tool.description || tool.title || tool.name).replace(
-          /\bapply_(?:training_changes|saved_workout_change|training_goal_change)\b/g,
+          /\bapply_(?:training_changes|saved_workout_change|training_goal_change|training_threshold_change)\b/g,
           'app-owned Apply confirmation in Quantified Self (not a model tool)',
         ),
         inputSchema: projectAssistantGeminiSchema(name, projectAssistantInputSchema(
@@ -516,7 +521,7 @@ export async function createAssistantMcpSession(
       throw new Error(`Assistant MCP tools are unavailable: ${missingToolNames.join(', ')}`);
     }
 
-    let preparedContentProposalRef: string | null = null;
+    let contentProposalReserved = false;
     const readyTrainingKinds = new Set<string>();
     return {
       getTrainingWorkoutReviews: async (proposalRef, prompt) => {
@@ -547,12 +552,12 @@ export async function createAssistantMcpSession(
           );
         }
         if (isAssistantContentProposalTool(name)) {
-          if (preparedContentProposalRef) {
+          if (contentProposalReserved) {
             throw new Error('The Assistant can prepare only one content change per response.');
           }
           try {
             const proposal = createAssistantContentProposal(name, args);
-            preparedContentProposalRef = proposal.proposalRef;
+            contentProposalReserved = true;
             return { structuredContent: proposal as unknown as Record<string, unknown> };
           } catch (error) {
             // Only local note-input validation is correctable. Never turn
@@ -565,6 +570,14 @@ export async function createAssistantMcpSession(
             }
             throw error;
           }
+        }
+        if (name === 'preview_training_threshold_change') {
+          if (contentProposalReserved) throw new Error('The Assistant can prepare only one content change per response.');
+          // Reserve before awaiting the server so parallel tool calls cannot
+          // silently replace another reviewed change. Failed previews release it.
+          contentProposalReserved = true;
+          try { return await callAssistantMcpTool(client, name, args); }
+          catch (error) { contentProposalReserved = false; throw error; }
         }
         let metricHistoryPages: Record<string, unknown>[] | null;
         try {

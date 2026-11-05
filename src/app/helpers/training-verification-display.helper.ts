@@ -25,9 +25,8 @@ export function trainingVerificationLabel(status: TrainingDeliveryStatusV1, veri
     return 'Not found in Garmin · review required';
   }
   if (status.status === 'approval_required') {
-    if (status.hasRemoteCopy || status.lastAcceptedAtMs != null) return 'Update needs review';
-    // An interrupted attempt may have been accepted before QS could save the ID.
-    return status.lastAttemptAtMs == null ? 'Not sent · Needs review' : 'Needs review';
+    // Historical records refresh under the current automatic-adjustment policy.
+    return 'Awaiting sync refresh';
   }
   if (['fresh_consent_required', 'reconnect_required', 'connection_repair', 'failed', 'needs_attention', 'unsupported']
     .includes(status.status)) return suunto

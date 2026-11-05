@@ -21,7 +21,7 @@ describe('provider-aware daily recipe context', () => {
       reference: { kind: 'max-heart-rate' as const, bpm: 190 } };
     const context = dayWorkoutProviderContext(controls, [provider], [reference, reference]);
     expect(context.evidence.commonExactEndings).toContain('time');
-    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded', requiresReview: true,
+    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded', requiresReview: false,
       issues: [expect.stringContaining(provider === 'wahoo' ? 'not ELEMNT computers or RIVAL' : 'stored reference snapshot must be frozen to an absolute range')] }]);
     expect(context.evidence).not.toHaveProperty('digest');
   });
@@ -42,9 +42,9 @@ describe('provider-aware daily recipe context', () => {
       version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
     } }, controls);
     const original = structuredClone(suggestion);
-    expect(context.correction(suggestion)).toContain('Suunto: degraded');
+    expect(context.correction(suggestion)).toBeNull();
     expect(context.limitations(suggestion)).toEqual([expect.stringContaining('Suunto Guide name')]);
-    expect(context.limitations(suggestion)[0]).toContain('needs Review sync');
+    expect(context.limitations(suggestion)[0]).not.toContain('needs Review sync');
     expect(context.limitations({ ...suggestion, draft: { ...suggestion.draft!, title: 'Easy run' } })).toEqual([]);
     expect(suggestion).toEqual(original);
   });

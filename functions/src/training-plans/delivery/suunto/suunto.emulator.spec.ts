@@ -434,6 +434,37 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await send()).status).toBe('delivered');
     expect([...server.guides.values()][0].guide.activities).toEqual([activityId]);
   });
+  it('accepts an edit to omitted pool metadata without creating another Guide', async () => {
+    const ref = user().collection('scheduledWorkouts').doc('w');
+    const structure = { version: 1 as const, sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' as const }, nodes: [{
+      kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 60 }, targets: [],
+    }] };
+    await ref.update({ structure });
+    const first = await send();
+    expect(first).toMatchObject({ status: 'delivered', approvalDigest: null });
+    const original = structuredClone([...server.guides.values()][0]);
+    const callsBefore = server.calls.length;
+    await ref.update({ 'structure.poolLength.meters': 50 });
+    await mark();
+    const pending = await ledger();
+    expect(pending).toMatchObject({ status: 'pending', desiredDigest: first.desiredDigest,
+      desiredGeneration: first.desiredGeneration + 1, acceptedContentDigest: first.acceptedContentDigest });
+    expect(pending.contentDigest).not.toBe(first.acceptedContentDigest);
+    await processTrainingDelivery(runtime, uid, first.id); await drain();
+    const accepted = await ledger();
+    expect(accepted).toMatchObject({ status: 'delivered', actual: { ids: first.actual!.ids },
+      contentDigest: pending.contentDigest, acceptedContentDigest: pending.contentDigest });
+    expect((await user().collection('trainingDeliveryStatuses').doc(first.id).get()).get('differsFromQS')).toBe(false);
+    expect([...server.guides.values()][0]).toEqual(original);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+    // Positive readback proves that the retained Guide already matches. No redundant update is needed.
+    expect(server.calls.slice(callsBefore)).toContainEqual(expect.objectContaining({ method: 'GET' }));
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(0);
+    expect((await ref.get()).get('structure.poolLength')).toEqual({ meters: 50, presentation: 'meters' });
+  });
+
   it('sends a Gym Guide with normal consent and updates load, reps and date without extra approval', async () => {
     useProductionPolicy();
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat', name: 'Back squat', sets: [
@@ -509,7 +540,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' }, false);
     await drain();
     const blocked = await ledger();
-    expect(blocked).toMatchObject({ status, actual: null, attempt: null });
+    expect(blocked).toMatchObject({ status: status === 'unsupported' ? 'unsupported' : 'pending', actual: null, attempt: null });
+    if (status === 'approval_required') {
+      // Seed an actual historical row: current mappers no longer produce this gate.
+      await user().collection(DELIVERY_LEDGER).doc(blocked.id).update({ status, approvalDigest: blocked.desiredDigest });
+    }
     const planSettings = user().collection('trainingDeliverySettings').doc('plan_p_suunto');
     const consent = (await planSettings.get()).data();
     legacy.mockRestore();
@@ -653,7 +688,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(kind === 'create' ? 1 : 2);
   });
-  it('requires review for strength losses and retains that exact approval across kg/lb updates', async () => {
+  it('syncs strength losses and kg/lb updates with informational warnings', async () => {
     useProductionPolicy();
     const details = { version: 1 as const, workoutId: 'w', revision: 1, exercises: [{ id: 'squat',
       name: 'Long exercise instructions '.repeat(3), sets: [{ id: 'set-one',
@@ -664,15 +699,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await user().collection('scheduledWorkouts').doc('w').collection('strengthDetails').doc('current').set(details);
     await command('send'); await drain();
     const row = await ledger();
-    expect(row).toMatchObject({ status: 'approval_required', actual: null });
-    expect(row.approvalDigest).toBeTruthy();
-    await processTrainingDelivery(runtime, uid, row.id);
-    expect(server.calls).toHaveLength(0);
-    const setting = await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get();
-    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
-      provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
-      expectedSettingsRevision: setting.get('revision'), approvalDigest: row.approvalDigest }, false);
-    await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(row).toMatchObject({ status: 'pending', actual: null, approvalDigest: null });
+    expect(row.issues.length).toBeGreaterThan(0);
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.size).toBe(1);
     const ids = (await ledger()).actual!.ids;
@@ -681,11 +710,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       expect((await ledger()).status).toBe('pending');
       await processTrainingDelivery(runtime, uid, row.id); await drain();
       const current = await ledger();
-      expect(current).toMatchObject({ status: 'delivered', actual: { ids },
-        mappingApprovalProof: { approvedDigest: row.approvalDigest } });
-      if (units === WeightUnits.Pounds) {
-        expect(current.mappingApprovalProof!.mappingDigest).toBe(current.acceptedDigest);
-      } // The original kg digest uses its direct approval, retaining the prior carry proof.
+      expect(current).toMatchObject({ status: 'delivered', actual: { ids }, approvalDigest: null });
       expect(JSON.stringify(server.guides.get(ids.guide)!.guide)).toContain(units === WeightUnits.Pounds ? '176.4 lb' : '80.0 kg');
     }
     expect(server.guides.size).toBe(1);
@@ -731,7 +756,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       provider: 'suunto', action: 'configure', expectedScheduleRevision: 1, expectedScopeRevision: 1,
       expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' }, false);
     await drain(); const blocked = await ledger();
-    expect(blocked.status).toBe('approval_required'); expect(server.guides.size).toBe(0);
+    expect(blocked.status).toBe('pending'); expect(server.guides.size).toBe(0);
     const settingsRef = user().collection('trainingDeliverySettings').doc('plan_p_suunto');
     const settings = (await settingsRef.get()).data();
     if (state === 'stopped') await command('stop');
@@ -965,7 +990,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
   });
   it.each([assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery,
     assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
-    'honors exact legacy loss approval through upgrade and unit changes, but not a newly edited instruction', async assessLegacy => {
+    'honors exact legacy loss approval through upgrade and unit changes, then syncs edited instructions automatically', async assessLegacy => {
     await user().update({ 'settings.unitSettings.distanceUnits': DistanceUnits.Miles });
     await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': [{
       kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1609.344 }, targets: [], note: 'A'.repeat(45),
@@ -974,11 +999,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     const previous = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone, strength) =>
       assessLegacy(workout, destination, zone, 'Quantified Self', strength));
     await command('send'); await drain();
-    const blocked = await ledger(); expect(blocked.status).toBe('approval_required');
+    const blocked = await ledger(); expect(blocked.status).toBe('pending');
     const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
     await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
       provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
-      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.approvalDigest }, false);
+      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.desiredDigest }, false);
     await drain();
     const approved = await ledger();
     const workout = parseScheduledWorkoutV1((await user().collection('scheduledWorkouts').doc('w').get()).data());
@@ -996,22 +1021,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await ledger()).approvalDigest).toBeNull();
     await processTrainingDelivery(runtime, uid, blocked.id); await drain();
     expect((await ledger()).status).toBe('delivered');
-    expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+    expect((await setting.get()).get('approvedDigest')).toBe(blocked.desiredDigest);
     const steps = structuredClone(server.guides.get(actual.ids.guide)!.guide.steps);
     for (const units of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
       await user().update({ 'settings.unitSettings.distanceUnits': units }); await mark();
       await processTrainingDelivery(runtime, uid, blocked.id); await drain();
       expect(await ledger()).toMatchObject({ status: 'delivered', approvalDigest: null,
         actual: { ids: actual.ids }, mappingApprovalProof: { suuntoMappingUnitSettings: { distanceUnits: units } } });
-      expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+      expect((await setting.get()).get('approvedDigest')).toBe(blocked.desiredDigest);
       expect(server.guides.get(actual.ids.guide)!.guide.steps).toEqual(steps);
       expect(server.guides.get(actual.ids.guide)!.guide.richText).toContain(units === DistanceUnits.Miles ? 'mi' : 'Km');
     }
     await user().collection('scheduledWorkouts').doc('w').update({ 'structure.nodes': workout.structure.nodes.map(node =>
       node.kind === 'step' && node.id === 'step' ? { ...node, note: 'A'.repeat(40) + 'BBBBB' } : node) });
     await mark(); await processTrainingDelivery(runtime, uid, blocked.id); await drain();
-    expect((await ledger()).status).toBe('approval_required');
-    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(4);
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(5);
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
   });
   it.each((['v2', 'v3', 'v4'] as const).flatMap(version => ['running', 'cycling', 'swimming', 'strength'].map(sport => [version, sport] as const)))(
@@ -1096,7 +1121,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     const setting = user().collection('trainingDeliverySettings').doc('workout_w_suunto');
     await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w',
       provider: 'suunto', action: 'approve', expectedScheduleRevision: 1, expectedScopeRevision: 1,
-      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.approvalDigest }, false);
+      expectedSettingsRevision: (await setting.get()).get('revision'), approvalDigest: blocked.desiredDigest }, false);
     await drain();
     const approved = await ledger();
     const operation: DeliveryOperation = { id: 'old-unaccepted', kind: 'upsert', deliveryId: approved.id,
@@ -1137,7 +1162,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     pro = true; await mark();
     await processTrainingDelivery(runtime, uid, approved.id); await drain();
     expect((await ledger()).status).toBe('delivered');
-    expect((await setting.get()).get('approvedDigest')).toBe(blocked.approvalDigest);
+    expect((await setting.get()).get('approvedDigest')).toBe(blocked.desiredDigest);
     expect(server.guides.size).toBe(1);
     expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(state === 'unaccepted-update' ? 0 : 1);
     expect(server.calls.filter(call => call.method === 'PUT')).toHaveLength(state === 'unaccepted-update' ? 1 : 0);
@@ -1147,8 +1172,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
       kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [], note: 'A'.repeat(40) + 'BBBBB',
     }] });
     await mark(); await processTrainingDelivery(runtime, uid, approved.id); await drain();
-    expect((await ledger()).status).toBe('approval_required');
-    expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(writes);
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.calls.filter(call => ['POST', 'PUT'].includes(call.method))).toHaveLength(writes + 1);
   });
   it.each(['v2', 'v3', 'v4'] as const)('recovers a %s reschedule/update with a lost ACK before applying the new screen layout', async version => {
     const original = await send();

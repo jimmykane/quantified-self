@@ -64,3 +64,16 @@ proof or permission to change a Training plan. Keep note context separate from m
 - Label every value with its returned canonical unit and state any aggregation or coverage limitation.
 - Where display fields are supplied, use the Sports Lib display value and unit together; canonical numbers remain in
   their separately declared canonical units. Do not mix a converted unit with an unconverted number.
+
+
+## Training threshold settings
+
+For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.
+They need independent threshold read permission and its dependent write grant; Health, measurement and plan grants
+are insufficient. Thresholds are dated calibration settings, not Health observations or evidence of which file inputs
+a workout used. Running/Cycling FTP stays separate in watts, HR uses bpm, and CSS requires an explicit per-100-metre
+or per-100-yard pace. Read current settings first, preserve unrequested values, use null only for explicit removal,
+review before/after values and future-workout effect, then use separate native host approval. Never invent a threshold,
+backdate, retarget recipes, rewrite old workouts or access private frozen weight provenance. A missing tool needs
+reauthorization/catalog refresh after release, never a substitute mutation. The built-in Assistant independently starts
+this access off, can prepare only, and needs app-owned Apply. Report success only from the accepted apply result.

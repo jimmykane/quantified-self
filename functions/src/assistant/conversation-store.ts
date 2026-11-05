@@ -41,6 +41,7 @@ export interface AssistantActiveConversationState {
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
   reflectionChangesEnabled?: boolean;
+  trainingThresholdsEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -63,6 +64,7 @@ interface StoredAssistantConversation {
   timelineNoteChangesEnabled: boolean;
   measurementChangesEnabled: boolean;
   reflectionChangesEnabled: boolean;
+  trainingThresholdsEnabled: boolean;
   trainingPlansEnabled: boolean;
   trainingPlanChangesEnabled: boolean;
   trainingDeliveryEnabled: boolean;
@@ -85,6 +87,7 @@ export interface BegunAssistantTurn {
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
   reflectionChangesEnabled?: boolean;
+  trainingThresholdsEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -163,6 +166,7 @@ export interface AssistantConversationStore {
     timelineNoteChangesEnabled?: boolean,
     measurementChangesEnabled?: boolean,
     reflectionChangesEnabled?: boolean,
+    trainingThresholdsEnabled?: boolean,
   ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
@@ -188,6 +192,7 @@ export interface AssistantConversationStore {
     timelineNoteChangesEnabled?: boolean,
     measurementChangesEnabled?: boolean,
     reflectionChangesEnabled?: boolean,
+    trainingThresholdsEnabled?: boolean,
   ) => Promise<AssistantConversation>;
 }
 
@@ -217,6 +222,7 @@ export function createAssistantRequestFingerprint(
   timelineNoteChangesEnabled = false,
   measurementChangesEnabled = false,
   reflectionChangesEnabled = false,
+  trainingThresholdsEnabled = false,
 ): string {
   const fingerprint = createHash('sha256')
     .update(requestId)
@@ -232,6 +238,7 @@ export function createAssistantRequestFingerprint(
   if (timelineNoteChangesEnabled) fingerprint.update('\0timeline-notes:write');
   if (measurementChangesEnabled) fingerprint.update('\0measurements:write');
   if (reflectionChangesEnabled) fingerprint.update('\0workout-reflections:write');
+  if (trainingThresholdsEnabled) fingerprint.update('\0training-thresholds:write');
   if (trainingPlansEnabled) fingerprint.update('\0training-plans:read');
   if (trainingPlanChangesEnabled) fingerprint.update('\0training-plans:write');
   if (trainingDeliveryEnabled) fingerprint.update('\0training-delivery:write');
@@ -259,6 +266,7 @@ function normalizeReplayReceipts(
   trainingDeliveryEnabled: boolean,
   measurementChangesEnabled: boolean,
   reflectionChangesEnabled: boolean,
+  trainingThresholdsEnabled: boolean,
 ): AssistantReplayReceipt[] {
   const receiptsByRequestId = new Map<string, AssistantReplayReceipt>();
   if (Array.isArray(value)) {
@@ -308,6 +316,7 @@ function normalizeReplayReceipts(
         timelineNoteChangesEnabled,
         measurementChangesEnabled,
         reflectionChangesEnabled,
+        trainingThresholdsEnabled,
       ),
       completedAtMs,
     });
@@ -393,6 +402,7 @@ function parseStoredConversation(
     timelineNoteChangesEnabled: data.timelineNoteChangesEnabled === true && data.timelineNotesEnabled === true,
     measurementChangesEnabled: data.measurementChangesEnabled === true,
     reflectionChangesEnabled: data.reflectionChangesEnabled === true,
+    trainingThresholdsEnabled: data.trainingThresholdsEnabled === true,
     trainingPlansEnabled: data.trainingPlansEnabled === true,
     trainingPlanChangesEnabled: data.trainingPlanChangesEnabled === true && data.trainingPlansEnabled === true,
     trainingDeliveryEnabled: data.trainingDeliveryEnabled === true && data.trainingPlansEnabled === true,
@@ -411,6 +421,7 @@ function parseStoredConversation(
       data.trainingDeliveryEnabled === true && data.trainingPlansEnabled === true,
       data.measurementChangesEnabled === true,
       data.reflectionChangesEnabled === true,
+      data.trainingThresholdsEnabled === true,
     ),
   };
 }
@@ -438,6 +449,7 @@ function createEmptyConversation(
   trainingPlansEnabled = false,
   trainingPlanChangesEnabled = false,
   trainingDeliveryEnabled = false,
+  trainingThresholdsEnabled = false,
 ): StoredAssistantConversation {
   const timestamp = Timestamp.fromDate(now);
   return {
@@ -453,6 +465,7 @@ function createEmptyConversation(
     timelineNoteChangesEnabled: timelineNotesEnabled && timelineNoteChangesEnabled,
     measurementChangesEnabled,
     reflectionChangesEnabled,
+    trainingThresholdsEnabled,
     trainingPlansEnabled,
     trainingPlanChangesEnabled: trainingPlansEnabled && trainingPlanChangesEnabled,
     trainingDeliveryEnabled: trainingPlansEnabled && trainingDeliveryEnabled,
@@ -617,6 +630,7 @@ export function createAssistantConversationStore(
         ...(conversation.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
         ...(conversation.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
         ...(conversation.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(conversation.trainingThresholdsEnabled ? { trainingThresholdsEnabled: true } : {}),
         ...(conversation.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         ...(conversation.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
         ...(conversation.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -689,6 +703,7 @@ export function createAssistantConversationStore(
       timelineNoteChangesEnabled = false,
       measurementChangesEnabled = false,
       reflectionChangesEnabled = false,
+      trainingThresholdsEnabled = false,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -703,7 +718,7 @@ export function createAssistantConversationStore(
         const conversation = !storedConversation
           || storedConversation.expireAt.toMillis() <= nowMs
           ? createEmptyConversation(now, dependencies.createId, locationAccess, false, false, false,
-            measurementChangesEnabled, reflectionChangesEnabled)
+            measurementChangesEnabled, reflectionChangesEnabled, false, false, false, trainingThresholdsEnabled)
           : storedConversation;
 
         if (expectedConversationId
@@ -719,6 +734,7 @@ export function createAssistantConversationStore(
           || conversation.timelineNoteChangesEnabled !== timelineNoteChangesEnabled
           || conversation.measurementChangesEnabled !== measurementChangesEnabled
           || conversation.reflectionChangesEnabled !== reflectionChangesEnabled
+          || conversation.trainingThresholdsEnabled !== trainingThresholdsEnabled
           || conversation.trainingPlansEnabled !== trainingPlansEnabled
           || conversation.trainingPlanChangesEnabled !== trainingPlanChangesEnabled
           || conversation.trainingDeliveryEnabled !== trainingDeliveryEnabled) {
@@ -776,6 +792,7 @@ export function createAssistantConversationStore(
           ...(updatedConversation.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
           ...(updatedConversation.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
           ...(updatedConversation.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+          ...(updatedConversation.trainingThresholdsEnabled ? { trainingThresholdsEnabled: true } : {}),
           ...(updatedConversation.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
           ...(updatedConversation.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
           ...(updatedConversation.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
@@ -832,6 +849,7 @@ export function createAssistantConversationStore(
               begunTurn.timelineNoteChangesEnabled === true,
               begunTurn.measurementChangesEnabled === true,
               begunTurn.reflectionChangesEnabled === true,
+              begunTurn.trainingThresholdsEnabled === true,
             ),
             completedAtMs: nowMs,
           },
@@ -983,6 +1001,7 @@ export function createAssistantConversationStore(
       timelineNoteChangesEnabled = false,
       measurementChangesEnabled = false,
       reflectionChangesEnabled = false,
+      trainingThresholdsEnabled = false,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -998,7 +1017,7 @@ export function createAssistantConversationStore(
         const snapshot = await transaction.get(conversationRef);
         const stored = snapshot.exists ? parseStoredConversation(snapshot.data(), now.getTime()) : null;
         const currentId = stored && stored.expireAt.toMillis() > now.getTime() ? stored.conversationId : null;
-        if (((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled || trainingPlansEnabled
+        if (((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled || trainingThresholdsEnabled || trainingPlansEnabled
           || trainingPlanChangesEnabled || trainingDeliveryEnabled) && expectedConversationId === undefined)
           || (expectedConversationId !== undefined && currentId !== expectedConversationId)) {
           throw new AssistantConversationStoreError(
@@ -1018,6 +1037,7 @@ export function createAssistantConversationStore(
           trainingPlansEnabled,
           trainingPlanChangesEnabled,
           trainingDeliveryEnabled,
+          trainingThresholdsEnabled,
         );
         transaction.set(conversationRef, conversation);
         return toPublicConversation(conversation);

@@ -1,4 +1,5 @@
 import { GOAL_TOOLS } from './training-goals.schemas';
+import { TRAINING_THRESHOLD_TOOLS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -580,6 +581,16 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
 const service = {
+    trainingThresholds: vi.fn(async (tool: string) => {
+      const thresholds = { functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' },
+        lactateThresholdHR: null, swimThresholdSpeed: null };
+      const policy = { family: 'cycling', familyLabel: 'Cycling', revision: 1, effectiveAt: '2026-07-01T08:00:00Z',
+        policyRef: 'opaque-threshold-policy', thresholds };
+      if (tool === 'get_training_thresholds') return { asOf: '2026-07-01T08:00:00Z', policies: [policy] };
+      if (tool === 'apply_training_threshold_change') return { status: 'applied', policy };
+      return { proposalRef: 'opaque-threshold-proposal', expiresAtMs: DAY_MS + 60000, requiresConfirmation: true,
+        appliesTo: 'future-workouts', review: { family: 'cycling', familyLabel: 'Cycling', before: thresholds, after: thresholds } };
+    }),
     workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
       ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
       : { activityRef: ACTIVITY_REF, target: 'activity', revision: 1, present: true,
@@ -1440,6 +1451,9 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  get_training_thresholds: { family: 'cycling' },
+  preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { functionalThresholdPower: 220 } },
+  apply_training_threshold_change: { proposalRef: 'opaque-threshold-proposal' },
   list_training_goals: {},
   get_training_goal: { goalRef: 'opaque-goal' },
   get_training_goals_progress: { localDate: '2026-07-02', timeZone: 'UTC', goalRefs: ['opaque-goal'] },
@@ -2127,7 +2141,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }).success).toBe(false);
   });
 
-  it('advertises strict schemas and validates every successful tool call', async () => {
+  it('advertises strict schemas within each explicit discovery budget', async () => {
     const dataService = createFixtureDataService();
     const connection = await connectFixtureServer(dataService);
     connections.push(connection);
@@ -2193,11 +2207,13 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const goalTools = tools.filter(tool => (GOAL_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(goalTools), 'utf8')).toBeLessThan(40 * 1024);
     const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
+    const thresholdTools = tools.filter(tool => (TRAINING_THRESHOLD_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(thresholdTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !thresholdTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2228,118 +2244,59 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       Object.values(DERIVED_METRIC_KINDS).length,
     );
 
-    const ajv = createAjv();
-    const validators = new Map(tools.map(tool => [
-      tool.name,
-      ajv.compile(tool.outputSchema as AnySchema),
-    ]));
-    const trainingValidator = validators.get('get_training_metric')!;
-    expect(trainingValidator({
-      metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
-      updatedAtMs: DAY_MS,
-      sourceEventCount: 0,
-      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
-    })).toBe(false);
+  });
 
-    const healthFixture = await dataService.queryHealthMetric({
-      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
-      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
-    });
-    expect(validators.get('query_health_metric')!({
-      ...healthFixture,
-      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
-    })).toBe(false); // Body composition must not expose otherwise-valid source series.
+  it.each(PUBLIC_MCP_TOOL_NAMES)('validates successful %s output and JSON-text equivalence', async toolName => {
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === toolName)!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: toolName, arguments: successfulToolArguments[toolName] });
+    expect(result.isError, toolName).not.toBe(true);
+    expect(result.structuredContent, toolName).toBeDefined();
+    expect(validator(result.structuredContent), `${toolName}: ${JSON.stringify(validator.errors)}`).toBe(true);
+    const text = result.content.find(content => content.type === 'text');
+    expect(text?.type).toBe('text');
+    if (text?.type === 'text') expect(JSON.parse(text.text)).toEqual(result.structuredContent);
 
-    for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
-      const result = await connection.client.callTool({
-        name: toolName,
-        arguments: successfulToolArguments[toolName],
-      });
-      expect(result.isError, toolName).not.toBe(true);
-      expect(result.structuredContent, toolName).toBeDefined();
-      const validator = validators.get(toolName)!;
-      expect(
-        validator(result.structuredContent),
-        `${toolName}: ${JSON.stringify(validator.errors)}`,
-      ).toBe(true);
-      const text = result.content.find(content => content.type === 'text');
-      expect(text?.type).toBe('text');
-      if (text?.type === 'text') {
-        expect(JSON.parse(text.text)).toEqual(result.structuredContent);
-      }
+    if (toolName === 'get_training_metric') expect(validator({ metricKind: DERIVED_METRIC_KINDS.Form,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION, updatedAtMs: DAY_MS, sourceEventCount: 0,
+      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend] })).toBe(false);
+    if (toolName === 'query_health_metric') {
+      const fixture = await dataService.queryHealthMetric({ uid: 'user-1', metricId: 'heart_rate',
+        startDate: '2026-07-01', endDate: '2026-07-02', mode: 'summaries', maxPoints: 200, measurementsAllowed: false });
+      expect(validator({ ...fixture, metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat') }))
+        .toBe(false); // Body composition cannot expose otherwise-valid source series.
     }
-    expect(dataService.listActivities).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        limit: 1,
-      }),
-    );
-    expect(dataService.queryActivitiesWithTags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        tags: ['Race'],
-        tagMatch: 'all',
-        limit: 1,
-      }),
-    );
-    await connection.client.callTool({
-      name: 'list_activities',
-      arguments: {
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      },
-    });
-    expect(dataService.listActivities).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      }),
-    );
-    expect(dataService.listRoutes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        activityTypes: ['Running'],
-        search: 'ridge',
-      }),
-      undefined, // External calls never receive an internal Assistant family.
-    );
-
-    const distanceChart = await connection.client.callTool({
-      name: 'get_activity_chart_data',
-      arguments: {
-        activityRef: ACTIVITY_REF,
-        metrics: ['heart_rate'],
-        xAxis: 'distance',
-        includeLocation: false,
-      },
-    });
-    expect(distanceChart.structuredContent).toMatchObject({
-      xAxis: 'distance',
-      xAxisUnit: 'meters',
-    });
-
-    for (const metricKind of Object.values(DERIVED_METRIC_KINDS)) {
-      const result = await connection.client.callTool({
-        name: 'get_training_metric',
-        arguments: { metricKind },
-      });
-      expect(result.isError, metricKind).not.toBe(true);
-      expect(
-        validators.get('get_training_metric')!(result.structuredContent),
-        `${metricKind}: ${JSON.stringify(
-          validators.get('get_training_metric')!.errors,
-        )}`,
-      ).toBe(true);
+    if (toolName === 'list_activities') {
+      expect(dataService.listActivities).toHaveBeenCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, activityTypes: ['Running'], limit: 1 }));
+      await connection.client.callTool({ name: toolName,
+        arguments: { relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 } });
+      expect(dataService.listActivities).toHaveBeenLastCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 }));
     }
-  }, 30_000);
+    if (toolName === 'query_activities_with_tags') expect(dataService.queryActivitiesWithTags)
+      .toHaveBeenCalledWith(expect.objectContaining({ startTimeMs: undefined, endTimeMs: undefined,
+        activityTypes: ['Running'], tags: ['Race'], tagMatch: 'all', limit: 1 }));
+    if (toolName === 'list_routes') expect(dataService.listRoutes).toHaveBeenCalledWith(
+      expect.objectContaining({ activityTypes: ['Running'], search: 'ridge' }),
+      undefined); // External calls never receive an internal Assistant family.
+    if (toolName === 'get_activity_chart_data') {
+      const distance = await connection.client.callTool({ name: toolName,
+        arguments: { activityRef: ACTIVITY_REF, metrics: ['heart_rate'], xAxis: 'distance', includeLocation: false } });
+      expect(distance.structuredContent).toMatchObject({ xAxis: 'distance', xAxisUnit: 'meters' });
+    }
+  });
+
+  it.each(Object.values(DERIVED_METRIC_KINDS))('validates the complete %s derived payload', async metricKind => {
+    const connection = await connectFixtureServer(createFixtureDataService()); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === 'get_training_metric')!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: 'get_training_metric', arguments: { metricKind } });
+    expect(result.isError, metricKind).not.toBe(true);
+    expect(validator(result.structuredContent), `${metricKind}: ${JSON.stringify(validator.errors)}`).toBe(true);
+  });
 
   it('rejects private Health ordering fields and arbitrary categorical values at the output boundary', async () => {
     const dataService = createFixtureDataService();
@@ -3219,6 +3176,30 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(page.structuredContent).toMatchObject({ scanComplete: false, nextCursor: 'opaque-cursor' });
   });
 
+  it.each(TRAINING_THRESHOLD_TOOLS)('isolates %s grants, strict inputs and private output on every transport', async name => {
+    const service = createFixtureDataService();
+    for (const scopes of [[MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsWrite, MCP_OAUTH_SCOPES.TrainingPlansRead],
+      [MCP_OAUTH_SCOPES.TrainingThresholdsWrite], [MCP_OAUTH_SCOPES.TrainingThresholdsRead]]) {
+      const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      const allowed = scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsRead)
+        && (name === 'get_training_thresholds' || scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsWrite));
+      expect(names.includes(name)).toBe(allowed);
+      if (!allowed) await expect(connection.client.callTool({ name, arguments: successfulToolArguments[name] })).rejects.toThrow(/not found/);
+    }
+    const scopes = [MCP_OAUTH_SCOPES.TrainingThresholdsRead, MCP_OAUTH_SCOPES.TrainingThresholdsWrite];
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const invalid = await connection.client.callTool({ name, arguments: { ...successfulToolArguments[name], uid: 'foreign-owner' } });
+    expect(invalid.isError).toBe(true); expect(service.trainingThresholds).not.toHaveBeenCalled();
+    const valid = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+    expect(valid.isError).not.toBe(true);
+    expect(service.trainingThresholds).toHaveBeenCalledWith(name, expect.objectContaining({ uid: 'user-1', scopes }));
+    service.trainingThresholds = vi.fn().mockResolvedValue({ ...(valid.structuredContent as object),
+      healthWeight: 'PRIVATE-WEIGHT-PROVENANCE', rawPolicy: { included: false } });
+    const leaked = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+    expect(leaked.isError).toBe(true); expect(leaked).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(leaked)).not.toMatch(/PRIVATE-WEIGHT-PROVENANCE|rawPolicy/);
+  });
   it('isolates reflection grants, native approval annotations and private projections on every transport', async () => {
     const service = createFixtureDataService();
     for (const scopes of [[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.WorkoutReflectionsRead],

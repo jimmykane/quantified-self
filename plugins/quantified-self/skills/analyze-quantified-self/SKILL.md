@@ -315,3 +315,15 @@ When a complete power target includes `garminPowerAveragingSeconds`, preserve it
 through full-recipe reads and previews. Omission retains the default; add or remove averaging only on explicit user
 intent and disclose the change. The choice is for Garmin workout execution and unsupported destinations must not
 silently drop it. It does not change watt/FTP/zone values, configure every watch data screen, or prove watch receipt.
+
+## Training threshold settings
+
+For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.
+They need independent threshold read permission and its dependent write grant; Health, measurement and plan grants
+are insufficient. Thresholds are dated calibration settings, not Health observations or evidence of which file inputs
+a workout used. Running/Cycling FTP stays separate in watts, HR uses bpm, and CSS requires an explicit per-100-metre
+or per-100-yard pace. Read current settings first, preserve unrequested values, use null only for explicit removal,
+review before/after values and future-workout effect, then use separate native host approval. Never invent a threshold,
+backdate, retarget recipes, rewrite old workouts or access private frozen weight provenance. A missing tool needs
+reauthorization/catalog refresh after release, never a substitute mutation. The built-in Assistant independently starts
+this access off, can prepare only, and needs app-owned Apply. Report success only from the accepted apply result.

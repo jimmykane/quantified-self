@@ -55,6 +55,12 @@
       <h3 id="assistant-content-access">Measurements, reflections, tags and notes</h3>
       <p class="assistant-training-intro">Changes start a fresh chat. New chat resets these choices: manual measurement changes start on, as do private workout reflections; other optional access starts off. You review every change.</p>
       <div class="assistant-training-options">
+        <app-compact-row title="Training thresholds" titleId="assistant-thresholds-title" icon="speed" density="compact">
+          <p id="assistant-thresholds-summary" class="assistant-training-summary">Read FTP, threshold HR and CSS settings and prepare changes for future workouts. Off for new chats. You review values before Apply; existing workouts and Health measurements stay unchanged.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.trainingThresholdsEnabled === true"
+            aria-label="Training thresholds — changing this starts a new chat" aria-describedby="assistant-thresholds-summary"
+            (change)="setTrainingThresholds($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
         <app-compact-row title="Manual Health measurements" titleId="assistant-measurements-title"
           icon="monitor_weight" density="compact">
           <p id="assistant-measurements-summary" class="assistant-training-summary">Find, add, edit or permanently delete manual entries such as weight and blood pressure. Provider imports stay read-only. On for new chats; nothing changes until you approve it.</p>

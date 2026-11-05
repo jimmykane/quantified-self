@@ -1,5 +1,6 @@
 import { activityStreamSeriesSchema } from './activity-stream.schema';
 import { GOAL_TOOLS, GOAL_OUTPUTS } from './training-goals.schemas';
+import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_OUTPUTS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
@@ -60,6 +61,7 @@ import {
 } from './content-write.schemas';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  ...TRAINING_THRESHOLD_TOOLS,
   ...GOAL_TOOLS,
   ...MCP_WORKOUT_REFLECTION_TOOLS,
   ...MCP_MANUAL_MEASUREMENT_TOOLS,
@@ -1612,6 +1614,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     ...MCP_MANUAL_MEASUREMENT_OUTPUTS,
     ...TRAINING_READ_OUTPUTS,
     ...GOAL_OUTPUTS,
+    ...TRAINING_THRESHOLD_OUTPUTS,
     ...TRAINING_WRITE_OUTPUTS,
     get_training_change_status: TRAINING_CHANGE_STATUS_OUTPUT,
     list_measurement_types: z.strictObject({
