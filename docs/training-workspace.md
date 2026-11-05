@@ -451,7 +451,7 @@ range registration without charts, owner changes, stale clicks, disposal, Materi
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `23.9.0` in both app and Functions
+- Installed `@sports-alliance/sports-lib`: `23.10.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -7260,6 +7260,7 @@ thresholds only fill missing or rejected calibration for new legs. A saved thres
 threshold-band estimate, never a guessed or mixed resting/max/threshold Banister tuple. A complete valid file tuple
 retains Banister priority. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
 
+Root and Functions pin the same published Sports Lib 23.10.0 artifact with matching lockfile integrity.
 New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
 This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
 changing recorded stats, parse options, original files or the file-only cache. Source finalization serializes each leg
@@ -7322,8 +7323,8 @@ the same defaults, instead of a separate document read for every family. One-fam
 still query immutable revisions even when the current head is absent. No persistent cache or extra writes are added.
 Existing tool schemas remain frozen. The Assistant's independent default-off choice permits reads
 and preparation only; app Apply rechecks generation, proposal, expiry and authority. New chat turns it off. See
-`docs/mcp-server.md` and `docs/assistant.md`. Companion library publication, dependency adoption, deployed-server update,
-registered-app rescan and plugin refresh are separate rollout steps; this work authorizes none of them.
+`docs/mcp-server.md` and `docs/assistant.md`. The companion API is published and adopted; deployed-server update,
+registered-app rescan and plugin refresh remain separate rollout steps requiring their normal approval.
 
 ### Sports Lib 23.9.0 R–R heart-rate adoption
 
