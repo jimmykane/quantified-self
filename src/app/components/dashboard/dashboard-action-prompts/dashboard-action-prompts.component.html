@@ -1,8 +1,9 @@
 @if (orderedPrompts.length) {
-<section class="dashboard-action-prompts" aria-label="Dashboard action prompts">
+<section class="dashboard-action-prompts qs-glass-card-panel" aria-label="Dashboard action prompts">
   @for (prompt of orderedPrompts; track prompt.id) {
   <app-dashboard-action-prompt
     [prompt]="prompt"
+    [compact]="true"
     [hasControls]="prompt.id === unitSetupPromptId"
     [hasActionControls]="prompt.id === firstActivityUploadPromptId"
     (primary)="primary.emit($event)"
