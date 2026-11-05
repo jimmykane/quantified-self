@@ -15,6 +15,7 @@ import { isFunctionsEmulator } from '../utils';
 import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS } from '../mcp/training-plans.schemas';
 import { MCP_MANUAL_MEASUREMENT_SCHEMA } from '../mcp/manual-measurements.schemas';
 import { HEALTH_METRIC_CATALOG } from '../../../shared/health';
+import { TRAINING_THRESHOLD_OUTPUTS } from '../mcp/training-thresholds.schemas';
 
 const MAX_FACTS = 6;
 const MAX_LINKS = 3;
@@ -402,6 +403,21 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_training_thresholds' || tool.name === 'preview_training_threshold_change') {
+    const parsed = TRAINING_THRESHOLD_OUTPUTS[tool.name].safeParse(structuredContent);
+    if (!parsed.success) return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: 'Training thresholds unavailable.', facts: [], links: [] };
+    const policies = 'policies' in parsed.data ? parsed.data.policies
+      : [{ familyLabel: parsed.data.review.familyLabel, thresholds: parsed.data.review.after }];
+    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS' } as const;
+    return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: tool.name === 'get_training_thresholds' ? `${policies.length} sport threshold settings; existing workouts are unchanged.`
+        : 'Proposed thresholds for future workouts. Review and Apply in Quantified Self; nothing has changed yet.',
+      facts: policies.flatMap(policy => Object.entries(labels).flatMap(([key, label]) => {
+        const value = policy.thresholds[key as keyof typeof labels];
+        return value ? [{ label: `${policy.familyLabel}: ${label}`, value: `${value.displayValue} ${value.displayUnit}`.trim() }] : [];
+      })).slice(0, MAX_FACTS), links: [] };
+  }
   if (tool.name === 'get_workout_reflection') {
     const textLength = typeof structuredContent.note === 'string' ? structuredContent.note.length : 0;
     return { toolName: tool.name, title: tool.title,

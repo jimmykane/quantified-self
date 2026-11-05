@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { randomUUID } from 'node:crypto';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, unresolvedTrainingLoadLegs,
+  sameTrainingLoadCalibration,
   type TrainingLoadControl, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../../../shared/training-load-source';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -66,9 +67,10 @@ export function mergedTrainingLoadLegs(resultId: string,
       const association = Object.entries(metadata?.controls ?? {}).find(([, control]) => control.activityId === activity.id);
       const sourceKey = association?.[0] ?? entry?.[0] ?? activity.id;
       const policy = metadata?.legs?.[sourceKey]?.policy ?? entry?.[1].policy ?? defaultAppliedTrainingLoadPolicy(activity.data.type);
-      // Reassociation can retain a different CSS before source reparse refreshes candidates.
+      const calibration = (metadata?.legs?.[sourceKey] ?? entry?.[1])?.calibration;
+      // Reassociation can retain different calibration before source reparse refreshes candidates.
       // Removing that association during merge must not make the stale score look valid.
-      if (association && policy.swimThresholdSpeed !== entry?.[1].policy.swimThresholdSpeed &&
+      if (association && entry && !sameTrainingLoadCalibration(metadata?.legs?.[sourceKey], entry[1]) &&
         entry?.[1].evaluations?.automatic.provenance !== 'imported') throw changedSource();
       const sourceControl = metadata?.controls[sourceKey];
       const id = mergedActivityId(resultId, source.eventId, activity.id);
@@ -83,7 +85,7 @@ export function mergedTrainingLoadLegs(resultId: string,
         endMs: trainingLoadTimeMs(activity.data.endDate), type: `${activity.data.type}`,
         duration: stat('Duration'), distance: stat('Distance') },
         recordedTss: recordedTrainingStressScore(activity.data), evaluations: entry?.[1].evaluations ?? null,
-        policy: { ...policy } };
+        policy: { ...policy }, ...(calibration ? { calibration } : {}) };
       // Explicit source association is already resolved by the mapping above. Never copy source IDs into controls.
       const control: TrainingLoadControl = {};
       if (sourceControl?.method !== undefined) control.method = sourceControl.method;
@@ -138,13 +140,15 @@ export async function prepareMergedTrainingLoad(uid: string, event: EventInterfa
       leg.sourceFingerprint = activityFingerprints.get(id);
       if (!leg.sourceFingerprint) throw changedSource();
       if (previous?.legs?.[id]) {
-        // A retry freezes the original CSS and its matching candidates together. Source
+        // A retry freezes the original calibration and its matching candidates together. Source
         // controls may have been reassociated/reparsed since the first preparation.
-        if (leg.policy.swimThresholdSpeed !== previous.legs[id].policy.swimThresholdSpeed) {
+        if (!sameTrainingLoadCalibration(leg, previous.legs[id])) {
           if (leg.sourceFingerprint !== previous.legs[id].sourceFingerprint) throw changedSource();
           leg.evaluations = previous.legs[id].evaluations;
         }
         leg.policy = previous.legs[id].policy;
+        if (previous.legs[id].calibration) leg.calibration = previous.legs[id].calibration;
+        else delete leg.calibration;
       }
     }
     const pending: TrainingLoadMetadata = { version: 1, revision: (previous?.revision ?? 0) + 1,

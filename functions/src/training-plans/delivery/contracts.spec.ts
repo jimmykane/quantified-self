@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeDeliveryTimeZone, parseTrainingDeliveryCommandV1, trainingDeliveryLocalDate,
   parseTrainingDeliveryStatusV1 } from '../../../../shared/training-provider-delivery';
-import { TrainingDeliveryTransportError } from './contracts';
+import { requiresDeliveryMappingApproval, TrainingDeliveryTransportError } from './contracts';
 
 const command = { schemaVersion: 1, mutationId: 'test-1', scope: 'workout', scopeId: 'workout-1',
   provider: 'garmin', action: 'send', expectedScheduleRevision: 1, expectedScopeRevision: 1,
   expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' };
 
 describe('Training delivery contracts', () => {
+  it.each([undefined, false, true])('does not add a mapping approval gate for legacy flag %s', requiresApproval => {
+    for (const level of ['exact', 'degraded', 'unsupported'] as const) {
+      expect(requiresDeliveryMappingApproval({ level, requiresApproval, issues: ['Provider limitation'],
+        digest: 'digest', mappingVersion: 'fixture' })).toBe(false);
+    }
+  });
   it('keeps transport diagnostics allowlisted even with invalid or unexpected runtime fields', () => {
     const details = { httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
       providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',

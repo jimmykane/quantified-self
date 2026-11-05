@@ -23,6 +23,25 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it('pairs threshold display units without retaining opaque references or policy state', () => {
+    const thresholds = { functionalThresholdPower: null, lactateThresholdHR: null,
+      swimThresholdSpeed: { value: 91.44 / 113, unit: 'm/s', displayValue: '01:53', displayUnit: '/100yd' } };
+    const policy = { family: 'swimming', familyLabel: 'Swimming', revision: 3, effectiveAt: '2026-11-04T00:00:00Z',
+      policyRef: 'PRIVATE-REF', thresholds };
+    const read = buildAssistantEvidence({ name: 'get_training_thresholds', title: 'Training thresholds' },
+      { asOf: '2026-11-04T00:00:00Z', policies: [policy] });
+    expect(read.facts).toEqual([{ label: 'Swimming: CSS', value: '01:53 /100yd' }]);
+    expect(JSON.stringify(read)).not.toMatch(/PRIVATE|revision|effectiveAt|m\/s/);
+    const preview = buildAssistantEvidence({ name: 'preview_training_threshold_change', title: 'Prepare thresholds' },
+      { proposalRef: 'PRIVATE-PROPOSAL', expiresAtMs: 123, requiresConfirmation: true, appliesTo: 'future-workouts',
+        review: { family: 'swimming', familyLabel: 'Swimming', before: thresholds, after: thresholds } });
+    expect(preview.summary).toContain('nothing has changed yet');
+    expect(preview.facts).toEqual(read.facts);
+    expect(JSON.stringify(preview)).not.toContain('PRIVATE');
+    const invalid = buildAssistantEvidence({ name: 'get_training_thresholds', title: 'Training thresholds' },
+      { asOf: '2026-11-04T00:00:00Z', policies: [{ ...policy, healthWeight: 'PRIVATE-HEALTH' }] });
+    expect(invalid.facts).toEqual([]);
+  });
   it('retains compact phase names and dates without private descriptions or references', () => {
     const evidence = buildAssistantEvidence({ name: 'get_training_plan_phases', title: 'Plan phases' }, {
       scheduleRevision: 1, planRevision: 1, planRef: 'PRIVATE-REF', startDate: '2026-09-01', endDate: '2026-09-30',

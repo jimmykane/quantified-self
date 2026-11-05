@@ -14,6 +14,20 @@ Notes are not filtered by provider and never change measurements, aggregation, o
 their own trend windows alongside the selected explorer range. The shared chart visibility preference lives in account
 settings, not query parameters. The Sleep stage breakdown is not a calendar chart and remains unchanged.
 
+## Training threshold settings in Fitness
+
+Health → Fitness offers the shared Training threshold editor for independent Running/Cycling FTP, sport-family
+threshold HR and Swimming CSS (per 100 metres or yards). It edits the same dated Training policies as Settings,
+not a second Health measurement. Saving changes only future-workout fallbacks and preserves load method/inclusion;
+imported TSS and valid file calibration retain priority. Existing workouts keep their saved policy and frozen inputs.
+Actual prior manual/device Health Weight can supply missing mass for a new workout's MET estimate, with no age expiry;
+conflicts remain unavailable and the chosen point is frozen privately. Threshold edits do not alter Health history.
+See [Training thresholds](training-workspace.md#dated-training-thresholds-and-swimming-css) for full rules.
+
+MCP threshold reads and reviewed writes have independent grants; Health and measurement permissions do not authorize
+them. The Assistant requires its separate default-off Training thresholds choice and app-owned Apply. This is separate
+from manual Health measurement entry and planned-workout relative target snapshots.
+
 ## Goals
 
 - Give provider adapters one typed model for daily health summaries, interval summaries, point measurements, profile snapshots, and bounded high-resolution samples.

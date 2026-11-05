@@ -121,6 +121,23 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it('keeps threshold access opt-in, binds retries and refuses a stale chat after reset', async () => {
+    const harness = createFirestoreHarness(); let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-11-04T12:00:00Z'), createId: () => `threshold-chat-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }) });
+    const original = await store.resetConversation('owner');
+    expect((await store.getActiveConversationState('owner')).trainingThresholdsEnabled).toBeUndefined();
+    const enabled = await store.resetConversation('owner', 'coordinate_free', false, original.conversationId,
+      false, false, false, false, false, false, false, true);
+    expect((await store.getActiveConversationState('owner')).trainingThresholdsEnabled).toBe(true);
+    await expect(store.beginTurn('owner', enabled.conversationId)).rejects.toMatchObject({ code: 'conversation_changed' });
+    const base = ['request', 'Set my cycling FTP to 220', 'coordinate_free', false, false, false, false, false, false, false, false] as const;
+    expect(createAssistantRequestFingerprint(...base)).not.toBe(createAssistantRequestFingerprint(...base, true));
+    await store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId);
+    expect((await store.getActiveConversationState('owner')).trainingThresholdsEnabled).toBeUndefined();
+    await expect(store.beginTurn('owner', enabled.conversationId)).rejects.toMatchObject({ code: 'conversation_changed' });
+  });
   it.each([true, false])('binds the first turn to the requested reflection choice %s', async enabled => {
     const harness = createFirestoreHarness();
     const store = createAssistantConversationStore({ db: () => harness.db as never,

@@ -294,8 +294,10 @@ plan; **Plan actions → Activate plan** remains available. Plan sync is a separ
 - For a new workout being sent to Suunto, omit step notes the user did not ask for. Keep necessary concise watch
   instructions within 40 characters when the step also shows duration or targets, or 54 for a manual-only step. Never
   silently drop a requested instruction to fit. Explain any exact mapping warning in the provider preview before the
-  native approval: one approved Send proposal covers its current digest-bound adjustment, not provider/watch receipt.
-- Keep the user's canonical sport unchanged. Provider family folds are private, approval-bound adapter behavior; never
+  native confirmation of the authored change and initial Send. Once sync is enabled, supported adjustments apply
+  automatically to future eligible edits and workouts entering the provider window, without separate mapping approval.
+  Warnings remain visible; unsupported recipes and changed account authority still block delivery. Send is not provider/watch receipt.
+- Keep the user's canonical sport unchanged. Provider family folds are private adapter behavior disclosed as warnings under Send/Enable consent; never
   offer to rewrite a workout from a specific sport such as Downhill Cycling to generic Cycling solely to make delivery
   pass.
 
@@ -373,3 +375,16 @@ complete replacement, and use the host's separate native approval for Apply. Goa
 plans, and a missing plan does not erase the goal. Pause, complete, archive and restore are authored lifecycle changes;
 never infer performance achievement. Goal edits never authorize plan changes, provider sends or another daily
 suggestion. The built-in Assistant uses its app-owned goal review and Apply, not public write tools.
+
+
+## Training threshold settings
+
+For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.
+They need independent threshold read permission and its dependent write grant; Health, measurement and plan grants
+are insufficient. Thresholds are dated calibration settings, not Health observations or evidence of which file inputs
+a workout used. Running/Cycling FTP stays separate in watts, HR uses bpm, and CSS requires an explicit per-100-metre
+or per-100-yard pace. Read current settings first, preserve unrequested values, use null only for explicit removal,
+review before/after values and future-workout effect, then use separate native host approval. Never invent a threshold,
+backdate, retarget recipes, rewrite old workouts or access private frozen weight provenance. A missing tool needs
+reauthorization/catalog refresh after release, never a substitute mutation. The built-in Assistant independently starts
+this access off, can prepare only, and needs app-owned Apply. Report success only from the accepted apply result.

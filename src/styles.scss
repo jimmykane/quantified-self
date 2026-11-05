@@ -245,6 +245,7 @@ section.component-container {
   --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --qs-theme-success: #10b981;
   // Semantic text colors retain their meaning and contrast when the app accent changes theme.
+  --qs-status-info: #{map.get(app-light-colors.$primary-palette, 40)};
   --qs-status-positive: #{map.get(mat.$green-palette, 40)};
   --qs-status-caution: #{map.get(app-light-colors.$tertiary-palette, 40)};
   --mat-sys-background: #fafafa;
@@ -266,6 +267,7 @@ section.component-container {
 
 .dark-theme {
   --qs-theme-primary: #607d8b;
+  --qs-status-info: #{map.get(app-dark-colors.$tertiary-palette, 80)};
   --qs-status-positive: #{map.get(mat.$green-palette, 80)};
   --qs-status-caution: #{map.get(app-light-colors.$tertiary-palette, 80)};
   --qs-theme-on-primary: #ffffff;

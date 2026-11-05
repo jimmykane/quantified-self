@@ -191,7 +191,7 @@ describe('Training delivery service summaries', () => {
   });
   it.each([
     ['retrying', 'retry scheduled', 'retries scheduled'],
-    ['approval_required', 'needs approval', 'need approval'],
+    ['approval_required', 'awaiting sync refresh', 'awaiting sync refresh'],
     ['fresh_consent_required', 'needs sync setup', 'need sync setup'],
     ['needs_attention', 'sync unconfirmed', 'syncs unconfirmed'],
     ['removed', 'copy removed', 'copies removed'],

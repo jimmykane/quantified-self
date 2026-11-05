@@ -24,6 +24,7 @@ class ServiceSourceIconStubComponent {
   template: `
     <app-dashboard-action-prompt
       [prompt]="prompt"
+      [compact]="compact"
       [hasControls]="hasControls"
       [hasActionControls]="hasActionControls"
       (primary)="onPrimary($event)"
@@ -36,6 +37,7 @@ class ServiceSourceIconStubComponent {
   standalone: false,
 })
 class DashboardActionPromptHostComponent {
+  compact = false;
   hasControls = true;
   hasActionControls = false;
   prompt: DashboardActionPromptViewModel = {
@@ -113,17 +115,36 @@ describe('DashboardActionPromptComponent', () => {
     expect(actionsText.indexOf('Projected action')).toBeLessThan(actionsText.indexOf('Upgrade to Pro'));
   });
 
-  it('pins the action row to the bottom of equal-height prompt cards', () => {
-    const styles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component.scss'),
-      'utf8',
-    );
+  it('opts compact rows out of the standalone frame while retaining their copy and controls', () => {
+    const card = fixture.nativeElement.querySelector('mat-card');
+    expect(card.classList.contains('qs-glass-card-panel')).toBe(true);
+    expect(card.classList.contains('qs-card-plain')).toBe(false);
+    host.compact = true;
+    fixture.detectChanges();
+    expect(card.classList.contains('dashboard-action-prompt--compact')).toBe(true);
+    expect(card.classList.contains('qs-card-plain')).toBe(true);
+    expect(card.classList.contains('qs-glass-card-panel')).toBe(false);
+    expect(card.textContent).toContain('Default units');
+    expect(card.querySelector('.projected-control')).not.toBeNull();
+    expect(card.querySelectorAll('button')).toHaveLength(2);
+    host.compact = false;
+    fixture.detectChanges();
+    expect(card.classList.contains('qs-glass-card-panel')).toBe(true);
+    expect(card.classList.contains('dashboard-action-prompt--compact')).toBe(false);
+  });
 
-    expect(styles).toContain('flex-direction: column');
-    expect(styles).toContain('margin-top: auto');
-    expect(styles).toContain('font: var(--mat-sys-title-medium)');
-    expect(styles).toContain('font: var(--mat-sys-body-medium)');
-    expect(styles).not.toContain('surface-container-low');
+  it('retains compact controls and error details while busy actions are disabled', () => {
+    host.compact = true;
+    host.prompt = { ...host.prompt, busy: true, error: 'Could not save unit preferences. Please try again.' };
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.projected-control')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(host.prompt.error);
+    expect(fixture.nativeElement.querySelector('mat-progress-spinner')).not.toBeNull();
+    const buttons = fixture.debugElement.queryAll(By.css('button'));
+    expect(buttons.every(button => button.nativeElement.disabled)).toBe(true);
+    for (const button of buttons) button.nativeElement.click();
+    expect(host.onPrimary).not.toHaveBeenCalled();
+    expect(host.onMenuAction).not.toHaveBeenCalled();
   });
 
   it('does not render an empty content block when there are no controls or errors', () => {

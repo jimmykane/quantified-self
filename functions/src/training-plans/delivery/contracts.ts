@@ -22,7 +22,7 @@ export interface DeliveryConnection {
 }
 export interface DeliveryAssessment {
   level: 'exact' | 'degraded' | 'unsupported';
-  /** Internal policy only. Omission keeps degraded mappings approval-gated. */
+  /** Legacy serializer metadata, retained for historical mapping/recovery proofs. */
   requiresApproval?: boolean;
   /** Private, adapter-proved equivalent approval for the identical prescription
    * before a presentation-only mapping upgrade. Never exposed as a wire field. */
@@ -33,9 +33,10 @@ export interface DeliveryAssessment {
   digest: string;
   mappingVersion: string;
 }
-export function requiresDeliveryMappingApproval(assessment: DeliveryAssessment): boolean {
-  return assessment.level === 'degraded' && assessment.requiresApproval !== false;
-}
+/** Supported provider adjustments are covered by ordinary Send/Enable consent.
+ * Keep one policy boundary for app/MCP previews and existing callers; serializer
+ * warnings remain visible and unsupported mappings are rejected independently. */
+export const requiresDeliveryMappingApproval: (assessment: DeliveryAssessment) => boolean = () => false;
 export interface DeliveryArtifact {
   ids: Record<string, string>;
   localDate: string;

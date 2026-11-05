@@ -101,3 +101,88 @@
     justify-content: flex-end;
   }
 }
+
+/* Dashboard rows opt out of the standalone card surface; the group owns its frame. */
+.dashboard-action-prompt--compact {
+  --mat-card-outlined-container-shape: 0;
+  --mat-card-outlined-container-color: transparent;
+  --mat-card-outlined-outline-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__header {
+  min-width: 0;
+  padding: 18px 18px 14px;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  margin: 0 12px 0 0;
+  color: var(--mat-sys-primary);
+  background: transparent;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__avatar mat-icon {
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__title {
+  font: var(--mat-sys-title-small);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__subtitle {
+  font: var(--mat-sys-body-small);
+  line-height: 1.45;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__content {
+  grid-column: 1;
+  min-width: 0;
+  padding: 0 18px 18px 62px;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__error span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__actions {
+  grid-column: 1;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 14px 16px;
+}
+
+.dashboard-action-prompt--compact .dashboard-action-prompt__projected-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@container dashboard-action-prompts (min-width: 800px) {
+  .dashboard-action-prompt--compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .dashboard-action-prompt--compact .dashboard-action-prompt__actions {
+    box-sizing: border-box;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-content: center;
+    justify-content: flex-end;
+    max-width: 440px;
+    padding: 14px 18px;
+  }
+}

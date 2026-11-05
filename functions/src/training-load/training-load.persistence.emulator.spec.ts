@@ -7,7 +7,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, DataPower, DataSpeedAvg, DataWeight, DataTrainingStressScore, DataTrainingStressScoreMethod, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -62,6 +62,327 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
+  async function datedHrWorkout(uid: string, method: 'AUTOMATIC' | 'MET' = 'AUTOMATIC', included = true) {
+    await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/hr`).set({ revision: 1,
+      method, included, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), lactateThresholdHR: 165 });
+    const event = workout(); const activity = event.getFirstActivity();
+    activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
+    activity.removeStat(DataTrainingStressScoreMethod.type);
+    const hr = activity.createStream(DataHeartRate.type); hr.setData(Array(3601).fill(100)); activity.addStream(hr);
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    await importWorkout(uid, event); return event;
+  }
+  async function priorWeight(uid: string, id: string, kilograms: number, time = Date.UTC(2020, 0, 1)) {
+    await db.doc(`users/${uid}/healthSourceRecords/${id}`).set({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: time, source: { revision: { digest: id } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: kilograms, unit: 'kg' } }] });
+  }
+  it('applies saved HR before deciding whether weight is needed, but prepares an explicitly preferred MET at import', async () => {
+    const uid = setup(); await priorWeight(uid, 'prior', 70);
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      await datedHrWorkout(uid);
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      expect((await db.doc(metadataPath(uid)).get()).get('legs.leg.calibration.weight')).toEqual({ status: 'deferred' });
+      const explicitUid = setup(); await priorWeight(explicitUid, 'prior', 70);
+      await datedHrWorkout(explicitUid, 'MET');
+      const saved = (await db.doc(metadataPath(explicitUid)).get()).data() as TrainingLoadMetadata;
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ method: 'MET', score: 9 });
+      expect(saved.legs!.leg.evaluations?.automatic).toMatchObject({ method: 'HR', score: 40 });
+      const excludedUid = setup(); await priorWeight(excludedUid, 'prior', 70);
+      await datedHrWorkout(excludedUid, 'MET', false);
+      const excluded = (await db.doc(metadataPath(excludedUid)).get()).data() as TrainingLoadMetadata;
+      expect(excluded.legs!.leg.calibration?.weight).toEqual({ status: 'deferred' });
+      expect(resolveEffectiveTrainingLoad({}, excluded)).toMatchObject({ status: 'excluded', score: 0 });
+      expect(collections.mock.calls.some(([path]) => path === `users/${excludedUid}/healthSourceRecords`)).toBe(false);
+    } finally { collections.mockRestore(); }
+  });
+  it.each(['overridden', 'leg-excluded', 'workout-excluded', 'unmatched'])('keeps unused deferred MET through reparse when %s', async state => {
+    const uid = setup(); const event = await datedHrWorkout(uid); await priorWeight(uid, 'prior', 70);
+    const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data() as TrainingLoadMetadata;
+    await ref.update({ excluded: state === 'workout-excluded', controls: { leg: { method: 'MET',
+      ...(state === 'overridden' ? { override: 0 } : {}), ...(state === 'leg-excluded' ? { included: false } : {}) } },
+      ...(state === 'unmatched' ? { legs: { ...before.legs, retained: { ...before.legs!.leg, activityId: null } } } : {}) });
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      const saved = (await ref.get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration?.weight).toEqual({ status: 'deferred' });
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject(state === 'unmatched'
+        ? { status: 'unavailable', reasons: ['activity-match-needs-review'] }
+        : state === 'overridden' ? { score: 0, method: 'OVERRIDE' } : { status: 'excluded', score: 0 });
+      await ref.update({ excluded: false, controls: { leg: { method: 'MET' },
+        ...(state === 'unmatched' ? { retained: { dismissed: true } } : {}) } });
+      await refreshTrainingLoadSummary(uid, 'workout');
+      expect(resolveEffectiveTrainingLoad({}, (await ref.get()).data() as TrainingLoadMetadata)).toMatchObject({ method: 'MET', score: 9 });
+    } finally { collections.mockRestore(); }
+  });
+  it.each(['missing', 'conflicting'] as const)('freezes an unavailable %s deferred weight once, retaining the normal fallback', async reason => {
+    const uid = setup(); await datedHrWorkout(uid);
+    if (reason === 'conflicting') { await priorWeight(uid, 'a', 70); await priorWeight(uid, 'b', 71); }
+    await db.doc(metadataPath(uid)).update({ controls: { leg: { method: 'MET' } } });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toEqual({ status: 'unavailable', reason });
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: 40, method: 'HR' });
+    await priorWeight(uid, 'later-backfill', 80, Date.UTC(2026, 0, 1));
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      await refreshTrainingLoadSummary(uid, 'workout');
+      saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration?.weight).toEqual({ status: 'unavailable', reason });
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+    } finally { collections.mockRestore(); }
+  });
+  it('rolls back a failed deferred lookup, then uses historical weight and preserves the range-rejection fallback', async () => {
+    const uid = setup(); await datedHrWorkout(uid); await priorWeight(uid, 'prior', 70);
+    await priorWeight(uid, 'future', 90, Date.UTC(2026, 0, 3));
+    const ref = db.doc(metadataPath(uid)); await ref.update({ controls: { leg: { method: 'MET' } } });
+    const before = (await ref.get()).data();
+    const original = db.collection.bind(db);
+    const collections = vi.spyOn(db, 'collection').mockImplementation((path: string) => {
+      if (path === `users/${uid}/healthSourceRecords`) throw new Error('temporary read failure');
+      return original(path);
+    });
+    try { await expect(refreshTrainingLoadSummary(uid, 'workout')).rejects.toThrow('temporary read failure'); }
+    finally { collections.mockRestore(); }
+    expect((await ref.get()).data()).toEqual(before);
+    await refreshTrainingLoadSummary(uid, 'workout');
+    expect((await ref.get()).get('legs.leg.calibration.weight.kilograms')).toBe(70);
+    const rejectedUid = setup(); await datedHrWorkout(rejectedUid); await priorWeight(rejectedUid, 'tiny', 0.01);
+    await db.doc(metadataPath(rejectedUid)).update({ controls: { leg: { method: 'MET' } } });
+    await refreshTrainingLoadSummary(rejectedUid, 'workout');
+    const rejected = (await db.doc(metadataPath(rejectedUid)).get()).data() as TrainingLoadMetadata;
+    expect(resolveEffectiveTrainingLoad({}, rejected)).toMatchObject({ method: 'HR', score: 40 });
+    expect(rejected.legs!.leg.evaluations!.met.reasons).toEqual(['calculation-unavailable', 'missing-power-inputs', 'threshold-hr-fallback']);
+  });
+  it('keeps explicit multisport reassociation calibration together when deferred MET is prepared', async () => {
+    const uid = setup(); await datedHrWorkout(uid); await priorWeight(uid, 'prior', 70);
+    const ref = db.doc(metadataPath(uid)); const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    await ref.update({ legs: { ...saved.legs, retained: { ...saved.legs!.leg, activityId: null } },
+      controls: { retained: { activityId: 'leg', method: 'MET' } } });
+    await refreshTrainingLoadSummary(uid, 'workout');
+    const current = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(resolveEffectiveTrainingLoad({}, current)).toMatchObject({ method: 'MET', score: 9 });
+    expect(current.legs!.leg.calibration).toEqual(current.legs!.retained.calibration);
+    expect(current.controls.retained).toEqual({ activityId: 'leg', method: 'MET' });
+  });
+  it('prepares only the selected multisport leg and respects overrides, exclusions, source changes and deletion guards', async () => {
+    const uid = setup(); const event = await datedHrWorkout(uid); await priorWeight(uid, 'prior', 70);
+    const other = workout('other', event.endDate.getTime()).getFirstActivity();
+    event.addActivity(other); const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+    const ref = db.doc(metadataPath(uid));
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      for (const controls of [{ leg: { method: 'MET', override: 0 } }, { leg: { method: 'MET', included: false } }]) {
+        await ref.update({ controls }); await refreshTrainingLoadSummary(uid, 'workout');
+        expect((await ref.get()).get('legs.leg.calibration.weight')).toEqual({ status: 'deferred' });
+      }
+      await ref.update({ controls: { leg: { method: 'MET' } }, excluded: true }); await refreshTrainingLoadSummary(uid, 'workout');
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      await ref.update({ excluded: false });
+      const child = db.doc(`users/${uid}/activities/leg`); const original = (await child.get()).data()!;
+      await child.update({ 'stats.Energy': 420 }); await refreshTrainingLoadSummary(uid, 'workout');
+      expect((await ref.get()).get('legs.leg.calibration.weight')).toEqual({ status: 'deferred' });
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      await child.set(original);
+      await db.doc(`users/${uid}`).delete(); await refreshTrainingLoadSummary(uid, 'workout');
+      expect((await ref.get()).get('legs.leg.calibration.weight')).toEqual({ status: 'deferred' });
+      await db.doc(`users/${uid}`).set({ test: true });
+      await refreshTrainingLoadSummary(uid, 'workout');
+      const saved = (await ref.get()).data() as TrainingLoadMetadata;
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ method: 'SUM', score: 18 });
+      expect(saved.legs!.other.calibration?.weight).toBeNull(); // The second leg already has file mass.
+      expect(saved.legs!.leg.evaluations?.automatic).toMatchObject({ method: 'HR', score: 40 });
+    } finally { collections.mockRestore(); }
+  });
+  it.each([false, true])('does not adopt new threshold or Health inputs on the first legacy reparse (controls: %s)', async controlled => {
+    const uid = setup(); const old = workout(); old.getFirstActivity().type = ActivityTypes.Cycling;
+    await source(uid, old);
+    if (controlled) await db.doc(metadataPath(uid)).set({ version: 1, revision: 1, excluded: false,
+      controls: { leg: { override: 0 } } });
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/saved`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)),
+      functionalThresholdPower: 200, lactateThresholdHR: 165 });
+    await db.doc(`users/${uid}/healthSourceRecords/prior-weight`).set({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: 'weight-70' } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: 70, unit: 'kg' } }] });
+    const next = workout(); const activity = next.getFirstActivity(); activity.type = ActivityTypes.Cycling;
+    activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
+    activity.removeStat(DataTrainingStressScoreMethod.type);
+    for (const [type, value] of [[DataPower.type, 200], [DataHeartRate.type, 165]] as const) {
+      const stream = activity.createStream(type); stream.setData(Array(3601).fill(value)); activity.addStream(stream);
+    }
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+      const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration).toBeUndefined();
+      expect(saved.legs!.leg.evaluations?.automatic.score).toBeNull();
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject(controlled
+        ? { status: 'available', score: 0, method: 'OVERRIDE' } : { status: 'unavailable', score: null });
+    } finally { collections.mockRestore(); }
+  });
+  it.each([
+    { type: ActivityTypes.VideoGaming, importedTss: undefined },
+    { type: ActivityTypes.Walking, importedTss: 0 },
+  ])('skips Health weight reads when MET cannot affect the result: $type / $importedTss', async ({ type, importedTss }) => {
+    const uid = setup(); const event = workout(); const activity = event.getFirstActivity();
+    activity.type = type; activity.removeStat(DataWeight.type);
+    activity.removeStat(DataTrainingStressScore.type); activity.removeStat(DataTrainingStressScoreMethod.type);
+    if (importedTss !== undefined) activity.addStat(new DataTrainingStressScore(importedTss));
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      await importWorkout(uid, event);
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration).toEqual({ version: 2, weight: null });
+      expect(saved.legs!.leg.evaluations?.automatic.score).toBe(importedTss ?? null);
+    } finally { collections.mockRestore(); }
+  });
+  it.each(['HR', 'POWER', 'SWIM_PACE'] as const)('defers Health weight with usable %s, prepares MET on selection once and retains it on reparse', async method => {
+    const uid = setup(); const event = workout(); const activity = event.getFirstActivity();
+    activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
+    activity.removeStat(DataTrainingStressScoreMethod.type);
+    if (method === 'HR') {
+      activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { lactateThresholdHR: 165 } } });
+      const hr = activity.createStream(DataHeartRate.type); hr.setData(Array(3601).fill(100)); activity.addStream(hr);
+    } else if (method === 'POWER') {
+      activity.type = ActivityTypes.Cycling;
+      activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { functionalThresholdPower: 200 } } });
+      const power = activity.createStream(DataPower.type); power.setData(Array(3601).fill(200)); activity.addStream(power);
+    } else {
+      activity.type = ActivityTypes.Swimming;
+      activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { thresholdSwimSpeed: 1 } } });
+      activity.addStat(new DataSpeedAvg(1));
+    }
+    ActivityUtilities.evaluateTrainingStressScore(activity);
+    expect(ActivityUtilities.getTrainingStressScoreEvaluations(activity).automatic.method).toBe(method);
+    await db.doc(`users/${uid}/healthSourceRecords/prior-weight`).set({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: 'weight-70' } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: 70, unit: 'kg' } }] });
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      await importWorkout(uid, event);
+      let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      const automatic = saved.legs!.leg.evaluations!.automatic;
+      expect(automatic).toMatchObject({ method, score: method === 'HR' ? 40 : 100 });
+      expect(saved.legs!.leg.calibration?.weight).toEqual({ status: 'deferred' });
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      await db.doc(metadataPath(uid)).update({ controls: { leg: { method: 'MET' } }, revision: saved.revision + 1 });
+      saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(resolveEffectiveTrainingLoad({}, saved).reasons).toContain('met-weight-pending');
+      const before = (await db.doc(`users/${uid}/activities/leg`).get()).data();
+      await Promise.all([refreshTrainingLoadSummary(uid, 'workout'), refreshTrainingLoadSummary(uid, 'workout')]);
+      saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.evaluations).toMatchObject({ automatic, met: { method: 'MET', score: 9 } });
+      expect(saved.legs!.leg.calibration?.weight).toMatchObject({ status: 'available', kilograms: 70 });
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ score: 9, method: 'MET' });
+      expect((await db.doc(`users/${uid}/activities/leg`).get()).data()).toEqual(before);
+      collections.mockClear();
+      await refreshTrainingLoadSummary(uid, 'workout');
+      const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+    } finally { collections.mockRestore(); }
+  });
+  it('uses dated independent FTP and HR while preserving source statistics and saved inputs on reparse', async () => {
+    const uid = setup();
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)),
+      functionalThresholdPower: 200, lactateThresholdHR: 165 });
+    const make = (id = 'leg') => {
+      const event = workout(id); const activity = event.getActivities()[0]; activity.type = ActivityTypes.Cycling;
+      const stream = activity.createStream(DataPower.type); stream.setData(Array(3601).fill(200)); activity.addStream(stream);
+      const hr = activity.createStream(DataHeartRate.type); hr.setData(Array(3601).fill(165)); activity.addStream(hr);
+      ActivityUtilities.evaluateTrainingStressScore(activity);
+      return event;
+    };
+    const original = make(); const before = JSON.stringify(original.toJSON());
+    await importWorkout(uid, original);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ calibration: { version: 2 }, policy: { functionalThresholdPower: 200 },
+      evaluations: { automatic: { score: 100, method: 'POWER' }, hr: { score: 100, hrAlgorithm: 'THRESHOLD', estimated: true } } });
+    expect(JSON.stringify(original.toJSON())).toBe(before);
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/later`).set({ revision: 2,
+      method: 'HR', included: false, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), functionalThresholdPower: 300, lactateThresholdHR: 190 });
+    const next = make('changed-id'); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ activityId: 'changed-id', policy: { revision: 1, functionalThresholdPower: 200 },
+      evaluations: { automatic: { score: 100 }, hr: { score: 100 } } });
+  });
+  it('initializes a newly recovered multisport leg without changing a matched legacy leg', async () => {
+    const uid = setup(); await importWorkout(uid, workout());
+    const ref = db.doc(metadataPath(uid)); const previous = (await ref.get()).data() as TrainingLoadMetadata;
+    delete previous.legs!.leg.calibration; await ref.set(previous);
+    await db.doc(`users/${uid}/trainingLoadPolicies/cycling/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), functionalThresholdPower: 200 });
+    const event = workout(); const extra = workout('recovered', Date.UTC(2026, 0, 2, 1)).getFirstActivity();
+    extra.type = ActivityTypes.Cycling;
+    const power = extra.createStream(DataPower.type); power.setData(Array(3601).fill(200)); extra.addStream(power);
+    ActivityUtilities.evaluateTrainingStressScore(extra); event.addActivity(extra); event.endDate = extra.endDate;
+    const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+    const saved = (await ref.get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration).toBeUndefined();
+    expect(saved.legs!.recovered).toMatchObject({ calibration: { version: 2 },
+      policy: { functionalThresholdPower: 200 }, evaluations: { automatic: { score: 100, method: 'POWER' } } });
+  });
+  it('freezes actual prior Health weight and never adopts later edits or adds Weight to recorded data', async () => {
+    const uid = setup();
+    const weight = db.doc(`users/${uid}/healthSourceRecords/actual-weight`);
+    const measurement = (kg: number) => ({ userID: uid, kind: 'point_measurement',
+      metricIds: ['body_weight'], endTimeMs: Date.UTC(2020, 0, 1), source: { revision: { digest: `weight-${kg}` } },
+      metrics: [{ kind: 'value', metricId: 'body_weight', valueType: 'number', aggregation: 'measurement',
+        semanticVariant: 'point', normalizationStatus: 'canonical', canonical: { value: kg, unit: 'kg' } }] });
+    await weight.set(measurement(70));
+    const make = () => {
+      const event = workout(); const activity = event.getActivities()[0];
+      activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type); activity.removeStat(DataTrainingStressScoreMethod.type);
+      ActivityUtilities.evaluateTrainingStressScore(activity); return event;
+    };
+    const original = make(); const before = JSON.stringify(original.toJSON()); await importWorkout(uid, original);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ status: 'available', kilograms: 70, observedAtMs: Date.UTC(2020, 0, 1) });
+    expect(saved.legs!.leg.evaluations?.met).toMatchObject({ score: 9, method: 'MET' });
+    expect(JSON.stringify(original.toJSON())).toBe(before);
+    await weight.set(measurement(90));
+    const next = make(); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ kilograms: 70, sourceRevision: 'weight-70' });
+    expect(saved.legs!.leg.evaluations?.met.score).toBe(9);
+    expect((await db.doc(`users/${uid}/activities/leg`).get()).get('stats.Weight')).toBeUndefined();
+    await weight.delete();
+    const retry = make(); const finalize = await prepareTrainingLoadMetadata(uid, retry); await source(uid, retry); await finalize();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.calibration?.weight).toMatchObject({ kilograms: 70 });
+    expect(saved.legs!.leg.evaluations?.met.score).toBe(9);
+  });
+  it('keeps legacy CSS precedence on reparse while new legs prefer independent file CSS', async () => {
+    const uid = setup();
+    await db.doc(`users/${uid}/trainingLoadPolicies/swimming/revisions/original`).set({ revision: 1,
+      method: 'AUTOMATIC', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), swimThresholdSpeed: 1.25 });
+    const make = () => {
+      const event = EventImporterJSON.getEventFromJSON({ name: 'Swim', startDate: Date.UTC(2026, 0, 2), endDate: Date.UTC(2026, 0, 2) + 3600000,
+        activities: [{ startDate: Date.UTC(2026, 0, 2), endDate: Date.UTC(2026, 0, 2) + 3600000, type: ActivityTypes.Swimming,
+          creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [], stats: { 'Average Speed': 1, 'Timer time': 3600 } }] } as any);
+      event.setID('workout'); const activity = event.getActivities()[0]; activity.setID('leg');
+      activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: { thresholdSwimSpeed: 1 } } });
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity); return event;
+    };
+    await importWorkout(uid, make());
+    const ref = db.doc(metadataPath(uid));
+    expect((await ref.get()).get('legs.leg.evaluations.automatic.score')).toBe(100);
+    await ref.update({ 'legs.leg.calibration': FieldValue.delete() }); // A metadata snapshot saved before this feature.
+    const next = make(); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    expect((await ref.get()).get('legs.leg.calibration')).toBeUndefined();
+    expect((await ref.get()).get('legs.leg.evaluations.automatic.score')).toBe(51.2);
+  });
   function reuploadWriter(uid: string, providerMetadata?: Record<string, unknown>) {
     const guard = new TrainingLoadSourceWrite(uid, event => prepareImportedEventWrite(uid, event, undefined, providerMetadata));
     const setDoc = vi.fn(async (path: string[], data: unknown) => db.runTransaction(async transaction => {

@@ -1,5 +1,27 @@
 # Sports-Lib Reparse Runbook
 
+## Sports Lib 23.10.0: dated threshold calibration compatibility
+
+Root and Functions pin the same published 23.10.0 artifact with matching lockfile integrity. Runtime detection and
+strict activity/route reparse targets follow the installed package; mismatch checks remain unchanged. Review any
+already-enabled scanners before a separately approved backend deployment: the version increase can make older records
+eligible. This adoption does not enable scanners, deploy Functions or start a production reparse.
+
+Training threshold settings do not require a historical reparse campaign. Existing legs retain their saved policy and
+legacy CSS precedence, with no new FTP, threshold-HR or Health-weight adoption. New legs privately record calibration
+version 2 and any selected prior actual Health weight, including frozen unavailability. A newly recovered extra leg
+can adopt this when the previous leg set is known; matched legacy legs and workouts without prior leg evidence retain
+compatibility behavior. Reparse/duplicate import/retry
+preserves that snapshot. It refreshes candidates from the original file plus the saved inputs, never current settings
+or later/backfilled Health records. Imported TSS, controls, exclusions, identity and deletion/write fences keep priority.
+An explicit multisport reassociation with different saved calibration requires source reparse before calculated load
+can be merged. No historical or route reparse campaign is needed for these settings. Route imports are unchanged;
+the included 23.9.1 fix writes new FIT course exports with the correct FIT 2.0 header and requires fit-file-parser
+6.2.7. Previously downloaded exports are not rewritten. Training summaries refresh through existing source/metadata
+invalidation, with no derived-schema bump. MCP threshold reads/writes use the additive contract documented in the
+Training guide; existing tool outputs and private calibration projections remain unchanged.
+See [dated thresholds](../../../docs/training-workspace.md#dated-training-thresholds-and-swimming-css).
+
 ## Purpose
 This pipeline reparses existing events and activities from stored original files so event/activity data is upgraded to a fixed sports-lib target version.
 

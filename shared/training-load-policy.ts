@@ -1,16 +1,23 @@
 import type { TrainingStressScoreEvaluations, TrainingStressScorePreference } from '@sports-alliance/sports-lib';
-import { resolveTrainingDisciplineFromActivityType, type TrainingSportId } from './training-disciplines';
+import { isTrainingDiscipline, resolveTrainingDisciplineFromActivityType, type TrainingSportId } from './training-disciplines';
+import { canonicalTrainingLoadValue } from './training-load-source';
 
 export const TRAINING_LOAD_METADATA_ID = 'trainingLoad';
 export const TRAINING_LOAD_POLICY_VERSION = 1;
 export type TrainingLoadMethod = TrainingStressScorePreference;
 /** Compatible with legacy evaluations that do not identify their HR formula. */
 export type TrainingLoadHrAlgorithm = 'BANISTER' | 'THRESHOLD';
-export interface TrainingLoadPolicy {
-  method: TrainingLoadMethod;
-  included: boolean;
+export interface TrainingLoadThresholds {
+  /** Independent FTP in watts; Running and Cycling have separate values. */
+  functionalThresholdPower?: number;
+  /** Independently measured threshold HR in bpm. */
+  lactateThresholdHR?: number;
   /** Independent CSS in metres/second, valid only for the Swimming family. */
   swimThresholdSpeed?: number;
+}
+export interface TrainingLoadPolicy extends TrainingLoadThresholds {
+  method: TrainingLoadMethod;
+  included: boolean;
 }
 export interface AppliedTrainingLoadPolicy extends TrainingLoadPolicy {
   family: TrainingSportId | null;
@@ -33,7 +40,18 @@ export interface TrainingLoadLeg {
   evaluations: TrainingStressScoreEvaluations | null;
   policy: AppliedTrainingLoadPolicy;
   sourceFingerprint?: string;
+  /** Absent means legacy CSS precedence and no Health-weight fallback. */
+  calibration?: {
+    version: 2;
+    /** Frozen actual Health measurement; never a live reference for calculation. */
+    weight: TrainingLoadHealthWeight;
+  };
 }
+export type TrainingLoadHealthWeight =
+  | { status: 'available'; kilograms: number; observedAtMs: number; sourceRecordId: string; sourceRevision: string }
+  | { status: 'unavailable'; reason: 'missing' | 'conflicting' | 'scan-limit' }
+  | { status: 'deferred' }
+  | null;
 export interface TrainingLoadMetadata {
   version: 1;
   revision: number;
@@ -94,10 +112,33 @@ export function isTrainingLoadMethod(value: unknown): value is TrainingLoadMetho
 export function validSwimThresholdSpeed(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100;
 }
+export const TRAINING_LOAD_THRESHOLD_KEYS = ['functionalThresholdPower', 'lactateThresholdHR', 'swimThresholdSpeed'] as const;
+export function validTrainingThreshold(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+/** Explicit projection shared by editors, future-default copies and server writers. */
+export function trainingLoadThresholds(policy: TrainingLoadThresholds): TrainingLoadThresholds {
+  return Object.fromEntries(TRAINING_LOAD_THRESHOLD_KEYS.flatMap(key => policy[key] === undefined ? [] : [[key, policy[key]]]));
+}
+/** Compare calculation inputs only; method/inclusion and revision are controls, not calibration. */
+export function sameTrainingLoadCalibration(left: Pick<TrainingLoadLeg, 'policy' | 'calibration'> | undefined,
+  right: Pick<TrainingLoadLeg, 'policy' | 'calibration'> | undefined): boolean {
+  if (!left?.policy || !right?.policy) return false;
+  return JSON.stringify(canonicalTrainingLoadValue({ thresholds: trainingLoadThresholds(left.policy), calibration: left.calibration }))
+    === JSON.stringify(canonicalTrainingLoadValue({ thresholds: trainingLoadThresholds(right.policy), calibration: right.calibration }));
+}
+/** A usable non-MET result lets new legs postpone the Health-weight fallback until MET is selected. */
+function deferredTrainingLoadMetWeight(leg: TrainingLoadLeg | undefined): boolean {
+  return leg?.calibration?.version === 2 && leg.calibration.weight?.status === 'deferred'
+    && leg.evaluations?.automatic.provenance === 'calculated' && leg.evaluations.automatic.score !== null
+    && leg.evaluations.automatic.method !== 'MET' && leg.evaluations.met.reasons.includes('missing-met-inputs');
+}
 export function validTrainingLoadPolicy(family: unknown, policy: TrainingLoadPolicy): boolean {
-  return isTrainingLoadMethod(policy.method) && typeof policy.included === 'boolean'
+  return isTrainingDiscipline(family) && isTrainingLoadMethod(policy.method) && typeof policy.included === 'boolean'
     && (policy.method !== 'SWIM_PACE' || family === 'swimming')
-    && (policy.swimThresholdSpeed === undefined || family === 'swimming' && validSwimThresholdSpeed(policy.swimThresholdSpeed));
+    && (policy.swimThresholdSpeed === undefined || family === 'swimming' && validSwimThresholdSpeed(policy.swimThresholdSpeed))
+    && (policy.functionalThresholdPower === undefined || (family === 'running' || family === 'cycling') && validTrainingThreshold(policy.functionalThresholdPower))
+    && (policy.lactateThresholdHR === undefined || validTrainingThreshold(policy.lactateThresholdHR));
 }
 export function recordedTrainingStressScore(source: { stats?: unknown; getStat?: TrainingLoadActivity['getStat'] }): number | null {
   const stats = source.stats && typeof source.stats === 'object' ? source.stats as Record<string, unknown> : {};
@@ -154,13 +195,14 @@ export function resolveEffectiveTrainingLoad(
     if ((control?.included ?? policy.included) === false) return excluded();
     if (validTrainingLoadOverride(control?.override)) return { score: control.override, status: 'available',
       method: 'OVERRIDE', estimated: false, reasons: [] };
-    // Explicit reassociation may bring a different saved CSS to this leg. Only source reparse
+    // Explicit reassociation may bring different saved calibration to this leg. Only source reparse
     // can recompute its candidate; do not present the target's old calibration as the retained one.
-    if (associated && policy.swimThresholdSpeed !== entry?.[1].policy.swimThresholdSpeed &&
+    if (associated && entry && !sameTrainingLoadCalibration(legs[key], entry[1]) &&
       entry?.[1].evaluations?.automatic.provenance !== 'imported')
       return unavailable('reparse-required');
     const method = control?.method ?? policy.method;
     const evaluations = entry?.[1].evaluations;
+    if (method === 'MET' && deferredTrainingLoadMetWeight(entry?.[1])) return unavailable('met-weight-pending');
     if (evaluations) {
       const result = evaluations[method === 'HR' ? 'hr' : method === 'MET' ? 'met' : method === 'SWIM_PACE' ? 'swimPace' : 'automatic'];
       if (!result) return unavailable('reparse-required');

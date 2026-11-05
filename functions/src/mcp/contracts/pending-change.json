@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "e27ea19e54235b866f6dae37131c383394cc5b028f7699e153859bcce6da6f15",
+  "candidateSha256": "7fd7732edc4c17b3fc1d534e6f2ac50e0b6967057aa6645f27c53fe5f5e39386",
   "lifecycleAction": "developer-refresh",
-  "summary": "Sports Lib 23 and previously pending Training, strength, phase/rest, analysis, reflection, sync and endurance additions remain. Add five Calendar goal read/progress/preview/apply tools and guidance: Training read/write grants, metrics for progress, separate approval, fixed dates, independent goal revisions and no provider actions. Baseline/history unchanged. Backend release, registered-app rescan and plugin refresh remain separate.",
+  "summary": "Retain pending Sports Lib 23, Training/strength/phases/rest/analysis/reflection/sync/endurance and Calendar goal tools. Add independent dated threshold read/preview/apply with watt/bpm/CSS units and future-workout-only changes. Initial Send/Enable covers supported provider adjustments and future edits; keep authored-change approval, warnings and unsupported/account fences. Baseline/history unchanged; backend release, app rescan and plugin refresh remain separate.",
   "rescanRequired": true
 }

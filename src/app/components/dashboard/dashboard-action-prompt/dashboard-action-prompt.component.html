@@ -1,6 +1,7 @@
 @if (prompt) {
-<mat-card class="dashboard-action-prompt qs-glass-card-panel" appearance="outlined">
-  <mat-card-header>
+<mat-card class="dashboard-action-prompt" [class.dashboard-action-prompt--compact]="compact"
+  [class.qs-card-plain]="compact" [class.qs-glass-card-panel]="!compact" appearance="outlined">
+  <mat-card-header class="dashboard-action-prompt__header">
     <div mat-card-avatar class="dashboard-action-prompt__avatar" aria-hidden="true">
       <mat-icon>{{ prompt.icon }}</mat-icon>
     </div>

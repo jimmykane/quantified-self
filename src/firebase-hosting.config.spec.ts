@@ -347,8 +347,10 @@ describe('Firebase Hosting configuration', () => {
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -479,10 +481,12 @@ describe('Firebase Hosting configuration', () => {
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
     // Approved corrections preserve manual Health permissions and link existing account tools.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
@@ -493,7 +497,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
@@ -559,9 +563,11 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
     // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-03');
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });

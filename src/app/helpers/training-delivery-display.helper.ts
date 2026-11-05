@@ -8,7 +8,7 @@ export const TRAINING_DELIVERY_STATUS_LABELS: Record<TrainingDeliveryStatus, str
   connection_repair: 'Connection needs repair', fresh_consent_required: 'Send again to give fresh consent',
   outside_horizon: 'Scheduled for later', past: 'Past workout · previously sent',
   completed: 'Completed in connected app', unsupported: 'This workout cannot be mapped',
-  approval_required: 'Review workout differences', retrying: 'Retry scheduled',
+  approval_required: 'Awaiting sync refresh', retrying: 'Retry scheduled',
   needs_attention: 'Sync could not be confirmed — inspect before retrying', failed: 'Sync failed',
 };
 

@@ -477,16 +477,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     const logs = JSON.stringify(vi.mocked(logger.warn).mock.calls);
     expect(logs).not.toContain(uid); expect(logs).not.toContain(ids.externalId); expect(logs).not.toContain(ids.workoutToken);
   });
-  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('delivers full %s after profile review, rechecks load-only edits and withdraws on Stop', async sport => {
+  it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('delivers full %s with disclosed profile mapping, syncs load-only edits and withdraws on Stop', async sport => {
     const details = wahooFixtureStrengthDetails();
     const ref = user().collection('scheduledWorkouts').doc('w');
     await ref.update({ structure: projectStrengthWorkoutToV1(details, sport) });
     await ref.collection('strengthDetails').doc('current').set(details);
     await command('send'); await drain();
-    const pending = await ledger(); expect(pending.status).toBe('approval_required');
-    await processTrainingDelivery(runtime, uid, pending.id);
-    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
-    await command('approve', 'Europe/Helsinki', pending.approvalDigest!); await drain();
+    const pending = await ledger(); expect(pending.status).toBe('pending');
+    expect(pending.approvalDigest).toBeNull();
     await processTrainingDelivery(runtime, uid, pending.id); await drain();
     const sent = await ledger(); expect(sent.status).toBe('delivered');
     const ids = sent.actual!.ids;
@@ -494,9 +492,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     expect(server.plans.get(ids.plan)).toMatchObject({ workout_type_family_id: 6, workout_type_location_id: 0 });
     details.exercises[0].sets[0].externalLoadKg = 2.5;
     await ref.collection('strengthDetails').doc('current').set(details); await mark();
-    const changed = await ledger(); expect(changed.status).toBe('approval_required');
-    await expect(command('approve', 'Europe/Helsinki', pending.approvalDigest!)).rejects.toThrow();
-    await command('approve', 'Europe/Helsinki', changed.approvalDigest!); await drain();
+    const changed = await ledger(); expect(changed.status).toBe('pending');
     await processTrainingDelivery(runtime, uid, changed.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids } });
     expect(JSON.stringify(server.plans.get(ids.plan)?.fixtureRecipe)).toContain('2.5 kg');
@@ -544,6 +540,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await ref.update({ structure: projectStrengthWorkoutToV1(details), title: 'Synthetic timed strength' });
     await ref.collection('strengthDetails').doc('current').set(details);
     await command('send'); await drain(); const row = await ledger();
+    expect(row.status).toBe('pending');
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
     const first = await ledger();
     expect(first.status).toBe('delivered'); expect(first.approvalDigest).toBeNull();
@@ -566,17 +563,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(server.workouts.size).toBe(0); expect(server.plans.size).toBe(0);
   });
-  it.each(WAHOO_SPORT_FIXTURES)('delivers $sport, updates/reschedules retained identities, and withdraws on Stop after any required mapping review', async ({ sport, family, type, location, level }) => {
+  it.each(WAHOO_SPORT_FIXTURES)('delivers $sport, updates/reschedules retained identities, and withdraws on Stop under normal sync consent', async ({ sport, family, type, location, level }) => {
     const ref = user().collection('scheduledWorkouts').doc('w');
     const workout = wahooFixtureWorkout(); workout.structure.sport = sport;
     await ref.set(workout);
     await command('send'); await drain(); const row = await ledger();
-    if (level === 'degraded') {
-      expect(row.status).toBe('approval_required');
-      await processTrainingDelivery(runtime, uid, row.id);
-      expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(0);
-      await command('approve', 'Europe/Helsinki', row.approvalDigest!); await drain();
-    }
+    expect(row.status).toBe('pending');
+    expect(row.issues.length > 0).toBe(level === 'degraded');
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
     const ids = (await ledger()).actual!.ids;
     expect((await ledger()).status).toBe('delivered');
@@ -585,11 +578,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     workout.title = 'Edited synthetic walk'; workout.localDate = '2026-10-31'; workout.updatedAtMs = now;
     workout.structure.nodes = [{ kind: 'step', id: 'longer', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] }];
     await ref.set(workout); await mark();
-    if (level === 'degraded') {
-      const pending = await ledger(); expect(pending.status).toBe('approval_required');
-      await expect(command('approve', 'Europe/Helsinki', row.approvalDigest!)).rejects.toThrow();
-      await command('approve', 'Europe/Helsinki', pending.approvalDigest!); await drain();
-    }
     await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids, localDate: '2026-10-31' } });
     expect(server.workouts.get(ids.workout)).toMatchObject({ workout_type_id: type, minutes: 5, starts: '2026-10-31T10:00:00.000Z' });
@@ -660,6 +648,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     });
   it('admits one worker, checkpoints both resources, and verifies all three cloud keys', async () => {
     await command('send'); await drain(); const row = await ledger();
+    expect(row.status).toBe('pending');
     await Promise.all([processTrainingDelivery(runtime, uid, row.id), processTrainingDelivery(runtime, uid, row.id)]); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.plans.size).toBe(1); expect(server.workouts.size).toBe(1);
     await processTrainingVerification(runtime, uid, row.id); expect((await ledger()).verification?.state).toBe('present');
