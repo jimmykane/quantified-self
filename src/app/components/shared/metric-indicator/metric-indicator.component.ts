@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/c
 import { CommonModule } from '@angular/common';
 
 export type MetricIndicatorVariant = 'score' | 'deviation' | 'range' | 'segments' | 'status';
-export type MetricIndicatorTone = 'positive' | 'negative' | 'neutral' | 'ready' | 'mixed' | 'recover';
+export type MetricIndicatorTone = 'positive' | 'caution' | 'negative' | 'neutral' | 'ready' | 'mixed' | 'recover';
 
 @Component({
   selector: 'app-metric-indicator',

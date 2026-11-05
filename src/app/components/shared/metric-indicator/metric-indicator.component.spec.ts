@@ -24,6 +24,21 @@ describe('MetricIndicatorComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.metric-indicator-threshold')).toHaveLength(2);
   });
 
+  it('preserves a caution range assessment without changing its value or accessible units', () => {
+    fixture.componentRef.setInput('variant', 'range');
+    fixture.componentRef.setInput('label', 'HRV');
+    fixture.componentRef.setInput('value', 23);
+    fixture.componentRef.setInput('valueText', '23 ms');
+    fixture.componentRef.setInput('rangeText', '60-day range 28.4–36.9 ms');
+    fixture.componentRef.setInput('rangeMin', 28.4);
+    fixture.componentRef.setInput('rangeMax', 36.9);
+    fixture.componentRef.setInput('tone', 'caution');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.metric-indicator-range-marker').getAttribute('data-tone')).toBe('caution');
+    expect(fixture.nativeElement.querySelector('[role="img"]').getAttribute('aria-label'))
+      .toBe('HRV: 23 ms; 60-day range 28.4–36.9 ms');
+  });
+
   it('renders signal coverage as discrete segments', () => {
     fixture.componentRef.setInput('variant', 'segments');
     fixture.componentRef.setInput('label', 'Readiness signals');
