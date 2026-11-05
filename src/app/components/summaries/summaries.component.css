@@ -1,3 +1,8 @@
+/* Reuse the app success palette with theme ink for a calmer, contrasting Today accent. */
+:host {
+  --qs-today-positive: color-mix(in srgb, var(--qs-theme-success) 50%, var(--mat-sys-on-surface) 50%);
+}
+
 .dashboard-summary-heading {
   margin: 0 0 0.75rem;
 }
@@ -359,7 +364,7 @@
   --qs-today-cue-color: var(--mat-sys-on-surface-variant);
   --qs-metric-indicator-color: var(--qs-today-cue-color);
 }
-.dashboard-current-state-row [data-cue-tone='positive'] { --qs-today-cue-color: var(--qs-status-positive); }
+.dashboard-current-state-row [data-cue-tone='positive'] { --qs-today-cue-color: var(--qs-today-positive); }
 .dashboard-current-state-row [data-cue-tone='caution'] { --qs-today-cue-color: var(--qs-status-caution); }
 .dashboard-current-state-row [data-cue-tone='negative'] { --qs-today-cue-color: var(--mat-sys-error); }
 .dashboard-current-state-row .dashboard-training-state-primary[data-cue-tone='positive'],
@@ -375,7 +380,7 @@
 }
 .dashboard-today-sleep.has-score dd { color: var(--qs-today-sleep-color); }
 .dashboard-readiness-hrv {
-  --qs-metric-indicator-range-color: color-mix(in srgb, var(--qs-status-positive) 26%, var(--mat-sys-surface-container));
+  --qs-metric-indicator-range-color: color-mix(in srgb, var(--qs-today-positive) 26%, var(--mat-sys-surface-container));
 }
 .dashboard-today-load-value,
 .dashboard-hrv-status { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; }
@@ -396,6 +401,9 @@
 }
 .dashboard-direction-cue mat-icon { inline-size: 1em; block-size: 1em; font-size: 1em; }
 .dashboard-hrv-status .dashboard-direction-cue { font-size: 0.68rem; }
+/* Ramp direction has no good/bad grade; the training state and history keep their assessment. */
+.dashboard-ramp-direction { --qs-today-cue-color: var(--qs-status-info); }
+.dashboard-ramp-direction.is-flat { --qs-today-cue-color: var(--mat-sys-on-surface-variant); }
 /* HRV direction is separate from the personal-range assessment on its value/marker. */
 .dashboard-hrv-direction { --qs-today-cue-color: var(--mat-sys-on-surface-variant); }
 .dashboard-hrv-direction[data-hrv-trend='rising'] { --qs-today-cue-color: var(--qs-status-info); }

@@ -135,9 +135,9 @@ export function buildDashboardTodayRampCue(value: number | null | undefined): Da
 export function buildDashboardTodayBaselineCue(ratio: number | null | undefined): DashboardTodayDirectionCue | null {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return null;
   // Use the same neutral band as the existing overnight-HR assessment.
-  return Math.abs(ratio - 1) < 0.005 ? { icon: 'trending_flat', label: 'Near baseline' }
-    : ratio > 1 ? { icon: 'trending_up', label: 'Above baseline' }
-    : { icon: 'trending_down', label: 'Below baseline' };
+  return Math.abs(ratio - 1) < 0.005 ? { icon: 'trending_flat', label: 'Near your usual level' }
+    : ratio > 1 ? { icon: 'trending_up', label: 'Above your usual level' }
+    : { icon: 'trending_down', label: 'Below your usual level' };
 }
 
 export function buildDashboardTodayHrvCue(trend: ReadinessHrvRecentTrend | null): DashboardTodayDirectionCue | null {

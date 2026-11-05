@@ -1920,7 +1920,7 @@ describe('SummariesComponent', () => {
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.getAttribute('data-cue-tone')).toBe('positive');
-    expect(overnightHeartRate?.querySelector('.dashboard-direction-cue')?.getAttribute('aria-label')).toContain('Below baseline');
+    expect(overnightHeartRate?.querySelector('.dashboard-direction-cue')?.getAttribute('aria-label')).toContain('Below your usual level');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
     expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
     expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
@@ -2004,9 +2004,12 @@ describe('SummariesComponent', () => {
     expect(native.querySelector('.dashboard-today-load')?.getAttribute('data-cue-tone'))
       .toBe(scenario.label === 'Recover' ? 'negative' : 'positive');
     expect(native.querySelector('.dashboard-today-load-value [role=img]')?.getAttribute('aria-label')).toContain('ramp');
+    expect(native.querySelector('.dashboard-ramp-direction')?.classList.contains('is-flat')).toBe(scenario.ramp === 0);
     expect(component.dashboardTodayReadiness.loadText).toBe(`-1.7 / ${scenario.ramp > 0 ? '+' : ''}${scenario.ramp}`);
     expect(native.querySelector('.dashboard-today-overnight-hr')?.getAttribute('data-cue-tone'))
       .toBe(scenario.ratio < 1 ? 'positive' : scenario.ratio > 1 ? 'negative' : 'neutral');
+    expect(native.querySelector('.dashboard-today-overnight-hr small')?.textContent)
+      .toBe(scenario.ratio < 1 ? 'Below your usual level' : scenario.ratio > 1 ? 'Above your usual level' : 'Near your usual level');
     expect(native.querySelectorAll('.dashboard-direction-cue button')).toHaveLength(0);
     // Insufficient range evidence and missing drivers must remove earlier colours and arrows.
     spy.mockReturnValue({ ...context, score: null, form: null, rampRate: null, hrvPersonalRange: null, overnightHeartRateRatio: null } as any);
@@ -2016,6 +2019,7 @@ describe('SummariesComponent', () => {
     expect(native.querySelector('.dashboard-readiness-hrv')?.getAttribute('data-cue-tone')).toBe('neutral');
     expect(native.querySelectorAll('.dashboard-direction-cue')).toHaveLength(0);
     expect(native.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('No current HRV');
+    expect(native.querySelector('.dashboard-today-overnight-hr small')?.textContent).toBe('Comparison unavailable');
   });
 
   describe('Today readiness initial loading', () => {

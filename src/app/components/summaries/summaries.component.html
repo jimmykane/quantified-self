@@ -139,7 +139,7 @@
         <dd class="dashboard-today-load-value">
           @if (dashboardTodayReadiness.rampCue; as cue) {
             <span>{{ dashboardTodayReadiness.formText }} /</span>
-            <span class="dashboard-direction-cue" role="img" [attr.aria-label]="cue.label + ': ' + dashboardTodayReadiness.rampText">
+            <span class="dashboard-direction-cue dashboard-ramp-direction" [class.is-flat]="cue.icon === 'trending_flat'" role="img" [attr.aria-label]="cue.label + ': ' + dashboardTodayReadiness.rampText">
               <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ dashboardTodayReadiness.rampText }}
             </span>
           } @else {
@@ -207,7 +207,7 @@
           <app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator>
         }
         </div>
-        <small>vs baseline · lower supports</small>
+        <small>{{ dashboardTodayReadiness.overnightHeartRateCue?.label || 'Comparison unavailable' }}</small>
         <small class="dashboard-readiness-night-context">{{ dashboardTodayReadiness.overnightHeartRateContextText }}</small>
       </div>
     </dl>

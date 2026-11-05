@@ -22,8 +22,8 @@ describe('dashboard Today visuals', () => {
   });
 
   it.each([
-    [0.978, 'Below baseline', 'trending_down'], [1.03, 'Above baseline', 'trending_up'],
-    [1, 'Near baseline', 'trending_flat'], [1.004, 'Near baseline', 'trending_flat'],
+    [0.978, 'Below your usual level', 'trending_down'], [1.03, 'Above your usual level', 'trending_up'],
+    [1, 'Near your usual level', 'trending_flat'], [1.004, 'Near your usual level', 'trending_flat'],
     [null, null, null], [NaN, null, null],
   ])('labels the HR comparison against baseline, not a time trend (%s)', (ratio, label, icon) => {
     const cue = buildDashboardTodayBaselineCue(ratio);
