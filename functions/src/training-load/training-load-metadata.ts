@@ -233,18 +233,6 @@ async function finalizeTrainingLoadMetadata(
       // for matched legacy legs or an older workout with no saved leg evidence.
       if ((firstImport || finalizedKeys.size > 0) && !finalizedKeys.has(key)) {
         leg.calibration = { version: 2, weight: null };
-        const energy = activity.getStat(DataEnergy.type)?.getValue();
-        const mass = activity.getStat(DataWeight.type)?.getValue();
-        if (leg.evaluations?.automatic.provenance !== 'imported'
-          && !leg.evaluations?.automatic.reasons.includes('unsupported-sport')
-          && typeof energy === 'number' && energy > 0
-          && Number.isFinite(energy) && !(typeof mass === 'number' && mass > 0 && Number.isFinite(mass))
-          && leg.identity.startMs !== null && Number.isSafeInteger(leg.identity.startMs)
-          && (leg.identity.duration === null || leg.identity.duration > 0)) {
-          if (!weightsByStart.has(leg.identity.startMs)) weightsByStart.set(leg.identity.startMs,
-            await readTrainingLoadWeight(db, transaction, uid, leg.identity.startMs));
-          leg.calibration.weight = weightsByStart.get(leg.identity.startMs)!;
-        }
       }
       const family = defaultAppliedTrainingLoadPolicy(activity.type).family;
       if (leg.calibration?.version === 2) {
@@ -255,6 +243,29 @@ async function finalizeTrainingLoadMetadata(
           ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
           ...(weight?.status === 'available' ? { bodyMassKg: weight.kilograms } : {}),
         });
+        const energy = activity.getStat(DataEnergy.type)?.getValue();
+        const mass = activity.getStat(DataWeight.type)?.getValue();
+        const method = reconciled.controls[key]?.method ?? leg.policy.method;
+        if ((weight === null || weight?.status === 'deferred')
+          && leg.evaluations.automatic.provenance !== 'imported'
+          && !leg.evaluations.automatic.reasons.includes('unsupported-sport')
+          && leg.evaluations.met.reasons.includes('missing-met-inputs')
+          && typeof energy === 'number' && energy > 0 && Number.isFinite(energy)
+          && !(typeof mass === 'number' && mass > 0 && Number.isFinite(mass))
+          && leg.identity.startMs !== null && Number.isSafeInteger(leg.identity.startMs)
+          && (leg.identity.duration === null || leg.identity.duration > 0)) {
+          if (method !== 'MET' && leg.evaluations.automatic.score !== null) leg.calibration!.weight = { status: 'deferred' };
+          else {
+            if (!weightsByStart.has(leg.identity.startMs)) weightsByStart.set(leg.identity.startMs,
+              await readTrainingLoadWeight(db, transaction, uid, leg.identity.startMs));
+            leg.calibration!.weight = weightsByStart.get(leg.identity.startMs)!;
+            const resolvedWeight = leg.calibration!.weight;
+            if (resolvedWeight?.status === 'available') leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithCalibration(activity, {
+              ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
+              bodyMassKg: resolvedWeight.kilograms,
+            });
+          }
+        }
       } else if (leg.policy.family === 'swimming' && leg.policy.swimThresholdSpeed !== undefined) {
         if (family === 'swimming')
           leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithSwimThreshold(activity, leg.policy.swimThresholdSpeed);

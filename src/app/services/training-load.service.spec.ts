@@ -72,6 +72,31 @@ describe('TrainingLoadService', () => {
     parentFingerprint: fingerprint(parent), legs: { saved: { activityId: 'leg', sourceFingerprint: fingerprint(child),
       identity: { startMs: 1000, endMs: 3601000, type: 'Walking', duration: 3600, distance: null },
       evaluations: null, recordedTss: 9, policy: defaultAppliedTrainingLoadPolicy('Walking') } } });
+  it.each(['select', 'unexclude', 'include', 'clear-override'])('waits for MET after %s, ignores the old snapshot and releases its listener', async action => {
+    const saved = parsedMetadata(); saved.revision = 4;
+    const hr = { preference: 'AUTOMATIC' as const, score: 40, method: 'HR' as const,
+      estimated: true, provenance: 'calculated' as const, reasons: [] };
+    saved.legs!.saved.calibration = { version: 2, weight: { status: 'deferred' } };
+    saved.legs!.saved.evaluations = { version: 1, automatic: hr, hr: { ...hr, preference: 'HR' },
+      met: { ...hr, preference: 'MET', reasons: ['missing-met-inputs'] } };
+    if (action !== 'select') saved.controls.saved = { method: 'MET',
+      ...(action === 'include' ? { included: false } : {}), ...(action === 'clear-override' ? { override: 0 } : {}) };
+    saved.excluded = action === 'unexclude';
+    records['users/u/events/e/metaData/trainingLoad'] = saved;
+    const metadata$ = new BehaviorSubject(saved); vi.spyOn(service, 'watch').mockReturnValue(metadata$);
+    let done = false;
+    const saving = service.save('u', 'e', 4, action === 'unexclude' ? { excluded: false }
+      : { key: 'saved', control: { method: 'MET' } }).then(() => { done = true; });
+    await vi.waitFor(() => expect(metadata$.observed).toBe(true));
+    expect(done).toBe(false);
+    const pending = { ...saved, excluded: false, revision: 5, controls: { saved: { method: 'MET' as const } } };
+    metadata$.next(pending); await Promise.resolve(); expect(done).toBe(false);
+    metadata$.next({ ...pending, revision: 6, legs: { saved: { ...saved.legs!.saved,
+      calibration: { version: 2, weight: { status: 'unavailable', reason: 'missing' } } } } });
+    await saving;
+    expect(metadata$.observed).toBe(false);
+    expect(update).toHaveBeenCalledWith(expect.anything(), expect.not.objectContaining({ legs: expect.anything() }));
+  });
   const summaryEvent = { getID: () => 'e', getActivities: () => [], toJSON: () => parent, stats: parent.stats } as never;
 
   it('validates lazy summary sources after optional derived reads without loading unrelated models', async () => {

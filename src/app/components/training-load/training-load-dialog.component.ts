@@ -121,9 +121,9 @@ export class TrainingLoadDialogComponent implements OnInit {
   get savedHealthWeightLabel(): string | null {
     const weight = this.savedCalibration?.weight;
     if (weight?.status === 'unavailable') {
-      if (weight.reason === 'missing') return 'Unavailable: no valid prior Health weight was available at first import.';
-      if (weight.reason === 'conflicting') return 'Unavailable: the latest prior Health weights conflicted at first import.';
-      return 'Unavailable: a reliable prior Health weight could not be established at first import.';
+      if (weight.reason === 'missing') return 'Unavailable: no valid prior Health weight was available when MET was prepared.';
+      if (weight.reason === 'conflicting') return 'Unavailable: the latest prior Health weights conflicted when MET was prepared.';
+      return 'Unavailable: a reliable prior Health weight could not be established when MET was prepared.';
     }
     if (weight?.status !== 'available') return null;
     const display = resolveUnitAwareDisplayFromValue(DataWeight.type, weight.kilograms, this.data.unitSettings);
@@ -148,6 +148,7 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.status === 'excluded') return 'Excluded from modeled load. Activity history and volume are retained.';
     if (this.metadata()?.sourceWritePending) return 'This import is not complete. Training load is unavailable until it finishes. Retry the import if it failed; you can still exclude the whole workout.';
     if (this.legModel.reasons.includes('source-updating')) return 'The workout changed during reparse. Close this editor and reopen the workout to load its current activities.';
+    if (this.legModel.reasons.includes('met-weight-pending')) return 'Preparing the MET estimate using a Health weight measured at or before this workout. Recorded data stays unchanged.';
     if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched activities below before using modeled load.';
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this activity’s saved policy.';
     if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New FTP, threshold HR or CSS settings do not apply retroactively.';

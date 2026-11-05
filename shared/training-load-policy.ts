@@ -50,6 +50,7 @@ export interface TrainingLoadLeg {
 export type TrainingLoadHealthWeight =
   | { status: 'available'; kilograms: number; observedAtMs: number; sourceRecordId: string; sourceRevision: string }
   | { status: 'unavailable'; reason: 'missing' | 'conflicting' | 'scan-limit' }
+  | { status: 'deferred' }
   | null;
 export interface TrainingLoadMetadata {
   version: 1;
@@ -126,6 +127,12 @@ export function sameTrainingLoadCalibration(left: Pick<TrainingLoadLeg, 'policy'
   return JSON.stringify(canonicalTrainingLoadValue({ thresholds: trainingLoadThresholds(left.policy), calibration: left.calibration }))
     === JSON.stringify(canonicalTrainingLoadValue({ thresholds: trainingLoadThresholds(right.policy), calibration: right.calibration }));
 }
+/** A usable non-MET result lets new legs postpone the Health-weight fallback until MET is selected. */
+function deferredTrainingLoadMetWeight(leg: TrainingLoadLeg | undefined): boolean {
+  return leg?.calibration?.version === 2 && leg.calibration.weight?.status === 'deferred'
+    && leg.evaluations?.automatic.provenance === 'calculated' && leg.evaluations.automatic.score !== null
+    && leg.evaluations.automatic.method !== 'MET' && leg.evaluations.met.reasons.includes('missing-met-inputs');
+}
 export function validTrainingLoadPolicy(family: unknown, policy: TrainingLoadPolicy): boolean {
   return isTrainingDiscipline(family) && isTrainingLoadMethod(policy.method) && typeof policy.included === 'boolean'
     && (policy.method !== 'SWIM_PACE' || family === 'swimming')
@@ -195,6 +202,7 @@ export function resolveEffectiveTrainingLoad(
       return unavailable('reparse-required');
     const method = control?.method ?? policy.method;
     const evaluations = entry?.[1].evaluations;
+    if (method === 'MET' && deferredTrainingLoadMetWeight(entry?.[1])) return unavailable('met-weight-pending');
     if (evaluations) {
       const result = evaluations[method === 'HR' ? 'hr' : method === 'MET' ? 'met' : method === 'SWIM_PACE' ? 'swimPace' : 'automatic'];
       if (!result) return unavailable('reparse-required');

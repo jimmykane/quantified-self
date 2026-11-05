@@ -1237,6 +1237,11 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
+Training-load Health weight is prepared only when MET is needed or selected. A later owner MET selection uses the
+existing server trigger, without adding an MCP mutation or exposing Health input/provenance. While preparation is
+pending, Training impact reports its existing unavailable-load coverage rather than a stale fallback score. The
+registered output schemas and threshold grants are unchanged; this internal behavior needs no plugin rebuild.
+
 The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location

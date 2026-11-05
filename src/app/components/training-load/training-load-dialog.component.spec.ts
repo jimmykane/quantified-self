@@ -63,7 +63,7 @@ describe('Training load editor', () => {
         met: { ...candidate, preference: 'MET', reasons: ['missing-met-inputs'] } } } } });
     expect(component.explanation).toContain('saved FTP fallback');
     expect(component.reasonText).toContain('saved prior Health weight fallback');
-    expect(component.savedHealthWeightLabel).toContain('conflicted at first import');
+    expect(component.savedHealthWeightLabel).toContain('conflicted when MET was prepared');
   });
   it('shows saved threshold and prior weight inputs with units without revealing private provenance', () => {
     const leg: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 10 * 86400000, endMs: 10 * 86400000 + 3600000,

@@ -36,7 +36,7 @@ export function trainingLoadWeightCandidates(uid: string, atMs: number,
  * There is deliberately no age limit. Query failures propagate so an import can retry.
  */
 export async function readTrainingLoadWeight(db: Firestore, transaction: Transaction, uid: string,
-  atMs: number): Promise<Exclude<TrainingLoadHealthWeight, null>> {
+  atMs: number): Promise<Exclude<TrainingLoadHealthWeight, null | { status: 'deferred' }>> {
   const base = db.collection(`users/${uid}/${HEALTH_SOURCE_RECORDS_COLLECTION_ID}`)
     .where('kind', '==', HEALTH_SOURCE_RECORD_KINDS.PointMeasurement)
     .where('metricIds', 'array-contains', HEALTH_METRIC_IDS.BodyWeight).where('endTimeMs', '<=', atMs)

@@ -89,7 +89,7 @@ export async function prepareTrainingLoadCacheWrite(db: admin.firestore.Firestor
   throw new Error('Invalid Training load cache tree.');
 }
 
-/** Triggers reread current records in the transaction: delayed deliveries cannot overwrite newer owner edits. */
+/** Reread current sources, prepare selected deferred MET and refresh its cache atomically. */
 export async function refreshTrainingLoadSummary(uid: string, eventId: string): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async transaction => {
@@ -98,6 +98,7 @@ export async function refreshTrainingLoadSummary(uid: string, eventId: string): 
         db.doc(`users/${uid}/events/${eventId}/metaData/trainingLoad`)]);
     if (guard.shouldSkip) return;
     const metadata = snapshot.data() as TrainingLoadMetadata | undefined;
+    const originalRevision = metadata?.revision;
     let activities: (TrainingLoadActivity & Record<string, unknown>)[] = [];
     if (parent.exists && metadata && !metadata.sourceWritePending && !metadata.legs && Object.keys(metadata.controls).length) {
       const children = await transaction.get(db.collection(`users/${uid}/activities`).where('eventID', '==', eventId).limit(101));
@@ -118,9 +119,39 @@ export async function refreshTrainingLoadSummary(uid: string, eventId: string): 
       if (stale) {
         const load = unavailableTrainingLoad();
         summary = { eventId, parentFingerprint: '', excluded: false, load, missingLeg: load, legs: {} };
+      } else if (summary.parentFingerprint === trainingLoadSourceFingerprint(parent.data()!)) {
+        let changed = false;
+        const weights = new Map<number, Awaited<ReturnType<typeof import('./training-load-weight').readTrainingLoadWeight>>>();
+        for (const [index, leg] of legs.entries()) {
+          if (!resolveEffectiveTrainingLoad({}, metadata, [], leg.activityId!).reasons.includes('met-weight-pending')) continue;
+          const { readTrainingLoadWeight } = await import('./training-load-weight');
+          const { calculateDeferredMet } = await import('./training-load-met');
+          const start = leg.identity.startMs;
+          if (start === null || !Number.isSafeInteger(start)) continue;
+          if (!weights.has(start)) weights.set(start, await readTrainingLoadWeight(db, transaction, uid, start));
+          const weight = weights.get(start)!;
+          if (weight.status === 'available') {
+            const met = calculateDeferredMet(leg, sources[index].data()!, weight.kilograms);
+            leg.evaluations!.met = met.score === null ? { ...leg.evaluations!.met,
+              reasons: [...new Set([met.reasons[0] ?? 'calculation-unavailable', ...leg.evaluations!.automatic.reasons])] } : met;
+          }
+          leg.calibration!.weight = weight;
+          // An explicit association with identical saved calibration owns the same input.
+          // Freeze both records so completion itself cannot create a calibration mismatch.
+          const associated = Object.entries(metadata.controls).find(([, control]) => control.activityId === leg.activityId);
+          if (associated) metadata.legs[associated[0]].calibration!.weight = weight;
+          changed = true;
+        }
+        if (changed) {
+          metadata.revision++;
+          summary = summarizeTrainingLoad(eventId, parent.data()!, metadata)!;
+        }
       }
     }
     const write = await prepareTrainingLoadCacheWrite(db, transaction, uid, eventId, summary);
+    if (metadata && metadata.revision !== originalRevision) transaction.update(snapshot.ref, {
+      legs: metadata.legs, revision: metadata.revision, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     write.write();
   });
 }

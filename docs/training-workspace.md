@@ -7268,18 +7268,34 @@ once for its identity and source fingerprint; this adds no stored state or reads
 available candidate, then falls back through Automatic. Other sports retain their existing order. Swim pace TSS remains
 `100 × activeHours × (averageSwimSpeed / CSS)^3`. Workout average pace is never its own CSS.
 
-For calorie-derived MET, file body mass has priority. Only an eligible new leg without imported TSS, with usable file energy and no usable file mass
-looks up actual manual/device Health Weight point measurements at or before its start. There is no age expiry. The
+For calorie-derived MET, file body mass has priority. An eligible new leg without imported TSS, with usable file energy
+and no usable file mass looks up Health Weight only when MET is preferred or Automatic has no available candidate after
+applying the saved FTP/HR/CSS fallbacks. A usable HR, power or pace candidate otherwise defers the lookup. Health Weight
+uses actual manual/device point measurements at or before the leg's start. There is no age expiry. The
 latest valid point wins; different valid weights at the same newest instant are unavailable, never averaged or
 provider-selected. A bounded descending query reads two records first, then pages of eight up to 64; unresolved scans
-are unavailable and transient query failures retry the import. The composite index covers kind, metric and recorded
-instant. No Health-history scan is added to Training rebuilds. Freeze the chosen kg, measurement instant and private
-source revision, or unavailable status, in the leg's owner-only calibration. Reparse never consults today's weight,
-backfilled records or later edits/deletions. Removing the Health point does not remove an already frozen workout
+are unavailable and transient query failures retry the operation. The composite index covers kind, metric and recorded
+instant. No Health-history scan is added to ordinary Training rebuilds. Freeze the chosen kg, measurement instant and private
+source revision, or unavailable status, when MET is first prepared. Reparse never replaces a frozen choice with today's
+weight, backfilled records or later edits/deletions. Removing the Health point does not remove an already frozen workout
 input; workout/account deletion removes that private snapshot. Help and Policies disclose this retention.
 The owner editor displays the saved fallback's units, date and age at the workout.
 MET remains `100 × hours × (kcal / (kg × hours) / 10)^2`, labelled estimated; no invented mass or resting-energy adjustment.
-An available Automatic HR/power candidate does not suppress this lookup: explicit MET still needs its own candidate.
+Deferred legs retain only a private `weight.status: deferred`, distinct from an attempted unavailable lookup. Selecting
+MET later uses the existing metadata trigger and cache transaction: verify the current parent and all leg sources,
+read the historical weight once, and calculate only MET through Sports Lib from the saved calories and timing scalars.
+Keep the cached HR/power/pace candidates and recorded statistics unchanged. No original-file parse, provider call, new
+Function or new client write permission is needed. The same transaction freezes the result and refreshes the summary;
+concurrent controls, reparse and deletion retain the existing read/revision/deletion fences. Missing/conflicting results
+are frozen too, preserving the normal Automatic fallback without repeat Health queries. Excluded/overridden/unmatched
+legs do not trigger deferred preparation. The owner save waits up to 30 seconds for the server result; timeout reports
+that the preference was saved and preparation is pending. A selected pending MET result is unavailable, never the stale
+pre-selection score. Enabling a previously excluded MET leg follows the same path.
+
+This removes unused Health reads from normal imports. A later MET selection adds its one-time Health query, metadata
+write and delivery through the existing trigger; subsequent selections/rebuilds reuse the frozen result. The internal
+pending/weight state stays out of MCP/Assistant projections. Training impact retains its frozen public schema and reports
+pending load through its existing unavailable coverage; threshold read/write tools and grants are unchanged.
 
 The small private per-leg `calibration.version: 2` distinguishes this file-first/frozen-weight behavior. Absence is the
 legacy behavior: existing workouts keep the original CSS-first wrapper and no new FTP/HR/Health fallback. Matched legs,

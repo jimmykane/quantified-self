@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { collection, collectionData, doc, docData, Firestore, runTransaction, serverTimestamp,
   query, where, limit } from 'app/firebase/firestore';
 import type { EventRead } from '@shared/event-read';
-import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
+import { combineLatest, filter, firstValueFrom, map, Observable, of, startWith, switchMap, timeout } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, validTrainingLoadPolicy, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
   trainingLoadThresholds,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
@@ -84,7 +84,7 @@ export class TrainingLoadService {
     const ref = doc(this.firestore, `users/${uid}/events/${eventId}/metaData/trainingLoad`);
     const policyRef = future ? doc(this.firestore, `users/${uid}/trainingLoadPolicies/${future.family}`) : null;
     const revisionId = future ? this.createPolicyRevisionId() : null;
-    await runTransaction(this.firestore, async transaction => {
+    const pending = await runTransaction(this.firestore, async transaction => {
       const event = await transaction.get(eventRef);
       const snapshot = await transaction.get(ref);
       const policySnapshot = policyRef ? await transaction.get(policyRef) : null;
@@ -98,7 +98,7 @@ export class TrainingLoadService {
         if (edit.control) controls[edit.key] = edit.control;
         else delete controls[edit.key];
       }
-      const patch = { version: 1, revision: expectedRevision + 1,
+      const patch = { version: 1 as const, revision: expectedRevision + 1,
         excluded: 'reset' in edit ? false : 'excluded' in edit ? edit.excluded : current?.excluded ?? false,
         controls: 'reset' in edit ? {} : controls, resetUnmatched: 'reset' in edit ? true : current?.resetUnmatched ?? false, editedLegKey: 'key' in edit ? edit.key : null, updatedAt: serverTimestamp() };
       const changed = !current || patch.excluded !== current.excluded
@@ -117,7 +117,20 @@ export class TrainingLoadService {
         transaction.set(policyRef, policy);
         transaction.set(doc(policyRef, 'revisions', revisionId), policy);
       }
+      const next = { ...current, ...patch };
+      const activityIds = Object.values(current?.legs ?? {}).flatMap(leg => leg.activityId &&
+        resolveEffectiveTrainingLoad({}, next, [], leg.activityId).reasons.includes('met-weight-pending') ? [leg.activityId] : []);
+      return activityIds.length ? { activityIds, revision: changed ? patch.revision : expectedRevision } : null;
     });
+    if (pending) {
+      try {
+        await firstValueFrom(this.watch(uid, eventId).pipe(filter(metadata => !!metadata &&
+          metadata.revision >= pending.revision &&
+          pending.activityIds.every(id => !resolveEffectiveTrainingLoad({}, metadata, [], id).reasons.includes('met-weight-pending'))), timeout(30_000)));
+      } catch {
+        throw new Error('Your preference was saved. MET preparation is still pending; close and reopen the editor to check it.');
+      }
+    }
   }
 
   async savePolicy(uid: string, family: TrainingSportId, expectedRevision: number, policy: TrainingLoadPolicy): Promise<void> {

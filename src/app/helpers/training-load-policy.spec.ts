@@ -15,6 +15,24 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('represents a selected deferred MET candidate as pending without affecting Automatic, overrides or exclusions', () => {
+    const data = metadata(); const leg = data.legs!.walk;
+    const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 40, estimated: true,
+      provenance: 'calculated' as const, reasons: [] };
+    leg.calibration = { version: 2, weight: { status: 'deferred' } };
+    leg.evaluations = { version: 1, automatic: hr, hr: { ...hr, preference: 'HR' },
+      met: { ...hr, preference: 'MET', reasons: ['missing-met-inputs'] } };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(40);
+    data.controls.walk = { method: 'MET' };
+    expect(resolveEffectiveTrainingLoad(source, JSON.parse(JSON.stringify(data)), activities, 'walk'))
+      .toMatchObject({ score: null, status: 'unavailable', reasons: ['met-weight-pending'] });
+    data.controls.walk.override = 0;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+    data.controls.walk = { method: 'MET', included: false };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').status).toBe('excluded');
+    data.controls.walk = { method: 'MET' }; leg.calibration.weight = { status: 'unavailable', reason: 'missing' };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk')).toMatchObject({ score: 40, method: 'HR' });
+  });
   it('validates separate FTP families and projects only explicit threshold settings', () => {
     const policy = { method: 'AUTOMATIC' as const, included: true, functionalThresholdPower: 220, lactateThresholdHR: 165 };
     expect(validTrainingLoadPolicy('running', policy)).toBe(true);
