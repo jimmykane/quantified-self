@@ -69,7 +69,6 @@ type Outcome = { label: string; code: TrainingSyncOutcome; synced: boolean; atte
 function countedOutcome(label: string, count: number): string {
   const forms: Record<string, readonly [string, string]> = {
     'Retry scheduled': ['retry scheduled', 'retries scheduled'],
-    'Needs approval': ['needs approval', 'need approval'],
     'Needs sync setup': ['needs sync setup', 'need sync setup'],
     'Sync unconfirmed': ['sync unconfirmed', 'syncs unconfirmed'],
     'Send unconfirmed': ['send unconfirmed', 'sends unconfirmed'],
@@ -116,7 +115,7 @@ function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus
   }
   if (status && ATTENTION.has(status.status)) {
     const labels: Partial<Record<TrainingDeliveryStatusV1['status'], string>> = {
-      unsupported: 'Not supported', approval_required: 'Needs approval', failed: suunto ? 'Send failed' : 'Sync failed',
+      unsupported: 'Not supported', approval_required: 'Awaiting sync refresh', failed: suunto ? 'Send failed' : 'Sync failed',
       needs_attention: suunto ? 'Send unconfirmed' : 'Sync unconfirmed', reconnect_required: 'Reconnect required',
       connection_repair: 'Check connection', fresh_consent_required: 'Needs sync setup',
     };

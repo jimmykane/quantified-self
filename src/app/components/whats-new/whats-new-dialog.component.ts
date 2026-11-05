@@ -1,3 +1,4 @@
+import { NotificationOfferComponent } from '../notification-offer/notification-offer.component';
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -16,7 +17,7 @@ import { computed } from '@angular/core';
   selector: 'app-whats-new-dialog',
   standalone: true,
   imports: [
-    CommonModule,
+    CommonModule, NotificationOfferComponent,
     MatDialogModule,
     MatButtonModule,
     WhatsNewFeedComponent,
@@ -26,11 +27,12 @@ import { computed } from '@angular/core';
   styleUrl: './whats-new-dialog.component.scss',
   template: `
     <div mat-dialog-title class="dialog-header">
-      <mat-icon class="header-icon">campaign</mat-icon>
-      <span class="header-text">What's New</span>
+      <mat-icon class="header-icon">notifications</mat-icon>
+      <span class="header-text">Updates &amp; notifications</span>
     </div>
     <mat-dialog-content class="dialog-content qs-scrollbar">
       <div class="dialog-body">
+        <app-notification-offer placement="tray" (navigated)="closeAfterNavigation()" />
         @if (isUpdateAvailable()) {
           <div class="update-banner">
               <mat-icon>system_update</mat-icon>
@@ -79,6 +81,8 @@ export class WhatsNewDialogComponent implements OnInit {
     this.haptics.selection();
     this.updateService.activateUpdate();
   }
+
+  closeAfterNavigation(): void { this.dialogRef.close(); }
 
   close(): void {
     this.haptics.selection();

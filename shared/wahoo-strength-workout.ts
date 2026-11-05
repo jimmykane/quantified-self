@@ -18,14 +18,14 @@ export function assessWahooStrengthWorkoutV1(structure: WorkoutStructureV1,
   }
   const issues: PlannedWorkoutProviderMappingAssessmentV1['issues'] = [{ severity: 'degraded',
     code: 'sport_profile_degraded', path: '$.strength',
-    message: 'Wahoo Gym uses timed sets/rests. Names and kilogram loads are instructions, not native rep/load tracking. Rounded load instructions require review.' }];
+    message: 'Wahoo Gym uses timed sets/rests. Names and kilogram loads are instructions, not native rep/load tracking. Rounded load guidance is disclosed as a warning.' }];
   details.exercises.forEach((exercise, i) => exercise.sets.forEach((set, j) => {
     const path = `$.strength.exercises[${i}].sets[${j}]`;
     if (set.ending.kind !== 'time') issues.push({ severity: 'unsupported', code: 'unsupported_ending',
       path: `${path}.ending`, message: 'Wahoo strength delivery requires timed sets; repetition sets cannot be sent or converted to estimated time.' });
     if (set.externalLoadKg !== undefined && Number(new DataWeight(set.externalLoadKg).getDisplayValue()) !== set.externalLoadKg) {
       issues.push({ severity: 'degraded', code: 'purpose_degraded', path: `${path}.externalLoadKg`,
-        message: 'Wahoo rounds this kilogram load instruction using Sports Lib display; it has no exact native load field. Review the rounded load before sending. QS keeps the exact prescription.' });
+        message: 'Wahoo rounds this kilogram load instruction using Sports Lib display; it has no exact native load field. The rounded load is guidance only. QS keeps the exact prescription.' });
     }
   }));
   return { provider: 'wahoo', level: issues.some(issue => issue.severity === 'unsupported') ? 'unsupported' : 'degraded',

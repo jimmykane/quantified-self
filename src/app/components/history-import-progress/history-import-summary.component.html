@@ -18,10 +18,10 @@
     @if (progress.kind === 'active') { <mat-progress-bar mode="indeterminate" [attr.aria-label]="progress.name + (progress.requestOnly ? ' history request submission in progress' : ' history import in progress')" /> }
     <p class="coverage-note">
       @if (progress.requestOnly) {
-        @if (progress.canDismiss) { Request processing has finished with issues. Counts are not failure totals. }
+        @if (progress.kind === 'attention') { Request processing has finished with issues. Counts are not failure totals. }
         Counts describe scheduled requests, not records received. Garmin sends records separately after accepting requests.
         Request acceptance does not confirm delivery; delivery completion is not tracked here.
-      } @else if (progress.canDismiss) {
+      } @else if (progress.kind === 'attention') {
         Processing has finished with issues. Counts shown are items or requests, not failure totals.
       } @else if (progress.kind === 'requested') {
         History requested. Available records are delivered separately.

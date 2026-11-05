@@ -114,6 +114,12 @@ export class AppNotificationDevicesService {
         const current = snapshot.data();
         // A stale page must never revoke a replacement registration after a transaction retry.
         if (current.generation !== device.generation || current.origin !== device.origin) throw new Error('Registration changed.');
+        const account = await transaction.get(doc(this.firestore, `users/${owner.uid}`));
+        if (!this.current(owner, epoch) || !account.exists()) throw new Error('Account changed.');
+        // Persist the explicit choice with revocation. Removed registrations alone cannot explain an opt-out.
+        transaction.set(doc(this.firestore, `users/${owner.uid}/config/settings`), {
+          appSettings: { notificationInvitation: { version: 1, choice: 'disabled' } },
+        }, { merge: true });
         // Registrations are leaves: Rules prohibit all descendants.
         transaction.delete(ref);
         return true;

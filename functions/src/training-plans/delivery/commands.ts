@@ -226,7 +226,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     if (workout?.planId && enable && (!planSetting?.enabled || planSetting.destinationKey !== connection.destinationKey
       || planSetting.connectionEpoch !== connection.epoch)) throw new HttpsError('failed-precondition', 'Enable this provider on the plan first.');
-    if (command.approvalDigest && preview.approvalDigest !== command.approvalDigest) {
+    if (['replace', 'fresh-guide'].includes(command.action)
+      && command.approvalDigest && preview.approvalDigest !== command.approvalDigest) {
       throw new HttpsError('aborted', 'The compatibility preview changed. Review the latest warnings.');
     }
     const revision = (state.data()?.revision ?? 0) + 1;

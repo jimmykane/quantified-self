@@ -126,11 +126,13 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
         });
         continue;
       }
-      const changed = ledger.desiredDigest !== intent.digest || ledger.desired !== intent.desired;
+      const contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
+      const changed = ledger.desiredDigest !== intent.digest || ledger.desired !== intent.desired
+        || ledger.contentDigest !== contentDigest;
       ledger.desiredGeneration += changed ? 1 : 0;
       ledger.desiredDigest = intent.digest; ledger.desired = intent.desired; ledger.status = intent.status;
       ledger.issues = intent.issues; ledger.approvalDigest = intent.approvalDigest; ledger.timeZone = intent.timeZone;
-      ledger.contentDigest = deliveryContentDigest(workout, intent.timeZone, context.strength);
+      ledger.contentDigest = contentDigest;
       const kind = queuedDeliveryOperation(ledger);
       if (!kind) {
         deferredWrites.push(() => { writeDelivery(runtime, tx, uid, ledger); tx.delete(job.ref); });
@@ -222,7 +224,8 @@ async function batchAdmission(runtime: DeliveryRuntime, uid: string, claim: Batc
         || context.connection.generation !== operation.connectionGeneration
         || context.connection.epoch !== ledger.connectionEpoch
         || ledger.blockedConnectionGeneration === operation.connectionGeneration
-        || !((operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
+        || !((operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest
+          && deliveryContentDigest(context.workout, intent.timeZone, context.strength) === operation.contentDigest)
           || (operation.kind === 'remove' && intent.desired === 'absent'))) return false;
     }
     return true;
@@ -330,8 +333,9 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
         ledger.acceptedContentDigest = operation.kind === 'upsert' ? operation.contentDigest : null;
         ledger.lastAcceptedAtMs = runtime.now(); ledger.attempt = null; ledger.retries = 0;
         ledger.retryAtMs = 0; ledger.providerNotBeforeMs = 0;
-        ledger.status = ledger.desiredDigest === operation.digest
-          ? operation.kind === 'upsert' ? 'delivered' : 'removed' : 'pending';
+        const acceptedCurrent = ledger.desiredDigest === operation.digest
+          && (operation.kind === 'remove' || ledger.contentDigest === operation.contentDigest);
+        ledger.status = acceptedCurrent ? operation.kind === 'upsert' ? 'delivered' : 'removed' : 'pending';
         accepted.push(operation.deliveryId);
       } else if (outcome.state === 'rejected') {
         ledger.attempt = null; ledger.status = 'failed';

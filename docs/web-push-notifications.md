@@ -135,6 +135,53 @@ The history-only subset requires the Rules deployment above. It needs no key rot
 
 Rollback of new admissions/sends is the new switch set to false; existing imports continue normally. Already claimed/accepted sends may finish. Never clear receipts or replay completed runs. The trigger uses 256 MiB, 30 seconds, max two instances, concurrency 20 and zero minimum instances in `europe-west2`; no idle warm instance or new scheduler is provisioned. Once deployed it is invoked on history-document writes even while disabled, then filters unrelated checkpoints in memory. Consented completion handling adds bounded configuration/Firestore reads, transactional claim/bookkeeping writes and one push request at most. This has incremental invocation/read/write costs; it is not a free or guaranteed-delivery service.
 
+## Notification discovery
+
+The owner Dashboard reuses the action-prompt area above Today for a notification invitation. It requires a confirmed
+connected activity service, no empty-account/setup prompts, an enabled activity-sync category and the frontend
+`web_push_activity_sync_enabled` switch. Browser permission must still be `default`, with no retained subscription
+or installation. Previously granted but unregistered browsers use the permanent tray/Settings entry points rather
+than being treated as never opted in. The header's **Updates & notifications** tray includes device status, an **On**
+switch, blocked/Home Screen instructions and a Settings link; its badge still counts release notes only. Public and
+impersonated sessions do not receive a device offer. Opening either surface never requests permission or sends a test.
+
+Turning the tray switch On requests device permission synchronously and enables every known notification category
+in one owner-scoped transaction after registration succeeds. The transaction reads current revisions before any writes
+and preserves already enabled categories. This explicit master action may re-enable categories the account previously
+turned off. Turning the switch off revokes only the current device; other devices and category preferences stay active.
+The switch remains On while any category is active on an enabled device, so a partial category selection is never
+presented as a silent device. Existing per-request history/delivery intent and sender throttles still apply.
+The switch can retry temporary worker/device-check failures after support, account and site configuration checks succeed.
+Retry verifies browser subscription ownership again, revoking foreign/orphaned endpoints before registering and
+reusing the current account's installation ID to avoid duplicate device rows. Before subscribing or starting a registration
+write, an observed newer local installation from another tab supersedes the pending enable. Site enablement and signing-key
+changes are checked again around asynchronous work.
+Permission remains in the original user gesture, before worker waits or category writes. Non-retryable configuration/read
+states offer a support Retry action; blocked permissions and installation requirements retain their browser instructions.
+If registration succeeds but enabling categories fails while others remain active, Retry repeats the incomplete On
+action without turning the device off or requesting permission again. When the switch is still off, On itself retries.
+The pending action is cleared after success, explicit Off, or an account change.
+
+`users/{uid}/config/settings.appSettings.notificationInvitation` is a client-owned versioned UI preference under
+existing private Settings Rules, separate from sender/category consent. A first snooze lasts 30 days; another snooze
+after that deadline becomes a permanent dismissal. Explicit dismiss, enable and disable choices are terminal for
+proactive discovery. Transactional nested merges preserve unrelated settings, concurrent snoozes do not consume the
+reminder twice, and terminal choices cannot be revived by a late snooze. Generic profile/Settings saves exclude this
+field so stale tabs cannot replay old choices; empty app-settings maps cannot erase it. Choices synchronize across beta/production.
+An account-scoped local stop marker also preserves explicit enable/disable intent if the preference write fails.
+An in-memory stop survives token refresh and account re-entry when local storage is unavailable. Device choices wait
+for a pending invitation claim check before saving, with the same account/lifetime and impersonation checks.
+Disabling a listed registration saves the shared opt-out in the same transaction as revocation. Sign-out, expiry and
+background reconciliation do not record an explicit opt-out. Account cleanup already covers the settings document.
+
+Invitation reads require an authoritative server snapshot; cache-only, malformed, failed and impersonated reads
+suppress the dashboard offer. Focus refreshes the snooze clock. Permission requests remain synchronous in an explicit
+button gesture, and asynchronous UI completion is fenced to the starting account and component lifetime.
+The current dashboard gesture keeps progress or failure feedback visible after permission state changes; failure
+provides a Settings link and only allows an enable retry when the push service can enable that device.
+No new Function, Rules deployment, scheduler, notification category or notification inbox is introduced. Frontend release
+uses the existing foundation and activity-sync switches; no cloud values are changed by this implementation.
+
 ## Recent live-activity sync notifications
 
 `activity_sync` defaults on as an account preference, independently of `history_import`. Sending additionally requires

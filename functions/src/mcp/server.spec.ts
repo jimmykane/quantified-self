@@ -1074,7 +1074,9 @@ describe('MCP HTTP scope enforcement', () => {
     expect(combinedWriteInstructions).toContain('Use preview_training_deletion');
     expect(writeInstructions).toContain('cannot request older service-copy cleanup');
     expect(combinedWriteInstructions).toContain('keep necessary concise instructions within 40 characters');
-    expect(combinedWriteInstructions).toContain('One approved Send proposal also approves the previewed digest-bound adjustment');
+    expect(combinedWriteInstructions).toContain('do not request separate mapping approval');
+    expect(combinedWriteInstructions).toContain('later workouts entering the scheduling window, across sports and providers');
+    expect(combinedWriteInstructions).toContain('Native confirmation of authored plan/workout changes remains required');
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);

@@ -69,11 +69,13 @@
   </div>
   }
   @if (showTodaySummary) {
+  <div [class.dashboard-today-card]="!isOwnerDashboard || todayDetailsExpanded()">
   <section id="dashboard-today-details" class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
     [hidden]="isOwnerDashboard && !todayDetailsExpanded()"
+    [style.--qs-today-sleep-base]="todaySleepBaseColor"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
     <div class="dashboard-current-state-top">
-      <div class="dashboard-current-state-primary dashboard-training-state-primary">
+      <div class="dashboard-current-state-primary dashboard-training-state-primary" [attr.data-cue-tone]="dashboardTodayTrainingState.scaleTone">
         <span>Training state</span>
         <strong>{{ dashboardTodayTrainingState.label }}</strong>
         <small class="dashboard-training-state-caption">{{ (sicknessContext.hasActiveSickness() || restContext.isRestDay()) && dashboardTodayTrainingState.label === 'Fresh' ? 'Low training load' : dashboardTodayTrainingState.caption }} · TSS only</small>
@@ -92,7 +94,7 @@
           <small>Lower load</small><small>Stable</small><small>High strain</small>
         </div>
       </div>
-      <div class="dashboard-current-state-primary dashboard-readiness-primary" [attr.aria-busy]="dashboardTodayReadiness.loading">
+      <div class="dashboard-current-state-primary dashboard-readiness-primary" [attr.aria-busy]="dashboardTodayReadiness.loading" [attr.data-cue-tone]="dashboardTodayReadiness.scoreTone">
         <span>Readiness</span>
         <div class="dashboard-readiness-primary-value">
           <strong>{{ dashboardTodayReadiness.label }}</strong>
@@ -103,7 +105,7 @@
           <mat-progress-bar mode="indeterminate" aria-label="Loading readiness"></mat-progress-bar>
           } @else if (dashboardTodayReadiness.score !== null) {
           <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
-            [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
+            [value]="dashboardTodayReadiness.score" [tone]="dashboardTodayReadiness.scoreTone"
             [showThresholds]="true"></app-metric-indicator>
           }
         </div>
@@ -115,7 +117,7 @@
         <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
         <app-metric-indicator variant="segments" label="Available readiness signals"
           [value]="dashboardTodayReadiness.availableSignalCount"
-          [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
+          [total]="4" [tone]="dashboardTodayReadiness.scoreTone"></app-metric-indicator>
         }
         }
       </div>
@@ -132,8 +134,18 @@
     </div>
     }
     <dl>
-      <div>
-        <dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd>
+      <div class="dashboard-today-load" [attr.data-cue-tone]="dashboardTodayTrainingState.scaleTone">
+        <dt>Load</dt>
+        <dd class="dashboard-today-load-value">
+          @if (dashboardTodayReadiness.rampCue; as cue) {
+            <span>{{ dashboardTodayReadiness.formText }} /</span>
+            <span class="dashboard-direction-cue dashboard-ramp-direction" [class.is-flat]="cue.icon === 'trending_flat'" role="img" [attr.aria-label]="cue.label + ': ' + dashboardTodayReadiness.rampText">
+              <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ dashboardTodayReadiness.rampText }}
+            </span>
+          } @else {
+            {{ dashboardTodayReadiness.loadText }}
+          }
+        </dd>
         <div class="dashboard-today-history-slot">
         @if (dashboardTodayReadiness.loadBars.length) {
           <!-- A static seven-day summary stays semantic HTML so Today paints with its data;
@@ -149,25 +161,39 @@
         </div>
         <small>Form / ramp</small>
       </div>
-      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
-      <div class="dashboard-readiness-hrv">
+      <div class="dashboard-today-sleep" [class.has-score]="dashboardTodayReadiness.sleepScore !== null"><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
+      <div class="dashboard-readiness-hrv" [attr.data-cue-tone]="dashboardTodayReadiness.hrvCueTone">
         <dt>HRV · 7-day average</dt>
-        <dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd>
-        <small>{{ dashboardTodayReadiness.hrvStatusText }}</small>
+        <dd>{{ dashboardTodayReadiness.hrvText }}</dd>
+        <div class="dashboard-hrv-status">
+          <small>{{ dashboardTodayReadiness.hrvRangeStatusText }}</small>
+          @if (dashboardTodayReadiness.hrvCue; as cue) {
+            <span class="dashboard-direction-cue dashboard-hrv-direction" [attr.data-hrv-trend]="cue.label"><mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ cue.label }}</span>
+          }
+        </div>
         @if (dashboardTodayReadiness.hrvRangeIndicator; as indicator) {
           <app-metric-indicator variant="range" label="HRV" [value]="indicator.value"
             [min]="indicator.min" [max]="indicator.max"
             [rangeMin]="indicator.rangeMin" [rangeMax]="indicator.rangeMax"
             [valueText]="dashboardTodayReadiness.hrvText" [rangeText]="dashboardTodayReadiness.hrvRangeText"
-            [tone]="dashboardTodayReadiness.hrvTone" [compact]="true"></app-metric-indicator>
+            [tone]="dashboardTodayReadiness.hrvCueTone" [compact]="true"></app-metric-indicator>
         }
         <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
         @if (dashboardTodayReadiness.hrvLatestText) {
           <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
         }
       </div>
-      <div>
-        <dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd>
+      <div class="dashboard-today-overnight-hr" [attr.data-cue-tone]="dashboardTodayReadiness.overnightHeartRateTone">
+        <dt>Overnight HR</dt>
+        <dd>
+          @if (dashboardTodayReadiness.overnightHeartRateCue; as cue) {
+            <span class="dashboard-direction-cue" role="img" [attr.aria-label]="cue.label + ': ' + dashboardTodayReadiness.overnightHeartRateText">
+              <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ dashboardTodayReadiness.overnightHeartRateText }}
+            </span>
+          } @else {
+            {{ dashboardTodayReadiness.overnightHeartRateText }}
+          }
+        </dd>
         <div class="dashboard-today-history-slot">
         @if (dashboardTodayReadiness.overnightHeartRateBars.length) {
           <div class="dashboard-today-history-bars" role="img"
@@ -181,7 +207,7 @@
           <app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator>
         }
         </div>
-        <small>vs baseline · lower supports</small>
+        <small>{{ dashboardTodayReadiness.overnightHeartRateCue?.label || 'Comparison unavailable' }}</small>
         <small class="dashboard-readiness-night-context">{{ dashboardTodayReadiness.overnightHeartRateContextText }}</small>
       </div>
     </dl>
@@ -190,6 +216,7 @@
     <app-daily-workout-suggestion [ownerUid]="user!.uid" [localDate]="todayRestDate" [dataReady]="!dashboardTodayReadiness.loading"
       [sleepRevision]="dailyWorkoutSuggestionSleepRevision" [sleepKey]="dailyWorkoutSuggestionSleepKey"></app-daily-workout-suggestion>
   }
+  </div>
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }
