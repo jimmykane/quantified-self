@@ -7287,10 +7287,12 @@ read the historical weight once, and calculate only MET through Sports Lib from 
 Keep the cached HR/power/pace candidates and recorded statistics unchanged. No original-file parse, provider call, new
 Function or new client write permission is needed. The same transaction freezes the result and refreshes the summary;
 concurrent controls, reparse and deletion retain the existing read/revision/deletion fences. Missing/conflicting results
-are frozen too, preserving the normal Automatic fallback without repeat Health queries. Excluded/overridden/unmatched
-legs do not trigger deferred preparation. The owner save waits up to 30 seconds for the server result; timeout reports
-that the preference was saved and preparation is pending. A selected pending MET result is unavailable, never the stale
-pre-selection score. Enabling a previously excluded MET leg follows the same path.
+are frozen too, preserving the normal Automatic fallback without repeat Health queries. With a usable non-MET
+candidate, excluded/overridden/unmatched legs keep weight deferred, including during duplicate import or reparse:
+finalization uses the same effective-load resolver as the owner editor and cache refresh. The owner save waits up to
+30 seconds for the server result; timeout reports that the preference was saved and preparation is pending. A selected
+pending MET result is unavailable, never the stale pre-selection score. Enabling a previously excluded MET leg follows
+the same path.
 
 This removes unused Health reads from normal imports. A later MET selection adds its one-time Health query, metadata
 write and delivery through the existing trigger; subsequent selections/rebuilds reuse the frozen result. The internal

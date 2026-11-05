@@ -62,9 +62,9 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     return finish;
   }
   const metadataPath = (uid: string) => `users/${uid}/events/workout/metaData/trainingLoad`;
-  async function datedHrWorkout(uid: string, method: 'AUTOMATIC' | 'MET' = 'AUTOMATIC') {
+  async function datedHrWorkout(uid: string, method: 'AUTOMATIC' | 'MET' = 'AUTOMATIC', included = true) {
     await db.doc(`users/${uid}/trainingLoadPolicies/walking-hiking/revisions/hr`).set({ revision: 1,
-      method, included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), lactateThresholdHR: 165 });
+      method, included, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), lactateThresholdHR: 165 });
     const event = workout(); const activity = event.getFirstActivity();
     activity.removeStat(DataWeight.type); activity.removeStat(DataTrainingStressScore.type);
     activity.removeStat(DataTrainingStressScoreMethod.type);
@@ -90,6 +90,33 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
       const saved = (await db.doc(metadataPath(explicitUid)).get()).data() as TrainingLoadMetadata;
       expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ method: 'MET', score: 9 });
       expect(saved.legs!.leg.evaluations?.automatic).toMatchObject({ method: 'HR', score: 40 });
+      const excludedUid = setup(); await priorWeight(excludedUid, 'prior', 70);
+      await datedHrWorkout(excludedUid, 'MET', false);
+      const excluded = (await db.doc(metadataPath(excludedUid)).get()).data() as TrainingLoadMetadata;
+      expect(excluded.legs!.leg.calibration?.weight).toEqual({ status: 'deferred' });
+      expect(resolveEffectiveTrainingLoad({}, excluded)).toMatchObject({ status: 'excluded', score: 0 });
+      expect(collections.mock.calls.some(([path]) => path === `users/${excludedUid}/healthSourceRecords`)).toBe(false);
+    } finally { collections.mockRestore(); }
+  });
+  it.each(['overridden', 'leg-excluded', 'workout-excluded', 'unmatched'])('keeps unused deferred MET through reparse when %s', async state => {
+    const uid = setup(); const event = await datedHrWorkout(uid); await priorWeight(uid, 'prior', 70);
+    const ref = db.doc(metadataPath(uid)); const before = (await ref.get()).data() as TrainingLoadMetadata;
+    await ref.update({ excluded: state === 'workout-excluded', controls: { leg: { method: 'MET',
+      ...(state === 'overridden' ? { override: 0 } : {}), ...(state === 'leg-excluded' ? { included: false } : {}) } },
+      ...(state === 'unmatched' ? { legs: { ...before.legs, retained: { ...before.legs!.leg, activityId: null } } } : {}) });
+    const collections = vi.spyOn(db, 'collection');
+    try {
+      const finish = await prepareTrainingLoadMetadata(uid, event); await source(uid, event); await finish();
+      expect(collections.mock.calls.some(([path]) => path === `users/${uid}/healthSourceRecords`)).toBe(false);
+      const saved = (await ref.get()).data() as TrainingLoadMetadata;
+      expect(saved.legs!.leg.calibration?.weight).toEqual({ status: 'deferred' });
+      expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject(state === 'unmatched'
+        ? { status: 'unavailable', reasons: ['activity-match-needs-review'] }
+        : state === 'overridden' ? { score: 0, method: 'OVERRIDE' } : { status: 'excluded', score: 0 });
+      await ref.update({ excluded: false, controls: { leg: { method: 'MET' },
+        ...(state === 'unmatched' ? { retained: { dismissed: true } } : {}) } });
+      await refreshTrainingLoadSummary(uid, 'workout');
+      expect(resolveEffectiveTrainingLoad({}, (await ref.get()).data() as TrainingLoadMetadata)).toMatchObject({ method: 'MET', score: 9 });
     } finally { collections.mockRestore(); }
   });
   it.each(['missing', 'conflicting'] as const)('freezes an unavailable %s deferred weight once, retaining the normal fallback', async reason => {

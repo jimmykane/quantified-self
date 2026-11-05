@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import { ActivityUtilities, DataEnergy, DataWeight, type EventInterface } from '@sports-alliance/sports-lib';
-import { defaultAppliedTrainingLoadPolicy, validTrainingLoadPolicy, recordedTrainingStressScore,
+import { defaultAppliedTrainingLoadPolicy, validTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
   trainingLoadThresholds,
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
@@ -245,7 +245,6 @@ async function finalizeTrainingLoadMetadata(
         });
         const energy = activity.getStat(DataEnergy.type)?.getValue();
         const mass = activity.getStat(DataWeight.type)?.getValue();
-        const method = reconciled.controls[key]?.method ?? leg.policy.method;
         if ((weight === null || weight?.status === 'deferred')
           && leg.evaluations.automatic.provenance !== 'imported'
           && !leg.evaluations.automatic.reasons.includes('unsupported-sport')
@@ -254,8 +253,12 @@ async function finalizeTrainingLoadMetadata(
           && !(typeof mass === 'number' && mass > 0 && Number.isFinite(mass))
           && leg.identity.startMs !== null && Number.isSafeInteger(leg.identity.startMs)
           && (leg.identity.duration === null || leg.identity.duration > 0)) {
-          if (method !== 'MET' && leg.evaluations.automatic.score !== null) leg.calibration!.weight = { status: 'deferred' };
-          else {
+          if (leg.evaluations.automatic.score !== null) leg.calibration!.weight = { status: 'deferred' };
+          // The same resolver owns method, override, exclusion and unmatched-leg precedence in every path.
+          if (leg.evaluations.automatic.score === null || resolveEffectiveTrainingLoad({}, {
+            version: 1, revision: 0, excluded: previous?.excluded ?? false,
+            resetUnmatched: previous?.resetUnmatched, ...reconciled,
+          }, [], leg.activityId!).reasons.includes('met-weight-pending')) {
             if (!weightsByStart.has(leg.identity.startMs)) weightsByStart.set(leg.identity.startMs,
               await readTrainingLoadWeight(db, transaction, uid, leg.identity.startMs));
             leg.calibration!.weight = weightsByStart.get(leg.identity.startMs)!;
