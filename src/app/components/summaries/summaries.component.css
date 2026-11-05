@@ -396,6 +396,11 @@
 }
 .dashboard-direction-cue mat-icon { inline-size: 1em; block-size: 1em; font-size: 1em; }
 .dashboard-hrv-status .dashboard-direction-cue { font-size: 0.68rem; }
+/* HRV direction is separate from the personal-range assessment on its value/marker. */
+.dashboard-hrv-direction { --qs-today-cue-color: var(--mat-sys-on-surface-variant); }
+.dashboard-hrv-direction[data-hrv-trend='rising'] { --qs-today-cue-color: var(--qs-status-info); }
+.dashboard-hrv-direction[data-hrv-trend='falling'] { --qs-today-cue-color: var(--qs-status-caution); }
+
 
 .dashboard-derived-metrics-retry {
   margin-right: 0.5rem;

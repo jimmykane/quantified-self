@@ -168,7 +168,7 @@
         <div class="dashboard-hrv-status">
           <small>{{ dashboardTodayReadiness.hrvRangeStatusText }}</small>
           @if (dashboardTodayReadiness.hrvCue; as cue) {
-            <span class="dashboard-direction-cue"><mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ cue.label }}</span>
+            <span class="dashboard-direction-cue dashboard-hrv-direction" [attr.data-hrv-trend]="cue.label"><mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ cue.label }}</span>
           }
         </div>
         @if (dashboardTodayReadiness.hrvRangeIndicator; as indicator) {

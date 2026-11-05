@@ -1995,6 +1995,7 @@ describe('SummariesComponent', () => {
     expect(native.querySelector('.dashboard-readiness-primary')?.getAttribute('data-cue-tone')).toBe(scenario.tone);
     expect(native.querySelector('.dashboard-readiness-hrv')?.getAttribute('data-cue-tone')).toBe(scenario.rangeTone);
     expect(native.querySelector('.dashboard-hrv-status .dashboard-direction-cue')?.textContent).toContain(scenario.trend);
+    expect(native.querySelector('.dashboard-hrv-direction')?.getAttribute('data-hrv-trend')).toBe(scenario.trend);
     if ('normalRange' in scenario) {
       // Valid assessments need not have drawable range geometry. Do not invent a band.
       expect(native.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
