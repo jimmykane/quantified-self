@@ -6,30 +6,133 @@ import { BehaviorSubject } from 'rxjs';
 import { TrainingLoadSettingsComponent } from './training-load-settings.component';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppUserService } from '../../services/app.user.service';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { TrainingThresholdsDialogComponent } from './training-thresholds-dialog.component';
 
 describe('dated Training load settings', () => {
   const savePolicy = vi.fn(); const success = vi.fn(); const error = vi.fn();
+  const readFtpSuggestions = vi.fn(); const selection = vi.fn();
   let component: TrainingLoadSettingsComponent;
   let policies$: BehaviorSubject<TrainingLoadPolicyHead[]>;
   beforeEach(() => {
-    vi.clearAllMocks(); savePolicy.mockResolvedValue(undefined);
+    vi.clearAllMocks(); savePolicy.mockResolvedValue(undefined); readFtpSuggestions.mockResolvedValue({});
     policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([
       { id: 'walking-hiking', revision: 4, method: 'HR', included: false },
     ]);
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
-      { provide: AppHapticsService, useValue: { success, error, selection: vi.fn() } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions, watchPolicies: () => policies$ } },
+      { provide: AppHapticsService, useValue: { success, error, selection } },
     ] });
     component = TestBed.runInInjectionContext(() => new TrainingLoadSettingsComponent());
     component.uid = 'owner'; component.ngOnChanges();
   });
+  it.each([false, true])('offers FTP as a draft proposal, requiring Save (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'cycling', revision: 5, method: 'HR', included: false,
+      functionalThresholdPower: 200, lactateThresholdHR: 165 }]);
+    readFtpSuggestions.mockResolvedValueOnce({ cycling: { value: 222.5,
+      displayText: '223 watt', detailText: 'Garmin · last seen Nov 4, 2026' } });
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const instance = fixture.componentInstance, row = instance.rows.find(row => row.id === 'cycling')!;
+    expect(row.form.controls.ftp.value).toBe('200'); expect(row.form.pristine).toBe(true);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    const family = fixture.nativeElement.querySelector('section[aria-label="Cycling"]') as HTMLElement;
+    expect(family.textContent).toContain('Found in recent activities:');
+    expect(family.textContent).toContain('older setting'); expect(family.textContent).toContain('not a new FTP test');
+    const use = family.querySelector('button[aria-label="Use Cycling FTP from recent activities"]') as HTMLButtonElement;
+    use.click(); fixture.detectChanges();
+    expect(row.form.controls.ftp.value).toBe('222.5'); expect(row.form.dirty).toBe(true);
+    expect(row.form.controls.thresholdHr.value).toBe('165'); expect(row.form.controls.included.value).toBe(false);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).toHaveBeenCalledOnce(); expect(use.disabled).toBe(true);
+    await instance.save(row);
+    expect(savePolicy).toHaveBeenCalledExactlyOnceWith('owner', 'cycling', 5,
+      { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
+    fixture.destroy();
+  });
+  it('ignores late suggestions for a previous account or destroyed editor without changing drafts', async () => {
+    let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.uid = 'old'; component.ngOnChanges();
+    component.uid = 'new'; component.ngOnChanges(); await Promise.resolve();
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    row.form.controls.ftp.setValue('250'); row.form.controls.ftp.markAsDirty();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Old account' } }); await Promise.resolve();
+    expect(component.ftpSuggestions()).toEqual({}); expect(row.form.controls.ftp.value).toBe('250');
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.ngOnChanges(); component.ngOnDestroy();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Destroyed editor' } }); await Promise.resolve();
+    expect(component.ftpSuggestions()).toEqual({});
+  });
+  it('keeps repeated, busy and missing suggestion actions silent', () => {
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    component.useFtpSuggestion(row);
+    component.ftpSuggestions.set({ cycling: { value: 222, displayText: '222 watt', detailText: '' } });
+    row.form.controls.ftp.setValue('222.0'); component.useFtpSuggestion(row);
+    component.busy.set('running'); row.form.controls.ftp.setValue('200'); component.useFtpSuggestion(row);
+    expect(row.form.controls.ftp.value).toBe('200'); expect(row.form.pristine).toBe(true);
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('preserves a draft typed while the optional suggestion is loading', async () => {
+    let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.ngOnChanges();
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    row.form.controls.ftp.setValue('250'); row.form.controls.ftp.markAsDirty();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Garmin' } }); await Promise.resolve();
+    expect(component.ftpSuggestions().cycling?.value).toBe(222);
+    expect(row.form.controls.ftp.value).toBe('250'); expect(row.form.dirty).toBe(true);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
+  it('closes the shared Health editor when its account changes without haptic feedback', () => {
+    component.ngOnDestroy(); TestBed.resetTestingModule();
+    const user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' });
+    const close = vi.fn();
+    TestBed.configureTestingModule({ providers: [
+      { provide: AppUserService, useValue: { user$ } },
+      { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner' } },
+      { provide: MatDialogRef, useValue: { close } },
+      { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+    ] });
+    TestBed.runInInjectionContext(() => new TrainingThresholdsDialogComponent());
+    expect(close).not.toHaveBeenCalled();
+    user$.next({ uid: 'other-owner' });
+    expect(close).toHaveBeenCalledOnce(); expect(success).not.toHaveBeenCalled();
+  });
   it('loads existing defaults quietly and saves only a changed family with its revision', async () => {
     const row = component.rows.find(row => row.id === 'walking-hiking')!;
-    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', ftp: '', thresholdHr: '' });
     await component.save(row); expect(savePolicy).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenCalledWith('owner', 'walking-hiking', 4, { method: 'HR', included: true });
     expect(row.revision).toBe(5); expect(row.form.pristine).toBe(true); expect(success).toHaveBeenCalledOnce();
+  });
+  it('shares thresholds with Health while preserving method and inclusion', async () => {
+    component.thresholdsOnly = true;
+    policies$.next([{ id: 'cycling', revision: 5, method: 'MET', included: false,
+      functionalThresholdPower: 220.5, lactateThresholdHR: 165 }]);
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    expect(component.visibleRows.map(row => row.id)).toEqual(['cycling']);
+    row.form.controls.thresholdHr.setValue('166'); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 5,
+      { method: 'MET', included: false, functionalThresholdPower: 220.5, lactateThresholdHR: 166 });
+    row.form.patchValue({ ftp: '', thresholdHr: '' }); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 6, { method: 'MET', included: false });
+  });
+  it('rejects invalid thresholds without a write and keeps sport FTP values independent', async () => {
+    const row = component.rows.find(row => row.id === 'running')!;
+    for (const value of ['0', '-1', 'NaN', 'Infinity']) {
+      row.form.controls.ftp.setValue(value); row.form.markAsDirty(); await component.save(row);
+    }
+    expect(savePolicy).not.toHaveBeenCalled();
+    row.form.patchValue({ ftp: '250', thresholdHr: '165' }); await component.save(row);
+    expect(savePolicy).toHaveBeenCalledWith('owner', 'running', 0,
+      { method: 'AUTOMATIC', included: true, functionalThresholdPower: 250, lactateThresholdHR: 165 });
+    expect(component.rows.find(row => row.id === 'cycling')!.form.controls.ftp.value).toBe('');
   });
   it('retains a conflicting draft for review without claiming that it saved', async () => {
     const row = component.rows[0]; row.form.patchValue({ method: 'MET' }); row.form.markAsDirty();
@@ -48,7 +151,7 @@ describe('dated Training load settings', () => {
     policies$.next([{ id: row.id, revision: 6, method: 'MET', included: false }]);
     finish(); await pending;
     expect(row.revision).toBe(6);
-    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', ftp: '', thresholdHr: '' });
     expect(row.form.pristine).toBe(true);
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', row.id, 6, { method: 'MET', included: true });
@@ -105,7 +208,7 @@ describe('CSS input and units', () => {
     });
     const selection = vi.fn();
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => policies$ } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection } },
     ] });
     const open = () => {
@@ -120,7 +223,7 @@ describe('CSS input and units', () => {
     expect(selection).not.toHaveBeenCalled();
     unit.selectionChange.emit({ source: unit, value: 'yd' }); fixture.detectChanges();
     expect(swimming.nativeElement.textContent).toContain('mm:ss per 100 yd');
-    const pace = swimming.query(By.css('input')).nativeElement as HTMLInputElement;
+    const pace = swimming.query(By.css('input[formControlName="cssPace"]')).nativeElement as HTMLInputElement;
     pace.value = input; pace.dispatchEvent(new Event('input'));
     expect(row.form.dirty).toBe(true);
     await fixture.componentInstance.save(row);
@@ -149,7 +252,7 @@ describe('CSS input and units', () => {
   });
   it('renders CSS inputs and the pace choice only in the Swimming family', () => {
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
+      { provide: TrainingLoadService, useValue: { readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
     ] });
     const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
@@ -168,7 +271,7 @@ describe('CSS input and units', () => {
     const savePolicy = vi.fn().mockResolvedValue(undefined);
     const policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([]);
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => policies$ } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
     ] });
     const component = TestBed.runInInjectionContext(() => new TrainingLoadSettingsComponent());

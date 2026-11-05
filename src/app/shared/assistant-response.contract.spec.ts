@@ -9,6 +9,17 @@ import {
 } from '@shared/assistant-response.contract';
 
 describe('complete first-party workout review boundary', () => {
+  it('requires exact threshold review values and rejects private neighbors before Apply', () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const proposal = { proposalRef: 'app-review', kind: 'apply_training_threshold_change', expiresAtMs: 1000,
+      summary: 'Change future thresholds.', requiresConfirmation: true, arguments: { proposalRef: 'sealed-server-proposal' },
+      thresholdReview: { family: 'cycling', familyLabel: 'Cycling', before: empty, after: { ...empty,
+        functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' } } } };
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, thresholdReview: undefined })).toBe(false);
+    expect(isAssistantContentProposal({ ...proposal, thresholdReview: { ...proposal.thresholdReview, sourceRecordId: 'private' } })).toBe(false);
+    expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, uid: 'foreign' } })).toBe(false);
+  });
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
     requiresConfirmation: true, summary: 'Review a workout.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery edit.' }],
     providerPreviews: [], workoutReviews: [workoutReviewFixture()] };

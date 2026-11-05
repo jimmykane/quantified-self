@@ -542,6 +542,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  trainingThresholdDependencies?: import('./training-thresholds.service').TrainingThresholdDependencies;
   manualMeasurementDependencies?: import('./manual-measurements.service').ManualMeasurementDependencies;
   activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
@@ -6721,6 +6722,17 @@ export function createMcpDataService(
 
     async createTimelineNote(input: McpContentWriteInput) {
       return runMcpContentWrite(input, createMcpTimelineNote, 'Timeline note could not be created safely. Try again later.');
+    },
+
+    async trainingThresholds(tool: import('./training-thresholds.schemas').TrainingThresholdTool, input: McpContentWriteInput) {
+      const { runMcpTrainingThresholds } = await import('./training-thresholds.service');
+      try {
+        return await runMcpTrainingThresholds(tool, input, dependencies.trainingThresholdDependencies);
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Training thresholds could not be managed safely.');
+      }
     },
 
     async manualMeasurement(tool: McpManualMeasurementTool, input: McpContentWriteInput) {

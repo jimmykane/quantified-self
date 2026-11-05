@@ -1,4 +1,6 @@
 export type McpScope =
+  | 'training-thresholds:read'
+  | 'training-thresholds:write'
   | 'workout-reflections:read'
   | 'workout-reflections:write'
   | 'training-plans:read'
@@ -19,6 +21,7 @@ export type McpScope =
   | 'route-location:read';
 
 export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
+  'training-thresholds:write': 'training-thresholds:read',
   'workout-reflections:read': 'activity-details:read',
   'workout-reflections:write': 'workout-reflections:read',
   'training-plans:write': 'training-plans:read',
@@ -34,6 +37,14 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'training-thresholds:read': {
+    title: 'Training thresholds',
+    description: 'Read current or dated FTP, threshold HR and CSS settings by sport family. These are saved calibration settings; valid file calibration takes precedence. This does not grant Health measurement history or private activity metadata.',
+  },
+  'training-thresholds:write': {
+    title: 'Change Training thresholds',
+    description: 'Preview and apply explicit FTP, threshold HR or CSS changes for future workouts using your client’s approval controls. Requires Training thresholds read access. Changes create dated revisions and preserve existing workouts, TSS controls, recorded scores and Health measurements. Existing connections must reauthorize; token refresh cannot add permission.',
+  },
   'workout-reflections:read': {
     title: 'Private workout reflections',
     description: 'Read your full private reflection text for an explicitly selected activity or recording. Text may contain sensitive health, personal or location information. Requires Individual activity details. Existing clients must reauthorize; revocation cannot erase copies already received. Imported RPE, planned targets and completion stay separate.',

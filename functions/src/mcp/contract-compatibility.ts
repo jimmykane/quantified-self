@@ -33,6 +33,12 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: 'manual-measurements-write',
   scopes: [MCP_OAUTH_SCOPES.MeasurementsWrite],
 }, {
+  id: 'training-thresholds-read',
+  scopes: [MCP_OAUTH_SCOPES.TrainingThresholdsRead],
+}, {
+  id: 'training-thresholds-write',
+  scopes: [MCP_OAUTH_SCOPES.TrainingThresholdsRead, MCP_OAUTH_SCOPES.TrainingThresholdsWrite],
+}, {
   id: 'manual-measurements-history',
   scopes: [MCP_OAUTH_SCOPES.MeasurementsRead, MCP_OAUTH_SCOPES.MeasurementsWrite],
 }, {

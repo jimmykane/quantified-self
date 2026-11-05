@@ -1,5 +1,35 @@
 # MCP Server
 
+## Dated Training threshold tools
+
+`get_training_thresholds` reads one family or the bounded registry (at most 50). Optional offset-bearing `asOf` reads
+an immutable policy effective by that instant, with no editable reference. Outputs contain family labels, policy
+revision/effective instant and three nullable canonical/display quantities: FTP in watts (Running/Cycling), threshold
+HR in bpm and CSS in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
+calibration a workout used. No method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
+Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
+reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
+
+`preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
+`policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an
+ambiguous pace string. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
+15-minute proposal shows exact before/after values and future-workout effect, preserving method, inclusion and other
+thresholds. `apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction
+rechecks grant generation, deletion, expiry and optimistic head revision, then appends a server-timestamped immutable
+revision. A competing edit requires reread/review. A replay returns the same saved revision; receipts expire after
+30 days through the existing proposal TTL. Thresholds do not create Health observations, retarget plan recipes,
+reparse workouts, update existing load snapshots or call providers.
+
+New scopes require reauthorization; refresh cannot widen an existing grant. Requested consent starts checked but
+requires approval. The external host owns per-call approval; QS cannot detect automatic approval settings. Disable
+threshold writes in unattended modes when individual review is required. The built-in Assistant independently defaults
+threshold access off, exposes read/preview only to the model, and requires the app's Apply with current conversation
+and proposal checks. Compact evidence pairs display values with units and excludes opaque/private metadata.
+
+This is an additive contract; registered schemas/history remain unchanged and the pending digest covers new tools.
+Backend deployment, registered-client rescan and validated plugin refresh remain separate authorized rollout actions.
+See [Training rules](training-workspace.md#dated-training-thresholds-and-swimming-css).
+
 ## Private workout reflections (Item 10)
 
 Three additive tools expose a deliberately separate athlete-context surface. `get_workout_reflection` requires both
@@ -1183,6 +1213,10 @@ behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
+- `training-thresholds:read` independently reads safe current or dated FTP, threshold HR and CSS settings;
+- `training-thresholds:write`, dependent on that read grant, previews and separately applies threshold-only changes
+  for future workouts. Neither grant exposes private policies/controls, Health weight or provenance;
+
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
@@ -1207,6 +1241,11 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `routes:read` for non-location saved-route summaries; and
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
+
+Training-load Health weight is prepared only when MET is needed or selected. A later owner MET selection uses the
+existing server trigger, without adding an MCP mutation or exposing Health input/provenance. While preparation is
+pending, Training impact reports its existing unavailable-load coverage rather than a stale fallback score. The
+registered output schemas and threshold grants are unchanged; this internal behavior needs no plugin rebuild.
 
 The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer

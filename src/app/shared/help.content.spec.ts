@@ -17,6 +17,18 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains one dated threshold setting and independent reviewed MCP/Assistant changes', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['Health → Fitness → Manage FTP, threshold HR and CSS', 'Running and Cycling FTP are independent',
+      'not a duplicate Health measurement', 'no age expiry', 'training-thresholds:read', 'training-thresholds:write',
+      'resets off on New chat', 'Later weigh-ins or edits do not recalculate that saved result',
+      'only when MET is selected or needed as a fallback', 'without reparsing the original file']) expect(copy).toContain(text);
+  });
+  it('describes imported FTP as an optional draft proposal, not a new test or automatic correction', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['last seen within 90 days', 'not a new FTP test', '**Use** only fills the draft',
+      '**Save** confirms it for future workouts', 'missing or stale snapshots show no suggestion']) expect(copy).toContain(text);
+  });
   it('limits Health read-only claims to read permission and protects imported measurements', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('This read permission cannot add, edit, delete or backfill measurements');

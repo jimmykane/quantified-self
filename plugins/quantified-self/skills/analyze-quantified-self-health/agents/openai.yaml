@@ -6,7 +6,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self recorded Health metrics"
+      description: "Permission-scoped recorded Health reads and independently approved Training threshold settings"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

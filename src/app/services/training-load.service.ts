@@ -1,14 +1,19 @@
 import { inject, Injectable } from '@angular/core';
-import { collection, collectionData, doc, docData, Firestore, runTransaction, serverTimestamp,
+import { collection, collectionData, doc, docData, Firestore, getDoc, runTransaction, serverTimestamp,
   query, where, limit } from 'app/firebase/firestore';
 import type { EventRead } from '@shared/event-read';
-import { combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, distinctUntilChanged, filter, firstValueFrom, from, map, Observable, of, startWith, switchMap, take, timeout } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, validTrainingLoadPolicy, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
+  trainingLoadThresholds,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
 import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-disciplines';
 import { AppUserService } from './app.user.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { browserTrainingLoadSourceFingerprint, canonicalTrainingLoadValue } from '@shared/training-load-source';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION, DERIVED_METRICS_COLLECTION_ID,
+  getDerivedMetricDocId } from '@shared/derived-metrics';
+import { resolveDashboardTrainingCapacityContext } from '../helpers/dashboard-derived-metrics.helper';
+import { buildRecentTrainingFtpSuggestions, type TrainingFtpSuggestions } from '../helpers/training-capacity.helper';
 
 export interface TrainingLoadView extends EffectiveTrainingLoad { updatedAtMs?: number; }
 export interface TrainingLoadPolicyHead extends TrainingLoadPolicy { id: TrainingSportId; revision: number; }
@@ -29,7 +34,23 @@ export class TrainingLoadService {
   }
 
   watchPolicies(uid: string): Observable<TrainingLoadPolicyHead[]> {
-    return collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>;
+    return this.users.user$.pipe(switchMap(user => user?.uid === uid
+      ? collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>
+      : of([])));
+  }
+
+  /** Optional one-shot suggestion. Never ensure/rebuild snapshots or query activity history. */
+  readFtpSuggestions(uid: string): Promise<TrainingFtpSuggestions> {
+    return firstValueFrom(this.users.user$.pipe(
+      distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
+      switchMap(user => user?.uid === uid ? from(getDoc(doc(this.firestore, 'users', uid,
+        DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingCapacity)))).pipe(map(snapshot => {
+        const data = snapshot.data();
+        const context = data?.['status'] === 'ready' && data['schemaVersion'] === DERIVED_METRIC_SCHEMA_VERSION
+          && data['metricKind'] === DERIVED_METRIC_KINDS.TrainingCapacity
+          ? resolveDashboardTrainingCapacityContext(data['payload']) : null;
+        return buildRecentTrainingFtpSuggestions(context, Date.now(), user.settings?.unitSettings);
+      })) : of({})), catchError(() => of({})), take(1)));
   }
 
   watchEffective(uid: string, events: readonly EventRead[]): Observable<Map<string, TrainingLoadView>> {
@@ -81,7 +102,7 @@ export class TrainingLoadService {
     const ref = doc(this.firestore, `users/${uid}/events/${eventId}/metaData/trainingLoad`);
     const policyRef = future ? doc(this.firestore, `users/${uid}/trainingLoadPolicies/${future.family}`) : null;
     const revisionId = future ? this.createPolicyRevisionId() : null;
-    await runTransaction(this.firestore, async transaction => {
+    const pending = await runTransaction(this.firestore, async transaction => {
       const event = await transaction.get(eventRef);
       const snapshot = await transaction.get(ref);
       const policySnapshot = policyRef ? await transaction.get(policyRef) : null;
@@ -95,7 +116,7 @@ export class TrainingLoadService {
         if (edit.control) controls[edit.key] = edit.control;
         else delete controls[edit.key];
       }
-      const patch = { version: 1, revision: expectedRevision + 1,
+      const patch = { version: 1 as const, revision: expectedRevision + 1,
         excluded: 'reset' in edit ? false : 'excluded' in edit ? edit.excluded : current?.excluded ?? false,
         controls: 'reset' in edit ? {} : controls, resetUnmatched: 'reset' in edit ? true : current?.resetUnmatched ?? false, editedLegKey: 'key' in edit ? edit.key : null, updatedAt: serverTimestamp() };
       const changed = !current || patch.excluded !== current.excluded
@@ -108,13 +129,26 @@ export class TrainingLoadService {
         else transaction.set(ref, patch);
       }
       if (future && policyRef) {
-        const swimThresholdSpeed = policySnapshot?.data()?.['swimThresholdSpeed'];
+        const thresholds = trainingLoadThresholds((policySnapshot?.data() ?? {}) as TrainingLoadPolicy);
         const policy = { method: future.policy.method, included: future.policy.included,
-          ...(future.family === 'swimming' && swimThresholdSpeed !== undefined ? { swimThresholdSpeed } : {}), revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
+          ...thresholds, revision: future.expectedRevision + 1, revisionId, effectiveAt: serverTimestamp() };
         transaction.set(policyRef, policy);
         transaction.set(doc(policyRef, 'revisions', revisionId), policy);
       }
+      const next = { ...current, ...patch };
+      const activityIds = Object.values(current?.legs ?? {}).flatMap(leg => leg.activityId &&
+        resolveEffectiveTrainingLoad({}, next, [], leg.activityId).reasons.includes('met-weight-pending') ? [leg.activityId] : []);
+      return activityIds.length ? { activityIds, revision: changed ? patch.revision : expectedRevision } : null;
     });
+    if (pending) {
+      try {
+        await firstValueFrom(this.watch(uid, eventId).pipe(filter(metadata => !!metadata &&
+          metadata.revision >= pending.revision &&
+          pending.activityIds.every(id => !resolveEffectiveTrainingLoad({}, metadata, [], id).reasons.includes('met-weight-pending'))), timeout(30_000)));
+      } catch {
+        throw new Error('Your preference was saved. MET preparation is still pending; close and reopen the editor to check it.');
+      }
+    }
   }
 
   async savePolicy(uid: string, family: TrainingSportId, expectedRevision: number, policy: TrainingLoadPolicy): Promise<void> {
