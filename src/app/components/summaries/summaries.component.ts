@@ -121,6 +121,12 @@ import {
 import { buildDashboardTodaySleepStatus } from '../../helpers/dashboard-relative-date.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import {
+  buildDashboardTodayRampCue,
+  buildDashboardTodayBaselineCue,
+  buildDashboardTodayHrvCue,
+  resolveDashboardTodayReadinessTone,
+  type DashboardTodayCueTone,
+  type DashboardTodayDirectionCue,
   buildDashboardTodayLoadBars,
   buildDashboardTodayHrvRangeIndicator,
   buildDashboardTodayOvernightHeartRateBars,
@@ -128,6 +134,7 @@ import {
   type DashboardTodayHistoryBar,
   type DashboardTodayRangeIndicator,
 } from '../../helpers/dashboard-today-visuals.helper';
+import { AppColors } from '../../services/color/app.colors';
 import { AppUserService } from '../../services/app.user.service';
 import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import {
@@ -250,16 +257,24 @@ interface DashboardTodayReadinessViewModel {
   evidenceText: string;
   availableSignalCount: number;
   loadText: string;
+  formText: string;
+  rampText: string;
+  rampCue: DashboardTodayDirectionCue | null;
+  scoreTone: DashboardTodayCueTone;
   sleepText: string;
   sleepScore: number | null;
   sleepContextText: string;
   hrvText: string;
   hrvStatusText: string;
+  hrvRangeStatusText: string;
+  hrvCue: DashboardTodayDirectionCue | null;
+  hrvCueTone: DashboardTodayCueTone;
   hrvRangeText: string;
   hrvLatestText: string;
   hrvTone: DashboardTodayReadinessTone;
   hrvRangeIndicator: DashboardTodayRangeIndicator | null;
   overnightHeartRateText: string;
+  overnightHeartRateCue: DashboardTodayDirectionCue | null;
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
   overnightHeartRateContextText: string;
@@ -295,16 +310,24 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     evidenceText: '0/4 signals',
     availableSignalCount: 0,
     loadText: '-- / --',
+    formText: '--',
+    rampText: '--',
+    rampCue: null,
+    scoreTone: 'neutral',
     sleepText: '--',
     sleepScore: null,
     sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
     hrvStatusText: 'No current HRV',
+    hrvRangeStatusText: 'No current HRV',
+    hrvCue: null,
+    hrvCueTone: 'neutral',
     hrvRangeText: '60-day personal range',
     hrvLatestText: '',
     hrvTone: 'neutral',
     hrvRangeIndicator: null,
     overnightHeartRateText: '--',
+    overnightHeartRateCue: null,
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
     overnightHeartRateContextText: '',
@@ -516,6 +539,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsHydrated = false;
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
+  public readonly todaySleepBaseColor = AppColors.Purple;
   public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
   public dashboardGlanceSignals = buildDashboardGlanceSignals(
@@ -2223,6 +2247,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs),
       { latestSleepAtMs: context.latestSleepAtMs, locale: this.locale, nowMs },
     );
+    const hrvRangeIndicator = buildDashboardTodayHrvRangeIndicator(context.hrvPersonalRange);
+    const formText = this.formatDashboardTodayMetric(context.form, true);
+    const rampText = this.formatDashboardTodayMetric(context.rampRate, true);
+    const score = awaitingSleep || warningText ? null : context.score;
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
     const matchingNights = sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap
       && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs);
@@ -2250,12 +2278,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       awaitingSleep,
       warningText,
       label: warningText ? 'Readiness unavailable' : awaitingSleep ? 'Awaiting today’s sleep' : context.label,
-      score: awaitingSleep || warningText ? null : context.score,
+      score,
+      scoreTone: resolveDashboardTodayReadinessTone(context.label, score),
       scoreText: awaitingSleep || warningText ? '' : `${this.formatDashboardTodayMetric(context.score)}/100`,
       confidenceText: `${context.confidence.charAt(0).toUpperCase()}${context.confidence.slice(1)} confidence`,
       evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
       availableSignalCount: context.availableSignalCount,
-      loadText: `${this.formatDashboardTodayMetric(context.form, true)} / ${this.formatDashboardTodayMetric(context.rampRate, true)}`,
+      loadText: `${formText} / ${rampText}`,
+      formText,
+      rampText,
+      rampCue: buildDashboardTodayRampCue(context.rampRate),
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
       sleepScore: context.sleepScore,
       sleepContextText: warningText && context.latestSleepAtMs === null
@@ -2263,11 +2295,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         : sleepStatus.contextText,
       hrvText: hrv.valueText,
       hrvStatusText: hrv.statusText,
+      hrvRangeStatusText: hrv.rangeStatusText,
+      hrvCue: hrvRangeIndicator ? buildDashboardTodayHrvCue(hrv.trend) : null,
+      hrvCueTone: hrvRangeIndicator ? context.hrvPersonalRange!.tone : 'neutral',
       hrvRangeText: hrv.rangeText,
       hrvLatestText: hrv.latestText,
       hrvTone: hrv.tone,
-      hrvRangeIndicator: buildDashboardTodayHrvRangeIndicator(context.hrvPersonalRange),
+      hrvRangeIndicator,
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
+      overnightHeartRateCue: buildDashboardTodayBaselineCue(context.overnightHeartRateRatio),
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null
         : (context.overnightHeartRateRatio - 1) * 100,
