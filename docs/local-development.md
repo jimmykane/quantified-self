@@ -128,13 +128,15 @@ For Pro, the command:
 
 For Free, it deletes only `subscriptions/local-pro`, sets the role claim to `free`, and removes stale grace-period values from both Auth claims and the local status document. It never reads or writes a Stripe customer ID, price, checkout session, invoice, or payment record.
 
-The browser suppresses re-entrant refreshes while a revision is pending and consumes it only after a successful token read. Transient refresh failures use the existing bounded profile retry/backoff; a failed attempt does not permanently consume the revision.
+The browser shares one pending refresh between concurrent claim merges, so no merge publishes its pre-refresh role while that refresh is unresolved. It consumes the revision only after a successful token read. Transient failures and stalled requests use the existing bounded profile retry/backoff; a failed attempt does not permanently consume the revision.
 
 The command verifies the Emulator Hub and expected loopback services before importing Firebase Admin. This prevents it from being aimed at a hosted user by changing CLI flags.
 
 ## Persistence and reset
 
 Normal `npm start` sessions import `.local/firebase-emulator-data` when a valid export exists and always request an export on exit. Before Firebase touches that path, the launcher requires the exact repository-local directory and rejects a symlink at any level of the saved export. Stop with one Ctrl+C and wait for Firebase to report shutdown before closing the terminal.
+
+Shutdown allows Angular and the compiler five seconds to exit and Firebase twenty seconds to export state. If a child remains unresponsive, the launcher terminates its owned process group (POSIX) or process tree (Windows) and reports that unsaved emulator state may be lost. Windows console Ctrl+C is allowed to reach Firebase directly instead of forcibly killing its wrapper first.
 
 `npm run local:smoke` is deliberately ephemeral: it does not import or export that directory and therefore cannot change the saved local dataset. It verifies client Auth, owner-authorized profile/legal writes, Pro-to-Free claims, Storage, a callable, a valid synthetic GPX upload, and the client's owner-authorized event read. No Mapbox token is needed. It does not automate browser screens or verify visual rendering.
 

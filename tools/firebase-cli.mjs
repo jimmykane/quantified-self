@@ -17,8 +17,10 @@ function run(command, args, options = {}) {
 
 async function runLocal(command, args) {
   const child = spawn(command, args, { stdio: 'inherit' });
-  const interrupt = () => child.kill('SIGINT');
-  const terminate = () => child.kill('SIGTERM');
+  // Windows console signals already reach the CLI. child.kill() would instead
+  // terminate it immediately and orphan Java emulators before state export.
+  const interrupt = () => { if (process.platform !== 'win32') child.kill('SIGINT'); };
+  const terminate = () => { if (process.platform !== 'win32') child.kill('SIGTERM'); };
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', terminate);
   try {

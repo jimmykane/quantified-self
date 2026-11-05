@@ -279,7 +279,7 @@ test('builds explicit local-only Firebase CLI arguments', () => {
     '--config', 'firebase.local.json',
     '--project', 'demo-quantified-self-local',
     '--only', 'auth,functions,firestore,storage,tasks',
-    '--export-on-exit', '.local/firebase-emulator-data',
+    '--export-on-exit', path.join('.local', 'firebase-emulator-data'),
   ]);
   assert.ok(buildEmulatorArguments(runtimeConfig, true).includes('--import'));
 });

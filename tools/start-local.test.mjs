@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { startLocalProcesses } from './start-local.mjs';
+import { startLocalProcesses, stopLocalChild } from './start-local.mjs';
 import { readLocalRuntimeConfiguration } from './local-runtime.mjs';
 
 test('starts a Functions watcher and stops every child on interruption or compiler failure', async t => {
@@ -14,6 +14,7 @@ test('starts a Functions watcher and stops every child on interruption or compil
       const spawnProcess = invocation => {
         invocations.push(invocation);
         const child = new EventEmitter();
+        child.pid = 123;
         child.exitCode = null;
         child.signalCode = null;
         child.kill = signal => {
@@ -30,7 +31,9 @@ test('starts a Functions watcher and stops every child on interruption or compil
         return child;
       };
       try {
-        await startLocalProcesses(runtimeConfig, {}, { spawnProcess, waitUntilReady: async () => {}, signals });
+        await startLocalProcesses(runtimeConfig, {}, { spawnProcess, waitUntilReady: async () => {}, signals,
+          stopChild: (child, name) => stopLocalChild(child, name, { platform: 'linux' }),
+        });
         assert.equal(invocations.length, 3);
         assert.ok(invocations[1].args.includes('--watch'));
         assert.match(invocations[1].args[invocations[1].args.indexOf('--project') + 1], /functions[/\\]tsconfig\.json$/u);
@@ -51,6 +54,7 @@ test('interrupting startup cancels readiness and never launches Angular or the w
   const { runtimeConfig } = await readLocalRuntimeConfiguration();
   let starts = 0;
   const firebase = new EventEmitter();
+  firebase.pid = 123;
   firebase.exitCode = null;
   firebase.signalCode = null;
   firebase.kill = signal => {
@@ -60,6 +64,7 @@ test('interrupting startup cancels readiness and never launches Angular or the w
   try {
     await startLocalProcesses(runtimeConfig, {}, {
       signals,
+      stopChild: (child, name) => stopLocalChild(child, name, { platform: 'linux' }),
       spawnProcess: () => { starts++; return firebase; },
       waitUntilReady: (_config, _timeout, signal) => new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
@@ -71,5 +76,27 @@ test('interrupting startup cancels readiness and never launches Angular or the w
     assert.equal(signals.listenerCount('SIGINT'), 0);
   } finally {
     process.exitCode = 0;
+  }
+});
+
+test('forces stuck children after the grace period and removes timeout listeners', async () => {
+  for (const platform of ['linux', 'win32']) {
+    const child = new EventEmitter();
+    child.pid = 123;
+    child.exitCode = null;
+    child.signalCode = null;
+    const signals = [];
+    child.kill = signal => { signals.push(signal); };
+    let forced = false;
+    await stopLocalChild(child, 'fixture', { platform, graceMs: 1, forceWaitMs: 100,
+      forceKill: () => {
+        forced = true;
+        child.signalCode = 'SIGKILL';
+        queueMicrotask(() => child.emit('exit', null, 'SIGKILL'));
+      },
+    });
+    assert.equal(forced, true);
+    assert.deepEqual(signals, platform === 'win32' ? [] : ['SIGINT']);
+    assert.equal(child.listenerCount('exit'), 0);
   }
 });

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import process from 'node:process';
 import path from 'node:path';
@@ -17,12 +17,15 @@ import {
   waitForEmulators,
 } from './local-runtime.mjs';
 
-function spawnInherited(invocation, environment) {
-  return spawn(invocation.command, invocation.args, {
+function spawnInherited(invocation, environment, detached = false) {
+  const child = spawn(invocation.command, invocation.args, {
     cwd: repositoryRoot,
     env: environment,
     stdio: 'inherit',
+    detached,
   });
+  child.localProcessGroup = detached;
+  return child;
 }
 
 function observeChildTermination(child, processName) {
@@ -52,23 +55,50 @@ async function runChecked(invocation, environment) {
 
 async function waitForExit(child, timeoutMs) {
   if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return;
+    return true;
   }
-  let timeout;
-  try {
-    await Promise.race([
-      once(child, 'exit'),
-      new Promise(resolve => { timeout = setTimeout(resolve, timeoutMs); }),
-    ]);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return new Promise(resolve => {
+    const finish = exited => {
+      clearTimeout(timeout);
+      child.off('exit', onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    child.once('exit', onExit);
+  });
+}
+
+export async function stopLocalChild(child, name, {
+  graceMs = 5_000,
+  forceWaitMs = 5_000,
+  platform = process.platform,
+  forceKill = () => {
+    if (platform === 'win32') {
+      const result = spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', timeout: 5_000 });
+      if ((result.error || result.status !== 0) && child.exitCode === null && child.signalCode === null) {
+        throw new Error(`[local] Could not stop the ${name} process tree.`);
+      }
+    } else if (child.localProcessGroup) {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    } else child.kill('SIGKILL');
+  },
+} = {}) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
+  // Windows kill('SIGINT') forcibly terminates only the target. Let console
+  // Ctrl+C reach the whole group, then use taskkill for an unresponsive tree.
+  if (platform !== 'win32') child.kill('SIGINT');
+  if (await waitForExit(child, graceMs)) return;
+  console.warn(`[local] ${name} did not stop in time; terminating its process tree. Unsaved emulator state may be lost.`);
+  forceKill();
+  if (!await waitForExit(child, forceWaitMs)) throw new Error(`[local] ${name} is still running after forced shutdown.`);
 }
 
 export async function startLocalProcesses(runtimeConfig, environment, {
-  spawnProcess = spawnInherited,
+  spawnProcess = (invocation, environment) => spawnInherited(invocation, environment, process.platform !== 'win32'),
   waitUntilReady = waitForEmulators,
   signals = process,
+  stopChild = stopLocalChild,
 } = {}) {
   const firebase = spawnProcess(
     buildLocalNodeCommand(
@@ -87,24 +117,23 @@ export async function startLocalProcesses(runtimeConfig, environment, {
     if (shutdownPromise) return shutdownPromise;
     shutdownPromise = (async () => {
       startup.abort();
-      if (angular && angular.exitCode === null) {
-        angular.kill('SIGINT');
-        await waitForExit(angular, 5_000);
-      }
-      if (watcher && watcher.exitCode === null) {
-        watcher.kill('SIGINT');
-        await waitForExit(watcher, 5_000);
-      }
-      if (firebase.exitCode === null) {
-        firebase.kill('SIGINT');
-        await waitForExit(firebase, 20_000);
-      }
+      // Always attempt all children, even if one process refuses termination.
+      const stops = await Promise.allSettled([
+        stopChild(angular, 'Angular'),
+        stopChild(watcher, 'Functions compiler'),
+      ]);
+      stops.push(...await Promise.allSettled([stopChild(firebase, 'Firebase emulators', { graceMs: 20_000 })]));
+      const failures = stops.filter(result => result.status === 'rejected');
+      if (failures.length) throw new AggregateError(failures.map(result => result.reason), '[local] Child process shutdown failed.');
       process.exitCode = exitCode;
     })();
     return shutdownPromise;
   };
 
-  const onInterrupt = () => void shutdown(0);
+  const onInterrupt = () => void shutdown(0).catch(error => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
   signals.once('SIGINT', onInterrupt);
   signals.once('SIGTERM', onInterrupt);
 

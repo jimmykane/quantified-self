@@ -153,13 +153,16 @@ describe('AppUserService', () => {
             } as any,
         } as AppUserInterface);
         const firstRevision = dbUserAtRevision(100, 1);
+        let reentered: Promise<AppUserInterface | null> | undefined;
         mockAuth.currentUser.getIdToken.mockImplementationOnce(async () => {
             // Mirrors onIdTokenChanged re-entering the merge while the forced refresh is pending.
-            await mergeClaims(mockAuth.currentUser, firstRevision);
+            // Firebase dispatches the listener; it does not wait for its merge.
+            reentered = mergeClaims(mockAuth.currentUser, firstRevision);
             return 'test-token';
         });
 
         await mergeClaims(mockAuth.currentUser, firstRevision);
+        await reentered;
         await mergeClaims(mockAuth.currentUser, firstRevision);
 
         expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(1);
@@ -168,6 +171,55 @@ describe('AppUserService', () => {
         await mergeClaims(mockAuth.currentUser, dbUserAtRevision(100, 2));
 
         expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps concurrent claim merges pending until their shared refresh completes', async () => {
+        vi.mocked(authState).mockReturnValue(of(null));
+        vi.mocked(user).mockReturnValue(of(null));
+        service = TestBed.inject(AppUserService);
+        const firebaseUser = mockAuth.currentUser;
+        let complete!: (token: string) => void;
+        firebaseUser.getIdToken.mockReset().mockReturnValue(new Promise(resolve => { complete = resolve; }));
+        firebaseUser.getIdTokenResult.mockResolvedValue({ claims: { iat: 100, stripeRole: 'free' } });
+        const profile = { uid: 'u1', claimsUpdatedAt: { seconds: 101, nanoseconds: 0 } };
+        const results: AppUserInterface[] = [];
+        const merges = [0, 1].map(() => (service as any).mergeClaims(firebaseUser, profile)
+            .then(value => results.push(value)));
+        try {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+            expect(results).toEqual([]);
+            firebaseUser.getIdTokenResult.mockResolvedValue({ claims: { iat: 102, stripeRole: 'pro' } });
+        } finally {
+            complete('refreshed-token');
+            await Promise.all(merges);
+        }
+        expect(results).toHaveLength(2);
+        expect(results.every(value => value.stripeRole === 'pro')).toBe(true);
+    });
+
+    it('does not publish stale claims when a shared refresh stalls past the retry budget', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.mocked(authState).mockReturnValue(of(null));
+            vi.mocked(user).mockReturnValue(of(null));
+            service = TestBed.inject(AppUserService);
+            const firebaseUser = mockAuth.currentUser;
+            firebaseUser.getIdToken.mockReset().mockImplementation(() => new Promise(() => {}));
+            firebaseUser.getIdTokenResult.mockResolvedValue({ claims: { iat: 100, stripeRole: 'free' } });
+            const results: AppUserInterface[] = [];
+            const failures: unknown[] = [];
+            (service as any).mergeClaimsWithAuthRetry(
+                firebaseUser, { uid: 'u1', claimsUpdatedAt: { seconds: 101, nanoseconds: 0 } },
+                (service as any).profileReadGeneration,
+            ).subscribe({ next: value => results.push(value), error: error => failures.push(error) });
+            await vi.advanceTimersByTimeAsync(61_250);
+            expect(results).toEqual([]);
+            expect(failures).toEqual([expect.objectContaining({ code: 'deadline-exceeded' })]);
+            expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('retries a failed claims refresh and consumes the revision only after recovery', async () => {
