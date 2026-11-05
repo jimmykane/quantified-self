@@ -7253,6 +7253,18 @@ from the next revision. Values must be positive and finite; existing sport eligi
 Running and Cycling are independent. CSS is stored as metres/second; unchanged unit round trips preserve full precision.
 Display rounds CSS to the nearest second after conversion without changing calculations.
 
+The shared editor can offer an optional **Use** FTP suggestion for Running or Cycling from the existing
+`training_capacity` snapshot. Read that one owner-only document once when the editor opens, without listeners,
+freshness probes, rebuild requests or activity queries. Only a ready, current-schema snapshot for the current UTC day
+is eligible, matching Training's calendar-sensitive freshness rule; absent, stale, malformed or unreadable snapshots
+show no suggestion. Reuse the imported-setting projection and its existing session-derived-FTP exclusion. Offer the
+latest value only when last seen within the previous 90 days, keeping Running and Cycling separate, with source and
+last-seen date. Recent observation does not prove a recent measurement: the watch may carry an old setting.
+**Use** fills only the FTP draft; normal **Save** appends the dated policy for future workouts. Hydration never replaces
+saved or dirty inputs. Account changes/destroyed editors ignore late results. This adds at most one document read per
+editor opening and no import/rebuild work, writes, new cache or source-file parsing. MCP/Assistant already read and
+preview/apply the saved thresholds; this local proposal changes no public data, schema, permission or mutation.
+
 Each save uses the existing owner transaction, revision check, deletion fence, server timestamp and immutable revision.
 First import selects the policy at each leg's recorded start time, so delayed uploads cannot borrow a later setting.
 Imported nonnegative TSS, including zero, wins for every method. Valid independent file calibration comes next; saved

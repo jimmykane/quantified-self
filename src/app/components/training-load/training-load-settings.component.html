@@ -33,6 +33,15 @@
             <span matTextSuffix>{{ ftpUnit }}</span>
             <mat-hint>{{ row.label }} FTP is saved independently from other sports.</mat-hint>
           </mat-form-field>
+          @if (ftpSuggestions()[row.id]; as suggestion) {
+            <div class="ftp-suggestion">
+              <p>Found in recent activities: <strong>{{ suggestion.displayText }}</strong><br>
+                {{ suggestion.detailText }}. The watch may be carrying an older setting; this is not a new FTP test.</p>
+              <button mat-button type="button" [disabled]="!!busy() || +row.form.controls.ftp.value === suggestion.value"
+                [attr.aria-label]="'Use ' + row.label + ' FTP from recent activities'" (click)="useFtpSuggestion(row)">Use {{ suggestion.displayText }}</button>
+              <p>Use fills this draft. Save to apply it to future workouts.</p>
+            </div>
+          }
         }
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Threshold heart rate (optional)</mat-label>

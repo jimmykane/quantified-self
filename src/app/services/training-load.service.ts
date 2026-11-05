@@ -1,8 +1,8 @@
 import { inject, Injectable } from '@angular/core';
-import { collection, collectionData, doc, docData, Firestore, runTransaction, serverTimestamp,
+import { collection, collectionData, doc, docData, Firestore, getDoc, runTransaction, serverTimestamp,
   query, where, limit } from 'app/firebase/firestore';
 import type { EventRead } from '@shared/event-read';
-import { combineLatest, filter, firstValueFrom, map, Observable, of, startWith, switchMap, timeout } from 'rxjs';
+import { catchError, combineLatest, distinctUntilChanged, filter, firstValueFrom, from, map, Observable, of, startWith, switchMap, take, timeout } from 'rxjs';
 import { DEFAULT_TRAINING_LOAD_POLICY, validTrainingLoadPolicy, isTrainingLoadMethod, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
   trainingLoadThresholds,
   type EffectiveTrainingLoad, type TrainingLoadActivity, type TrainingLoadControl, type TrainingLoadMetadata, type TrainingLoadPolicy } from '@shared/training-load-policy';
@@ -10,6 +10,10 @@ import { isTrainingDiscipline, type TrainingSportId } from '@shared/training-dis
 import { AppUserService } from './app.user.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { browserTrainingLoadSourceFingerprint, canonicalTrainingLoadValue } from '@shared/training-load-source';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION, DERIVED_METRICS_COLLECTION_ID,
+  getDerivedMetricDocId } from '@shared/derived-metrics';
+import { resolveDashboardTrainingCapacityContext } from '../helpers/dashboard-derived-metrics.helper';
+import { buildRecentTrainingFtpSuggestions, type TrainingFtpSuggestions } from '../helpers/training-capacity.helper';
 
 export interface TrainingLoadView extends EffectiveTrainingLoad { updatedAtMs?: number; }
 export interface TrainingLoadPolicyHead extends TrainingLoadPolicy { id: TrainingSportId; revision: number; }
@@ -33,6 +37,20 @@ export class TrainingLoadService {
     return this.users.user$.pipe(switchMap(user => user?.uid === uid
       ? collectionData(collection(this.firestore, `users/${uid}/trainingLoadPolicies`), { idField: 'id' }) as Observable<TrainingLoadPolicyHead[]>
       : of([])));
+  }
+
+  /** Optional one-shot suggestion. Never ensure/rebuild snapshots or query activity history. */
+  readFtpSuggestions(uid: string): Promise<TrainingFtpSuggestions> {
+    return firstValueFrom(this.users.user$.pipe(
+      distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
+      switchMap(user => user?.uid === uid ? from(getDoc(doc(this.firestore, 'users', uid,
+        DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingCapacity)))).pipe(map(snapshot => {
+        const data = snapshot.data();
+        const context = data?.['status'] === 'ready' && data['schemaVersion'] === DERIVED_METRIC_SCHEMA_VERSION
+          && data['metricKind'] === DERIVED_METRIC_KINDS.TrainingCapacity
+          ? resolveDashboardTrainingCapacityContext(data['payload']) : null;
+        return buildRecentTrainingFtpSuggestions(context, Date.now(), user.settings?.unitSettings);
+      })) : of({})), catchError(() => of({})), take(1)));
   }
 
   watchEffective(uid: string, events: readonly EventRead[]): Observable<Map<string, TrainingLoadView>> {

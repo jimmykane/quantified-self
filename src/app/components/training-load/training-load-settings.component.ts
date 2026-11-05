@@ -7,6 +7,7 @@ import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPoli
 import { SharedModule } from '../../modules/shared.module';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import type { TrainingFtpSuggestions } from '../../helpers/training-capacity.helper';
 
 @Component({ selector: 'app-training-load-settings', standalone: true, imports: [SharedModule],
   templateUrl: './training-load-settings.component.html', styleUrls: ['./training-load-settings.component.scss'],
@@ -26,6 +27,7 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   readonly loaded = signal(false);
   readonly busy = signal<TrainingSportId | null>(null);
   readonly message = signal('');
+  readonly ftpSuggestions = signal<TrainingFtpSuggestions>({});
   readonly rows = TRAINING_SPORT_DEFINITIONS.map(family => ({ ...family, revision: 0, cssUnit: 'm' as 'm' | 'yd', cssOriginalSpeed: undefined as number | undefined, cssOriginalText: '',
     form: new FormGroup({ method: new FormControl<TrainingLoadMethod>('AUTOMATIC', { nonNullable: true }),
       included: new FormControl(true, { nonNullable: true }), cssPace: new FormControl('', { nonNullable: true }),
@@ -34,6 +36,11 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   selectFamily(value: TrainingSportId): void { if (value !== this.selectedFamily()) { this.selectedFamily.set(value); this.selection(); } }
   ngOnChanges(): void {
     this.generation++; this.subscription?.unsubscribe(); this.policies = [];
+    const generation = this.generation;
+    this.ftpSuggestions.set({});
+    void this.service.readFtpSuggestions(this.uid).then(suggestions => {
+      if (generation === this.generation) this.ftpSuggestions.set(suggestions);
+    });
     this.loaded.set(false); this.message.set(''); this.busy.set(null);
     for (const row of this.rows) {
       row.revision = 0; row.cssUnit = 'm'; row.form.enable({ emitEvent: false }); this.loadPolicy(row, { method: 'AUTOMATIC', included: true });
@@ -51,6 +58,13 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   }
   ngOnDestroy(): void { this.generation++; this.subscription?.unsubscribe(); }
   selection(): void { this.haptics.selection(); }
+  useFtpSuggestion(row: typeof this.rows[number]): void {
+    const suggestion = this.ftpSuggestions()[row.id];
+    if (!suggestion || this.busy() || !this.loaded() || Number(row.form.controls.ftp.value) === suggestion.value) return;
+    row.form.controls.ftp.setValue(String(suggestion.value));
+    row.form.controls.ftp.markAsDirty();
+    this.haptics.selection();
+  }
   private cssSpeed(row: typeof this.rows[number]): number | undefined {
     const text = row.form.controls.cssPace.value.trim();
     if (!text) return undefined;

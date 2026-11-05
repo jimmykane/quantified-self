@@ -5,4 +5,5 @@ p { line-height: 1.5; }
 .load-settings-family { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 h5 { margin: 0; }
 button { height: auto; min-height: 40px; white-space: normal; }
+.ftp-suggestion p { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .load-settings-grid { grid-template-columns: minmax(0, 1fr); } }

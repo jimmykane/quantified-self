@@ -12,19 +12,80 @@ import { TrainingThresholdsDialogComponent } from './training-thresholds-dialog.
 
 describe('dated Training load settings', () => {
   const savePolicy = vi.fn(); const success = vi.fn(); const error = vi.fn();
+  const readFtpSuggestions = vi.fn(); const selection = vi.fn();
   let component: TrainingLoadSettingsComponent;
   let policies$: BehaviorSubject<TrainingLoadPolicyHead[]>;
   beforeEach(() => {
-    vi.clearAllMocks(); savePolicy.mockResolvedValue(undefined);
+    vi.clearAllMocks(); savePolicy.mockResolvedValue(undefined); readFtpSuggestions.mockResolvedValue({});
     policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([
       { id: 'walking-hiking', revision: 4, method: 'HR', included: false },
     ]);
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
-      { provide: AppHapticsService, useValue: { success, error, selection: vi.fn() } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions, watchPolicies: () => policies$ } },
+      { provide: AppHapticsService, useValue: { success, error, selection } },
     ] });
     component = TestBed.runInInjectionContext(() => new TrainingLoadSettingsComponent());
     component.uid = 'owner'; component.ngOnChanges();
+  });
+  it.each([false, true])('offers FTP as a draft proposal, requiring Save (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'cycling', revision: 5, method: 'HR', included: false,
+      functionalThresholdPower: 200, lactateThresholdHR: 165 }]);
+    readFtpSuggestions.mockResolvedValueOnce({ cycling: { value: 222.5,
+      displayText: '223 watt', detailText: 'Garmin · last seen Nov 4, 2026' } });
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const instance = fixture.componentInstance, row = instance.rows.find(row => row.id === 'cycling')!;
+    expect(row.form.controls.ftp.value).toBe('200'); expect(row.form.pristine).toBe(true);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    const family = fixture.nativeElement.querySelector('section[aria-label="Cycling"]') as HTMLElement;
+    expect(family.textContent).toContain('Found in recent activities:');
+    expect(family.textContent).toContain('older setting'); expect(family.textContent).toContain('not a new FTP test');
+    const use = family.querySelector('button[aria-label="Use Cycling FTP from recent activities"]') as HTMLButtonElement;
+    use.click(); fixture.detectChanges();
+    expect(row.form.controls.ftp.value).toBe('222.5'); expect(row.form.dirty).toBe(true);
+    expect(row.form.controls.thresholdHr.value).toBe('165'); expect(row.form.controls.included.value).toBe(false);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).toHaveBeenCalledOnce(); expect(use.disabled).toBe(true);
+    await instance.save(row);
+    expect(savePolicy).toHaveBeenCalledExactlyOnceWith('owner', 'cycling', 5,
+      { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
+    fixture.destroy();
+  });
+  it('ignores late suggestions for a previous account or destroyed editor without changing drafts', async () => {
+    let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.uid = 'old'; component.ngOnChanges();
+    component.uid = 'new'; component.ngOnChanges(); await Promise.resolve();
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    row.form.controls.ftp.setValue('250'); row.form.controls.ftp.markAsDirty();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Old account' } }); await Promise.resolve();
+    expect(component.ftpSuggestions()).toEqual({}); expect(row.form.controls.ftp.value).toBe('250');
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.ngOnChanges(); component.ngOnDestroy();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Destroyed editor' } }); await Promise.resolve();
+    expect(component.ftpSuggestions()).toEqual({});
+  });
+  it('keeps repeated, busy and missing suggestion actions silent', () => {
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    component.useFtpSuggestion(row);
+    component.ftpSuggestions.set({ cycling: { value: 222, displayText: '222 watt', detailText: '' } });
+    row.form.controls.ftp.setValue('222.0'); component.useFtpSuggestion(row);
+    component.busy.set('running'); row.form.controls.ftp.setValue('200'); component.useFtpSuggestion(row);
+    expect(row.form.controls.ftp.value).toBe('200'); expect(row.form.pristine).toBe(true);
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('preserves a draft typed while the optional suggestion is loading', async () => {
+    let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
+    readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.ngOnChanges();
+    const row = component.rows.find(row => row.id === 'cycling')!;
+    row.form.controls.ftp.setValue('250'); row.form.controls.ftp.markAsDirty();
+    finish({ cycling: { value: 222, displayText: '222 watt', detailText: 'Garmin' } }); await Promise.resolve();
+    expect(component.ftpSuggestions().cycling?.value).toBe(222);
+    expect(row.form.controls.ftp.value).toBe('250'); expect(row.form.dirty).toBe(true);
+    expect(savePolicy).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
   });
   it('closes the shared Health editor when its account changes without haptic feedback', () => {
     component.ngOnDestroy(); TestBed.resetTestingModule();
@@ -147,7 +208,7 @@ describe('CSS input and units', () => {
     });
     const selection = vi.fn();
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => policies$ } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection } },
     ] });
     const open = () => {
@@ -191,7 +252,7 @@ describe('CSS input and units', () => {
   });
   it('renders CSS inputs and the pace choice only in the Swimming family', () => {
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
+      { provide: TrainingLoadService, useValue: { readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
     ] });
     const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
@@ -210,7 +271,7 @@ describe('CSS input and units', () => {
     const savePolicy = vi.fn().mockResolvedValue(undefined);
     const policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([]);
     TestBed.configureTestingModule({ providers: [
-      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: TrainingLoadService, useValue: { savePolicy, readFtpSuggestions: vi.fn().mockResolvedValue({}), watchPolicies: () => policies$ } },
       { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection: vi.fn() } },
     ] });
     const component = TestBed.runInInjectionContext(() => new TrainingLoadSettingsComponent());

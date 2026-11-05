@@ -5,7 +5,8 @@ import { BehaviorSubject, filter, firstValueFrom, of } from 'rxjs';
 import { createHash, webcrypto } from 'node:crypto';
 import { defaultAppliedTrainingLoadPolicy, type TrainingLoadMetadata } from '@shared/training-load-policy';
 import { serializeTrainingLoadSource } from '@shared/training-load-source';
-import { collectionData, Firestore, runTransaction } from 'app/firebase/firestore';
+import { collectionData, Firestore, getDoc, runTransaction } from 'app/firebase/firestore';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '@shared/derived-metrics';
 import { AppUserService } from './app.user.service';
 import { TrainingLoadService } from './training-load.service';
 import { ActivityCalendarService } from './activity-calendar.service';
@@ -14,7 +15,7 @@ import type { User } from '@sports-alliance/sports-lib';
 
 vi.mock('app/firebase/firestore', async importOriginal => ({ ...await importOriginal<any>(),
   doc: vi.fn((...parts: any[]) => ({ path: parts.slice(1).join('/') })),
-  serverTimestamp: vi.fn(() => 'SERVER_TIME'), runTransaction: vi.fn(), collectionData: vi.fn(),
+  serverTimestamp: vi.fn(() => 'SERVER_TIME'), runTransaction: vi.fn(), collectionData: vi.fn(), getDoc: vi.fn(),
   collection: vi.fn((...parts: unknown[]) => parts.slice(1).join('/')), query: vi.fn((...parts: unknown[]) => parts),
   where: vi.fn((...parts: unknown[]) => parts), limit: vi.fn(value => value),
 }));
@@ -37,6 +38,56 @@ describe('TrainingLoadService', () => {
     service = TestBed.inject(TrainingLoadService);
   });
   afterEach(() => vi.unstubAllGlobals());
+  function capacitySnapshot() {
+    const now = Date.now();
+    return { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, metricKind: 'training_capacity',
+      payload: { dayBoundary: 'UTC', excludesMergedEvents: true, asOfDayMs: Math.floor(now / 86400000) * 86400000,
+        disciplines: ['running', 'cycling'].map(discipline => ({ discipline, importedVo2Max: null, referenceVo2Max: null,
+          ftpSetting: discipline === 'running' ? null : { kind: 'ftp-setting', value: 222,
+            provenance: 'imported-activity-stat', firstSeenAtMs: now - 86400000, lastSeenAtMs: now - 86400000,
+            observationCount: 3, sourceKey: 'garmin', previousValue: null, previousAtMs: null,
+            previousSourceKey: null, changePct: null } })) } };
+  }
+  it('reads one existing capacity snapshot for FTP suggestions, with no activity queries, writes or rebuilds', async () => {
+    const data = capacitySnapshot(), before = JSON.stringify(data);
+    vi.mocked(getDoc).mockResolvedValue({ data: () => data } as never);
+    expect(await service.readFtpSuggestions('u')).toMatchObject({ cycling: { value: 222, displayText: '222 watt' } });
+    expect(getDoc).toHaveBeenCalledExactlyOnceWith({ path: 'users/u/derivedMetrics/training_capacity' });
+    expect(collectionData).not.toHaveBeenCalled(); expect(runTransaction).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled(); expect(update).not.toHaveBeenCalled();
+    expect(JSON.stringify(data)).toBe(before);
+  });
+  it.each(['missing', 'stale', 'yesterday', 'queued', 'building', 'failed', 'schema', 'kind', 'payload', 'calculated-ftp'])('omits suggestions for a %s snapshot', async kind => {
+    const data = capacitySnapshot();
+    if (kind === 'schema') data.schemaVersion--;
+    else if (kind === 'kind') data.metricKind = 'power_curve';
+    else if (kind === 'payload') data.payload.disciplines = [];
+    else if (kind === 'yesterday') data.payload.asOfDayMs -= 86400000;
+    else if (kind === 'calculated-ftp') data.payload.disciplines[1].ftpSetting!.provenance = 'calculated';
+    else data.status = kind;
+    vi.mocked(getDoc).mockResolvedValue({ data: () => kind === 'missing' ? undefined : data } as never);
+    expect(await service.readFtpSuggestions('u')).toEqual({});
+    expect(getDoc).toHaveBeenCalledOnce(); expect(runTransaction).not.toHaveBeenCalled();
+  });
+  it('does not read another owner and treats failed optional reads as no suggestion', async () => {
+    expect(await service.readFtpSuggestions('someone-else')).toEqual({});
+    expect(getDoc).not.toHaveBeenCalled();
+    vi.mocked(getDoc).mockRejectedValueOnce(new Error('Offline'));
+    expect(await service.readFtpSuggestions('u')).toEqual({});
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+  it('does not repeat the read for profile updates or return the previous account’s pending suggestion', async () => {
+    const users = TestBed.inject(AppUserService) as unknown as { user$: BehaviorSubject<{ uid: string }> };
+    users.user$ = new BehaviorSubject({ uid: 'u' });
+    let finish!: (snapshot: Awaited<ReturnType<typeof getDoc>>) => void;
+    vi.mocked(getDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.readFtpSuggestions('u');
+    users.user$.next({ uid: 'u' }); expect(getDoc).toHaveBeenCalledOnce();
+    users.user$.next({ uid: 'other' });
+    expect(await pending).toEqual({});
+    finish({ data: () => capacitySnapshot() } as never); await Promise.resolve();
+    expect(users.user$.observed).toBe(false); expect(getDoc).toHaveBeenCalledOnce();
+  });
   it('releases private policy listeners and clears values when the account changes', () => {
     const users = TestBed.inject(AppUserService) as unknown as { user$: BehaviorSubject<{ uid: string } | null> };
     users.user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'u' });
