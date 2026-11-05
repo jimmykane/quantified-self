@@ -1,8 +1,9 @@
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
-import { ActivityUtilities, type EventInterface } from '@sports-alliance/sports-lib';
-import { defaultAppliedTrainingLoadPolicy, validTrainingLoadPolicy, recordedTrainingStressScore,
+import { ActivityUtilities, DataEnergy, DataWeight, type EventInterface } from '@sports-alliance/sports-lib';
+import { defaultAppliedTrainingLoadPolicy, validTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
+  trainingLoadThresholds,
   type AppliedTrainingLoadPolicy, type TrainingLoadLeg, type TrainingLoadMetadata } from '../../../shared/training-load-policy';
 import { resolveActivityIdentityAssignments } from '../shared/activity-identity-matcher';
 import { getUserDeletionGuardedDocumentsInTransaction } from '../shared/user-deletion-guard';
@@ -10,6 +11,7 @@ import { canonicalTrainingLoadValue as canonical, trainingLoadTimeMs } from '../
 import { prepareTrainingLoadCacheWrite, summarizeTrainingLoad, trainingLoadSourceFingerprint } from './training-load-cache';
 import { trainingLoadSourceSnapshot } from './training-load-source-snapshot';
 import type { PreparedTrainingLoadWrite } from './training-load-source-write';
+import { readTrainingLoadWeight } from './training-load-weight';
 export { trainingLoadSourceFingerprint } from './training-load-cache';
 export { trainingLoadTimeMs } from '../../../shared/training-load-source';
 
@@ -46,6 +48,8 @@ export function reconcileTrainingLoadLegs(
     const target = Object.entries(priorLegs).find(([, item]) => item.activityId === control.activityId);
     if (!target) continue;
     priorLegs[key] = { ...target[1], policy: leg.policy };
+    if (leg.calibration) priorLegs[key].calibration = leg.calibration;
+    else delete priorLegs[key].calibration;
     delete priorLegs[target[0]]; delete controls[target[0]];
     const { activityId: _association, ...preferences } = control;
     controls[key] = preferences;
@@ -69,6 +73,11 @@ export function reconcileTrainingLoadLegs(
     const proposedKey = candidate.activityId ?? randomUUID();
     const key = old?.[0] ?? (previous?.legs?.[proposedKey] ? randomUUID() : proposedKey);
     legs[key] = { ...candidate, policy: old?.[1].policy ?? candidate.policy };
+    // Reparse refreshes candidates, never the calibration already adopted by a saved leg.
+    if (old) {
+      if (old[1].calibration) legs[key].calibration = old[1].calibration;
+      else delete legs[key].calibration;
+    }
   });
   matches.unmatchedExistingIndexes.forEach(index => {
     const entry = previousEntries[index];
@@ -94,7 +103,7 @@ async function policyAt(
   return data && validTrainingLoadPolicy(fallback.family, data as AppliedTrainingLoadPolicy)
     ? { family: fallback.family, revision: data.revision, method: data.method, included: data.included,
       effectiveAtMs: trainingLoadTimeMs(data.effectiveAt),
-      ...(data.swimThresholdSpeed !== undefined ? { swimThresholdSpeed: data.swimThresholdSpeed } : {}) } : fallback;
+      ...trainingLoadThresholds(data as AppliedTrainingLoadPolicy) } : fallback;
 }
 
 /** Freeze legacy identities durably before any source overwrite, including retries after a partial write. */
@@ -165,12 +174,13 @@ async function finalizeTrainingLoadMetadata(
   if (!eventId) throw new Error('Training load requires a persisted event identity.');
   const activities = event.getActivities();
   if (activities.length > 100) throw new Error('Training load supports at most 100 legs per workout.');
-  const candidates: TrainingLoadLeg[] = activities.map(activity => ({
-    activityId: activity.getID() as string, identity: identity(activity.toJSON()),
-    recordedTss: recordedTrainingStressScore(activity),
-    evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
-    policy: defaultAppliedTrainingLoadPolicy(activity.type), sourceFingerprint: trainingLoadSourceFingerprint(activity.toJSON()),
-  }));
+  const candidates: TrainingLoadLeg[] = activities.map(activity => {
+    const data = activity.toJSON();
+    return { activityId: activity.getID() as string, identity: identity(data),
+      recordedTss: recordedTrainingStressScore(activity),
+      evaluations: ActivityUtilities.getTrainingStressScoreEvaluations(activity),
+      policy: defaultAppliedTrainingLoadPolicy(activity.type), sourceFingerprint: trainingLoadSourceFingerprint(data) };
+  });
   const eventRef = db.doc(`users/${uid}/events/${eventId}`);
   const metaRef = eventRef.collection('metaData').doc('trainingLoad');
   const parentFingerprint = trainingLoadSourceFingerprint(event.toJSON());
@@ -187,6 +197,7 @@ async function finalizeTrainingLoadMetadata(
       throw new Error('Training load source changed during import; retry the source write.');
     }
     let previous = snapshot.exists ? snapshot.data() as TrainingLoadMetadata : null;
+    const finalizedKeys = new Set(Object.keys(previous?.legs ?? {}));
     // Parent totals and individual child values can be identical across different
     // leg sets. They prove source consistency, not ownership of this finalization.
     if (previous?.sourceWriteId !== expectedSourceWriteId)
@@ -211,13 +222,55 @@ async function finalizeTrainingLoadMetadata(
       previous = { ...previous, legs };
     }
     const reconciled = reconcileTrainingLoadLegs(previous, candidates, verifiedActivityIds);
+    const weightsByStart = new Map<number, Awaited<ReturnType<typeof readTrainingLoadWeight>>>();
     // Matched legs already own an immutable dated policy. Only genuinely new legs query history.
     for (const [key, leg] of Object.entries(reconciled.legs ?? {})) {
       if (leg.activityId && !previous?.legs?.[key])
         leg.policy = await policyAt(db, transaction, uid, leg);
-      if (leg.activityId && leg.policy.family === 'swimming' && leg.policy.swimThresholdSpeed !== undefined) {
-        const activity = activities.find(activity => activity.getID() === leg.activityId);
-        if (activity && defaultAppliedTrainingLoadPolicy(activity.type).family === 'swimming')
+      const activity = activities.find(activity => activity.getID() === leg.activityId);
+      if (!activity) continue;
+      // A newly recovered leg also owns a first import. Never adopt new inputs
+      // for matched legacy legs or an older workout with no saved leg evidence.
+      if ((firstImport || finalizedKeys.size > 0) && !finalizedKeys.has(key)) {
+        leg.calibration = { version: 2, weight: null };
+      }
+      const family = defaultAppliedTrainingLoadPolicy(activity.type).family;
+      if (leg.calibration?.version === 2) {
+        const weight = leg.calibration.weight;
+        const thresholds = family === leg.policy.family ? trainingLoadThresholds(leg.policy) : {};
+        const { swimThresholdSpeed, ...rest } = thresholds;
+        leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithCalibration(activity, {
+          ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
+          ...(weight?.status === 'available' ? { bodyMassKg: weight.kilograms } : {}),
+        });
+        const energy = activity.getStat(DataEnergy.type)?.getValue();
+        const mass = activity.getStat(DataWeight.type)?.getValue();
+        if ((weight === null || weight?.status === 'deferred')
+          && leg.evaluations.automatic.provenance !== 'imported'
+          && !leg.evaluations.automatic.reasons.includes('unsupported-sport')
+          && leg.evaluations.met.reasons.includes('missing-met-inputs')
+          && typeof energy === 'number' && energy > 0 && Number.isFinite(energy)
+          && !(typeof mass === 'number' && mass > 0 && Number.isFinite(mass))
+          && leg.identity.startMs !== null && Number.isSafeInteger(leg.identity.startMs)
+          && (leg.identity.duration === null || leg.identity.duration > 0)) {
+          if (leg.evaluations.automatic.score !== null) leg.calibration!.weight = { status: 'deferred' };
+          // The same resolver owns method, override, exclusion and unmatched-leg precedence in every path.
+          if (leg.evaluations.automatic.score === null || resolveEffectiveTrainingLoad({}, {
+            version: 1, revision: 0, excluded: previous?.excluded ?? false,
+            resetUnmatched: previous?.resetUnmatched, ...reconciled,
+          }, [], leg.activityId!).reasons.includes('met-weight-pending')) {
+            if (!weightsByStart.has(leg.identity.startMs)) weightsByStart.set(leg.identity.startMs,
+              await readTrainingLoadWeight(db, transaction, uid, leg.identity.startMs));
+            leg.calibration!.weight = weightsByStart.get(leg.identity.startMs)!;
+            const resolvedWeight = leg.calibration!.weight;
+            if (resolvedWeight?.status === 'available') leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithCalibration(activity, {
+              ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
+              bodyMassKg: resolvedWeight.kilograms,
+            });
+          }
+        }
+      } else if (leg.policy.family === 'swimming' && leg.policy.swimThresholdSpeed !== undefined) {
+        if (family === 'swimming')
           leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithSwimThreshold(activity, leg.policy.swimThresholdSpeed);
       }
     }

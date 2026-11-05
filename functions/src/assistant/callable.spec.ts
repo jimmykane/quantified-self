@@ -224,6 +224,31 @@ describe('Assistant callable', () => {
     }
     expect(manualMeasurement).not.toHaveBeenCalled();
   });
+  it('applies threshold changes only from the current independently enabled app review', async () => {
+    const { store, conversation } = createDependencies();
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const proposal = { proposalRef: 'local-review', kind: 'apply_training_threshold_change' as const,
+      expiresAtMs: Date.now() + 60000, requiresConfirmation: true as const, summary: 'Review thresholds',
+      arguments: { proposalRef: 'sealed-mcp-proposal' }, thresholdReview: { family: 'cycling', familyLabel: 'Cycling',
+        before: empty, after: { ...empty, functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'W' } } } };
+    const state = { conversation, pendingRequestId: null, trainingThresholdsEnabled: true, pendingContentProposal: proposal };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue(state as never);
+    const trainingThresholds = vi.fn().mockResolvedValue({ status: 'applied' });
+    const request = { conversationId: conversation.conversationId, proposalRef: 'local-review', confirm: true };
+    await expect(runApplyAssistantContentProposal(request, context, store, { trainingThresholds } as never))
+      .resolves.toMatchObject({ status: 'applied', kind: 'apply_training_threshold_change' });
+    expect(trainingThresholds).toHaveBeenCalledWith(proposal.kind, expect.objectContaining({
+      scopes: ['training-thresholds:read', 'training-thresholds:write'], arguments: proposal.arguments,
+      assistantConversationId: conversation.conversationId, assistantProposalRef: 'local-review' }));
+    trainingThresholds.mockClear();
+    for (const changed of [{ trainingThresholdsEnabled: false },
+      { pendingContentProposal: { ...proposal, thresholdReview: undefined } }]) {
+      vi.mocked(store.getActiveConversationState).mockResolvedValue({ ...state, ...changed } as never);
+      await expect(runApplyAssistantContentProposal(request, context, store, { trainingThresholds } as never))
+        .rejects.toMatchObject({ code: 'aborted' });
+    }
+    expect(trainingThresholds).not.toHaveBeenCalled();
+  });
   it.each(['save_workout_reflection', 'delete_workout_reflection'] as const)('applies %s only with current independent access and review', async kind => {
     const { store, conversation } = createDependencies();
     const args = { activityRef: 'reflection-activity', target: 'activity', expectedRevision: 1,
@@ -631,7 +656,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
-      false, false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false, false);
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
@@ -804,7 +829,7 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
-      false, false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false, false);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
@@ -828,7 +853,7 @@ describe('Assistant callable', () => {
     expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true,
-      false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false);
     vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
       pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
     await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
@@ -847,7 +872,7 @@ describe('Assistant callable', () => {
     await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
     expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null,
-      false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false);
   });
 
   it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
@@ -863,7 +888,7 @@ describe('Assistant callable', () => {
     await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
       .rejects.toMatchObject({ code: 'aborted' });
     expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat',
-      false, false, false, false, false, false, false);
+      false, false, false, false, false, false, false, false);
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -1512,7 +1537,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
-      undefined, false, false, false, false, false, false, false);
+      undefined, false, false, false, false, false, false, false, false);
   });
 
   it('rejects an unknown reset location boundary without replacing the conversation', async () => {

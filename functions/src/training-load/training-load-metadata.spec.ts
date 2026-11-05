@@ -12,6 +12,18 @@ const previous = (): TrainingLoadMetadata => ({ version: 1, revision: 5, exclude
     ...defaultAppliedTrainingLoadPolicy('Walking'), method: 'HR', included: false, revision: 3, effectiveAtMs: 500 } } } });
 
 describe('training load reconciliation', () => {
+  it('retains frozen weight and calculation semantics across changed IDs and legacy retries', () => {
+    const prior = previous();
+    prior.legs!.old.calibration = { version: 2, weight: { status: 'available', kilograms: 70,
+      observedAtMs: 0, sourceRecordId: 'private-weight', sourceRevision: 'original' } };
+    const next = reconcileTrainingLoadLegs(prior, [{ ...leg('new'),
+      calibration: { version: 2, weight: { status: 'available', kilograms: 90,
+        observedAtMs: 0, sourceRecordId: 'other-weight', sourceRevision: 'later' } } }]);
+    expect(next.legs!.old.calibration).toEqual(prior.legs!.old.calibration);
+    delete prior.legs!.old.calibration;
+    expect(reconcileTrainingLoadLegs(prior, [{ ...leg('new'), calibration: { version: 2, weight: null } }])
+      .legs!.old.calibration).toBeUndefined();
+  });
   it('retains policy and zero override across a sport change only for the reservation-certified stable leg', () => {
     const prior = previous();
     const changed = { ...leg('old'), identity: { ...leg('old').identity, type: 'Yoga' }, recordedTss: 9 };

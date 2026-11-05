@@ -13,6 +13,7 @@ import {
 })
 export class DashboardActionPromptComponent {
   @Input() prompt: DashboardActionPromptViewModel | null = null;
+  @Input() compact = false;
   @Input() hasControls = false;
   @Input() hasActionControls = false;
 

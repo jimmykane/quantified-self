@@ -1,6 +1,10 @@
 {
   "indexes": [
     {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "endTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
       "collectionGroup": "stripeBillingJobs", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "recoverAt", "order": "ASCENDING" }]
     },

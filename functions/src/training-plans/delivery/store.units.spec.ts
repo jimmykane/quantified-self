@@ -3,9 +3,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, PaceUnits, SpeedUnits, SwimPaceUnits, VerticalSpeedUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
-import { readSuuntoGuideUnitSettings, readSuuntoGuideOwnerPreferences } from './store';
+import { queuedDeliveryOperation, readSuuntoGuideUnitSettings, readSuuntoGuideOwnerPreferences } from './store';
+import type { DeliveryLedgerV1 } from './contracts';
 import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import { suuntoGuideDescription } from '../providers/suunto-guide-description';
+
+describe('Training delivery source-version updates', () => {
+  it('queues an update when an edit is outside the provider text limit but the serialized payload is unchanged', () => {
+    const ledger = { desired: 'present', desiredDigest: 'same-payload', acceptedDigest: 'same-payload',
+      acceptedContentDigest: 'previous-full-recipe', contentDigest: 'edited-full-recipe', attempt: null } as DeliveryLedgerV1;
+    expect(queuedDeliveryOperation(ledger)).toBe('upsert');
+    expect(queuedDeliveryOperation({ ...ledger, acceptedContentDigest: ledger.contentDigest })).toBeNull();
+    expect(queuedDeliveryOperation({ ...ledger, desired: 'preserve' })).toBeNull();
+  });
+});
 
 describe('Suunto private owner-unit snapshots', () => {
   const workout = { id: 'fixture' } as ScheduledWorkoutV1;

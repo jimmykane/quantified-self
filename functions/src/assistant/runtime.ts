@@ -1,5 +1,7 @@
 import { TRAINING_PREVIEW_TOOLS as PLAN_PREVIEW_TOOLS, TRAINING_READ_TOOLS as PLAN_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { GOAL_PREVIEW_TOOLS, GOAL_READ_TOOLS, GOAL_PREVIEW_OUTPUT } from '../mcp/training-goals.schemas';
+import { TRAINING_THRESHOLD_OUTPUTS } from '../mcp/training-thresholds.schemas';
+import { randomUUID } from 'node:crypto';
 const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS] as const;
 const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS] as const;
 import { PUBLIC_MCP_TOOL_NAMES, type PublicMcpToolName } from '../mcp/tool-output-schemas';
@@ -222,6 +224,7 @@ export interface AssistantRuntimeDependencies {
     measurementChangesEnabled?: boolean,
     reflectionChangesEnabled?: boolean,
     activityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'],
+    trainingThresholdsEnabled?: boolean,
   ) => Promise<AssistantMcpSession>;
   generateAnswer: (input: AssistantModelGenerationInput) => Promise<AssistantModelGenerationResult>;
   createVisualSource: typeof createAssistantVisualSource;
@@ -230,6 +233,7 @@ export interface AssistantRuntimeDependencies {
 }
 
 const ASSISTANT_SYSTEM_INSTRUCTION_SECTIONS: Array<string | { tool: AssistantMcpToolName; text: string }> = [
+  { tool: 'get_training_thresholds', text: 'Training thresholds are dated calibration settings, separate from Health observations. Read current values before an explicit change; keep its policyRef and mutationId on retries. Use only athlete-supplied FTP, threshold HR or CSS and explicit CSS units; do not estimate a threshold from a workout. Valid file calibration and imported TSS take precedence. A historical policy read is not proof that its values were used by a workout. The preview only prepares an app review; only the user can Apply. Saving or clearing affects future workouts and never recalculates existing ones or changes provider settings or planned-workout targets.' },
   TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE,
   TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE,
   TRAINING_PLAN_NEXT_STEPS_GUIDANCE,
@@ -1014,6 +1018,7 @@ function isEnabledContentChangeTool(
   timelineNoteChangesEnabled: boolean,
   measurementChangesEnabled: boolean,
   reflectionChangesEnabled: boolean,
+  trainingThresholdsEnabled = false,
 ): boolean {
   return (reflectionChangesEnabled && (toolName === 'query_activities' || toolName === 'get_workout_reflection' || toolName.startsWith('prepare_workout_reflection_')))
     || (activityTagChangesEnabled
@@ -1023,6 +1028,7 @@ function isEnabledContentChangeTool(
         || toolName === 'prepare_timeline_note_create'
         || toolName === 'prepare_timeline_note_update'
         || toolName === 'prepare_timeline_note_delete'))
+    || (trainingThresholdsEnabled && (toolName === 'get_training_thresholds' || toolName === 'preview_training_threshold_change'))
     || (measurementChangesEnabled && ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(toolName)
       || toolName.startsWith('prepare_manual_measurement_')));
 }
@@ -1514,7 +1520,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
 const defaultDependencies: AssistantRuntimeDependencies = {
   createMcpSession: (uid, appBaseUrl, locationAccess, timelineNotesEnabled, trainingPlansEnabled,
     trainingPlanChangesEnabled, trainingDeliveryEnabled, conversationId, activityTagChangesEnabled,
-    timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled, activityDisciplines) => createAssistantMcpSession(
+    timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled, activityDisciplines, trainingThresholdsEnabled) => createAssistantMcpSession(
     uid,
     appBaseUrl,
     undefined,
@@ -1529,6 +1535,7 @@ const defaultDependencies: AssistantRuntimeDependencies = {
     measurementChangesEnabled,
     reflectionChangesEnabled,
     activityDisciplines,
+    trainingThresholdsEnabled,
   ),
   generateAnswer: generateAssistantModelAnswer,
   createVisualSource: createAssistantVisualSource,
@@ -1556,6 +1563,7 @@ export function createAssistantRuntime(
       timelineNoteChangesEnabled?: boolean;
       measurementChangesEnabled?: boolean;
       reflectionChangesEnabled?: boolean;
+      trainingThresholdsEnabled?: boolean;
       trainingPlansEnabled?: boolean;
       trainingPlanChangesEnabled?: boolean;
       trainingDeliveryEnabled?: boolean;
@@ -1563,7 +1571,7 @@ export function createAssistantRuntime(
       assertTrainingPlansAccess?: () => Promise<void>;
       assertTrainingWriteAccess?: () => Promise<void>;
       assertTimelineNotesAccess?: () => Promise<void>;
-      assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections') => Promise<void>;
+      assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections' | 'thresholds') => Promise<void>;
       history: AssistantMessage[];
       onBillableAttempt?: () => Promise<void>;
     }): Promise<AssistantRuntimeResult> => {
@@ -1584,6 +1592,7 @@ export function createAssistantRuntime(
         input.measurementChangesEnabled === true,
         input.reflectionChangesEnabled === true,
         promptWorkflow?.activityDisciplineOverrides,
+        input.trainingThresholdsEnabled === true,
       );
       const invocations: AssistantToolInvocation[] = [];
       const visualSources: AssistantVisualSource[] = [];
@@ -1635,6 +1644,7 @@ export function createAssistantRuntime(
               input.timelineNoteChangesEnabled === true,
               input.measurementChangesEnabled === true,
               input.reflectionChangesEnabled === true,
+              input.trainingThresholdsEnabled === true,
             ))
           : metricTrendIntent
             ? session.tools.filter(tool => tool.name === 'query_metrics'
@@ -1648,6 +1658,7 @@ export function createAssistantRuntime(
               input.timelineNoteChangesEnabled === true,
               input.measurementChangesEnabled === true,
               input.reflectionChangesEnabled === true,
+              input.trainingThresholdsEnabled === true,
             ))
             : session.tools;
         // Gemini rejects the combined deeply nested Training preview catalogue
@@ -1738,6 +1749,10 @@ export function createAssistantRuntime(
             let result;
             let toolFailureStage = 'assistant_tool_execution';
             try {
+              if (tool.name === 'get_training_thresholds' || tool.name === 'preview_training_threshold_change') {
+                if (!input.trainingThresholdsEnabled || !input.assertContentWriteAccess) throw new Error('Training threshold access is unavailable.');
+                await input.assertContentWriteAccess('thresholds');
+              }
               if ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(tool.name)) {
                 if (!input.measurementChangesEnabled || !input.assertContentWriteAccess) throw new Error('Manual measurement access is unavailable.');
                 await input.assertContentWriteAccess('measurements');
@@ -1777,6 +1792,16 @@ export function createAssistantRuntime(
                 await input.assertTrainingWriteAccess();
               }
               result = await session.callTool(tool.name, resolvedToolInput);
+              if (tool.name === 'get_training_thresholds' || tool.name === 'preview_training_threshold_change')
+                await input.assertContentWriteAccess!('thresholds');
+              if (tool.name === 'preview_training_threshold_change') {
+                const preview = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(result.structuredContent);
+                pendingContentProposal = { proposalRef: randomUUID(), kind: 'apply_training_threshold_change',
+                  expiresAtMs: Math.min(preview.expiresAtMs, currentTime.getTime() + 10 * 60_000),
+                  summary: `Save ${preview.review.familyLabel} thresholds for future workouts. Existing workouts stay unchanged.`,
+                  requiresConfirmation: true, arguments: { proposalRef: preview.proposalRef }, thresholdReview: preview.review };
+                if (!isAssistantContentProposal(pendingContentProposal)) throw new Error('Invalid Training threshold review.');
+              }
               if ((MCP_MANUAL_MEASUREMENT_READ_TOOLS as readonly string[]).includes(tool.name)) await input.assertContentWriteAccess!('measurements');
               if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) await input.assertTrainingPlansAccess!();
               if (tool.name === 'get_workout_reflection') await input.assertContentWriteAccess!('reflections');

@@ -14,6 +14,7 @@ export interface AssistantExploreBottomSheetData {
   timelineNoteChangesEnabled?: boolean;
   measurementChangesEnabled?: boolean;
   reflectionChangesEnabled?: boolean;
+  trainingThresholdsEnabled?: boolean;
   trainingPlansEnabled?: boolean;
   trainingPlanChangesEnabled?: boolean;
   trainingDeliveryEnabled?: boolean;
@@ -22,6 +23,7 @@ export interface AssistantExploreBottomSheetData {
 
 export type AssistantExploreBottomSheetResult =
   | { kind: 'reflection_changes'; enabled: boolean }
+  | { kind: 'training_thresholds'; enabled: boolean }
   | { kind: 'measurement_changes'; enabled: boolean }
   | { kind: 'training_plans'; enabled: boolean }
   | { kind: 'training_plan_changes'; enabled: boolean }
@@ -80,6 +82,11 @@ export class AssistantExploreBottomSheetComponent {
   setReflectionChanges(enabled: boolean): void {
     if (enabled === (this.data.reflectionChangesEnabled === true)) return;
     this.bottomSheetRef.dismiss({ kind: 'reflection_changes', enabled });
+  }
+
+  setTrainingThresholds(enabled: boolean): void {
+    if (enabled === (this.data.trainingThresholdsEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'training_thresholds', enabled });
   }
 
   setMeasurementChanges(enabled: boolean): void {

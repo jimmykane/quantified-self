@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { observeInspection } from './verification-evidence';
+import { inspectionBinding, observeInspection } from './verification-evidence';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
 import { canRepairMissingArtifacts, type InspectionObservation, type InspectionPolicy } from './verification-contracts';
 
 const policy: InspectionPolicy = { version: 'proof-v1', mode: 'retained-ids', required: ['workout', 'schedule'],
@@ -7,6 +9,24 @@ const policy: InspectionPolicy = { version: 'proof-v1', mode: 'retained-ids', re
 const missing: InspectionObservation = { conflict: false, artifacts: [
   { key: 'workout', state: 'present', authoritative: true }, { key: 'schedule', state: 'absent', authoritative: true }] };
 describe('provider-neutral inspection evidence', () => {
+  it('invalidates a replacement review when full QS content changes behind an unchanged provider payload', () => {
+    const context: DeliveryContext = { workout: { schemaVersion: 1, id: 'w', planId: null, revision: 1,
+      localDate: '2026-09-10', lifecycle: 'planned', title: 'Original prescription', createdAtMs: 1, updatedAtMs: 1,
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'run', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [] }] } },
+      setting: null, override: null, scopeGeneration: 0, planActive: true, hasPro: true, nowMs: 1,
+      pastCleanup: null, transport: null,
+      connection: { state: 'connected', destinationKey: 'account', epoch: 0, generation: 'connection' } };
+    const ledger = { destinationKey: 'account', desiredDigest: 'unchanged-provider-payload', timeZone: 'UTC',
+      actual: null, contentDigest: 'stale-cached-content' } as DeliveryLedgerV1;
+    const original = inspectionBinding(ledger, context, policy);
+    const edited = { ...context, workout: { ...context.workout!, title: 'Changed full prescription' } };
+    expect(inspectionBinding(ledger, edited, policy)).not.toBe(original);
+    // Revision/timestamp churn alone does not change the actual prescription being reviewed.
+    expect(inspectionBinding(ledger, { ...context, workout: { ...context.workout!, revision: 2, updatedAtMs: 2 } }, policy))
+      .toBe(original);
+  });
+
   it('resumes positive discovery in an unstable Suunto inventory without carrying negative proof', () => {
     const suunto = { ...policy, required: ['guide'], authoritativeAbsenceKeys: [], repairReadyKeys: [] };
     const page: InspectionObservation = { conflict: false, artifacts: [{ key: 'guide', state: 'unknown', authoritative: false }],

@@ -77,6 +77,44 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it.each([true, false])('shares one content review slot between threshold and local proposals (threshold first: %s)', async thresholdFirst => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', true, false, false, false, undefined, true);
+    const threshold = () => session.callTool('preview_training_threshold_change', {});
+    const local = () => session.callTool('prepare_activity_tag_change', { activityRef: 'activity', expectedTags: [], tags: ['Easy'] });
+    try {
+      const first = thresholdFirst ? threshold() : local();
+      await expect(thresholdFirst ? local() : threshold()).rejects.toThrow('only one content change');
+      await first;
+      await expect(thresholdFirst ? local() : threshold()).rejects.toThrow('only one content change');
+    } finally { await session.close(); }
+  });
+  it('releases the content slot when a remote threshold preview fails', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_training_threshold_change' }),
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', true, false, false, false, undefined, true);
+    try {
+      await expect(session.callTool('preview_training_threshold_change', {})).rejects.toThrow();
+      await expect(session.callTool('prepare_activity_tag_change', { activityRef: 'activity', expectedTags: [], tags: ['Easy'] }))
+        .resolves.toHaveProperty('structuredContent');
+    } finally { await session.close(); }
+  });
+  it('exposes threshold reads and preview only after independent opt-in, never model apply', async () => {
+    let captured: AuthenticatedMcpRequest | undefined;
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: auth => { captured = auth; return createTestServer(); },
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', false, false, false, false, undefined, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('get_training_thresholds');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_threshold_change');
+      expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_threshold_change');
+      expect(captured?.scopes).toContain(MCP_OAUTH_SCOPES.TrainingThresholdsRead);
+      expect(captured?.scopes).toContain(MCP_OAUTH_SCOPES.TrainingThresholdsWrite);
+      expect(captured?.scopes).not.toContain(MCP_OAUTH_SCOPES.TrainingPlansWrite);
+      await expect(session.callTool('apply_training_threshold_change' as never, {})).rejects.toThrow(/available/);
+    } finally { await session.close(); }
+  });
   it('retains only a sanitized snapshot of an SDK client failure', async () => {
     const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
       createServer: () => createTestServer(),
@@ -512,6 +550,7 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'get_workout_reflection' && name !== 'query_timeline_notes'
+        && name !== 'get_training_thresholds' && name !== 'preview_training_threshold_change'
         && name !== 'query_activities_with_tags'
         && name !== 'query_editable_timeline_notes'
         && !['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement'].includes(name)

@@ -3,7 +3,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
-import { requiresDeliveryMappingApproval, type DeliveryContext, type DeliveryIntent, type DeliveryLedgerV1 } from './contracts';
+import type { DeliveryContext, DeliveryIntent, DeliveryLedgerV1 } from './contracts';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 
@@ -82,19 +82,18 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
         && (ledger.mappingApprovalProof.mappingDigest === assessment.digest
           || compatibleDigests.includes(ledger.mappingApprovalProof.mappingDigest))
         && ledger.mappingApprovalProof.contentDigest === contentDigest));
-  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
-    && !compatibleApproval) {
-    return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
-  }
   const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16', 'suunto-guides-v17', 'suunto-guides-v18'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
   const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16', 'suunto-guides-v17', 'suunto-guides-v18'].includes(assessment.mappingVersion)
     && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(workout!.structure.sport)
     ? context.suuntoSwimmingSettings : undefined;
+  // Retain existing historical proof metadata without making it a delivery gate.
   const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
-    && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
+    && assessment.level === 'degraded' && assessment.requiresApproval !== false && approval === assessment.digest;
   const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval
     ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoPresentation ? context.suuntoUnitSettings : undefined;
-  return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
+  const currentContentDigest = deliveryContentDigest(workout, timeZone, context.strength);
+  return { ...result('present', ledger?.acceptedDigest === assessment.digest
+    && ledger.acceptedContentDigest === currentContentDigest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
     ...((compatibleApproval && contentDigest) || recordSuuntoPresentation ? { mappingApprovalProof: {
       approvedDigest: approval!, mappingDigest: assessment.digest,
       contentDigest: contentDigest ?? deliveryContentDigest(workout, timeZone, context.strength)!,

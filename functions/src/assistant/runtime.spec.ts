@@ -5,6 +5,33 @@ import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-work
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it('prepares a server-validated threshold review without applying it', async () => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'get_training_thresholds', title: 'Read thresholds', description: 'Read settings', inputSchema: { type: 'object' } },
+      { name: 'preview_training_threshold_change', title: 'Preview thresholds', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const before = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const after = { ...before, functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' } };
+    callTool.mockImplementation(async name => ({ structuredContent: name === 'get_training_thresholds'
+      ? { asOf: '2026-11-04T12:00:00Z', policies: [] }
+      : { proposalRef: 'sealed-threshold-proposal', expiresAtMs: Date.parse('2026-11-04T12:15:00Z'),
+        requiresConfirmation: true, appliesTo: 'future-workouts', review: { family: 'cycling', familyLabel: 'Cycling', before, after } } }));
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-11-04T12:00:00Z'), generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_training_thresholds')!.execute({ family: 'cycling' });
+        await input.tools.find(tool => tool.name === 'preview_training_threshold_change')!.execute({ policyRef: 'sealed-policy',
+          mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { functionalThresholdPower: 220 } });
+        return { answer: 'Review the threshold change in Quantified Self before Apply.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Set my cycling FTP to 220 watts.',
+      timeZone: 'UTC', history: [], conversationId: 'threshold-chat', trainingThresholdsEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({ kind: 'apply_training_threshold_change',
+      arguments: { proposalRef: 'sealed-threshold-proposal' }, thresholdReview: { before, after } });
+    expect(result.pendingContentProposal?.proposalRef).not.toBe('sealed-threshold-proposal');
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(callTool.mock.calls.some(([name]) => name === 'apply_training_threshold_change')).toBe(false);
+    expect(access).toHaveBeenCalledTimes(4);
+  });
   it.each([[], ['Spring marathon'], ['Strength consistency', 'Autumn race']].map(goalNames => ({ goalNames })))('routes the Plans setup request to plan review with goal focus $goalNames', ({ goalNames }) => {
     const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null, days: null,
       minutes: null, goalNames, timelineNotesEnabled: true, instructions: '' }, '2026-11-04');
@@ -3519,7 +3546,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false, false, false, undefined, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -3909,7 +3936,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false, false, false, undefined, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {

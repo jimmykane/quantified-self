@@ -76,6 +76,13 @@ beforeEach(() => {
 });
 
 describe('merge Training load snapshots', () => {
+  it.each(['missing', 'toString'])('rejects an orphaned association %s as a changed source instead of crashing or borrowing calibration', key => {
+    const a = source('a'); a.metadata.controls[key] = { activityId: 'leg' };
+    try {
+      mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }]);
+      throw new Error('Expected source review');
+    } catch (error) { expect(error).toMatchObject({ code: 'failed-precondition' }); }
+  });
   it('copies candidates and frozen policy, preserves override zero and translates whole-source exclusion per leg', () => {
     const a = source('a'), b = source('b', 0, 'IMPORTED'), c = source('c');
     a.metadata.controls.old = { override: 0 }; b.metadata.excluded = true;
@@ -130,7 +137,9 @@ describe('merge Training load snapshots', () => {
     a.metadata.legs!.current.evaluations = { version: 1, automatic: imported, hr: { ...imported, preference: 'HR' },
       met: { ...imported, preference: 'MET' }, swimPace: { ...imported, preference: 'SWIM_PACE' } };
     delete a.metadata.controls.old.override;
+    a.metadata.legs!.current.calibration = { version: 2, weight: null };
     expect(resolveEffectiveTrainingLoad({}, a.metadata).score).toBe(0);
+    expect(Object.values(mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }]).legs!)[0].calibration).toBeUndefined();
     const copied = mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }]);
     expect(resolveEffectiveTrainingLoad({}, { version: 1, revision: 1, excluded: false, ...copied }).score).toBe(0);
   });

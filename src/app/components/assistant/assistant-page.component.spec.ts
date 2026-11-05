@@ -199,7 +199,7 @@ describe('AssistantPageComponent', () => {
     expect(assistantService.sendMessage).not.toHaveBeenCalled();
     expect(component.promptControl.value).toBe('');
     await component.startPlanChat(); fixture.detectChanges();
-    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', true, null, true, true, false, false, false, false, false);
+    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', true, null, true, true, false, false, false, false, false, false);
     expect(component.promptControl.value).toBe(request.prompt);
     expect(component.planRequest()).toBeNull();
     expect(assistantService.sendMessage).not.toHaveBeenCalled();
@@ -599,6 +599,22 @@ describe('AssistantPageComponent', () => {
     expect(component.contentProposalResult()).toContain('Nothing was changed');
   });
 
+  it('reviews threshold values with their units before app Apply', async () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const proposal: AssistantContentProposalPreview = { proposalRef: 'threshold-review', kind: 'apply_training_threshold_change',
+      expiresAtMs: Date.now() + 60000, requiresConfirmation: true, summary: 'Review Swimming thresholds',
+      arguments: { proposalRef: 'PRIVATE-SEALED-REFERENCE' }, thresholdReview: { family: 'swimming', familyLabel: 'Swimming',
+        before: empty, after: { ...empty, swimThresholdSpeed: { value: 91.44 / 113, unit: 'm/s', displayValue: '01:53', displayUnit: '/100yd' } } } };
+    component.conversation.set(chatResponse.conversation); component.pendingContentProposal.set(proposal);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
+    expect(text).toContain('Review Training thresholds'); expect(text).toContain('CSS: Not set → 01:53 /100yd');
+    expect(text).toContain('future workouts only'); expect(text).not.toContain('PRIVATE');
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenCalledWith({ proposalRef: 'threshold-review',
+      conversationId: chatResponse.conversation.conversationId, confirm: true });
+  });
   it('reviews private reflection text, then applies only explicit confirmation', async () => {
     const proposal: AssistantContentProposalPreview = {
       proposalRef: 'reflection-proposal', kind: 'save_workout_reflection',
@@ -1616,6 +1632,7 @@ describe('AssistantPageComponent', () => {
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
       data: {
+        trainingThresholdsEnabled: false,
         locationAccess: 'coordinate_free',
         timelineNotesEnabled: false,
         activityTagChangesEnabled: false,
@@ -1630,6 +1647,23 @@ describe('AssistantPageComponent', () => {
     expect(component.promptControl.value).toBe(routeExample.prompt);
     openSpy.mockRestore();
   });
+  it('keeps threshold access independent, defaults it off and removes it on New chat', async () => {
+    await component.ngOnInit(); expect(component.trainingThresholdsEnabled()).toBe(false);
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'training_thresholds', enabled: true }),
+    } as never);
+    component.openExploreSheet(); await fixture.whenStable();
+    expect(component.trainingThresholdsEnabled()).toBe(true);
+    expect(component.trainingPlanChangesEnabled()).toBe(false);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', false, null,
+      false, false, false, false, false, true, true, true);
+    await component.resetConversation();
+    expect(component.trainingThresholdsEnabled()).toBe(false);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', false,
+      expect.any(String), false, false, false, false, false, true, true, false);
+    open.mockRestore();
+  });
   it('defaults manual measurements on only for fresh chats and resets it on New chat', async () => {
     await component.ngOnInit();
     expect(component.measurementChangesEnabled()).toBe(true);
@@ -1639,7 +1673,7 @@ describe('AssistantPageComponent', () => {
     await component.resetConversation();
     expect(component.measurementChangesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', false, chatResponse.conversation.conversationId,
-      false, false, false, false, false, true, true);
+      false, false, false, false, false, true, true, false);
   });
 
   it('changes manual-entry access independently in a fresh chat, preserving other choices', async () => {
@@ -1655,7 +1689,7 @@ describe('AssistantPageComponent', () => {
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(component.trainingPlansEnabled()).toBe(true);
     expect(component.promptControl.value).toBe('Keep my draft');
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, null, true, false, false, false, false, false, true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, null, true, false, false, false, false, false, true, false);
     open.mockRestore();
   });
 
@@ -1673,13 +1707,13 @@ describe('AssistantPageComponent', () => {
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(component.promptControl.value).toBe('Keep my draft');
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'coordinate_free', true, null, false, false, false, false, false, true, false);
+      'coordinate_free', true, null, false, false, false, false, false, true, false, false);
     component.openExploreSheet();
     expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
     await component.resetConversation();
     expect(component.reflectionChangesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'coordinate_free', false, chatResponse.conversation.conversationId, false, false, false, false, false, true, true);
+      'coordinate_free', false, chatResponse.conversation.conversationId, false, false, false, false, false, true, true, false);
     open.mockRestore();
   });
 
@@ -1742,7 +1776,7 @@ describe('AssistantPageComponent', () => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
         false,
-        null, false, false, false, false, false, true, true);
+        null, false, false, false, false, false, true, true, false);
     });
     fixture.detectChanges();
 
@@ -1870,7 +1904,7 @@ describe('AssistantPageComponent', () => {
     await component.resetConversation();
 
     expect(assistantService.resetConversation).toHaveBeenCalledWith(
-      'coordinate_free', false, 'conversation-1', false, false, false, false, false, true, true);
+      'coordinate_free', false, 'conversation-1', false, false, false, false, false, true, true, false);
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.timelineNotesEnabled()).toBe(false);
@@ -1908,7 +1942,7 @@ describe('AssistantPageComponent', () => {
     const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
     component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, true, false, false, false, false, true, true);
+      'precise_activity', true, null, true, false, false, false, false, true, true, false);
     expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('What is planned next week?');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1); expect(hapticsService.success).toHaveBeenCalledTimes(1);
@@ -1926,7 +1960,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'precise_activity', true, null, false, false, false, false, false, true, true);
+      'precise_activity', true, null, false, false, false, false, false, true, true, false);
     expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('Compare sleep and my notes.');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
@@ -1939,7 +1973,7 @@ describe('AssistantPageComponent', () => {
     await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
     expect(component.timelineNotesEnabled()).toBe(true);
     expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
-      'coordinate_free', true, 'conversation-1', false, false, false, false, false, true, true);
+      'coordinate_free', true, 'conversation-1', false, false, false, false, false, true, true, false);
     open.mockRestore();
   });
 
@@ -1974,7 +2008,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.resetting()).toBe(false));
     expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith(
-      'precise_activity', true, 'conversation-1', false, false, false, false, false, true, true);
+      'precise_activity', true, 'conversation-1', false, false, false, false, false, true, true, false);
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.reflectionChangesEnabled()).toBe(false);
     expect(component.locationAccess()).toBe('coordinate_free');
