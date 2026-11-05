@@ -51,7 +51,7 @@ workflow. [Gitleaks](https://github.com/gitleaks/gitleaks) is additionally requi
 repository hooks.
 
 > [!NOTE]
-> The root `.nvmrc` still selects Node 20 for local frontend development. Select Node 22 explicitly with `nvm use 22` for frontend tests and Functions development; the CI test jobs use Node 22 and `functions/package.json` declares the same runtime.
+> The root `.nvmrc`, frontend CI and Functions runtime use Node 22. Run `nvm use` after entering the checkout.
 
 ## Quick start
 
@@ -117,6 +117,8 @@ Sign in with a fake local identity. Email magic links appear in the emulator out
 
 Press Ctrl+C once to stop the stack and export emulator state. The next `npm start` imports it automatically.
 
+Functions TypeScript sources are watched and rebuilt automatically alongside Angular. Restart `npm start` after switching branches or changing email templates.
+
 ### 4. Test Free and Pro locally without Stripe
 
 Local accounts start on Free. After creating an account and completing onboarding, change only that fake account's synthetic role from another terminal:
@@ -136,7 +138,15 @@ Run the disposable full-stack smoke test while `npm start` is stopped:
 npm run local:smoke
 ```
 
-It proves local Auth, Firestore, synthetic Pro-to-Free roles, Storage, a callable Function, and an authenticated upload endpoint work together without App Check. To erase saved emulator data, stop the stack and run:
+It verifies local Auth, owner-scoped onboarding writes, synthetic Pro-to-Free client claims, Storage, a callable Function, and a valid GPX upload followed by an owner-scoped event read. It needs no Mapbox token and runs in required Linux/Windows CI jobs. This is an SDK/API smoke test; it does not automate the browser onboarding screens.
+
+If another local stack is running, use separate smoke ports without editing configuration (macOS/Linux):
+
+```bash
+QS_LOCAL_SMOKE_PORT_OFFSET=20000 npm run local:smoke
+```
+
+In PowerShell, set `$env:QS_LOCAL_SMOKE_PORT_OFFSET = '20000'` before the command, then remove it afterward with `Remove-Item Env:QS_LOCAL_SMOKE_PORT_OFFSET`. The smoke run never imports or exports your saved dataset. To erase saved emulator data, stop the stack and run:
 
 ```bash
 npm run local:reset

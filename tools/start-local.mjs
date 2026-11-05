@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import process from 'node:process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   assertLocalPrerequisites,
   assertPortsAvailable,
@@ -52,10 +54,122 @@ async function waitForExit(child, timeoutMs) {
   if (!child || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
-  await Promise.race([
-    once(child, 'exit'),
-    new Promise(resolve => setTimeout(resolve, timeoutMs)),
-  ]);
+  let timeout;
+  try {
+    await Promise.race([
+      once(child, 'exit'),
+      new Promise(resolve => { timeout = setTimeout(resolve, timeoutMs); }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function startLocalProcesses(runtimeConfig, environment, {
+  spawnProcess = spawnInherited,
+  waitUntilReady = waitForEmulators,
+  signals = process,
+} = {}) {
+  const firebase = spawnProcess(
+    buildLocalNodeCommand(
+      'firebase',
+      buildEmulatorArguments(runtimeConfig, await hasSavedEmulatorState()),
+    ),
+    environment,
+  );
+  const firebaseTermination = observeChildTermination(firebase, 'Firebase emulators');
+  let angular;
+  let watcher;
+  let shutdownPromise;
+  const startup = new AbortController();
+
+  const shutdown = (exitCode = 0) => {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = (async () => {
+      startup.abort();
+      if (angular && angular.exitCode === null) {
+        angular.kill('SIGINT');
+        await waitForExit(angular, 5_000);
+      }
+      if (watcher && watcher.exitCode === null) {
+        watcher.kill('SIGINT');
+        await waitForExit(watcher, 5_000);
+      }
+      if (firebase.exitCode === null) {
+        firebase.kill('SIGINT');
+        await waitForExit(firebase, 20_000);
+      }
+      process.exitCode = exitCode;
+    })();
+    return shutdownPromise;
+  };
+
+  const onInterrupt = () => void shutdown(0);
+  signals.once('SIGINT', onInterrupt);
+  signals.once('SIGTERM', onInterrupt);
+
+  try {
+    const startupResult = await Promise.race([
+      waitUntilReady(runtimeConfig, 120_000, startup.signal).then(() => ({ ready: true })),
+      firebaseTermination.then(termination => ({ ready: false, termination })),
+    ]);
+    if (!startupResult.ready) {
+      if (shutdownPromise) {
+        await shutdownPromise;
+        return;
+      }
+      throw new Error(`[local] ${describeChildTermination(startupResult.termination)} before becoming ready.`);
+    }
+    if (shutdownPromise) {
+      await shutdownPromise;
+      return;
+    }
+
+    watcher = spawnProcess(buildLocalNodeCommand('functions-watch', [
+      '--project', path.join(repositoryRoot, 'functions', 'tsconfig.json'), '--watch', '--preserveWatchOutput',
+    ]), environment);
+    const watcherTermination = observeChildTermination(watcher, 'Functions compiler');
+
+    angular = spawnProcess(
+      buildLocalNodeCommand('ng', [
+        'serve',
+        '--configuration', 'local',
+        '--host', runtimeConfig.host,
+        '--port', String(runtimeConfig.ports.app),
+        '--ssl=false',
+      ]),
+      environment,
+    );
+    const angularTermination = observeChildTermination(angular, 'Angular');
+
+    console.info(`\n[local] Application: http://${runtimeConfig.host}:${runtimeConfig.ports.app}`);
+    console.info(`[local] Emulator UI: http://${runtimeConfig.host}:${runtimeConfig.ports.ui}`);
+    console.info('[local] Billing and all backend provider credentials are disabled. Press Ctrl+C to save emulator state.\n');
+    console.info('[local] Functions TypeScript sources are watched automatically. Restart after template or branch changes.');
+
+    const exited = await Promise.race([
+      firebaseTermination,
+      angularTermination,
+      watcherTermination,
+    ]);
+    if (!shutdownPromise) {
+      console.error(`[local] ${describeChildTermination(exited)} unexpectedly.`);
+      await shutdown(typeof exited.code === 'number' && exited.code !== 0 ? exited.code : 1);
+    } else {
+      await shutdownPromise;
+    }
+  } catch (error) {
+    if (startup.signal.aborted && shutdownPromise) {
+      await shutdownPromise;
+      return;
+    }
+    await shutdown(1);
+    throw error;
+  } finally {
+    startup.abort();
+    signals.off('SIGINT', onInterrupt);
+    signals.off('SIGTERM', onInterrupt);
+  }
 }
 
 async function main() {
@@ -65,86 +179,15 @@ async function main() {
   await assertPortsAvailable(runtimeConfig);
   await ensureLocalStateDirectory();
   const isolation = await createIsolatedLocalProcessEnvironment();
-
   try {
     await runChecked(buildLocalNodeCommand('functions-build'), isolation.environment);
-
-    const firebase = spawnInherited(
-      buildLocalNodeCommand(
-        'firebase',
-        buildEmulatorArguments(runtimeConfig, await hasSavedEmulatorState()),
-      ),
-      isolation.environment,
-    );
-    const firebaseTermination = observeChildTermination(firebase, 'Firebase emulators');
-    let angular;
-    let shuttingDown = false;
-
-    const shutdown = async (exitCode = 0) => {
-      if (shuttingDown) {
-        return;
-      }
-      shuttingDown = true;
-      if (angular && angular.exitCode === null) {
-        angular.kill('SIGINT');
-        await waitForExit(angular, 5_000);
-      }
-      if (firebase.exitCode === null) {
-        firebase.kill('SIGINT');
-        await waitForExit(firebase, 20_000);
-      }
-      process.exitCode = exitCode;
-    };
-
-    process.once('SIGINT', () => void shutdown(0));
-    process.once('SIGTERM', () => void shutdown(0));
-
-    try {
-      const startupResult = await Promise.race([
-        waitForEmulators(runtimeConfig).then(() => ({ ready: true })),
-        firebaseTermination.then(termination => ({ ready: false, termination })),
-      ]);
-      if (!startupResult.ready) {
-        if (shuttingDown) {
-          return;
-        }
-        throw new Error(`[local] ${describeChildTermination(startupResult.termination)} before becoming ready.`);
-      }
-
-      angular = spawnInherited(
-        buildLocalNodeCommand('ng', [
-          'serve',
-          '--configuration', 'local',
-          '--host', runtimeConfig.host,
-          '--port', String(runtimeConfig.ports.app),
-          '--ssl=false',
-        ]),
-        isolation.environment,
-      );
-      const angularTermination = observeChildTermination(angular, 'Angular');
-
-      console.info(`\n[local] Application: http://${runtimeConfig.host}:${runtimeConfig.ports.app}`);
-      console.info(`[local] Emulator UI: http://${runtimeConfig.host}:${runtimeConfig.ports.ui}`);
-      console.info('[local] Billing and all backend provider credentials are disabled. Press Ctrl+C to save emulator state.\n');
-
-      const exited = await Promise.race([
-        firebaseTermination,
-        angularTermination,
-      ]);
-      if (!shuttingDown) {
-        console.error(`[local] ${describeChildTermination(exited)} unexpectedly.`);
-        await shutdown(typeof exited.code === 'number' && exited.code !== 0 ? exited.code : 1);
-      }
-    } catch (error) {
-      await shutdown(1);
-      throw error;
-    }
+    await startLocalProcesses(runtimeConfig, isolation.environment);
   } finally {
     await isolation.cleanup();
   }
 }
 
-main().catch(error => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

@@ -5,6 +5,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const localRuntimeConfigPath = path.join(repositoryRoot, 'local-runtime.config.json');
@@ -15,8 +16,9 @@ export const localSecretPath = path.join(repositoryRoot, 'functions', '.secret.l
 export const localSecretExamplePath = path.join(repositoryRoot, 'functions', '.secret.local.example');
 
 const LOCAL_NODE_COMMAND_SCRIPTS = Object.freeze({
-  firebase: path.join(repositoryRoot, 'node_modules', 'firebase-tools', 'lib', 'bin', 'firebase.js'),
+  firebase: path.join(repositoryRoot, 'tools', 'firebase-cli.mjs'),
   'functions-build': path.join(repositoryRoot, 'functions', 'scripts', 'build.mjs'),
+  'functions-watch': path.join(repositoryRoot, 'functions', 'node_modules', 'typescript', 'bin', 'tsc'),
   ng: path.join(repositoryRoot, 'node_modules', '@angular', 'cli', 'bin', 'ng.js'),
 });
 
@@ -59,7 +61,7 @@ export function buildLocalNodeCommand(name, args = []) {
   }
   return {
     command: process.execPath,
-    args: [scriptPath, ...args],
+    args: [scriptPath, ...(name === 'firebase' ? ['--local'] : []), ...args],
   };
 }
 
@@ -264,8 +266,11 @@ export async function ensureLocalSecretFileAt(
   let secretContents = await readFile(secretPath, 'utf8');
   assertNoLocalSecrets(secretContents, processEnvironment);
 
-  const assignments = [...parseEnvAssignments(secretContents).values()];
-  if (assignments.every(value => value.length === 0)) {
+  const assignments = parseEnvAssignments(secretContents);
+  const expectedAssignments = parseEnvAssignments(exampleContents);
+  const safeToUpgrade = [...assignments.entries()].every(([name, value]) =>
+    expectedAssignments.has(name) && (value.length === 0 || value === LOCAL_SECRET_SENTINEL));
+  if (safeToUpgrade && secretContents !== exampleContents) {
     await assertSafeLocalSecretFilePath(secretPath, 'the local secret placeholder file');
     await replaceWithLocalSecretTemplate(examplePath, secretPath);
     secretContents = await readFile(secretPath, 'utf8');
@@ -336,6 +341,20 @@ export async function readLocalRuntimeConfiguration() {
   return { runtimeConfig, firebaseConfig, angularConfig };
 }
 
+// Smoke runs never start Angular or import/export saved state. A port offset
+// lets them coexist with an interactive stack without editing tracked config.
+export async function readLocalSmokeConfiguration(environment = process.env) {
+  const configuration = await readLocalRuntimeConfiguration();
+  const value = environment.QS_LOCAL_SMOKE_PORT_OFFSET ?? '0';
+  if (!/^\d+$/u.test(value)) throw new Error('[local-smoke] Port offset must be a non-negative integer.');
+  const offset = Number(value);
+  const { runtimeConfig, firebaseConfig } = configuration;
+  for (const name of REQUIRED_PORT_NAMES) runtimeConfig.ports[name] += offset;
+  for (const name of [...EXPECTED_EMULATORS, 'ui', 'hub']) firebaseConfig.emulators[name].port += offset;
+  validateRuntimeConfiguration(runtimeConfig, firebaseConfig);
+  return configuration;
+}
+
 export async function ensureEmptyLocalSecretFile() {
   await ensureLocalSecretFileAt(localSecretPath, localSecretExamplePath);
 
@@ -369,13 +388,14 @@ export async function createIsolatedLocalProcessEnvironment(sourceEnvironment = 
   };
 }
 
-export async function assertLocalPrerequisites() {
+export async function assertLocalPrerequisites({ requireMapbox = true } = {}) {
   const requiredPaths = [
     buildLocalNodeCommand('ng').args[0],
     buildLocalNodeCommand('firebase').args[0],
+    path.join(repositoryRoot, 'node_modules', 'firebase-tools', 'lib', 'bin', 'firebase.js'),
     buildLocalNodeCommand('functions-build').args[0],
     path.join(repositoryRoot, 'functions', 'node_modules', 'typescript', 'bin', 'tsc'),
-    path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts'),
+    ...(requireMapbox ? [path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts')] : []),
   ];
   const missing = [];
   for (const requiredPath of requiredPaths) {
@@ -389,8 +409,10 @@ export async function assertLocalPrerequisites() {
     throw new Error(`[local] Missing prerequisites: ${missing.join(', ')}. Follow README Quick Start first.`);
   }
 
-  const tokenContents = await readFile(path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts'), 'utf8');
-  assertPublicMapboxTokenSource(tokenContents);
+  if (requireMapbox) {
+    const tokenContents = await readFile(path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts'), 'utf8');
+    assertPublicMapboxTokenSource(tokenContents);
+  }
 }
 
 export async function hasSavedEmulatorState() {
@@ -485,8 +507,11 @@ export async function assertPortsAvailable(runtimeConfig, portNames = Object.key
   }
 }
 
-export async function readEmulatorHub(runtimeConfig) {
-  const response = await fetch(`http://${runtimeConfig.host}:${runtimeConfig.ports.hub}/emulators`);
+export async function readEmulatorHub(runtimeConfig, signal) {
+  const timeout = AbortSignal.timeout(5_000);
+  const response = await fetch(`http://${runtimeConfig.host}:${runtimeConfig.ports.hub}/emulators`, {
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
   if (!response.ok) {
     throw new Error(`[local] Emulator Hub returned HTTP ${response.status}.`);
   }
@@ -502,17 +527,18 @@ export function assertExpectedEmulators(runtimeConfig, emulatorRegistry) {
   }
 }
 
-export async function waitForEmulators(runtimeConfig, timeoutMs = 120_000) {
+export async function waitForEmulators(runtimeConfig, timeoutMs = 120_000, signal) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
+    signal?.throwIfAborted();
     try {
-      const registry = await readEmulatorHub(runtimeConfig);
+      const registry = await readEmulatorHub(runtimeConfig, signal);
       assertExpectedEmulators(runtimeConfig, registry);
       return registry;
     } catch (error) {
       lastError = error;
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await delay(500, undefined, { signal });
     }
   }
   throw new Error(`[local] Timed out waiting for Firebase emulators: ${lastError instanceof Error ? lastError.message : 'unknown error'}`);

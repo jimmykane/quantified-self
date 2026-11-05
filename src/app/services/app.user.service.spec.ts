@@ -170,6 +170,56 @@ describe('AppUserService', () => {
         expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(2);
     });
 
+    it('retries a failed claims refresh and consumes the revision only after recovery', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.mocked(authState).mockReturnValue(of(null));
+            vi.mocked(user).mockReturnValue(of(null));
+            service = TestBed.inject(AppUserService);
+            const firebaseUser = mockAuth.currentUser;
+            firebaseUser.getIdToken.mockReset().mockRejectedValueOnce({ code: 'auth/network-request-failed' })
+                .mockResolvedValue('recovered-token');
+            firebaseUser.getIdTokenResult.mockResolvedValue({ claims: { iat: 100, stripeRole: 'pro' } });
+            const profile = { uid: 'u1', claimsUpdatedAt: { seconds: 101, nanoseconds: 0 }, gracePeriodUntil: 123 };
+            const results: AppUserInterface[] = [];
+            (service as any).mergeClaimsWithAuthRetry(
+                firebaseUser, profile, (service as any).profileReadGeneration,
+            ).subscribe(value => results.push(value));
+            await vi.advanceTimersByTimeAsync(10000);
+            expect(results).toHaveLength(1);
+            expect(results[0]).toMatchObject({ stripeRole: 'pro' });
+            expect(results[0]).not.toHaveProperty('gracePeriodUntil');
+            void (service as any).mergeClaims(firebaseUser, profile);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('bounds repeated claims refresh failures instead of looping through token emissions', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.mocked(authState).mockReturnValue(of(null));
+            vi.mocked(user).mockReturnValue(of(null));
+            service = TestBed.inject(AppUserService);
+            const firebaseUser = mockAuth.currentUser;
+            const failure = { code: 'auth/network-request-failed' };
+            firebaseUser.getIdToken.mockReset().mockRejectedValue(failure);
+            firebaseUser.getIdTokenResult.mockResolvedValue({ claims: { iat: 100, stripeRole: 'free' } });
+            const failures: unknown[] = [];
+            (service as any).mergeClaimsWithAuthRetry(
+                firebaseUser, { uid: 'u1', claimsUpdatedAt: { seconds: 101, nanoseconds: 0 } },
+                (service as any).profileReadGeneration,
+            ).subscribe({ error: error => failures.push(error) });
+            await vi.advanceTimersByTimeAsync(60000);
+            expect(failures).toEqual([failure]);
+            expect(firebaseUser.getIdToken).toHaveBeenCalledTimes(5);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('does not load chart/settings utilities for an anonymous account', () => {
         vi.mocked(authState).mockReturnValue(of(null));
         vi.mocked(user).mockReturnValue(of(null));

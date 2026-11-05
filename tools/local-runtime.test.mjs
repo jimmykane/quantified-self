@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { access, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +19,7 @@ import {
   LOCAL_SMOKE_CHECK_COMMAND,
   parseEnvAssignments,
   readLocalRuntimeConfiguration,
+  readLocalSmokeConfiguration,
   removeLocalStateAt,
   repositoryRoot,
   validateAngularLocalConfiguration,
@@ -77,6 +80,16 @@ test('accepts the committed local runtime and Firebase configurations', async ()
   const committed = await readLocalRuntimeConfiguration();
   assert.equal(committed.runtimeConfig.projectId, 'demo-quantified-self-local');
   assert.equal(committed.firebaseConfig.emulators.singleProjectMode, true);
+});
+
+test('offsets only ephemeral smoke ports and rejects unsafe offsets', async () => {
+  const smoke = await readLocalSmokeConfiguration({ QS_LOCAL_SMOKE_PORT_OFFSET: '10000' });
+  assert.equal(smoke.runtimeConfig.ports.functions, 15001);
+  assert.equal(smoke.firebaseConfig.emulators.functions.port, 15001);
+  assert.equal((await readLocalRuntimeConfiguration()).runtimeConfig.ports.functions, 5001);
+  for (const value of ['-1', '1.2', 'NaN', '65536']) {
+    await assert.rejects(readLocalSmokeConfiguration({ QS_LOCAL_SMOKE_PORT_OFFSET: value }));
+  }
 });
 
 test('accepts only the isolated Angular local build and serve targets', () => {
@@ -222,6 +235,14 @@ test('creates or atomically repairs an ordinary local secret placeholder file', 
   await writeFile(secretPath, 'STRIPE_SECRET_KEY=\n');
   await ensureLocalSecretFileAt(secretPath, examplePath, {});
   assert.equal(await readFile(secretPath, 'utf8'), expectedContents);
+
+  await writeFile(examplePath, `${expectedContents}GEMINI_API_KEY=${LOCAL_SECRET_SENTINEL}\n`);
+  await ensureLocalSecretFileAt(secretPath, examplePath, {});
+  assert.equal(await readFile(secretPath, 'utf8'), await readFile(examplePath, 'utf8'));
+
+  await writeFile(secretPath, 'STRIPE_SECRET_KEY=private-do-not-overwrite\n');
+  await assert.rejects(ensureLocalSecretFileAt(secretPath, examplePath, {}), /Refusing/u);
+  assert.equal(await readFile(secretPath, 'utf8'), 'STRIPE_SECRET_KEY=private-do-not-overwrite\n');
 });
 
 test('accepts only a browser-safe Mapbox public token source', () => {
@@ -277,8 +298,8 @@ test('launches local tools through Node instead of platform-specific command shi
     assert.equal(invocation.command, process.execPath);
     assert.equal(invocation.args[0].endsWith('.cmd'), false);
   }
-  assert.match(firebase.args[0], /firebase-tools[/\\]lib[/\\]bin[/\\]firebase\.js$/u);
-  assert.deepEqual(firebase.args.slice(1), ['--version']);
+  assert.match(firebase.args[0], /tools[/\\]firebase-cli\.mjs$/u);
+  assert.deepEqual(firebase.args.slice(1), ['--local', '--version']);
   assert.match(angular.args[0], /@angular[/\\]cli[/\\]bin[/\\]ng\.js$/u);
   assert.match(functionsBuild.args[0], /functions[/\\]scripts[/\\]build\.mjs$/u);
   assert.throws(() => buildLocalNodeCommand('unknown'), /Unknown local command/u);
@@ -289,6 +310,39 @@ test('keeps the package-local Firebase CLI aligned with the shared exact pin', a
   const firebaseToolsVersion = (await readFile(path.join(repositoryRoot, '.firebase-tools-version'), 'utf8')).trim();
 
   assert.equal(packageJson.devDependencies['firebase-tools'], firebaseToolsVersion);
+});
+
+test('the shared wrapper checks the package-local version and preserves arguments and failures', async context => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'qs-local-cli-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(path.join(directory, 'tools'));
+  const packageDirectory = path.join(directory, 'node_modules', 'firebase-tools', 'lib', 'bin');
+  await mkdir(packageDirectory, { recursive: true });
+  await writeFile(path.join(directory, '.firebase-tools-version'), '1.2.3');
+  const wrapper = path.join(directory, 'tools', 'firebase-cli.mjs');
+  await writeFile(wrapper, await readFile(path.join(repositoryRoot, 'tools', 'firebase-cli.mjs')));
+  const script = path.join(packageDirectory, 'firebase.js');
+  await writeFile(script, "if(process.argv[2]==='--version')console.log('1.2.2');else throw Error('Must not run');");
+  const stale = spawnSync(process.execPath, [wrapper, '--local', 'emulators:start'], { encoding: 'utf8' });
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /found 1\.2\.2/u);
+  await writeFile(script, "if(process.argv[2]==='--version')console.log('1.2.3');else{console.log(JSON.stringify(process.argv.slice(2)));process.exitCode=7;}");
+  const args = ['emulators:exec', '--config', 'directory with spaces/config.json', 'literal $value & text'];
+  const forwarded = spawnSync(process.execPath, [wrapper, '--local', ...args], { encoding: 'utf8' });
+  assert.equal(forwarded.status, 7);
+  assert.deepEqual(JSON.parse(forwarded.stdout), args);
+  // POSIX process signals are forwarded individually. Windows console Ctrl+C
+  // is delivered to the console group; its full runtime is checked in CI.
+  if (process.platform !== 'win32') {
+    await writeFile(script, "if(process.argv[2]==='--version')console.log('1.2.3');else{process.on('SIGINT',()=>{console.log('stopped');process.exit(0)});console.log('ready');setInterval(()=>{},1000);}");
+    const child = spawn(process.execPath, [wrapper, '--local', 'emulators:start'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    context.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
+    const [ready] = await once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) });
+    assert.match(ready.toString(), /ready/u);
+    const stopped = once(child, 'exit', { signal: AbortSignal.timeout(5000) });
+    child.kill('SIGINT');
+    assert.deepEqual(await stopped, [0, null]);
+  }
 });
 
 test('keeps the Functions package build on the cross-platform Node script', async () => {

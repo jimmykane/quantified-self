@@ -317,10 +317,42 @@ jobs:
       - name: Run firestore rules tests
         run: npm run test:rules
 
+  local_runtime:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-v1
+      - run: npm ci
+      - run: npm --prefix functions ci
+      - run: npm run local:config:test
+      - name: Run isolated local stack smoke test
+        run: npm run local:smoke
+
   # Preserve the existing protected-branch context: run-tests / run_tests.
   # No individual runner can satisfy the gate when another fails or is skipped.
   run_tests:
-    needs: [unit_tests, functions_tests, functions_build, frontend_plan, frontend_tests, rules_tests, functions_emulators, delivery_plan, delivery_emulators]
+    needs: [unit_tests, functions_tests, functions_build, frontend_plan, frontend_tests, rules_tests, functions_emulators, delivery_plan, delivery_emulators, local_runtime]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -336,10 +368,11 @@ jobs:
           EMULATOR_RESULT: ${{ needs.functions_emulators.result }}
           DELIVERY_PLAN_RESULT: ${{ needs.delivery_plan.result }}
           DELIVERY_RESULT: ${{ needs.delivery_emulators.result }}
+          LOCAL_RUNTIME_RESULT: ${{ needs.local_runtime.result }}
         run: |
-          for result in "$UNIT_RESULT" "$FUNCTIONS_RESULT" "$FUNCTIONS_BUILD_RESULT" "$FRONTEND_PLAN_RESULT" "$FRONTEND_RESULT" "$RULES_RESULT" "$EMULATOR_RESULT" "$DELIVERY_PLAN_RESULT" "$DELIVERY_RESULT"; do
+          for result in "$UNIT_RESULT" "$FUNCTIONS_RESULT" "$FUNCTIONS_BUILD_RESULT" "$FRONTEND_PLAN_RESULT" "$FRONTEND_RESULT" "$RULES_RESULT" "$EMULATOR_RESULT" "$DELIVERY_PLAN_RESULT" "$DELIVERY_RESULT" "$LOCAL_RUNTIME_RESULT"; do
             if [[ "$result" != "success" ]]; then
-              echo "Required test gate failed: validation=$UNIT_RESULT, functions=$FUNCTIONS_RESULT, functions-build=$FUNCTIONS_BUILD_RESULT, frontend-plan=$FRONTEND_PLAN_RESULT, frontend=$FRONTEND_RESULT, rules=$RULES_RESULT, emulators=$EMULATOR_RESULT, delivery-plan=$DELIVERY_PLAN_RESULT, delivery=$DELIVERY_RESULT"
+              echo "Required test gate failed: validation=$UNIT_RESULT, functions=$FUNCTIONS_RESULT, functions-build=$FUNCTIONS_BUILD_RESULT, frontend-plan=$FRONTEND_PLAN_RESULT, frontend=$FRONTEND_RESULT, rules=$RULES_RESULT, emulators=$EMULATOR_RESULT, delivery-plan=$DELIVERY_PLAN_RESULT, delivery=$DELIVERY_RESULT, local-runtime=$LOCAL_RUNTIME_RESULT"
               exit 1
             fi
           done

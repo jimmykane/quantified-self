@@ -13,6 +13,7 @@ import {
   doc,
   getDoc,
   getFirestore,
+  setDoc,
 } from 'firebase/firestore';
 import {
   connectFunctionsEmulator,
@@ -32,7 +33,7 @@ import {
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
-import { readLocalRuntimeConfiguration } from './local-runtime.mjs';
+import { readLocalSmokeConfiguration } from './local-runtime.mjs';
 import { updateLocalRole } from './local-role.mjs';
 
 function assert(condition, message) {
@@ -42,7 +43,7 @@ function assert(condition, message) {
 }
 
 async function main() {
-  const { runtimeConfig } = await readLocalRuntimeConfiguration();
+  const { runtimeConfig } = await readLocalSmokeConfiguration();
   const { host, ports, projectId } = runtimeConfig;
 
   process.env.GCLOUD_PROJECT = projectId;
@@ -86,11 +87,11 @@ async function main() {
     console.info('[local-smoke] Auth emulator check passed.');
 
     const adminFirestore = getAdminFirestore(adminApp);
-    await adminFirestore.doc(`users/${clientUser.uid}`).set({
+    await setDoc(doc(firestore, `users/${clientUser.uid}`), {
       onboardingCompleted: true,
       localSmoke: true,
     });
-    await adminFirestore.doc(`users/${clientUser.uid}/legal/agreements`).set({
+    await setDoc(doc(firestore, `users/${clientUser.uid}/legal/agreements`), {
       acceptedPrivacyPolicy: true,
       acceptedDataPolicy: true,
       acceptedTos: true,
@@ -100,7 +101,7 @@ async function main() {
     assert(clientUserSnapshot.exists(), 'Authenticated Firestore read failed.');
     console.info('[local-smoke] Firestore emulator check passed.');
 
-    await updateLocalRole({ email, role: 'pro' });
+    await updateLocalRole({ email, role: 'pro' }, new Date(), true);
     const proUser = await getAdminAuth(adminApp).getUser(clientUser.uid);
     assert(proUser.customClaims?.stripeRole === 'pro', 'Synthetic Pro claim was not applied.');
     const syntheticSubscription = await adminFirestore
@@ -109,8 +110,9 @@ async function main() {
     assert(syntheticSubscription.exists, 'Synthetic Pro subscription was not created.');
     assert(syntheticSubscription.data()?.role === 'pro', 'Synthetic subscription has the wrong role.');
     assert(syntheticSubscription.data()?.localSynthetic === true, 'Synthetic subscription is not marked local-only.');
+    assert((await clientUser.getIdTokenResult(true)).claims.stripeRole === 'pro', 'Client did not receive the Pro claim.');
 
-    await updateLocalRole({ email, role: 'free' });
+    await updateLocalRole({ email, role: 'free' }, new Date(), true);
     const freeUser = await getAdminAuth(adminApp).getUser(clientUser.uid);
     assert(freeUser.customClaims?.stripeRole === 'free', 'Synthetic Free claim was not applied.');
     assert(freeUser.customClaims?.gracePeriodUntil === undefined, 'Synthetic Free left a stale grace-period claim.');
@@ -120,6 +122,7 @@ async function main() {
     assert(!deletedSubscription.exists, 'Synthetic Pro subscription was not removed.');
     const status = await adminFirestore.doc(`users/${clientUser.uid}/system/status`).get();
     assert(status.data()?.gracePeriodUntil === undefined, 'Synthetic Free left a stale grace-period status.');
+    assert((await clientUser.getIdTokenResult(true)).claims.stripeRole === 'free', 'Client did not receive the Free claim.');
     console.info('[local-smoke] Synthetic Pro-to-Free role check passed.');
 
     const storagePath = `users/${clientUser.uid}/local-smoke/probe.txt`;
@@ -142,14 +145,20 @@ async function main() {
           Authorization: `Bearer ${idToken}`,
           'Content-Type': 'application/octet-stream',
           Origin: `http://${host}:${ports.app}`,
+          'X-File-Extension': 'gpx',
+          'X-Original-Filename': 'local-smoke.gpx',
         },
-        body: Buffer.from([0]),
+        body: '<?xml version="1.0"?><gpx version="1.1" creator="local-smoke" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Synthetic local walk</name><type>Walking</type><trkseg><trkpt lat="60.17" lon="24.94"><ele>10</ele><time>2026-01-01T10:00:00Z</time></trkpt><trkpt lat="60.171" lon="24.941"><ele>12</ele><time>2026-01-01T10:01:00Z</time></trkpt><trkpt lat="60.172" lon="24.942"><ele>11</ele><time>2026-01-01T10:02:00Z</time></trkpt></trkseg></trk></gpx>',
       },
     );
-    assert(uploadResponse.status === 400, `Expected authenticated upload validation to return HTTP 400, received ${uploadResponse.status}.`);
+    assert(uploadResponse.status === 200, `Expected a valid activity upload to return HTTP 200, received ${uploadResponse.status}: ${await uploadResponse.clone().text()}`);
+    const uploaded = await uploadResponse.json();
+    assert(uploaded.activitiesCount > 0 && typeof uploaded.eventId === 'string', 'Upload did not create an activity.');
+    const uploadedEvent = await getDoc(doc(firestore, `users/${clientUser.uid}/events/${uploaded.eventId}`));
+    assert(uploadedEvent.exists(), 'The uploaded event was not readable through owner security rules.');
 
     console.info('[local-smoke] Auth, Firestore, synthetic roles, Storage, callable Functions, and local HTTP upload checks passed.');
-    console.info('[local-smoke] The HTTP upload succeeded without an App Check token only inside the Functions emulator.');
+    console.info('[local-smoke] A valid GPX upload and owner event read succeeded without an App Check token inside the emulator.');
   } finally {
     if (storageFile) {
       await storageFile.delete({ ignoreNotFound: true }).catch(() => undefined);

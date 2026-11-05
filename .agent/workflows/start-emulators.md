@@ -19,8 +19,8 @@ Credentials are required while Admin SDK traffic stays on these emulators. Do no
 
 ## Keep the backend current
 
-The emulator loads `functions/lib`, not TypeScript sources. After the initial build, keep this running in a separate
-terminal from the repository root while editing backend or shared code:
+The emulator loads `functions/lib`, not TypeScript sources. `npm start` runs the TypeScript watcher automatically.
+For the separate Functions-only maintainer workflow, keep this running in another terminal:
 
 ```bash
 npm --prefix functions run build:watch

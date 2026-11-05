@@ -12,12 +12,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = file => load(readFileSync(resolve(root, '.github/workflows', file), 'utf8'));
 const testing = workflow('testing.yaml');
 const shared = workflow('_run-tests.yml');
-const requiredJobs = ['unit_tests', 'functions_tests', 'functions_build', 'frontend_plan', 'frontend_tests', 'rules_tests', 'functions_emulators', 'delivery_plan', 'delivery_emulators'];
+const requiredJobs = ['unit_tests', 'functions_tests', 'functions_build', 'frontend_plan', 'frontend_tests', 'rules_tests', 'functions_emulators', 'delivery_plan', 'delivery_emulators', 'local_runtime'];
 const resultVariables = {
   UNIT_RESULT: 'unit_tests', FUNCTIONS_RESULT: 'functions_tests', FRONTEND_RESULT: 'frontend_tests',
   FUNCTIONS_BUILD_RESULT: 'functions_build', FRONTEND_PLAN_RESULT: 'frontend_plan',
   RULES_RESULT: 'rules_tests', EMULATOR_RESULT: 'functions_emulators',
   DELIVERY_PLAN_RESULT: 'delivery_plan', DELIVERY_RESULT: 'delivery_emulators',
+  LOCAL_RUNTIME_RESULT: 'local_runtime',
 };
 
 test('Firebase CI consumers install the shared pin instead of an unversioned CLI', () => {
@@ -53,6 +54,23 @@ test('every check job uses the declared Functions Node runtime', () => {
     const job = shared.jobs[id];
     const nodeSetup = job.steps.find(step => step.uses === 'actions/setup-node@v4');
     assert.equal(nodeSetup?.with['node-version'], functionsPackage.engines.node);
+  }
+});
+
+test('the contributor runtime is required on Linux and Windows without provider secrets or a Mapbox token', () => {
+  const job = shared.jobs.local_runtime;
+  assert.deepEqual(job.strategy.matrix.os, ['ubuntu-latest', 'windows-latest']);
+  assert.equal(job.strategy['fail-fast'], false);
+  const commands = job.steps.map(step => step.run);
+  for (const command of ['npm ci', 'npm --prefix functions ci', 'npm run local:config:test', 'npm run local:smoke']) {
+    assert.ok(commands.includes(command));
+  }
+  assert.ok(job.steps.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
+  assert.equal(job.env, undefined);
+  assert.ok(job.steps.every(step => !step.env && !step.if && !step['continue-on-error']));
+  const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
+  for (const spec of ['tools/local-runtime.test.mjs', 'tools/local-role.test.mjs', 'tools/start-local.test.mjs']) {
+    assert.ok(scripts['local:config:test'].split(' ').includes(spec));
   }
 });
 

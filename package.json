@@ -28,7 +28,7 @@
     "hooks:install": "lefthook install",
     "credentials:check-staged-files": "node tools/check-staged-credential-files.mjs",
     "credentials:test": "node --test tools/check-staged-credential-files.test.mjs",
-    "local:config:test": "node --test tools/local-runtime.test.mjs",
+    "local:config:test": "node --test tools/local-runtime.test.mjs tools/local-role.test.mjs tools/start-local.test.mjs",
     "local:smoke": "node tools/run-local-smoke.mjs",
     "local:smoke:check": "node tools/local-smoke-check.mjs",
     "local:role": "node tools/local-role.mjs",

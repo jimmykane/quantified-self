@@ -11,6 +11,7 @@ approved manual deployment workflows. Independent jobs run the same mandatory ch
 | `frontend_plan` | Frontend allocation/policy/shard guards and one automatically balanced plan for the tested commit |
 | `frontend_tests` | Two runners covering the complete suite across all three projects |
 | `rules_tests` | Firestore and Storage Rules tests with Java/Firebase emulators |
+| `local_runtime` | Linux/Windows contributor launcher guards, role/lifecycle tests and an ephemeral Auth/Firestore/Storage/Functions smoke test with a valid GPX upload; no provider credentials or Mapbox token |
 | `functions_emulators` | Complete lifecycle, completion and MCP/data emulator groups |
 | `delivery_plan` | Registry/discovery validation and one automatically balanced delivery plan for the tested commit |
 | `delivery_emulators` | Two isolated emulator runners covering every delivery spec exactly once |

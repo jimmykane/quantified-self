@@ -21,7 +21,7 @@ The main commands are:
 
 | Command | Effect |
 | --- | --- |
-| `npm start` | Validate isolation, build Functions, start the required Firebase emulators and Angular, then import/export persistent emulator state |
+| `npm start` | Validate isolation, build and watch Functions, start the required Firebase emulators and Angular, then import/export persistent emulator state |
 | `npm run local:config:test` | Test the configuration, project, endpoint, secret, credential, and Firebase CLI argument guards |
 | `npm run local:smoke` | Start an ephemeral emulator stack and verify Auth, Firestore, synthetic Pro-to-Free roles, Storage, callable Functions, and authenticated HTTP upload behavior |
 | `npm run local:role -- --email you@example.com --role pro` | Give an existing, onboarded fake account a synthetic Pro entitlement |
@@ -51,8 +51,8 @@ The launcher performs these operations in order:
 4. Compile Functions.
 5. Start only Auth, Functions, Firestore, Storage, and Cloud Tasks with the pinned repository Firebase CLI and explicit `--config`, `--project`, and `--only` arguments.
 6. Wait for the Emulator Hub to report every expected service at the configured loopback address.
-7. Start Angular with the `local` configuration.
-8. On Ctrl+C, stop Angular and Firebase cleanly and export emulator state under `.local/firebase-emulator-data`.
+7. Start the Functions TypeScript watcher and Angular with the `local` configuration. Changes to backend/shared TypeScript rebuild automatically; restart after branch or template changes.
+8. On Ctrl+C, cancel pending readiness checks, stop Angular and the compiler, and let Firebase export emulator state under `.local/firebase-emulator-data`. The launcher also stops sibling processes if a child exits unexpectedly.
 
 The first emulator start can take longer because Firebase downloads Java emulator binaries.
 
@@ -73,7 +73,7 @@ If any check fails, Functions do not initialize. In a hosted runtime the existin
 
 ### No local backend credentials
 
-`functions/.secret.local.example` contains `LOCAL_EMULATOR_DISABLED`, not credentials. Blank or missing emulator secrets cause Firebase to query Secret Manager, so the explicit sentinel prevents that fallback. `npm start` creates or upgrades an empty/all-blank ignored `.secret.local`, then requires its names and values to match the safe example exactly. It rejects symbolic links, non-regular files, and hard-linked placeholder files before any repair can overwrite them.
+`functions/.secret.local.example` contains `LOCAL_EMULATOR_DISABLED`, not credentials. Blank or missing emulator secrets cause Firebase to query Secret Manager, so the explicit sentinel prevents that fallback. `npm start` creates the ignored `.secret.local` and upgrades older files containing only known empty/sentinel entries, then requires an exact match with the current template. It rejects real values, unexpected keys, symbolic links, non-regular files, and hard-linked placeholder files before any repair can overwrite them.
 
 The launcher also rejects inherited values such as `GOOGLE_APPLICATION_CREDENTIALS`, `FIREBASE_TOKEN`, `GCLOUD_PROJECT`, and `GOOGLE_CLOUD_PROJECT` before startup. It recursively refuses Functions `.env*`, `.runtimeconfig.json`, service-account, and Firebase Admin SDK credential files. Child processes receive an isolated config directory and an intentionally missing ADC path so code that accidentally initializes an un-emulated Google client fails before inheriting workstation credentials.
 
@@ -128,13 +128,17 @@ For Pro, the command:
 
 For Free, it deletes only `subscriptions/local-pro`, sets the role claim to `free`, and removes stale grace-period values from both Auth claims and the local status document. It never reads or writes a Stripe customer ID, price, checkout session, invoice, or payment record.
 
+The browser suppresses re-entrant refreshes while a revision is pending and consumes it only after a successful token read. Transient refresh failures use the existing bounded profile retry/backoff; a failed attempt does not permanently consume the revision.
+
 The command verifies the Emulator Hub and expected loopback services before importing Firebase Admin. This prevents it from being aimed at a hosted user by changing CLI flags.
 
 ## Persistence and reset
 
 Normal `npm start` sessions import `.local/firebase-emulator-data` when a valid export exists and always request an export on exit. Before Firebase touches that path, the launcher requires the exact repository-local directory and rejects a symlink at any level of the saved export. Stop with one Ctrl+C and wait for Firebase to report shutdown before closing the terminal.
 
-`npm run local:smoke` is deliberately ephemeral: it does not import or export that directory and therefore cannot change the saved local dataset. It exercises the role command from Pro back to Free and verifies the synthetic subscription, Auth claims, and grace-period cleanup.
+`npm run local:smoke` is deliberately ephemeral: it does not import or export that directory and therefore cannot change the saved local dataset. It verifies client Auth, owner-authorized profile/legal writes, Pro-to-Free claims, Storage, a callable, a valid synthetic GPX upload, and the client's owner-authorized event read. No Mapbox token is needed. It does not automate browser screens or verify visual rendering.
+
+The required CI gate runs the local configuration/role/launcher tests and this smoke test on Linux and Windows. `QS_LOCAL_SMOKE_PORT_OFFSET=20000 npm run local:smoke` shifts only the ephemeral smoke ports so a maintainer can keep an interactive stack running. In PowerShell, set `$env:QS_LOCAL_SMOKE_PORT_OFFSET = '20000'` before running the command. The runner generates and removes a temporary value-free config under `.local/`; persistent state and tracked port configuration are untouched.
 
 `npm run local:reset` applies the same exact-path and symlink checks, requires the Emulator Hub port to be free, and then deletes that directory. This operation is not recoverable unless the developer made a separate copy.
 

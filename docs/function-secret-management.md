@@ -98,8 +98,8 @@ CI scans the commits introduced by each push or pull request with a pinned Gitle
 ## Local emulators and scripts
 
 The default contributor workflow never uses provider credentials. Run the isolated stack from the repository root; it
-creates or repairs a missing/empty/all-blank `functions/.secret.local` from the sentinel template and otherwise rejects
-missing, extra, blank, or non-sentinel bindings:
+creates `functions/.secret.local` from the sentinel template and upgrades older files containing only known
+empty/sentinel bindings. It rejects unexpected names and real values without overwriting them:
 
 ```bash
 npm start

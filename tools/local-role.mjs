@@ -1,7 +1,7 @@
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertExpectedEmulators, readEmulatorHub, readLocalRuntimeConfiguration } from './local-runtime.mjs';
+import { assertExpectedEmulators, readEmulatorHub, readLocalRuntimeConfiguration, readLocalSmokeConfiguration } from './local-runtime.mjs';
 
 export function parseRoleArguments(args) {
   let email = '';
@@ -58,8 +58,8 @@ async function setBackgroundTriggers(runtimeConfig, enabled) {
   }
 }
 
-export async function updateLocalRole({ email, role }, now = new Date()) {
-  const { runtimeConfig } = await readLocalRuntimeConfiguration();
+export async function updateLocalRole({ email, role }, now = new Date(), smoke = false) {
+  const { runtimeConfig } = await (smoke ? readLocalSmokeConfiguration() : readLocalRuntimeConfiguration());
   const registry = await readEmulatorHub(runtimeConfig);
   assertExpectedEmulators(runtimeConfig, registry);
 
