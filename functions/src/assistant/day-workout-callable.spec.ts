@@ -311,6 +311,29 @@ describe('generateDayWorkout callable', () => {
       expect(deps.finalize).toHaveBeenCalledTimes(1);
     } finally { generate.mockReset(); }
   });
+  it.each([true, false])('provides safe field guidance for canonical failures, recovering=%s within the existing retry budget', async recover => {
+    const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
+    const invalid = { ...reply, title: 'PRIVATE_TITLE', rationale: 'PRIVATE_RATIONALE',
+      structure: { ...reply.structure, poolLength: { meters: 25, presentation: 'meters' } } };
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(recover ? reply : invalid));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      if (recover) expect((await runGenerateDayWorkout(request, auth, deps)).draft?.structure).toEqual(reply.structure);
+      else await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(warning).toHaveBeenCalledWith('[DayWorkout] Invalid model prescription.', expect.objectContaining({
+        issueCodes: ['invalid_value'], validationIssues: [{ code: 'invalid_value', field: '$.structure.poolLength',
+          reason: 'Pool length is only valid for pool swimming.' }],
+      }));
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).toContain('$.structure.poolLength: Pool length is only valid for pool swimming.');
+      expect(JSON.stringify([warning.mock.calls, correction])).not.toContain('PRIVATE_');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce(); expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(deps.release).not.toHaveBeenCalled();
+    } finally { warning.mockRestore(); generate.mockReset(); }
+  });
   it.each(['schema', 'JSON syntax'])('stops after two %s failures without exposing raw output or charging twice', async kind => {
     const deps = dependencies();
     const malformed = kind === 'schema' ? JSON.stringify({ kind: 'rest', rationale: 'PRIVATE_MODEL_REPLY', PRIVATE_VALIDATION_DETAIL: true })

@@ -818,6 +818,13 @@ complexity limit; the canonical parsers and generation validator still enforce a
 See [Gemini structured-output limits](https://ai.google.dev/gemini-api/docs/structured-output#limitations).
 Validation corrections include only server-authored reasons. Failure diagnostics record the stage, billable flag,
 error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
+Canonical recipe/strength failures also include up to five distinct `validationIssues`: an allowlisted code,
+a known schema-field prefix with normalized array positions, and an exact allowlisted rule or static fallback.
+The same safe details enter the existing single correction prompt. Unknown property names, authored IDs, values
+and arbitrary exception messages are excluded; unrecognized rules fall back to code-specific guidance. Genkit JSON/
+schema failures keep their generic diagnostic. This does not add model attempts, change quota or reset daily receipts.
+MCP impact review: no wire or consent impact; the diagnostics and correction prompt are private to first-party generation.
+Help is unchanged because the supported controls and review flow are unchanged.
 
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
 and actual Feeling/RPE minimum/maximum buckets. The generator replaces its all-sport recording-day buckets with

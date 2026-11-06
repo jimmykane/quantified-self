@@ -20,6 +20,7 @@ import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-wor
 import { createAssistantMcpSession } from './mcp-session';
 import { assistantGenkit } from './model';
 import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion, type ValidatedDaySuggestion } from './day-workout-validation';
+import { dayWorkoutValidationDiagnostics } from './day-workout-diagnostics';
 
 export interface DayWorkoutDependencies {
   store: DayWorkoutStore;
@@ -159,16 +160,19 @@ export async function generateValidatedDayWorkout(request: GenerateDayWorkoutReq
         throw error;
       }
       await assertActive();
+      const validationIssues = dayWorkoutValidationDiagnostics(error);
       logger.warn('[DayWorkout] Invalid model prescription.', {
         attempt: attempt + 1,
         errorName: error instanceof Error ? error.name : 'unknown',
         validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
         issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
+        ...(validationIssues.length ? { validationIssues } : {}),
       });
       const targetCorrection = request.controls.target === 'garmin-power-zone'
         ? 'Include one primary Garmin power zone from 1 to 7 on at least one step; no athlete reference or watt range is needed. Other steps may be targetless.'
         : 'Omit targets without available references.';
-      correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint. ${targetCorrection} Omit all external loads.`;
+      const fieldCorrection = validationIssues.map(issue => `${issue.field}: ${issue.reason}`).join(' ');
+      correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} ${fieldCorrection} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint. ${targetCorrection} Omit all external loads.`;
     }
   }
   suggestion ??= providerFallback;
