@@ -488,6 +488,7 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');

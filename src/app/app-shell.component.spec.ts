@@ -161,6 +161,7 @@ describe('AppShellComponent', () => {
                         getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free')),
                         gracePeriodUntil: signal(null),
                         profileReadState: signal({ status: 'initializing' }),
+                        getStartupDiagnostics: vi.fn().mockReturnValue({ activeStages: [], pendingProfileDocuments: [], lastFailedStage: null }),
                         isAdmin: vi.fn().mockReturnValue(Promise.resolve(false)),
                         hasIncompleteProfileReads: vi.fn().mockReturnValue(false)
                     }
@@ -208,7 +209,8 @@ describe('AppShellComponent', () => {
             expect(pendingFixture.nativeElement.querySelector('app-metric-loader')).toBeNull();
             expect(pendingFixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Loading is taking longer');
             expect(report).toHaveBeenCalledExactlyOnceWith('App startup stalled', {
-                level: 'warning', tags: { startup_failure: 'timeout', profile_state: 'initializing' },
+                level: 'warning', tags: { startup_failure: 'timeout', profile_state: 'initializing', startup_stage: 'auth-state' },
+                contexts: { accountStartup: { activeStages: [], pendingProfileDocuments: [], lastFailedStage: null } },
             });
             expect(pendingComponent.authState).toBeNull();
             await vi.advanceTimersByTimeAsync(120_000);
@@ -229,6 +231,24 @@ describe('AppShellComponent', () => {
             expect(pendingComponent.authState).toBe(false);
             await vi.advanceTimersByTimeAsync(120_000);
             expect(report).toHaveBeenCalledTimes(timing === 'before' ? 0 : 1);
+        } finally { pendingFixture.destroy(); vi.useRealTimers(); }
+    });
+
+    it('attaches the pending startup stage and document types to a stalled-shell report', async () => {
+        vi.useFakeTimers();
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const diagnostic = { elapsedMs: 15_000, activeStages: ['profile-listener'] as const,
+            activeStageElapsedMs: { 'profile-listener': 10_000 }, completedStageMs: { 'auth-token': 200 },
+            pendingProfileDocuments: ['settings'] as const, lastFailedStage: null };
+        vi.spyOn(TestBed.inject(AppUserService), 'getStartupDiagnostics').mockReturnValue({ ...diagnostic,
+            activeStages: [...diagnostic.activeStages], pendingProfileDocuments: [...diagnostic.pendingProfileDocuments] });
+        const { pendingFixture } = createPendingStartup();
+        try {
+            await vi.advanceTimersByTimeAsync(15_000);
+            expect(report).toHaveBeenCalledWith('App startup stalled', expect.objectContaining({
+                tags: expect.objectContaining({ startup_stage: 'profile-listener' }),
+                contexts: { accountStartup: diagnostic },
+            }));
         } finally { pendingFixture.destroy(); vi.useRealTimers(); }
     });
 

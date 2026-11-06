@@ -138,4 +138,60 @@ describe('AppCheckReadinessService', () => {
 
     await expect(service.getToken()).rejects.toThrow('Could not retrieve App Check token.');
   });
+
+  it('shares a pending verification across token and readiness consumers', async () => {
+    let resolve!: (value: { token: string }) => void;
+    hoisted.mockGetAppCheckToken.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const token = service.getToken();
+    const ready = service.ensureReady();
+    const secondToken = service.getToken();
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledOnce();
+    resolve({ token: 'verified-token' });
+    await expect(token).resolves.toBe('verified-token');
+    await expect(secondToken).resolves.toBe('verified-token');
+    await expect(ready).resolves.toBeUndefined();
+    await service.getToken();
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps forced refresh distinct while sharing it with subsequent consumers', async () => {
+    let resolveOrdinary!: (value: { token: string }) => void;
+    let resolveForced!: (value: { token: string }) => void;
+    hoisted.mockGetAppCheckToken
+      .mockReturnValueOnce(new Promise(done => { resolveOrdinary = done; }))
+      .mockReturnValueOnce(new Promise(done => { resolveForced = done; }));
+    const ordinary = service.getToken();
+    const forced = service.getToken(true);
+    const joined = service.getToken();
+    const joinedForced = service.getToken(true);
+    expect(hoisted.mockGetAppCheckToken.mock.calls).toEqual([[appCheckMock, false], [appCheckMock, true]]);
+    resolveOrdinary({ token: 'old-token' });
+    await ordinary;
+    resolveForced({ token: 'fresh-token' });
+    for (const promise of [forced, joined, joinedForced]) await expect(promise).resolves.toBe('fresh-token');
+  });
+
+  it('classifies a stalled verification once and discards its late result before a fresh request', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveOld!: (value: { token: string }) => void;
+      hoisted.mockGetAppCheckToken.mockReturnValueOnce(new Promise(done => { resolveOld = done; }));
+      const request = service.getToken();
+      const rejected = expect(request).rejects.toMatchObject({ code: 'appCheck/token-timeout' });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejected;
+      expect(diagnostics.reportFailure).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ code: 'appCheck/token-timeout' }), 'token-request');
+      resolveOld({ token: 'stale-token' });
+      await expect(service.getToken()).resolves.toBe('app-check-token');
+      expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not replace a verification failure when diagnostics throw', async () => {
+    const failure = { code: 'appCheck/recaptcha-error' };
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce(failure);
+    diagnostics.reportFailure.mockImplementationOnce(() => { throw new Error('diagnostics unavailable'); });
+    await expect(service.getToken()).rejects.toBe(failure);
+  });
 });

@@ -1969,6 +1969,8 @@ Some older email delivery records may remain after account deletion. Those with 
 
 If sign-in or account loading has not finished after 15 seconds, **Loading is taking longer than expected** replaces the rolling numbers. Check your connection and select **Reload page** to try again. Reloading keeps your browser session and does not clear storage or change saved account data. If loading finishes in the meantime, the app continues automatically. If you then see an account recovery message, use **Retry** there. For repeated failures, contact support with your browser name and the time it happened; never send passwords or verification tokens.
 
+If account loading stalls after sign-in, QS attempts an independent server check automatically. If that also times out, use **Retry** on the account recovery screen. A browser-verification timeout instead offers **Reload page**. Neither recovery signs you out, clears browser storage or changes saved account data.
+
 ### Account software could not load
 
 If you see **We couldn't load the account software**, you're still signed in, but part of the app could not download. Check your connection and select **Reload page**. Your browser can retain a failed download until the page reloads, so retrying the account read alone may not help. You do not need to sign out or clear browser storage; your saved account data stays unchanged.

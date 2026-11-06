@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { appCheckFailureDetails, initialAppCheckRejectionFromLog, isAppCheckVerificationFailure } from './app-check-error.helper';
 
 describe('appCheckFailureDetails', () => {
+  it('identifies a verification timeout without automatically repeating a stalled SDK request', () => {
+    expect(appCheckFailureDetails({ code: 'appCheck/token-timeout' })).toEqual({
+      code: 'appCheck/token-timeout', httpStatus: null, retryAfterSeconds: null, cooldown: false, retryable: false,
+    });
+  });
   it('requires explicit App Check evidence before attributing a blocked operation', () => {
     expect(isAppCheckVerificationFailure({ code: 'appCheck/recaptcha-error' })).toBe(true);
     expect(isAppCheckVerificationFailure({ code: 'functions/failed-precondition', message: 'App Check verification failed.' })).toBe(true);

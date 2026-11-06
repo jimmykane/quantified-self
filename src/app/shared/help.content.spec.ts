@@ -265,6 +265,8 @@ describe('help.content', () => {
       'does not clear storage', 'the app continues automatically', 'use **Retry** there']) {
       expect(copy).toContain(phrase);
     }
+    expect(copy).toContain('attempts an independent server check automatically');
+    expect(copy).toContain('A browser-verification timeout instead offers **Reload page**');
   });
 
   it('explains browser verification cooldowns and recovery without resetting account data', () => {

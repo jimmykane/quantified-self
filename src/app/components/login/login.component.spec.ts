@@ -172,7 +172,7 @@ describe('LoginComponent', () => {
         expect(component.isProfileRecoveryInProgress).toBe(false);
     });
 
-    it.each(['initial-throttle', 'throttled', 'recaptcha-error'])('reloads for appCheck/%s without retrying credentials or signing out', async code => {
+    it.each(['initial-throttle', 'throttled', 'recaptcha-error', 'token-timeout'])('reloads for appCheck/%s without retrying credentials or signing out', async code => {
         mockUserService.profileReadState.set({ status: 'error', uid: '123', code: `appCheck/${code}` });
         expect(component.profileVerificationNeedsReload()).toBe(true);
         expect(haptics.selection).not.toHaveBeenCalled();
