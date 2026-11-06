@@ -82,6 +82,16 @@ describe('durable history coordinator', () => {
     expect(meta.connectionHistoryImport.steps[0].status).toBe('processed'); expect(JSON.stringify(meta)).not.toContain('credential');
     expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
+  it('preserves child cutoff evidence committed after the coordinator loaded its snapshot without projecting it', async () => {
+    const cutoffs = { dailies: { minimumStartMs: now - 1000, observedAtMs: now } };
+    mocks.execute.mockImplementationOnce(async () => {
+      mocks.rows.get(path()).garminHealthBackfillCutoffs = cutoffs;
+      return { count: 0, nextStartMs: now + 1000, nextPage: 1 };
+    });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved().garminHealthBackfillCutoffs).toEqual(cutoffs);
+    expect(mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionHistoryImport.garminHealthBackfillCutoffs).toBeUndefined();
+  });
   it('saves the same checkpoint when Firestore retries the completion transaction', async () => {
     mocks.replayFinalCommit = true;
     await processConnectionHistoryRun(run.id, '0');
@@ -588,6 +598,17 @@ describe('durable history coordinator', () => {
     await expect(trigger(event)).rejects.toThrow('not accepted');
     expect(signals().at(-1)).toMatchObject({ event: 'dispatch_attempt', outcome: 'failed', provider: 'wahoo' });
     run.processed = true; await trigger(event); expect(signals()).toHaveLength(1);
+  });
+  it('does not dispatch or flush derived work for a child cutoff-only update', async () => {
+    const before = structuredClone(run);
+    run.garminHealthBackfillCutoffs = { dailies: { minimumStartMs: now - 1000, observedAtMs: now } };
+    const trigger = onConnectionHistoryImportWritten as unknown as (event: {
+      params: { runId: string };
+      data: { before: { exists: boolean; data: () => ConnectionHistoryRun }; after: { data: () => ConnectionHistoryRun } };
+    }) => Promise<void>;
+    await trigger({ params: { runId: run.id }, data: { before: { exists: true, data: () => before }, after: { data: () => run } } });
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.flushDerived).not.toHaveBeenCalled();
   });
   it.each(['processed', 'failed', 'skipped'] as const)('flushes pending derived work on a committed terminal %s transition without configuration', async status => {
     const before = structuredClone(run); run.processed = true; run.revision++; run.steps[0].status = status;
