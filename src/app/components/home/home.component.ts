@@ -71,13 +71,13 @@ export class HomeComponent implements OnInit {
   readonly heroMotionPaused = signal(false);
   readonly heroMotionSuspended = signal(true);
   readonly heroProviders = [
-    { icon: 'garmin', name: 'Garmin', tooltip: 'Garmin Connect', startY: 36,
+    { icon: 'garmin', name: 'Garmin', tooltip: 'Garmin Connect',
       path: 'M 2 36 C 44 36 40 168 84 168', mobilePath: 'M 50 0 C 50 38 200 24 200 64' },
-    { icon: 'suunto', name: 'Suunto', tooltip: 'Suunto App', startY: 124,
+    { icon: 'suunto', name: 'Suunto', tooltip: 'Suunto App',
       path: 'M 2 124 C 42 124 44 168 84 168', mobilePath: 'M 150 0 C 150 28 200 36 200 64' },
-    { icon: 'coros', name: 'COROS', tooltip: 'COROS', startY: 212,
+    { icon: 'coros', name: 'COROS', tooltip: 'COROS',
       path: 'M 2 212 C 42 212 44 168 84 168', mobilePath: 'M 250 0 C 250 28 200 36 200 64' },
-    { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo', startY: 300,
+    { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo',
       path: 'M 2 300 C 44 300 40 168 84 168', mobilePath: 'M 350 0 C 350 38 200 24 200 64' },
   ].map(provider => ({
     ...provider,

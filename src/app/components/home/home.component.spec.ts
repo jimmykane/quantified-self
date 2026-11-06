@@ -127,6 +127,7 @@ describe('HomeComponent', () => {
     const borderTraces = Array.from(visual.querySelectorAll('.hero-product .hero-border-glow'));
     expect(borderTraces).toHaveLength(2);
     expect(borderTraces.every(trace => trace.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(visual.querySelector('.hero-connection-port')).toBeNull();
     for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
