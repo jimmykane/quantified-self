@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS, garminHealthPermissionsRevision, knownUnavailableGarminHealthMinimum } from './health-backfill-cutoffs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS, garminHealthPermissionsRevision, knownUnavailableGarminHealthMinimum, rememberGarminHealthMinimum } from './health-backfill-cutoffs';
 
 describe('Garmin Health run cutoff eligibility', () => {
   const now = Date.parse('2026-11-06T09:00:00Z');
   const minimum = now - 86_400_000;
   const valid = { minimumStartMs: minimum, observedAtMs: now, permissionsRevision: 'a'.repeat(64) };
+  afterEach(() => vi.restoreAllMocks());
   it('skips only wholly unavailable ranges, preserving equality and overlapping windows', () => {
     expect(knownUnavailableGarminHealthMinimum({ dailies: valid }, 'dailies', minimum - 1000, valid.permissionsRevision, now)).toBe(minimum);
     expect(knownUnavailableGarminHealthMinimum({ dailies: valid }, 'dailies', minimum, valid.permissionsRevision, now)).toBeNull();
@@ -40,5 +41,30 @@ describe('Garmin Health run cutoff eligibility', () => {
     expect(garminHealthPermissionsRevision({ ...grants, permissionsLastChangedAt: 124 })).not.toBe(revision);
     expect(garminHealthPermissionsRevision({ ...grants, permissions: ['HEALTH_EXPORT', {}] })).toBeNull();
     expect(garminHealthPermissionsRevision({ ...grants, permissionsLastChangedAt: NaN })).toBeNull();
+  });
+  it('retains response time across delayed writes and rejects an observation once its original hour expires', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const update = vi.fn();
+    const transaction = { update } as unknown as Parameters<typeof rememberGarminHealthMinimum>[0];
+    const run = { ref: {} } as Parameters<typeof rememberGarminHealthMinimum>[1];
+    const observedAtMs = now - 1000;
+    rememberGarminHealthMinimum(transaction, run, 'dailies', minimum, valid.permissionsRevision, valid.permissionsRevision, observedAtMs);
+    expect(update).toHaveBeenCalledWith(run.ref, { 'garminHealthBackfillCutoffs.dailies': { ...valid, observedAtMs } });
+    update.mockClear();
+    clock.mockReturnValue(observedAtMs + GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS);
+    rememberGarminHealthMinimum(transaction, run, 'dailies', minimum, valid.permissionsRevision, valid.permissionsRevision, observedAtMs);
+    expect(update).not.toHaveBeenCalled();
+  });
+  it.each([
+    { name: 'earlier boundary at the same time', offset: -1000, observedAtMs: now, writes: 1 },
+    { name: 'later boundary at the same time', offset: 1000, observedAtMs: now, writes: 0 },
+    { name: 'later boundary from a newer response', offset: 1000, observedAtMs: now + 1000, writes: 1 },
+  ])('handles a $name according to observation order', ({ offset, observedAtMs, writes }) => {
+    vi.spyOn(Date, 'now').mockReturnValue(now + 1000);
+    const update = vi.fn();
+    const transaction = { update } as unknown as Parameters<typeof rememberGarminHealthMinimum>[0];
+    const run = { ref: {}, cutoffs: { dailies: valid } } as Parameters<typeof rememberGarminHealthMinimum>[1];
+    rememberGarminHealthMinimum(transaction, run, 'dailies', minimum + offset, valid.permissionsRevision, valid.permissionsRevision, observedAtMs);
+    expect(update).toHaveBeenCalledTimes(writes);
   });
 });

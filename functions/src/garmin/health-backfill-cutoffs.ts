@@ -23,6 +23,18 @@ export function garminHealthPermissionsRevision(tokenData: Record<string, unknow
   ])).digest('hex');
 }
 
+function isFreshCutoff(
+  cutoff: NonNullable<Cutoffs>[GarminHealthSummaryType],
+  permissionsRevision: string | null,
+  nowMs: number,
+): boolean {
+  return !!cutoff && Number.isSafeInteger(cutoff.minimumStartMs) && cutoff.minimumStartMs >= 0
+    && Number.isSafeInteger(cutoff.observedAtMs) && cutoff.observedAtMs >= 0 && cutoff.minimumStartMs <= cutoff.observedAtMs
+    && cutoff.observedAtMs <= nowMs && nowMs - cutoff.observedAtMs < GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS
+    && typeof cutoff.permissionsRevision === 'string' && /^[0-9a-f]{64}$/.test(cutoff.permissionsRevision)
+    && cutoff.permissionsRevision === permissionsRevision;
+}
+
 export function knownUnavailableGarminHealthMinimum(
   cutoffs: Cutoffs,
   family: GarminHealthSummaryType,
@@ -31,13 +43,8 @@ export function knownUnavailableGarminHealthMinimum(
   nowMs = Date.now(),
 ): number | null {
   const cutoff = cutoffs?.[family];
-  if (!cutoff || !Number.isSafeInteger(cutoff.minimumStartMs) || cutoff.minimumStartMs < 0
-    || cutoff.minimumStartMs > nowMs || !Number.isSafeInteger(cutoff.observedAtMs) || cutoff.observedAtMs < 0
-    || cutoff.observedAtMs > nowMs || nowMs - cutoff.observedAtMs >= GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS
-    || typeof cutoff.permissionsRevision !== 'string' || !/^[0-9a-f]{64}$/.test(cutoff.permissionsRevision)
-    || cutoff.permissionsRevision !== permissionsRevision
-    // Equality retains the inclusive final second; overlapping ranges still ask Garmin.
-    || rangeEndMs >= cutoff.minimumStartMs) return null;
+  // Equality retains the inclusive final second; overlapping ranges still ask Garmin.
+  if (!cutoff || !isFreshCutoff(cutoff, permissionsRevision, nowMs) || rangeEndMs >= cutoff.minimumStartMs) return null;
   return cutoff.minimumStartMs;
 }
 
@@ -80,10 +87,16 @@ export function rememberGarminHealthMinimum(
   minimumStartMs: number,
   permissionsRevision: string | null,
   currentPermissionsRevision: string | null,
+  observedAtMs: number,
 ): void {
   const nowMs = Date.now();
-  if (!Number.isSafeInteger(minimumStartMs) || minimumStartMs < 0 || minimumStartMs > nowMs
-    || permissionsRevision === null || permissionsRevision !== currentPermissionsRevision) return;
+  const cutoff = { minimumStartMs, observedAtMs, permissionsRevision: permissionsRevision ?? undefined };
+  if (!isFreshCutoff(cutoff, currentPermissionsRevision, nowMs)) return;
+  const previous = run.cutoffs?.[family];
+  if (previous && isFreshCutoff(previous, currentPermissionsRevision, nowMs)
+    && (previous.observedAtMs > observedAtMs
+      // Simultaneous observations prefer the boundary that requests more history.
+      || (previous.observedAtMs === observedAtMs && previous.minimumStartMs <= minimumStartMs))) return;
   // Use the latest response, including a lower minimum if Garmin expands availability.
-  transaction.update(run.ref, { [`garminHealthBackfillCutoffs.${family}`]: { minimumStartMs, observedAtMs: nowMs, permissionsRevision } });
+  transaction.update(run.ref, { [`garminHealthBackfillCutoffs.${family}`]: cutoff });
 }

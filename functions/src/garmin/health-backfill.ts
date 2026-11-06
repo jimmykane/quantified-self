@@ -243,7 +243,7 @@ async function advanceCursorTransaction(
   total: number,
   guards: GarminHealthWriteLifecycleGuards,
   resetRetryCount: boolean,
-  minimum?: { learnedStartMs: number; permissionsRevision: string | null } | { reuse: true },
+  minimum?: { learnedStartMs: number; permissionsRevision: string | null; observedAtMs: number } | { reuse: true },
 ): Promise<'advanced' | 'superseded' | 'deleted' | 'lifecycle_changed' | 'minimum_expired'> {
   const db = admin.firestore();
   const stateRef = db.collection('users').doc(queueItem.userID!)
@@ -307,7 +307,8 @@ async function advanceCursorTransaction(
           return 'minimum_expired';
         }
       } else if (run) {
-        rememberGarminHealthMinimum(transaction, run, family, minimum.learnedStartMs, minimum.permissionsRevision, permissionsRevision);
+        rememberGarminHealthMinimum(transaction, run, family, minimum.learnedStartMs,
+          minimum.permissionsRevision, permissionsRevision, minimum.observedAtMs);
       }
     }
 
@@ -795,6 +796,7 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
     const requestPermissionsRevision = garminHealthPermissionsRevision(refreshed.tokenData);
     let nextCursor: GarminHealthBackfillCursor;
     let minimumStartMs: number | null = null;
+    let minimumObservedAtMs = 0;
     try {
       await requestPromise.get({
         headers: { Authorization: `Bearer ${refreshed.tokenData.accessToken}` },
@@ -818,6 +820,8 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
           parsed.rangeEndMs,
         );
       } else if (isGarminBackfillMinimumStartError(error)) {
+        // Retain provider-response time across transaction delays and retries.
+        minimumObservedAtMs = Date.now();
         minimumStartMs = extractGarminBackfillMinimumStartMs(error);
         if (minimumStartMs === null) {
           return moveToDlq(
@@ -874,7 +878,7 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
       currentGuards,
       minimumStartMs === null || familyAdvanced,
       minimumStartMs === null ? undefined : {
-        learnedStartMs: minimumStartMs, permissionsRevision: requestPermissionsRevision,
+        learnedStartMs: minimumStartMs, permissionsRevision: requestPermissionsRevision, observedAtMs: minimumObservedAtMs,
       },
     );
     if (transition === 'deleted') {

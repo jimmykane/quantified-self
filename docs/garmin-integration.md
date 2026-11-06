@@ -238,7 +238,9 @@ Health minimum-start clipping independently adds up to 30 seconds of headroom af
 
 Connection-history Health children remember parsed `400` minimum-start responses privately on their existing import run,
 separately for each Health family. Later children can advance an entire remaining family range without a provider call
-only when its inclusive end precedes a confirmed minimum observed less than one hour ago. Ranges touching or crossing
+only when its inclusive end precedes a confirmed minimum observed less than one hour ago. Observation time is captured
+at the provider response and retained through transaction retries; delayed older observations cannot overwrite newer
+evidence. Equal-time observations prefer the earlier cutoff to request more history. Ranges touching or crossing
 that minimum retain the existing provider request and clipping path; the cache adds no boundary headroom. Evidence and
 cursor progress commit together under the existing queue revision and connection/deletion/Pro guards. Reuse rechecks the
 current run evidence in that transaction, does not renew its age, and cannot cross runs, accounts or credential/connection

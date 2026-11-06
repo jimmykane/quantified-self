@@ -69,7 +69,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin Health run cutoff 
     });
     mocks.request.mockReset().mockRejectedValue({ statusCode: 400, error: { minStartTimeInSeconds: 10 } });
   });
-  afterEach(async () => { await mocks.db.terminate(); });
+  afterEach(async () => { vi.restoreAllMocks(); await mocks.db.terminate(); });
   async function child() {
     const ref = mocks.db.collection('sleepSyncQueue').doc();
     const item: SleepSyncQueueItemInterface = {
@@ -203,5 +203,47 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin Health run cutoff 
     expect((await savedRun()).garminHealthBackfillCutoffs?.dailies?.minimumStartMs).toBe(10_000);
     for (const item of children) expect((await item.ref!.get()).data()?.processed).toBe(true);
     expect(mocks.request).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('keeps a newer lower cutoff when an older response commits later', async () => {
+    const observedAtMs = Date.now();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(observedAtMs);
+    const original = mocks.db.runTransaction.bind(mocks.db);
+    let delayNextTransaction = false;
+    let release!: () => void;
+    let parked!: () => void;
+    const delayed = new Promise<void>(resolve => { release = resolve; });
+    const transactionParked = new Promise<void>(resolve => { parked = resolve; });
+    vi.spyOn(mocks.db, 'runTransaction').mockImplementation(async (...args) => {
+      if (delayNextTransaction) {
+        delayNextTransaction = false;
+        parked();
+        await delayed;
+      }
+      return original(...args);
+    });
+    mocks.request.mockImplementationOnce(async () => {
+      delayNextTransaction = true;
+      throw { statusCode: 400, error: { minStartTimeInSeconds: 10 } };
+    }).mockRejectedValue({ statusCode: 400, error: { minStartTimeInSeconds: 5 } });
+    const older = processGarminHealthBackfillQueueItem(await child());
+    await transactionParked;
+    try {
+      now.mockReturnValue(observedAtMs + 1000);
+      await learn();
+    } finally {
+      release();
+      await older;
+    }
+    expect((await savedRun()).garminHealthBackfillCutoffs?.dailies).toMatchObject({
+      minimumStartMs: 5000, observedAtMs: observedAtMs + 1000,
+    });
+    mocks.request.mockClear().mockResolvedValue('');
+    const available = await child();
+    await available.ref!.update({ rangeStartMs: 6000, rangeEndMs: 6000, garminHealthBackfillNextStartMs: 6000 });
+    Object.assign(available, { rangeStartMs: 6000, rangeEndMs: 6000, garminHealthBackfillNextStartMs: 6000 });
+    await processGarminHealthBackfillQueueItem(available);
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+    expect((await available.ref!.get()).data()?.resultStatus).toBe('success');
   }, 15_000);
 });
