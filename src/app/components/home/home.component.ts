@@ -79,8 +79,9 @@ export class HomeComponent implements OnInit {
       path: 'M 2 212 C 42 212 44 168 84 168', mobilePath: 'M 250 0 C 250 28 200 36 200 64' },
     { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo', startY: 300,
       path: 'M 2 300 C 44 300 40 168 84 168', mobilePath: 'M 350 0 C 350 38 200 24 200 64' },
-  ].map(provider => ({
+  ].map((provider, index) => ({
     ...provider,
+    mobileStartX: 50 + index * 100,
     // One continuous curve through the junction, ending exactly at the card border.
     flowPath: `${provider.path} H 136`,
     mobileFlowPath: `${provider.mobilePath} V 104`,

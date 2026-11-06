@@ -36,7 +36,6 @@
                 <path class="hero-connection-track" [attr.d]="provider.path"></path>
                 <path class="hero-connection-halo" [attr.d]="provider.flowPath" pathLength="100"></path>
                 <path class="hero-connection-pulse" [attr.d]="provider.flowPath" pathLength="100"></path>
-                <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
               </g>
             }
             <g class="hero-aggregate">
@@ -55,7 +54,11 @@
               <path class="hero-connection-track" d="M 200 64 V 104"></path>
             </g>
           </svg>
-          <!-- Keep the junction circular while the decorative paths stretch to fit. -->
+          <!-- Keep all connection points circular while the paths stretch to fit. -->
+          @for (provider of heroProviders; track provider.icon) {
+            <span class="hero-connection-port" [attr.data-provider]="provider.icon"
+              [style.--hero-port-y]="provider.startY" [style.--hero-port-x]="provider.mobileStartX"></span>
+          }
           <span class="hero-aggregation-point"></span>
         </div>
       </div>
