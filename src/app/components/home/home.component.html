@@ -54,11 +54,7 @@
               <path class="hero-connection-track" d="M 200 64 V 104"></path>
             </g>
           </svg>
-          <!-- Keep all connection points circular while the paths stretch to fit. -->
-          @for (provider of heroProviders; track provider.icon) {
-            <span class="hero-connection-port" [attr.data-provider]="provider.icon"
-              [style.--hero-port-y]="provider.startY" [style.--hero-port-x]="provider.mobileStartX"></span>
-          }
+          <!-- Keep the junction circular while the decorative paths stretch to fit. -->
           <span class="hero-aggregation-point"></span>
         </div>
       </div>

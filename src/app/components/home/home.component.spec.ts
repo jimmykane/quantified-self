@@ -127,9 +127,7 @@ describe('HomeComponent', () => {
     const borderTraces = Array.from(visual.querySelectorAll('.hero-product .hero-border-glow'));
     expect(borderTraces).toHaveLength(2);
     expect(borderTraces.every(trace => trace.getAttribute('aria-hidden') === 'true')).toBe(true);
-    const ports = Array.from(visual.querySelectorAll<HTMLElement>('.hero-connection-field > .hero-connection-port'));
-    expect(ports.map(port => port.dataset.provider)).toEqual(['garmin', 'suunto', 'coros', 'wahoo']);
-    expect(ports.every(port => port.closest('[aria-hidden="true"]'))).toBe(true);
+    expect(visual.querySelector('.hero-connection-port')).toBeNull();
     for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
       expect(svg.getAttribute('aria-hidden')).toBe('true');
       expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
@@ -147,11 +145,6 @@ describe('HomeComponent', () => {
         expect(pulse.getAttribute('d')?.startsWith(`${branch} `)).toBe(true);
         expect(pulse.getAttribute('d')).toMatch(svg.classList.contains('hero-provider-wires--mobile') ? /V 104$/ : /H 136$/);
         expect(pulse.getAttribute('pathLength')).toBe('100');
-        const port = ports.find(item => item.dataset.provider === connection.getAttribute('data-provider'))!;
-        const mobile = svg.classList.contains('hero-provider-wires--mobile');
-        const start = mobile ? `${port.style.getPropertyValue('--hero-port-x')} 0`
-          : `2 ${port.style.getPropertyValue('--hero-port-y')}`;
-        expect(branch?.startsWith(`M ${start} `)).toBe(true);
       }
     }
     expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
