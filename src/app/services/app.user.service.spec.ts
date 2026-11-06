@@ -2336,7 +2336,7 @@ describe('AppUserService', () => {
             expect(mockFunctionsService.call).not.toHaveBeenCalled();
         });
 
-        it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
+        it('strips server-owned Training and independently revised power settings while retaining workspace preferences', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
             const updates = {
                 displayName: 'New Name',
@@ -2348,6 +2348,7 @@ describe('AppUserService', () => {
                             sportShortcuts: ['running', 'cycling'],
                         },
                     },
+                    workoutPower: { version: 1, revision: 1, profiles: [] },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
@@ -2602,12 +2603,13 @@ describe('AppUserService', () => {
             expect(writtenData.privacy).toBeUndefined();
         });
 
-        it('does not include server-owned training settings in full user writes', async () => {
+        it('does not replay server-owned Training or independently revised power settings in full user writes', async () => {
             const user = {
                 uid: 'test-uid',
                 displayName: 'Test User',
                 settings: {
                     appSettings: { theme: 'dark' },
+                    workoutPower: { version: 1, revision: 1, profiles: [] },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {

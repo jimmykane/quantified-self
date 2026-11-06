@@ -1,3 +1,4 @@
+import type { WorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
@@ -28,6 +29,7 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  powerReference?: WorkoutPowerProfileV1;
   goalsRevision?: number;
   eventGoals?: Array<{ name: string; localDate: string }>;
   adviceOnly?: boolean;

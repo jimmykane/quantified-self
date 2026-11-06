@@ -131,6 +131,10 @@
     "environment": "angular",
     "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
   },
+  "src/app/components/workout-power/workout-power-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the standalone Material settings controls and verifies Angular form binding, lifecycle ownership, retained drafts and mutation haptics."
+  },
   "src/app/helpers/markdown.pipe.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection of the Markdown pipe, DomSanitizer and PendingTasks to verify lazy parsing holds SSR stability through success and failure."
@@ -218,5 +222,9 @@
   "src/app/services/training-workout-added.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses injected Material snackbar/dialog services, DestroyRef and child EnvironmentInjector teardown to verify the owner-bound action survives source-view navigation and cancels on account changes."
+  },
+  "src/app/services/workout-power-settings.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection for Auth, owner-scoped Firestore transactions and lazy Lite reads, including owner/session changes and optimistic concurrency."
   }
 }

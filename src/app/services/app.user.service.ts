@@ -1736,8 +1736,9 @@ export class AppUserService implements OnDestroy {
     // Metric-affecting Training settings and benchmarks are written only by
     // validated callables. Client-owned workspace navigation preferences live
     // under appSettings and remain writable through the normal settings path.
-    // Generic profile saves must not replay a stale server-owned value.
-    const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;
+    // Workout power has a dedicated revision-checked writer; generic profile saves
+    // must not replay a stale planning profile or server-owned metric setting.
+    const { trainingSettings: _trainingSettings, workoutPower: _workoutPower, ...clientWritableSettings } = settings as Record<string, unknown>;
     const appSettings = clientWritableSettings['appSettings'];
     if (appSettings && typeof appSettings === 'object' && !Array.isArray(appSettings)) {
       // Only the invitation/device services own this choice. A profile captured before a

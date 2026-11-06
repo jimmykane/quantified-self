@@ -1,3 +1,4 @@
+import { WorkoutPowerSettingsComponent } from '../components/workout-power/workout-power-settings.component';
 import { PushNotificationSettingsComponent } from '../components/push-notification-settings/push-notification-settings.component';
 import { TrainingLoadSettingsComponent } from '../components/training-load/training-load-settings.component';
 import { NgModule } from '@angular/core';
@@ -16,6 +17,7 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
         CommonModule,
         PushNotificationSettingsComponent,
         TrainingLoadSettingsComponent,
+        WorkoutPowerSettingsComponent,
         SharedModule,
         MaterialModule,
         UserRoutingModule,

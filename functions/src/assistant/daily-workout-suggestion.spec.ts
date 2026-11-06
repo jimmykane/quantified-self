@@ -61,6 +61,38 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('resolves power after routine sport selection and retains the original source after settings change', async () => {
+    const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
+    const powerReference = { sport: ActivityTypes.Cycling, provider: 'garmin' as const, source: 'Bike power meter',
+      reference: { kind: 'functional-threshold-power' as const, watts: 240 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    deps.selectSport.mockResolvedValue(controls);
+    deps.context.mockImplementation(async (_uid, request) => {
+      expect(request.controls.sport).toBe(ActivityTypes.Cycling);
+      return { ...evidence(), powerReference, references: [{ kind: 'power', mode: 'relative' as const,
+        minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] };
+    });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy ride', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result.result).toMatchObject({ kind: 'workout', powerReference });
+    deps.context.mockResolvedValue(evidence());
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+
+  it('does not attribute an unused power source to a prepared effort-only workout', async () => {
+    const deps = dependencies();
+    const powerReference = { sport: dailyControls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    deps.context.mockResolvedValue({ ...evidence(), powerReference });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } } as never);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.result?.kind).toBe('workout'); expect(result.result).not.toHaveProperty('powerReference');
+  });
+
   it('regenerates explicitly through the quota-funded generator and replaces only a current ready suggestion', async () => {
     const deps = dependencies();
     const previous = { requestId: 'daily-suggestion:2026-10-30', kind: 'rest', draft: null };

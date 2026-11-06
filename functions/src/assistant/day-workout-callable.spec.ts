@@ -42,6 +42,36 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('returns the original confirmed source snapshot and replays it without rereading changed settings', async () => {
+    const deps = dependencies();
+    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [],
+      powerReference, references: [{ kind: 'power', mode: 'relative', minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Power run', rationale: 'Use the confirmed reference.',
+      structure: { version: 1, sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.powerReference).toEqual(powerReference);
+    expect(JSON.stringify(result.draft)).not.toContain('suunto');
+    vi.mocked(deps.store.begin).mockResolvedValueOnce({ response: structuredClone(result) });
+    vi.mocked(deps.context).mockRejectedValue(Error('Settings changed'));
+    expect(await runGenerateDayWorkout(request, auth, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+
+  it.each(['effort-only', 'heart-rate'] as const)('does not attribute an unused power source to an %s generated workout', async preference => {
+    const deps = dependencies();
+    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    const heartRate = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'max-heart-rate', bpm: 180 } } as const;
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], powerReference, references: [heartRate] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: preference === 'heart-rate' ? [heartRate] : [] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.kind).toBe('workout'); expect(result).not.toHaveProperty('powerReference');
+  });
+
   it('accepts only bounded replacement identity and revision with Training context', () => {
     expect(parseGenerateDayWorkoutRequest({ ...request, replaceWorkout: { id: 'workout', revision: 2 } }, new Date('2026-10-28T12:00Z')))
       .toMatchObject({ replaceWorkout: { id: 'workout', revision: 2 } });

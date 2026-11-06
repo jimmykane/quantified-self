@@ -1,0 +1,6 @@
+:host { display: block; min-width: 0; }
+.power-fields { border: 0; margin: 0; padding: 0; display: grid; gap: 16px; min-width: 0; }
+.power-fields legend { margin-block: 16px; }
+mat-form-field { width: 100%; min-width: 0; }
+.power-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+p, li { overflow-wrap: anywhere; }

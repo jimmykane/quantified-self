@@ -1,3 +1,4 @@
+import { workoutPowerSummary, workoutPowerZones } from '../../helpers/workout-power-settings.helper';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -171,6 +172,11 @@ export class DayWorkoutDialogComponent {
     && this.dailyDelivery().providers.every(provider => this.deliveryRows().some(row => row.provider === provider && row.connected)));
   readonly review = computed(() => { const draft = this.result()?.draft;
     return draft ? dayWorkoutReview(draft, this.user()?.settings?.unitSettings, this.result()?.previousLoads) : null; });
+  readonly powerReview = computed(() => {
+    const profile = this.result()?.powerReference;
+    return profile ? { summary: workoutPowerSummary(profile, this.user()?.settings?.unitSettings),
+      zones: workoutPowerZones(profile, this.user()?.settings?.unitSettings) } : null;
+  });
   readonly contextDetails = computed(() => [...(this.result()?.usedContext ?? []), ...(this.result()?.missingContext ?? [])]);
   readonly valid = computed(() => { try {
     const controls = this.controls(); const date = normalizeTrainingLocalDate(controls.localDate);

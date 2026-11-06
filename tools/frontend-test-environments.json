@@ -213,6 +213,7 @@
     "src/app/helpers/wahoo-route-access.helper.spec.ts",
     "src/app/helpers/workout-library-presentation.helper.spec.ts",
     "src/app/helpers/workout-library.shared.spec.ts",
+    "src/app/helpers/workout-power-settings.helper.spec.ts",
     "src/app/helpers/workout-profile-chart.helper.spec.ts",
     "src/app/helpers/workout-profile.helper.spec.ts",
     "src/app/helpers/workout-reflection.shared.spec.ts",

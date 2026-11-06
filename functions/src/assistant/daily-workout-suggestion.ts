@@ -1,3 +1,4 @@
+import { dayWorkoutPowerReferenceUsed } from './day-workout-power';
 import { z } from 'zod';
 import type { DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -248,8 +249,10 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       const suggestion = await generateValidatedDayWorkout(request, evidence, generate, assertActive, providerContext?.correction);
       if (providerContext) evidence.missingContext.push(...providerContext.limitations(suggestion));
       await assertActive();
+      const powerReference = dayWorkoutPowerReferenceUsed(suggestion, evidence.powerReference);
       result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
-        usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+        usedContext: evidence.usedContext, missingContext: evidence.missingContext,
+        ...(powerReference ? { powerReference } : {}) };
     }
     await dependencies.store.finish(uid, date, token, 'ready', controls, result);
     outcome = 'ready';
