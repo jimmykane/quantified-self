@@ -641,9 +641,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.clearStartupTimeouts();
     this.startupStalled.set(true);
     try {
+      const diagnostic = this.userService.getStartupDiagnostics();
       this.logger.captureMessage('App startup stalled', {
         level: 'warning',
-        tags: { startup_failure: reason, profile_state: this.userService.profileReadState().status },
+        tags: { startup_failure: reason, profile_state: this.userService.profileReadState().status,
+          startup_stage: diagnostic.activeStages[0] ?? diagnostic.lastFailedStage ?? 'auth-state' },
+        contexts: { accountStartup: diagnostic },
       });
     } catch { /* Reporting must never block the recovery controls. */ }
   }

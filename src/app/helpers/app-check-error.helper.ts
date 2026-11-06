@@ -1,7 +1,7 @@
 const APP_CHECK_CODES = [
   'already-initialized', 'use-before-activation', 'fetch-network-error', 'fetch-parse-error',
   'fetch-status-error', 'storage-open', 'storage-get', 'storage-set', 'recaptcha-error',
-  'initial-throttle', 'throttled',
+  'initial-throttle', 'throttled', 'token-timeout',
 ] as const;
 
 export interface AppCheckFailureDetails {

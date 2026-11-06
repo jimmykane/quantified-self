@@ -12,6 +12,7 @@ export class AppCheckReadinessService {
   private readonly diagnostics = inject(AppCheckDiagnosticsService);
   private readyPromise: Promise<void> | null = null;
   private readyRevision = 0;
+  private readonly pendingTokens = new Map<boolean, Promise<string>>();
 
   isConfigured(): boolean {
     return !!this.appCheck;
@@ -45,17 +46,34 @@ export class AppCheckReadinessService {
     return this.fetchTokenWithinDeadline(forceRefresh);
   }
 
-  private async fetchTokenWithinDeadline(forceRefresh: boolean): Promise<string> {
+  private fetchTokenWithinDeadline(forceRefresh: boolean): Promise<string> {
+    // Ordinary consumers may share a forced refresh, but a forced refresh must
+    // not be satisfied by an older ordinary request. Never retain resolved tokens.
+    const existing = this.pendingTokens.get(true) ?? (!forceRefresh ? this.pendingTokens.get(false) : undefined);
+    if (existing) return existing;
+    const request = this.fetchTokenWithDeadline(forceRefresh).finally(() => {
+      if (this.pendingTokens.get(forceRefresh) === request) this.pendingTokens.delete(forceRefresh);
+    });
+    this.pendingTokens.set(forceRefresh, request);
+    return request;
+  }
+
+  private async fetchTokenWithDeadline(forceRefresh: boolean): Promise<string> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const tokenRequest = this.fetchToken(forceRefresh);
     const deadline = new Promise<never>((_, reject) => {
       timeout = setTimeout(() => {
-        reject(new Error('App Check is taking too long. Please try again.'));
+        reject(Object.assign(new Error('App Check is taking too long. Please reload the page to try again.'), {
+          code: 'appCheck/token-timeout',
+        }));
       }, AppCheckReadinessService.readinessTimeoutMs);
     });
 
     try {
       return await Promise.race([tokenRequest, deadline]);
+    } catch (error) {
+      try { this.diagnostics.reportFailure(error, 'token-request'); } catch { /* Preserve the actual verification result. */ }
+      throw error;
     } finally {
       if (timeout !== undefined) {
         clearTimeout(timeout);
@@ -68,10 +86,7 @@ export class AppCheckReadinessService {
       throw new Error('App Check is not configured for this app.');
     }
 
-    const appCheckResult = await getAppCheckToken(this.appCheck, forceRefresh).catch(error => {
-      this.diagnostics.reportFailure(error, 'token-request');
-      throw error;
-    });
+    const appCheckResult = await getAppCheckToken(this.appCheck, forceRefresh);
     const appCheckToken = appCheckResult?.token;
     if (!appCheckToken) {
       throw new Error('Could not retrieve App Check token.');

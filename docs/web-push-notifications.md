@@ -6,6 +6,30 @@ Settings → Notifications supports explicit device opt-in, disable, and a self-
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
+## Notification click routing
+
+All five payload families retain the absolute declarative `notification.navigate` destination and use Angular's
+[`openWindow` click operation](https://angular.dev/ecosystem/service-workers/push-notifications) for the worker fallback.
+This calls `clients.openWindow()` without choosing or navigating the last-focused QS browser tab. The browser can
+route the URL into an installed app; [Chrome on Android supports this routing](https://developer.mozilla.org/en-US/docs/Web/API/Clients/openWindow).
+The existing root-scoped standalone manifest already includes activity details, Settings, Connections and Training.
+No custom worker, extra click listener, manifest identity change or native URL scheme is needed.
+
+App selection depends on the browser, OS and installation preferences; it cannot be forced by the payload.
+The app must be installed from the notification's own origin: a production installation does not claim beta links.
+Without a matching installed app, the fallback opens a browser window/tab and may create a new tab rather than
+reuse an existing one. Exact single-activity links, grouped Activities links and result/query parameters are preserved.
+Declarative platforms continue to route their existing `navigate` URL through the browser.
+
+This payload change requires redeploying the affected senders: `sendTestPushNotification`, `sendHistoryImportNotification`,
+`sendActivitySyncNotifications`, `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications`.
+The Training sender still requires its separate first-deployment prerequisites below if not already deployed.
+Routing itself needs no flag, Rules, index or service-worker change. Already delivered notifications retain their old
+payload. Monitoring coverage is unchanged: transport, queues, rates, schedules and outcome labels are unchanged.
+Unit tests cover all payload families on both origins; real-device routing must still be verified with a fresh alert,
+including an installed app closed while a normal QS tab was last focused, an already open app, no installation,
+beta versus production installations, and native declarative delivery. Unit tests do not establish OS app selection.
+
 ## Data flow and ownership
 
 The browser obtains a subscription through `window.pushManager` when available, otherwise Angular's existing root worker. The browser writes a private leaf at `users/{uid}/pushSubscriptions/{installationId}` with schema version, origin, public signing-key version, random generation, endpoint, encryption keys and server timestamp. Firestore Rules permit direct owner CRUD, allow bounded owner-only listing (maximum 26 documents per request), prohibit descendants and impersonated listing/writes, validate supported endpoints and fence deleted/missing accounts. Optional `device: { browser, platform }` contains only allowlisted coarse display hints, never a raw user agent or hardware identifier. Subscription endpoints and encryption material are capability credentials: never log or publish them.

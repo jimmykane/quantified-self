@@ -15,6 +15,6 @@ export function deliveryNotificationPayload(origin: string, path: string, attent
     title: 'Quantified Self', body: attention ? 'Activity delivery needs attention. Open Quantified Self to review the results.'
       : 'Your activity send has finished. Open Quantified Self to review the results.',
     tag: 'qs-activity-delivery', renotify: false, icon: `${origin}/assets/favicons/android-chrome-192x192.png`, navigate: origin + path,
-    data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: path } } },
+    data: { onActionClick: { default: { operation: 'openWindow', url: path } } },
   } };
 }

@@ -15,6 +15,7 @@ export interface HistoryExecution {
   runId: string;
   cooldownStartedAtMs: number;
   garminHealthSummaryTypes?: ConnectionHistoryRun['garminHealthSummaryTypes'];
+  garminHealthBackfillCutoffs?: ConnectionHistoryRun['garminHealthBackfillCutoffs'];
   // In-memory only: overlapping history pages must not replay failures without owner action.
   retainedFailedChildPaths?: ReadonlySet<string>;
   requiredDocumentFieldValues: ReadonlyArray<{ documentRef: admin.firestore.DocumentReference; expectedFields: Readonly<Record<string, unknown>> }>;
@@ -59,6 +60,7 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
   };
   return { userID: run.userID, serviceName: run.serviceName, runId: run.id, cooldownStartedAtMs: run.dateCreated,
     garminHealthSummaryTypes: run.garminHealthSummaryTypes,
+    garminHealthBackfillCutoffs: run.processed ? undefined : run.garminHealthBackfillCutoffs,
     retainedFailedChildPaths: new Set(run.steps.flatMap(step => step.failedChildPaths ?? [])),
     requiredDocumentFieldValues: [
       { documentRef: admin.firestore().doc(run.rootPath), expectedFields: { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: run.credentialGeneration } },

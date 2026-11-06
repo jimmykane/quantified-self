@@ -56,6 +56,6 @@ export function activityNotificationPayload(origin: string, uid: string, entries
   return { web_push: 8030, notification: { title: 'Quantified Self',
     body: entries.length === 1 ? 'A new activity has synced. Open Quantified Self to view it.' : `${entries.length} new activities have synced. Open Quantified Self to view them.`,
     tag: 'qs-activity-sync', renotify: false, icon: `${origin}/assets/favicons/android-chrome-192x192.png`, navigate: origin + path,
-    data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: path } } },
+    data: { onActionClick: { default: { operation: 'openWindow', url: path } } },
   } };
 }

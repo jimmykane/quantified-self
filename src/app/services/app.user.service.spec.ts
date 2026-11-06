@@ -134,6 +134,232 @@ describe('AppUserService', () => {
         expect(service).toBeTruthy();
     });
 
+    describe('bounded account startup', () => {
+        const complete = { uid: 'u1', email: 'live@example.test', acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
+
+        it('allows verification to finish after ten seconds before starting the profile-read deadline', async () => {
+            vi.useFakeTimers();
+            try {
+                let verify!: (token: string) => void;
+                mockAppCheck.getToken.mockReturnValue(new Promise(resolve => { verify = resolve; }));
+                vi.mocked(docData).mockReturnValue(of(complete));
+                const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(12_000);
+                expect(docData).not.toHaveBeenCalled();
+                expect(service.getStartupDiagnostics().activeStages).toEqual(['browser-verification']);
+                expect(service.profileReadState().status).toBe('loading');
+                expect(report).not.toHaveBeenCalled();
+                verify('verified-token');
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.user()?.uid).toBe('u1');
+                expect(mockAppCheck.getToken).toHaveBeenCalledOnce();
+                expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledOnce();
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('reports a stalled Auth token independently of successful browser verification', async () => {
+            vi.useFakeTimers();
+            try {
+                mockAuth.currentUser.getIdToken.mockReturnValue(new Promise(() => {}));
+                const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                expect(report).toHaveBeenCalledWith('Account startup stage failed', expect.objectContaining({
+                    tags: { startup_stage: 'auth-token', startup_error_code: 'deadline-exceeded' },
+                }));
+                expect(service.user()).toBeNull();
+                expect(docData).not.toHaveBeenCalled();
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('recovers a stalled listener with one independent read and retains live profile updates', async () => {
+            vi.useFakeTimers();
+            try {
+                const settings = new Subject<Record<string, unknown>>();
+                vi.mocked(docData).mockReturnValueOnce(of(complete)).mockReturnValueOnce(of({}))
+                    .mockReturnValueOnce(of({})).mockReturnValueOnce(settings);
+                mockVerification.verifyIfIncomplete.mockResolvedValue({ ...complete, email: 'restored@example.test' });
+                const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(9_999);
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+                expect(service.user()).toBeNull();
+                await vi.advanceTimersByTimeAsync(1);
+                expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledExactlyOnceWith('u1', null);
+                expect(service.user()?.email).toBe('restored@example.test');
+                expect(service.profileReadState().status).toBe('ready');
+                expect(report).toHaveBeenCalledWith('Account startup stage failed', expect.objectContaining({
+                    contexts: { accountStartup: expect.objectContaining({ pendingProfileDocuments: ['settings'] }) },
+                }));
+                expect(report).toHaveBeenCalledWith('Account startup recovered', expect.any(Object));
+                settings.next({});
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.user()?.email).toBe('live@example.test');
+                expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledOnce();
+                expect(setDoc).not.toHaveBeenCalled();
+                expect(updateDoc).not.toHaveBeenCalled();
+                expect(mockAuth.signOut).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('discards an older independent result when the listener recovers first', async () => {
+            vi.useFakeTimers();
+            try {
+                const settings = new Subject<Record<string, unknown>>();
+                vi.mocked(docData).mockReturnValueOnce(of(complete)).mockReturnValueOnce(of({}))
+                    .mockReturnValueOnce(of({})).mockReturnValueOnce(settings);
+                let restore!: (profile: AppUserInterface) => void;
+                mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { restore = resolve; }));
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                expect(service.getStartupDiagnostics().activeStages).toContain('profile-verification');
+                settings.next({});
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.user()?.email).toBe('live@example.test');
+                restore({ ...complete, email: 'stale@example.test' });
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.user()?.email).toBe('live@example.test');
+                expect(service.getStartupDiagnostics().activeStages).toEqual([]);
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('re-verifies a newer missing snapshot instead of reusing an older pending fallback', async () => {
+            vi.useFakeTimers();
+            try {
+                TestBed.overrideProvider(UserProfileVerificationService, { useClass: UserProfileVerificationService });
+                verificationSDK.getFirestore.mockReturnValue({});
+                verificationSDK.doc.mockImplementation((_db, path) => path);
+                const oldReads: Array<(snapshot: { data: () => undefined }) => void> = [];
+                verificationSDK.getDoc.mockReset().mockImplementation(() => new Promise(resolve => { oldReads.push(resolve); }));
+                const snapshots = new Subject<undefined>();
+                vi.mocked(docData).mockReturnValue(snapshots);
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4);
+                verificationSDK.getDoc.mockImplementation(async path => ({ data: () => path === 'users/u1' ? complete : {} }));
+                snapshots.next(undefined);
+                await vi.advanceTimersByTimeAsync(0);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(8);
+                expect(service.user()?.onboardingCompleted).toBe(true);
+                for (const resolve of oldReads) resolve({ data: () => undefined });
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.profileReadState()).toEqual({ status: 'ready', uid: 'u1', profileExists: true });
+                expect(service.user()?.onboardingCompleted).toBe(true);
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it.each(['switch', 'sign out', 'destroy'])('ignores a pending fallback after account %s', async change => {
+            vi.useFakeTimers();
+            try {
+                const authChanges = new BehaviorSubject<any>(mockAuth.currentUser);
+                const tokenChanges = new BehaviorSubject<any>(mockAuth.currentUser);
+                vi.mocked(authState).mockReturnValue(authChanges);
+                vi.mocked(user).mockReturnValue(tokenChanges);
+                vi.mocked(docData).mockReturnValueOnce(new Subject()).mockReturnValue(of(complete));
+                let restore!: (profile: AppUserInterface) => void;
+                mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { restore = resolve; }));
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                if (change === 'destroy') service.ngOnDestroy();
+                else {
+                    mockAuth.currentUser = change === 'switch' ? { ...mockAuth.currentUser, uid: 'u2' } : null;
+                    authChanges.next(mockAuth.currentUser);
+                    tokenChanges.next(mockAuth.currentUser);
+                }
+                await vi.advanceTimersByTimeAsync(0);
+                restore({ ...complete, email: 'stale@example.test' });
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.user()?.uid ?? null).toBe(change === 'switch' ? 'u2' : null);
+                expect(service.getStartupDiagnostics().lastFailedStage).toBeNull();
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('cancels the fallback deadline on destruction before adding any independent reads', async () => {
+            vi.useFakeTimers();
+            try {
+                vi.mocked(docData).mockReturnValue(new Subject());
+                const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(9_000);
+                service.ngOnDestroy();
+                await vi.advanceTimersByTimeAsync(20_000);
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+                expect(report).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('stops automatic retries when both readers stall and keeps the session available for Retry', async () => {
+            vi.useFakeTimers();
+            try {
+                vi.mocked(docData).mockReturnValue(new Subject());
+                mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(() => {}));
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(20_000);
+                expect(service.profileReadState()).toMatchObject({ status: 'error', code: 'account/profile-read-timeout' });
+                await vi.advanceTimersByTimeAsync(60_000);
+                expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledOnce();
+                expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledOnce();
+                expect(service.user()).toBeNull();
+                expect(mockAuth.signOut).not.toHaveBeenCalled();
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('does not use the fallback to bypass an explicit listener permission error', async () => {
+            vi.useFakeTimers();
+            try {
+                vi.mocked(docData).mockReturnValue(throwError(() => ({ code: 'permission-denied' })));
+                service = TestBed.inject(AppUserService);
+                await vi.runAllTimersAsync();
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+                expect(service.user()).toBeNull();
+                expect(service.profileReadState()).toMatchObject({ status: 'error', code: 'permission-denied' });
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('accepts a server-confirmed missing profile once without repeating independent reads', async () => {
+            vi.useFakeTimers();
+            try {
+                TestBed.overrideProvider(UserProfileVerificationService, { useClass: UserProfileVerificationService });
+                verificationSDK.getFirestore.mockReturnValue({});
+                verificationSDK.doc.mockImplementation((_db, path) => path);
+                verificationSDK.getDoc.mockReset().mockResolvedValue({ data: () => undefined });
+                vi.mocked(docData).mockReturnValue(new Subject());
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4);
+                expect(service.profileReadState()).toEqual({ status: 'ready', uid: 'u1', profileExists: false });
+                expect(service.user()?.acceptedPrivacyPolicy).toBe(false);
+                expect(service.user()?.acceptedDataPolicy).toBe(false);
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('identifies a stalled settings merge without reading the same documents again', async () => {
+            vi.useFakeTimers();
+            try {
+                vi.mocked(docData).mockReturnValue(of(complete));
+                vi.mocked(loadUserSettingsUtilities).mockReturnValue(new Promise(() => {}));
+                const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+                service = TestBed.inject(AppUserService);
+                await vi.advanceTimersByTimeAsync(10_000);
+                expect(report).toHaveBeenCalledWith('Account startup stage failed', expect.objectContaining({
+                    tags: { startup_stage: 'profile-merge', startup_error_code: 'deadline-exceeded' },
+                }));
+                expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+                expect(service.user()).toBeNull();
+                expect(setDoc).not.toHaveBeenCalled();
+            } finally { vi.useRealTimers(); }
+        });
+    });
+
     it('does not load chart/settings utilities for an anonymous account', () => {
         vi.mocked(authState).mockReturnValue(of(null));
         vi.mocked(user).mockReturnValue(of(null));

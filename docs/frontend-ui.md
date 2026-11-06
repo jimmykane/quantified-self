@@ -1059,9 +1059,34 @@ Public startup content remains visible and is not replaced by this private loadi
 clears recovery and opens the normal shell; no synthetic signed-out identity or authenticated content is produced
 to unblock a pending read. Destruction and successful startup cancel the deadline.
 
-The shell reports **App startup stalled** once per blocked startup through the existing Sentry logger, using only
-fixed reason and profile-status tags, without account identifiers, tokens, URLs or profile contents in the added
-context. Reporting failure cannot block recovery. Reload requires an explicit click and one selection haptic;
+Credential and profile deadlines are independent: Auth token retrieval has ten seconds, browser verification retains
+its own fifteen seconds, and only then does the ten-second initial profile-listener window begin. Concurrent browser
+verification consumers share one pending request; a forced refresh never borrows an older ordinary request. Resolved
+tokens are not cached by this sharing layer. Verification expiry is `appCheck/token-timeout`, not a generic Firestore
+timeout, and requires explicit reload rather than repeating a stalled verification automatically.
+
+If the initial listener does not deliver a complete profile while a server document is still pending, one independent
+Firestore Lite verification uses the existing Auth, App Check, merge and account-generation fences. It adds at most
+four document reads for that exceptional attempt. A successful fallback can open the shell while the original live
+listener remains subscribed for updates. A listener result supersedes an in-flight fallback, even if both are missing;
+the old independent request is invalidated before any newer missing snapshot is verified. The fallback's already
+verified result is not verified a second time. Explicit listener errors retain normal error handling instead of
+triggering this timeout fallback. If all documents already arrived, a stalled settings merge is diagnosed separately
+and does not cause redundant server reads. If both readers time out, `account/profile-read-timeout` stops automatic
+retries and exposes the existing **Retry** action without signing out, clearing persistence or changing account data.
+
+`Account startup stage failed` records the fixed Auth-token, browser-verification, profile-listener, settings-merge,
+independent-verification or claim-merge stage. It includes bounded stage/overall timings and pending document kinds
+(`user`, `legal`, `system`, `settings`), never their paths, contents or credentials. Unknown error codes are normalized.
+The existing shell-stall report includes the same snapshot, and `Account startup recovered` records later successful
+account loading. Failures are deduplicated per stage/Auth generation, with at most eight new stage/recovery reports
+per page; telemetry failure cannot change the account outcome. Existing Sentry account association is unchanged.
+Service destruction cancels profile streams, fallback deadlines and claim retries; late independent results cannot
+publish or restart this work after teardown.
+
+The shell reports **App startup stalled** once per blocked startup through the existing Sentry logger, using
+fixed reason/profile/stage tags and the bounded startup snapshot above, without account identifiers, tokens, URLs
+or profile contents in the added context. Reporting failure cannot block recovery. Reload requires an explicit click and one selection haptic;
 the action displays **Reloading…** and is disabled while navigation is pending. A five-second UI fallback allows
 another click if navigation was cancelled. Teardown and late startup success cancel that fallback. Recovery never
 signs out, clears browser persistence or writes account data.

@@ -142,6 +142,62 @@ describe('generateDayWorkout callable', () => {
     expect(alternatives.every(value => value.additionalProperties === false)).toBe(true);
     expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"maxItems":');
     expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"pattern":');
+    if (sport === ActivityTypes.Running) {
+      expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"repetitions"');
+      expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"kilojoules"');
+    } else {
+      expect(JSON.stringify(input.output.jsonSchema)).toContain('"repetitions"');
+    }
+  });
+  it.each([
+    { kind: 'repetitions', repetitions: 10 },
+    { kind: 'kilojoules', kilojoules: 50 },
+  ])('rejects unsupported endurance ending $kind in the real Genkit schema, including repeats', async ending => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending, targets: [] };
+    for (const node of [step, { kind: 'repeat', id: 'repeat', count: 2, steps: [step] }]) {
+      const { provider, generate } = mockSdkOutputs(JSON.stringify({ kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.',
+        structure: { version: 1, sport: request.controls.sport, nodes: [node] } }));
+      try {
+        await expect(generateDayWorkoutSuggestion(request, evidence)).rejects.toBeInstanceOf(DayWorkoutSuggestionValidationError);
+        expect(provider).toHaveBeenCalledOnce();
+      } finally { generate.mockReset(); }
+    }
+  });
+  it.each([
+    { kind: 'time', seconds: 300 },
+    { kind: 'distance', meters: 100 },
+    { kind: 'manual' },
+  ])('preserves supported endurance ending $kind, pool length and repeats through real Genkit and validation', async ending => {
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending, targets: [] };
+    const reply = { kind: 'workout', title: 'Easy swim', rationale: 'Keep it easy.', structure: {
+      version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [step, { kind: 'repeat', id: 'repeat', count: 2, steps: [{ ...step, id: 'repeated-work' }] }],
+    } };
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(reply));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      const response = await runGenerateDayWorkout({ ...request, controls: { ...request.controls, sport: ActivityTypes.Swimming } }, auth, deps);
+      expect(response.draft?.structure).toEqual(reply.structure);
+      expect(provider).toHaveBeenCalledOnce();
+      expect(deps.finalize).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+  it('corrects an endurance ending rejected by the decoder without a second quota charge', async () => {
+    const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
+    const invalid = structuredClone(reply);
+    Object.assign(invalid.structure.nodes[0], { ending: { kind: 'repetitions', repetitions: 10 } });
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(reply));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      const response = await runGenerateDayWorkout(request, auth, deps);
+      expect(response.draft?.structure).toEqual(reply.structure);
+      expect(JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction).toContain('Invalid prescription schema.');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce();
+      expect(deps.finalize).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
   });
   it('instructs generation to use automatic recovery evidence without treating missing or future signals as known', () => {
     for (const signal of ['freshness (Form)', 'ramp rate', 'sleep duration/quality', 'HRV personalRange',
@@ -254,6 +310,29 @@ describe('generateDayWorkout callable', () => {
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.finalize).toHaveBeenCalledTimes(1);
     } finally { generate.mockReset(); }
+  });
+  it.each([true, false])('provides safe field guidance for canonical failures, recovering=%s within the existing retry budget', async recover => {
+    const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
+    const invalid = { ...reply, title: 'PRIVATE_TITLE', rationale: 'PRIVATE_RATIONALE',
+      structure: { ...reply.structure, poolLength: { meters: 25, presentation: 'meters' } } };
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(recover ? reply : invalid));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      if (recover) expect((await runGenerateDayWorkout(request, auth, deps)).draft?.structure).toEqual(reply.structure);
+      else await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(warning).toHaveBeenCalledWith('[DayWorkout] Invalid model prescription.', expect.objectContaining({
+        issueCodes: ['invalid_value'], validationIssues: [{ code: 'invalid_value', field: '$.structure.poolLength',
+          reason: 'Pool length is only valid for pool swimming.' }],
+      }));
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).toContain('$.structure.poolLength: Pool length is only valid for pool swimming.');
+      expect(JSON.stringify([warning.mock.calls, correction])).not.toContain('PRIVATE_');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce(); expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(deps.release).not.toHaveBeenCalled();
+    } finally { warning.mockRestore(); generate.mockReset(); }
   });
   it.each(['schema', 'JSON syntax'])('stops after two %s failures without exposing raw output or charging twice', async kind => {
     const deps = dependencies();

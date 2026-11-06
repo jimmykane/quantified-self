@@ -5,10 +5,10 @@ import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 
 
-import { Observable, Subject, from, firstValueFrom, of, combineLatest, defer, distinctUntilChanged, NEVER, throwError, timer } from 'rxjs';
+import { Observable, Subject, from, firstValueFrom, of, combineLatest, defer, distinctUntilChanged, forkJoin, merge, NEVER, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
-import { catchError, filter, map, take, switchMap, shareReplay, retry, startWith, tap, timeout } from 'rxjs/operators';
+import { catchError, filter, finalize, map, take, takeUntil, switchMap, shareReplay, retry, startWith, tap, timeout } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -72,6 +72,7 @@ import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
+import { AccountStartupDiagnostics, AccountStartupStage, ProfileDocumentKind } from '../helpers/account-startup-diagnostics.helper';
 import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
@@ -241,6 +242,7 @@ export interface GarminRouteSendProviderState {
 interface UserProfileReadOptions {
   requireCompleteProfile?: boolean;
   waitForServer?: boolean;
+  onDocumentReady?: (kind: ProfileDocumentKind) => void;
 }
 
 export type AppUserProfileReadState =
@@ -300,6 +302,8 @@ export class AppUserService implements OnDestroy {
   private readonly appCheckReadiness = inject(AppCheckReadinessService);
   private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
   private readonly profileVerification = inject(UserProfileVerificationService);
+  private readonly startupDiagnostics = new AccountStartupDiagnostics((message, context) => this.logger.captureMessage(message, context));
+  private readonly destroyed$ = new Subject<void>();
   private readonly profileReload$ = new Subject<boolean>();
   private profileRecoveryPromise: Promise<boolean> | null = null;
   private usersWithIncompleteProfileReads = new Set<string>();
@@ -322,6 +326,7 @@ export class AppUserService implements OnDestroy {
   private readonly authenticatedUserProfile$ = authState(this.auth).pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
     switchMap((firebaseUser): Observable<AuthenticatedUserProfile | null> => {
+      this.startupDiagnostics.reset();
       // This stream starts before the constructor's logging subscription. Establish the generation
       // before profile credential requests, including an already restored synchronous Auth snapshot.
       try {
@@ -375,6 +380,7 @@ export class AppUserService implements OnDestroy {
         })
       );
     }),
+    takeUntil(this.destroyed$),
     shareReplay(1)
   );
 
@@ -404,6 +410,7 @@ export class AppUserService implements OnDestroy {
             uid: tokenUser.uid,
             profileExists: profile.dbUser !== null,
           });
+          this.startupDiagnostics.ready();
           this.trackAppCheckProfileOutcome('succeeded', profile.diagnosticAttempt);
           this.lastPublishedProfileRead = {
             uid: tokenUser.uid,
@@ -433,6 +440,7 @@ export class AppUserService implements OnDestroy {
     distinctUntilChanged((previous, current) => previous.readGeneration === current.readGeneration
       && previous.publicationGeneration === current.publicationGeneration
       && JSON.stringify(previous.user) === JSON.stringify(current.user)),
+    takeUntil(this.destroyed$),
     shareReplay(1)
   );
 
@@ -548,12 +556,10 @@ export class AppUserService implements OnDestroy {
       if (readGeneration !== this.profileReadGeneration) return NEVER;
       // A promise that never settles does not reach retry/catchError. Bound
       // each attempt, including any token refresh performed while merging.
-      return from(this.mergeClaims(firebaseUser, dbUser)).pipe(timeout({
-        first: AppUserService.profileReadServerTimeoutMs,
-        with: () => throwError(() => Object.assign(new Error('Timed out loading account token claims.'), {
+      return this.observeStartupStage('token-claims', () => from(this.mergeClaims(firebaseUser, dbUser)),
+        AppUserService.profileReadServerTimeoutMs, () => Object.assign(new Error('Timed out loading account token claims.'), {
           code: 'deadline-exceeded',
-        })),
-      }));
+        }));
     }).pipe(
       retry({
         count: AppUserService.transientReadRetryCount,
@@ -593,26 +599,23 @@ export class AppUserService implements OnDestroy {
     let refreshCredentials = forceRefresh;
     const loadUserProfile = () => defer(() => {
       this.profileVerification.invalidatePendingRead(firebaseUser.uid);
-      return from(Promise.all([
-        firebaseUser.getIdToken(refreshCredentials),
-        this.appCheckReadiness.isConfigured() ? this.appCheckReadiness.getToken(refreshCredentials) : Promise.resolve(),
-      ])).pipe(
-        switchMap(() => this.getUserByID(firebaseUser.uid, {
-          requireCompleteProfile: true,
-          waitForServer: true,
-        })),
-        switchMap(profile => {
-          if (!this.profileVerification.needsVerification(profile)) {
+      return forkJoin([
+        this.observeStartupStage('auth-token', () => from(firebaseUser.getIdToken(refreshCredentials))),
+        // App Check owns its 15-second deadline. A surrounding ten-second profile
+        // timeout must not misclassify an unfinished verification as a Firestore failure.
+        this.appCheckReadiness.isConfigured()
+          ? this.observeStartupStage('browser-verification', () => from(this.appCheckReadiness.getToken(refreshCredentials)), 0)
+          : of(undefined),
+      ]).pipe(
+        switchMap(() => this.readProfileWithWatchFallback(firebaseUser)),
+        switchMap(({ profile, verified }) => {
+          if (verified || !this.profileVerification.needsVerification(profile)) {
             this.profileVerification.invalidatePendingRead(firebaseUser.uid);
             return of(profile);
           }
           this.beginProfileRead(firebaseUser.uid);
-          return from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, profile));
+          return this.observeStartupStage('profile-verification', () => from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, profile)));
         }),
-        timeout({
-          first: AppUserService.profileReadServerTimeoutMs,
-          with: () => throwError(() => this.createProfileReadTimeoutError()),
-        })
       );
     });
 
@@ -659,6 +662,73 @@ export class AppUserService implements OnDestroy {
         }
       })
     );
+  }
+
+  public getStartupDiagnostics() { return this.startupDiagnostics.snapshot(); }
+
+  private observeStartupStage<T>(
+    stage: AccountStartupStage,
+    operation: () => Observable<T>,
+    deadlineMs = AppUserService.profileReadServerTimeoutMs,
+    deadlineError = () => this.createProfileReadTimeoutError(),
+  ): Observable<T> {
+    return defer(() => {
+      const attempt = this.startupDiagnostics.begin(stage);
+      let result$ = defer(operation);
+      if (deadlineMs > 0) result$ = result$.pipe(timeout({ first: deadlineMs, with: () => throwError(deadlineError) }));
+      return result$.pipe(
+        tap({ next: () => this.startupDiagnostics.complete(attempt), error: error => this.startupDiagnostics.failed(attempt, error) }),
+        finalize(() => this.startupDiagnostics.cancel(attempt)),
+      );
+    });
+  }
+
+  private readProfileWithWatchFallback(firebaseUser: FirebaseUserType): Observable<{ profile: AppUserInterface | null; verified: boolean }> {
+    return defer(() => {
+      const attempt = this.startupDiagnostics.begin('profile-listener');
+      let fallbackStarted = false;
+      const watch$ = this.getUserByID(firebaseUser.uid, {
+        requireCompleteProfile: true, waitForServer: true,
+        onDocumentReady: kind => this.startupDiagnostics.documentReady(attempt, kind),
+      }).pipe(
+        tap({
+          next: () => {
+            // A newer listener result wins over a pending independent read, including
+            // when both results are null. Do not share the superseded verification.
+            if (fallbackStarted) this.profileVerification.invalidatePendingRead(firebaseUser.uid);
+            fallbackStarted = false;
+            this.startupDiagnostics.complete(attempt);
+          },
+          error: error => this.startupDiagnostics.failed(attempt, error),
+        }),
+        finalize(() => this.startupDiagnostics.cancel(attempt)),
+        shareReplay({ bufferSize: 1, refCount: true }),
+      );
+      const fallback$ = timer(AppUserService.profileReadServerTimeoutMs).pipe(
+        takeUntil(watch$),
+        switchMap(() => {
+          const error = this.createProfileReadTimeoutError();
+          this.startupDiagnostics.failed(attempt, error);
+          // If all documents arrived, the settings merge is stalled. Re-reading
+          // Firestore cannot repair a stalled dynamic import.
+          if (this.startupDiagnostics.snapshot().pendingProfileDocuments.length === 0) return throwError(() => error);
+          fallbackStarted = true;
+          return this.observeStartupStage('profile-verification', () => from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, null))).pipe(
+            catchError(failure => this.getErrorCode(failure) === 'deadline-exceeded'
+              ? throwError(() => Object.assign(new Error('Both account profile readers timed out. Please retry.'), { code: 'account/profile-read-timeout' }))
+              : throwError(() => failure)),
+            tap(() => this.startupDiagnostics.complete(attempt)),
+          );
+        }),
+        // Keep the original live listener. A late snapshot cancels publication
+        // of the fallback; later server updates continue through the same stream.
+        takeUntil(watch$),
+      );
+      return merge(
+        watch$.pipe(map(profile => ({ profile, verified: false }))),
+        fallback$.pipe(map(profile => ({ profile, verified: true }))),
+      );
+    });
   }
 
   private isFirestorePermissionDenied(error: unknown): boolean {
@@ -978,7 +1048,7 @@ export class AppUserService implements OnDestroy {
 
 
   constructor() {
-    authState(this.auth).subscribe((user) => {
+    authState(this.auth).pipe(takeUntil(this.destroyed$)).subscribe((user) => {
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
         void user.getIdTokenResult()
@@ -1005,12 +1075,17 @@ export class AppUserService implements OnDestroy {
     const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
     const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
     const snapshotOptions = options.waitForServer ? { waitForServer: true } : undefined;
+    const documentReady = (kind: ProfileDocumentKind) => <T>(source: Observable<T>): Observable<T> => source.pipe(tap(() => {
+      try { options.onDocumentReady?.(kind); } catch { /* Diagnostics never gate a document read. */ }
+    }));
 
     return combineLatest({
       user: (docData(userDoc, snapshotOptions) as Observable<AppUserInterface | null>).pipe(
+        documentReady('user'),
         catchError((err) => throwError(() => err))
       ),
       legal: (docData(legalDoc, snapshotOptions) as Observable<Record<string, unknown>>).pipe(
+        documentReady('legal'),
         catchError((err) => {
           if (options.requireCompleteProfile) {
             return throwError(() => err);
@@ -1021,6 +1096,7 @@ export class AppUserService implements OnDestroy {
         })
       ),
       system: (docData(systemDoc, snapshotOptions) as Observable<Record<string, unknown>>).pipe(
+        documentReady('system'),
         catchError((err) => {
           if (options.requireCompleteProfile) {
             return throwError(() => err);
@@ -1031,6 +1107,7 @@ export class AppUserService implements OnDestroy {
         })
       ),
       settings: (docData(settingsDoc, snapshotOptions) as Observable<Record<string, unknown>>).pipe(
+        documentReady('settings'),
         catchError((err) => {
           if (options.requireCompleteProfile) {
             return throwError(() => err);
@@ -1985,7 +2062,10 @@ export class AppUserService implements OnDestroy {
   }
 
   ngOnDestroy() {
-    // Required to satisfy OnDestroy interface
+    this.profileReadGeneration += 1;
+    this.destroyed$.next();
+    this.destroyed$.complete();
+    this.startupDiagnostics.reset();
   }
 
   private createEmptyActivityServiceConnectionState(): ActivityServiceConnectionState {

@@ -806,12 +806,25 @@ repetition durations; recipes, strict proposal/confirmation contracts, scopes, c
 This frontend-only clarification requires no backend, Rules/index deployment or plugin refresh.
 
 Model output uses a sport-specific JSON shape derived from the existing MCP Training recipe/strength schemas.
+The first-party endurance decoder narrows standalone and repeated step endings to `time`, `distance` and `manual`,
+matching the generation validator. It must not advertise the full MCP editing union's `repetitions` or `kilojoules`:
+those can exhaust the one bounded correction and leave an included daily suggestion failed. Strength retains its
+separate repetitions/time schema. Pool length and the explicit Garmin-zone target choice are preserved.
+MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
+unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
 shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
 complexity limit; the canonical parsers and generation validator still enforce all of those limits after generation.
 See [Gemini structured-output limits](https://ai.google.dev/gemini-api/docs/structured-output#limitations).
 Validation corrections include only server-authored reasons. Failure diagnostics record the stage, billable flag,
 error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
+Canonical recipe/strength failures also include up to five distinct `validationIssues`: an allowlisted code,
+a known schema-field prefix with normalized array positions, and an exact allowlisted rule or static fallback.
+The same safe details enter the existing single correction prompt. Unknown property names, authored IDs, values
+and arbitrary exception messages are excluded; unrecognized rules fall back to code-specific guidance. Genkit JSON/
+schema failures keep their generic diagnostic. This does not add model attempts, change quota or reset daily receipts.
+MCP impact review: no wire or consent impact; the diagnostics and correction prompt are private to first-party generation.
+Help is unchanged because the supported controls and review flow are unchanged.
 
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
 and actual Feeling/RPE minimum/maximum buckets. The generator replaces its all-sport recording-day buckets with
@@ -2987,7 +3000,9 @@ clients cannot read, list or reset them.
 rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best
 effort, at most one attempt per batch/destination; a crash after claim can lose an alert. The generic standard/declarative
 payload contains no workout names, metrics, provider IDs or errors. It opens `/training/plans?sync=attention` on the
-destination site. The existing history control opens Workout sync history once after owner/schedule readiness,
+destination site. The [shared click policy](web-push-notifications.md#notification-click-routing) uses Angular's
+`openWindow` fallback so the browser can select the matching installed app; native declarative navigation retains
+the same URL. App selection remains browser-controlled. The existing history control opens Workout sync history once after owner/schedule readiness,
 without preview, permission, provider mutation or hydration haptics. Transport uses low urgency, ten-minute TTL,
 a stable tag and `renotify: false`.
 The automatic redirect to a remembered Standalone view preserves incoming query parameters, including the attention

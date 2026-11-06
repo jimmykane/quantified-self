@@ -157,6 +157,10 @@ async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<{ run:
     if ((await getUserDeletionGuardStateInTransaction(db, tx, run.userID)).shouldSkip) return null;
     // Firestore can replay this callback; keep the input revision and checkpoint immutable.
     const checkpoint = structuredClone(run);
+    // Children can discover Garmin cutoffs while this coordinator holds its lease.
+    // Preserve their private evidence rather than replacing it with our older snapshot.
+    if (current.data()?.garminHealthBackfillCutoffs) checkpoint.garminHealthBackfillCutoffs = current.data()!.garminHealthBackfillCutoffs;
+    else delete checkpoint.garminHealthBackfillCutoffs;
     let currentConnection = true;
     try { await assertHistoryConnectionCurrent(checkpoint, tx); }
     catch (error) { if (!(error instanceof HistoryLifecycleChangedError)) throw error; currentConnection = false; }

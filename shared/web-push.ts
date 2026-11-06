@@ -54,7 +54,7 @@ export function buildPushTestPayload(origin: string) {
     title: 'Quantified Self', body: 'Notifications are working on this device.', tag: 'qs-notification-test',
     icon: origin + '/assets/favicons/android-chrome-192x192.png',
     navigate: origin + WEB_PUSH_SETTINGS_PATH,
-    data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: WEB_PUSH_SETTINGS_PATH } } },
+    data: { onActionClick: { default: { operation: 'openWindow', url: WEB_PUSH_SETTINGS_PATH } } },
   } };
 }
 /** Both deployed sites share account consent and rate limits; local/arbitrary origins stay excluded. */
