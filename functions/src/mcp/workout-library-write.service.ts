@@ -1,4 +1,4 @@
-import { hasGarminPowerZoneTargetV1, hasAuthoredEarlyLapV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import { hasGarminPowerAveragingV1, hasGarminPowerZoneTargetV1, hasAuthoredEarlyLapV1, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -21,7 +21,7 @@ import { TrainingScheduleMutationError } from '../training-plans/mutation';
 import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
 import { TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_WRITE_INPUTS,
   TRAINING_WRITE_OUTPUTS } from './training-plans.schemas';
-import { describeGarminPowerZoneRecipeEffect } from './training-recipe-review';
+import { describeGarminPowerAveragingRecipeEffect, describeGarminPowerZoneRecipeEffect } from './training-recipe-review';
 import { describeEarlyLapRecipeEffect, assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
 
 const PROPOSALS = 'trainingMcpLibraryProposals';
@@ -146,6 +146,8 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
       const item = parseWorkoutLibraryItemV1(snapshot.data());
       if (item.id !== target.id || item.createdAtMs !== target.createdAtMs
         || item.revision !== change.expectedRevision) invalid('The saved workout changed. Read it again.');
+      if (recipeMode !== 'v3' && change.kind === 'update' && hasGarminPowerAveragingV1(item.structure))
+        invalid('Read the saved recipe with v3 and use the v3 preview to preserve or explicitly change Garmin power averaging.');
       if (recipeMode !== 'v3' && change.kind === 'update' && hasGarminPowerZoneTargetV1(item.structure))
         invalid('Read the saved recipe with v3 and use the v3 preview to preserve or explicitly change Garmin power zones.');
       if (recipeMode === 'legacy' && change.kind === 'update' && hasAuthoredEarlyLapV1(item.structure))
@@ -234,7 +236,7 @@ export async function previewSavedWorkoutChange(input: TrainingWriteInput,
         ? `Permanently remove “${title}” from the saved-workout library. Already scheduled workouts and their history stay unchanged.`
         : `${change.kind === 'set-status' ? change.status === 'active' ? 'Restore' : 'Archive' : change.kind === 'save-workout' ? 'Save the scheduled workout as a' : change.kind === 'copy' ? 'Duplicate the' : change.kind === 'update' ? 'Update the' : 'Create a'} saved workout “${title}”. Already scheduled workouts are independent and will not change.`;
     if ((change.kind === 'create' || change.kind === 'update') && (recipeMode === 'v2' || recipeMode === 'v3')) {
-      summary = `${describeGarminPowerZoneRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))}${describeEarlyLapRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))} ${summary}`;
+      summary = `${describeGarminPowerAveragingRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))}${describeGarminPowerZoneRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))}${describeEarlyLapRecipeEffect(previousStructure, parseWorkoutStructureV1(change.structure))} ${summary}`;
     }
     const changes: Preview['changes'] = change.kind === 'place'
       ? Array.from({ length: Math.ceil(change.dates.length / 20) }, (_, index) => ({

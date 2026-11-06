@@ -23,7 +23,7 @@ import {
 export type GarminWorkoutSportV1 = GarminWorkoutSportFamilyV1;
 export type GarminWorkoutIntensityV1 = 'REST' | 'WARMUP' | 'COOLDOWN' | 'RECOVERY' | 'ACTIVE';
 export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST' | 'REPS';
-export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
+export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'POWER_3S' | 'POWER_10S' | 'POWER_30S' | 'OPEN';
 
 interface GarminTargetFieldsV1 {
     targetType: GarminWorkoutTargetTypeV1 | null;
@@ -214,6 +214,11 @@ function absoluteTargetRange(target: WorkoutTargetV1): {
     }
 }
 
+function powerTargetType(target: WorkoutTargetV1, fallback: Exclude<GarminWorkoutTargetTypeV1, 'OPEN'>): Exclude<GarminWorkoutTargetTypeV1, 'OPEN'> {
+    return target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined
+        ? ({ 3: 'POWER_3S', 10: 'POWER_10S', 30: 'POWER_30S' } as const)[target.garminPowerAveragingSeconds] : fallback;
+}
+
 function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: boolean): GarminTargetFieldsV1 {
     if (!target) {
         return {
@@ -225,12 +230,12 @@ function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: bool
         };
     }
     if (target.mode === 'garmin-zone') return {
-        targetType: 'POWER', targetValue: target.zone,
+        targetType: powerTargetType(target, 'POWER'), targetValue: target.zone,
         targetValueLow: null, targetValueHigh: null, targetValueType: null,
     };
     const range = absoluteTargetRange(target);
     return {
-        targetType: range.type,
+        targetType: powerTargetType(target, range.type),
         targetValue: null,
         targetValueLow: range.low,
         targetValueHigh: range.high,
@@ -250,7 +255,7 @@ function secondaryTargetFields(target: WorkoutTargetV1 | undefined): GarminSecon
     }
     const range = absoluteTargetRange(target);
     return {
-        secondaryTargetType: range.type,
+        secondaryTargetType: powerTargetType(target, range.type),
         secondaryTargetValue: null,
         secondaryTargetValueLow: range.low,
         secondaryTargetValueHigh: range.high,

@@ -38,6 +38,16 @@
           </mat-select>
         </mat-form-field>
       }
+      @if (row.target.kind === 'power') {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Garmin power averaging</mat-label>
+          <mat-select [value]="row.target.garminPowerAveragingSeconds ?? 0" [disabled]="disabled()"
+            (selectionChange)="averaging(index, $event.value)">
+            <mat-option [value]="0">Default</mat-option>
+            <mat-option [value]="3">3 seconds</mat-option><mat-option [value]="10">10 seconds</mat-option>
+            <mat-option [value]="30">30 seconds</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
       @if (row.target.mode === 'garmin-zone') {
         <mat-form-field subscriptSizing="dynamic"><mat-label>Garmin power zone</mat-label>
           <mat-select [value]="row.target.minimum" [disabled]="disabled()" (selectionChange)="zone(index, $event.value)">
@@ -95,6 +105,9 @@
     }
     @if (row.target.kind === 'cadence') {
       <p class="target-hint">Canonical cadence. Swimming and rowing targets do not imply a stroke-rate conversion; provider support varies.</p>
+    }
+    @if (row.target.kind === 'power' && row.target.garminPowerAveragingSeconds !== undefined) {
+      <p class="target-hint">Requests an averaged Garmin workout target. Device behavior varies; other services cannot receive this choice. Select Default to remove it.</p>
     }
     <p class="target-preview" aria-live="polite">{{ row.preview }}</p>
   </div>

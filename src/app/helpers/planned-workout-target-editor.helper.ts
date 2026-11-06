@@ -3,7 +3,7 @@ import {
   type DataInterface, type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
-  formatWorkoutTargetV1, isGarminPowerZoneSportV1, isRowingWorkoutSportV1, isSwimmingWorkoutSportV1,
+  GARMIN_POWER_AVERAGING_SECONDS, type GarminPowerAveragingSeconds, formatWorkoutTargetV1, isGarminPowerZoneSportV1, isRowingWorkoutSportV1, isSwimmingWorkoutSportV1,
   type WorkoutTargetKindV1, type WorkoutTargetV1,
 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
@@ -13,6 +13,7 @@ export type WorkoutEditorReferenceKind = RelativeTarget['reference']['kind'];
 type SpeedEditorField = 'minimum' | 'maximum' | 'referenceValue';
 interface EditorSpeedSnapshot { editorValue: number; metersPerSecond: number }
 export interface ManualWorkoutEditorTarget {
+  garminPowerAveragingSeconds?: GarminPowerAveragingSeconds;
   kind: WorkoutTargetKindV1;
   mode: 'absolute' | 'relative' | 'garmin-zone';
   presentation: 'pace' | 'speed';
@@ -154,18 +155,24 @@ export function workoutTargetToManualEditor(target: WorkoutTargetV1, sport: Acti
   const ref = target.mode === 'relative' ? target.kind === 'speed' ? fromSpeed(referenceValue(target), presentation, sport, units) : referenceValue(target) : null;
   return { ...createManualWorkoutEditorTarget(target.kind), mode: target.mode, presentation,
     rangeMode: low === high ? 'single' : 'range', minimum, maximum,
+    ...(target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined ? { garminPowerAveragingSeconds: target.garminPowerAveragingSeconds } : {}),
     ...(target.mode === 'relative' ? { referenceKind: target.reference.kind } : {}), referenceValue: ref,
     source: { target: cloneWorkoutTarget(target), minimum, maximum, referenceValue: ref, referenceSaved: target.mode === 'relative' } };
 }
 
 /** Preserve each untouched canonical bound independently, including inverted pace bounds. */
 export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, sport: ActivityTypes, units?: UserUnitSettingsInterface | null): WorkoutTargetV1 {
+  const seconds = target.garminPowerAveragingSeconds;
+  if (seconds !== undefined && (target.kind !== 'power' || !GARMIN_POWER_AVERAGING_SECONDS.includes(seconds))) {
+    throw new Error('Choose Garmin power averaging of 3, 10 or 30 seconds.');
+  }
+  const averaging = seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds };
   if (target.mode === 'garmin-zone') {
     if (target.kind !== 'power' || !isGarminPowerZoneSportV1(sport) || target.rangeMode !== 'single'
       || !Number.isInteger(target.minimum) || target.minimum! < 1 || target.minimum! > 7) {
       throw new Error('Choose one Garmin power zone from 1 to 7 for Running or Cycling.');
     }
-    return { kind: 'power', mode: 'garmin-zone', zone: target.minimum! };
+    return { kind: 'power', mode: 'garmin-zone', zone: target.minimum!, ...averaging };
   }
   const minimum = target.minimum, maximum = target.rangeMode === 'single' ? target.minimum : target.maximum;
   if (typeof minimum !== 'number' || typeof maximum !== 'number') throw new Error('Target ranges need two numeric values.');
@@ -205,14 +212,14 @@ export function manualEditorTargetToWorkout(target: ManualWorkoutEditorTarget, s
     const range = { mode: 'relative' as const, minimumPercent: low, maximumPercent: high };
     switch (target.kind) {
       case 'heart-rate': return { ...range, kind: target.kind, reference: { kind: target.referenceKind as 'max-heart-rate' | 'threshold-heart-rate', bpm: ref } };
-      case 'power': return { ...range, kind: target.kind, reference: { kind: target.referenceKind as 'functional-threshold-power' | 'critical-power', watts: ref } };
+      case 'power': return { ...range, kind: target.kind, ...averaging, reference: { kind: target.referenceKind as 'functional-threshold-power' | 'critical-power', watts: ref } };
       case 'speed': return { ...range, kind: target.kind, presentation: target.presentation, reference: { kind: 'threshold-speed', metersPerSecond: ref } };
       case 'cadence': return { ...range, kind: target.kind, reference: { kind: 'preferred-cadence', rpm: ref } };
     }
   }
   switch (target.kind) {
     case 'heart-rate': return { kind: target.kind, mode: 'absolute', minimumBpm: low, maximumBpm: high };
-    case 'power': return { kind: target.kind, mode: 'absolute', minimumWatts: low, maximumWatts: high };
+    case 'power': return { kind: target.kind, mode: 'absolute', minimumWatts: low, maximumWatts: high, ...averaging };
     case 'speed': return { kind: target.kind, mode: 'absolute', presentation: target.presentation, minimumMetersPerSecond: low, maximumMetersPerSecond: high };
     case 'cadence': return { kind: target.kind, mode: 'absolute', minimumRpm: low, maximumRpm: high };
   }

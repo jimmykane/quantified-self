@@ -6,7 +6,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { describeGarminPowerZoneRecipeEffect, describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
+import { describeGarminPowerAveragingRecipeEffect, describeGarminPowerZoneRecipeEffect, describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
 import { findTrainingPrescriptionConflict } from './training-prescription-consistency';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { readSuuntoGuideUnitSettings } from '../training-plans/delivery/store';
@@ -26,7 +26,7 @@ import {
   type TrainingPlanV1,
   type TrainingScheduleMutationOperationV1,
 } from '../../../shared/training-plans';
-import { hasGarminPowerZoneTargetV1, formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
+import { hasGarminPowerAveragingV1, hasGarminPowerZoneTargetV1, formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
   strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
 import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
@@ -471,6 +471,7 @@ function describeScheduleEffects(
   operation: TrainingScheduleMutationOperationV1,
   before: TrainingScheduleSnapshotV1,
   after: TrainingScheduleSnapshotV1,
+  includeRecipeCounts = true,
 ): string {
   const details: string[] = [];
   const activatedPlanId = operation.kind === 'create-plan' && operation.activate
@@ -494,9 +495,9 @@ function describeScheduleEffects(
   if (workoutId) {
     const workout = after.workouts.get(workoutId);
     if (workout && operation.kind !== 'move-workout') {
-      details.push(workout.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails?.has(workout.id)
-        ? 'Strength recipe: review the full exercise prescription; the v1 structure is only a compatibility summary.'
-        : describeTrainingRecipeReview(workout.structure));
+      if (workout.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails?.has(workout.id)) {
+        details.push('Strength recipe: review the full exercise prescription; the v1 structure is only a compatibility summary.');
+      } else if (includeRecipeCounts) details.push(describeTrainingRecipeReview(workout.structure));
     }
     const planId = workout?.planId ?? null;
     const priorPlan = planId ? before.plans.get(planId) : null;
@@ -933,6 +934,9 @@ export async function previewTrainingChanges(
     }
     if (!['v4', 'v4-batch'].includes(recipeMode) && change.kind === 'update-workout') {
       const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (hasGarminPowerAveragingV1(simulated.workouts.get(workoutId)!.structure)) {
+        invalid('Read the v4 recipe and use the v4 preview to preserve or explicitly change Garmin power averaging.');
+      }
       if (hasGarminPowerZoneTargetV1(simulated.workouts.get(workoutId)!.structure)) {
         invalid('Read the v4 recipe and use the v4 preview to preserve or explicitly change Garmin power zones.');
       }
@@ -988,12 +992,16 @@ export async function previewTrainingChanges(
     }
     const deletionTarget = recipeMode === 'deletion' && operation.kind === 'delete-workout'
       ? before.workouts.get(operation.workoutId) : null;
-    const summary = (deletionTarget
-      ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
-      + (['v2', 'v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
+    const deletionDescription = deletionTarget ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '';
+    const recipeEffects = (['v2', 'v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
       + (['v3', 'v3-batch', 'v4', 'v4-batch'].includes(recipeMode) ? describeEarlyLapEffect(operation, before, simulated) : '')
       + (['v4', 'v4-batch'].includes(recipeMode) && 'workoutId' in operation && simulated.workouts.has(operation.workoutId)
+        ? describeGarminPowerAveragingRecipeEffect(before.workouts.get(operation.workoutId)?.structure, simulated.workouts.get(operation.workoutId)!.structure) : '')
+      + (['v4', 'v4-batch'].includes(recipeMode) && 'workoutId' in operation && simulated.workouts.has(operation.workoutId)
         ? describeGarminPowerZoneRecipeEffect(before.workouts.get(operation.workoutId)?.structure, simulated.workouts.get(operation.workoutId)!.structure) : '');
+    let summary = deletionDescription + describeScheduleEffects(operation, before, simulated) + recipeEffects;
+    // Definition counts are optional; retain the complete title, dates and execution/consent effects.
+    if (summary.length > 500) summary = deletionDescription + describeScheduleEffects(operation, before, simulated, false) + recipeEffects;
     const reviewStructure = ['create-workout', 'update-workout', 'copy-workout'].includes(operation.kind)
       && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
     publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure

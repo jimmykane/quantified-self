@@ -123,7 +123,12 @@ export interface WorkoutRelativeHeartRateTargetV1 {
   };
 }
 
+export const GARMIN_POWER_AVERAGING_SECONDS = [3, 10, 30] as const;
+export type GarminPowerAveragingSeconds = typeof GARMIN_POWER_AVERAGING_SECONDS[number];
+
 export interface WorkoutAbsolutePowerTargetV1 {
+  /** Explicit Garmin execution target; omitted retains the existing POWER mapping. */
+  garminPowerAveragingSeconds?: GarminPowerAveragingSeconds;
   kind: 'power';
   mode: 'absolute';
   minimumWatts: number;
@@ -132,9 +137,16 @@ export interface WorkoutAbsolutePowerTargetV1 {
 
 /** A symbolic Garmin sport/device setting, never a QS FTP snapshot or watt range. */
 export interface WorkoutGarminPowerZoneTargetV1 {
+  /** Explicit Garmin execution target; omitted retains the existing POWER mapping. */
+  garminPowerAveragingSeconds?: GarminPowerAveragingSeconds;
   kind: 'power';
   mode: 'garmin-zone';
   zone: number;
+}
+
+export function hasGarminPowerAveragingV1(structure: WorkoutStructureV1): boolean {
+  return structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+    .some(step => step.targets.some(target => target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined)));
 }
 
 export function isGarminPowerZoneSportV1(sport: ActivityTypes): boolean {
@@ -147,6 +159,8 @@ export function hasGarminPowerZoneTargetV1(structure: WorkoutStructureV1): boole
 }
 
 export interface WorkoutRelativePowerTargetV1 {
+  /** Explicit Garmin execution target; omitted retains the existing POWER mapping. */
+  garminPowerAveragingSeconds?: GarminPowerAveragingSeconds;
   kind: 'power';
   mode: 'relative';
   minimumPercent: number;
@@ -618,11 +632,19 @@ function parseTarget(value: unknown, path: string, context: ParseContext): Worko
   const mode = readEnum(record.mode, ['absolute', 'relative', 'garmin-zone'], `${path}.mode`, context);
   if (!kind || !mode) return null;
 
+  const averaging = record.garminPowerAveragingSeconds;
+  if ('garminPowerAveragingSeconds' in record && (kind !== 'power'
+    || !GARMIN_POWER_AVERAGING_SECONDS.includes(averaging as GarminPowerAveragingSeconds))) {
+    pushIssue(context, 'invalid_value', `${path}.garminPowerAveragingSeconds`, 'Choose Garmin power averaging of 3, 10 or 30 seconds.');
+    return null;
+  }
+  const garminAveraging = averaging === undefined ? {} : { garminPowerAveragingSeconds: averaging as GarminPowerAveragingSeconds };
+
   if (mode === 'garmin-zone') {
-    rejectUnknownFields(record, ['kind', 'mode', 'zone'], path, context);
+    rejectUnknownFields(record, ['kind', 'mode', 'zone', 'garminPowerAveragingSeconds'], path, context);
     const zone = readPositiveInteger(record.zone, `${path}.zone`, context, 7);
     if (kind !== 'power') pushIssue(context, 'invalid_value', `${path}.kind`, 'Garmin zones require a power target.');
-    return kind === 'power' && zone !== null ? { kind, mode, zone } : null;
+    return kind === 'power' && zone !== null ? { kind, mode, zone, ...garminAveraging } : null;
   }
 
   if (kind === 'heart-rate' && mode === 'absolute') {
@@ -635,11 +657,11 @@ function parseTarget(value: unknown, path: string, context: ParseContext): Worko
   }
 
   if (kind === 'power' && mode === 'absolute') {
-    rejectUnknownFields(record, ['kind', 'mode', 'minimumWatts', 'maximumWatts'], path, context);
+    rejectUnknownFields(record, ['kind', 'mode', 'minimumWatts', 'maximumWatts', 'garminPowerAveragingSeconds'], path, context);
     const minimumWatts = readNonNegativeNumber(record.minimumWatts, `${path}.minimumWatts`, context, validPower);
     const maximumWatts = readNonNegativeNumber(record.maximumWatts, `${path}.maximumWatts`, context, validPower);
     return readRange(minimumWatts, maximumWatts, `${path}.minimumWatts`, `${path}.maximumWatts`, context)
-      ? { kind, mode, minimumWatts: minimumWatts!, maximumWatts: maximumWatts! }
+      ? { kind, mode, minimumWatts: minimumWatts!, maximumWatts: maximumWatts!, ...garminAveraging }
       : null;
   }
 
@@ -708,7 +730,7 @@ function parseTarget(value: unknown, path: string, context: ParseContext): Worko
   }
 
   if (kind === 'power') {
-    rejectUnknownFields(record, ['kind', 'mode', 'minimumPercent', 'maximumPercent', 'reference'], path, context);
+    rejectUnknownFields(record, ['kind', 'mode', 'minimumPercent', 'maximumPercent', 'reference', 'garminPowerAveragingSeconds'], path, context);
     rejectUnknownFields(reference, ['kind', 'watts'], `${path}.reference`, context);
     const referenceKind = readEnum(
       reference.kind,
@@ -718,7 +740,7 @@ function parseTarget(value: unknown, path: string, context: ParseContext): Worko
     );
     const watts = readPositiveNumber(reference.watts, `${path}.reference.watts`, context, validPower);
     return referenceKind && watts !== null
-      ? { kind, mode: 'relative', ...relativeRange, reference: { kind: referenceKind, watts } }
+      ? { kind, mode: 'relative', ...relativeRange, reference: { kind: referenceKind, watts }, ...garminAveraging }
       : null;
   }
 
@@ -1101,7 +1123,7 @@ function formatPercentRange(minimum: number, maximum: number, locale?: string): 
   return `${formatRange(formatter.format(minimum), formatter.format(maximum))}%`;
 }
 
-export function formatWorkoutTargetV1(
+function formatWorkoutTargetValueV1(
   target: WorkoutTargetV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
@@ -1168,6 +1190,13 @@ export function formatWorkoutTargetV1(
       return `${percent} of ${reference} preferred cadence`;
     }
   }
+}
+
+export function formatWorkoutTargetV1(target: WorkoutTargetV1, unitSettings?: UserUnitSettingsInterface | null,
+  locale?: string, sport?: ActivityTypes): string {
+  const value = formatWorkoutTargetValueV1(target, unitSettings, locale, sport);
+  return target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined
+    ? `${value} · Garmin ${target.garminPowerAveragingSeconds}-second average` : value;
 }
 
 export function formatWorkoutStepV1(

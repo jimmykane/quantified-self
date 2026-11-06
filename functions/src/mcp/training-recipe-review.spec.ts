@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, DistanceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { formatWorkoutStepV1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '../../../shared/planned-workout';
-import { describeGarminPowerZoneRecipeEffect, describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
+import { describeGarminPowerAveragingRecipeEffect, describeGarminPowerZoneRecipeEffect, describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
 
 describe('Training recipe review', () => {
   it('retains owner units and whole nodes when a review sample is bounded', () => {
@@ -109,4 +109,19 @@ describe('Garmin zone change disclosure', () => {
     expect(text).toContain('Z1, Z2, Z3, Z4, Z5, Z6, Z7 → Z1, Z2, Z3, Z4, Z5, Z6, Z7');
     expect(text.length).toBeLessThanOrEqual(134);
   });
+});
+
+
+it('discloses adding, changing and removing Garmin averaging, including repeat children', () => {
+  const recipe = (seconds?: 3 | 10 | 30): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running, nodes: [
+    { kind: 'repeat', id: 'set', count: 2, steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 },
+      targets: [{ kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200, ...(seconds ? { garminPowerAveragingSeconds: seconds } : {}) }] }] },
+  ] });
+  expect(describeGarminPowerAveragingRecipeEffect(undefined, recipe())).toBe('');
+  expect(describeGarminPowerAveragingRecipeEffect(undefined, recipe(10))).toContain('default → 10s');
+  expect(describeGarminPowerAveragingRecipeEffect(recipe(10), recipe(30))).toContain('10s → 30s');
+  expect(describeGarminPowerAveragingRecipeEffect(recipe(30), recipe())).toContain('30s → default');
+  const input = recipe(3); const snapshot = JSON.stringify(input);
+  expect(describeGarminPowerAveragingRecipeEffect(input, input).length).toBeLessThan(120);
+  expect(JSON.stringify(input)).toBe(snapshot);
 });

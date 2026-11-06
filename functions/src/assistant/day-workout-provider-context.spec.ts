@@ -106,3 +106,34 @@ it('checks the explicitly selected symbolic zone without an athlete reference or
     expect(target).not.toHaveProperty('maximumWatts');
   }
 });
+
+it.each([3, 10, 30] as const)('checks the selected Garmin %i-second window and retains it without a provider-only retry', seconds => {
+  const power = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+    reference: { kind: 'critical-power', watts: 250 } } as const;
+  for (const target of ['auto', 'power', 'garmin-power-zone'] as const) {
+    const selected = { ...controls, target, garminPowerAveragingSeconds: seconds };
+    const references = [power];
+    const before = structuredClone(references);
+    const context = dayWorkoutProviderContext(selected, PLANNED_WORKOUT_PROVIDER_IDS, references);
+    for (const provider of context.evidence.providers.filter(provider => provider.provider !== 'garmin')) {
+      expect(provider.targets[0]).toMatchObject({ kind: 'power', level: 'unsupported', requiresReview: true });
+      expect(provider.targets[0].issues.join(' ')).toContain('requires Garmin');
+    }
+    expect(context.evidence.providers.find(provider => provider.provider === 'garmin')!.targets[0].level).not.toBe('unsupported');
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Power run', rationale: 'Use the selected power target.',
+      structure: { version: 1, sport: selected.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [target === 'garmin-power-zone'
+          ? { kind: 'power', mode: 'garmin-zone', zone: 2 } : power] }] } }, selected, [], references);
+    const original = structuredClone(suggestion);
+    expect(context.correction(suggestion)).toBeNull();
+    expect(context.limitations(suggestion).join(' ')).toContain('requires Garmin');
+    expect(suggestion).toEqual(original);
+    expect(references).toEqual(before);
+    if (target === 'auto') {
+      const targetless = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Easy run', rationale: 'Use effort guidance.',
+        structure: { version: 1, sport: selected.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+          ending: { kind: 'distance', meters: 1000 }, targets: [] }] } }, selected);
+      expect(context.correction(targetless)).toContain('Prefer a locally exact recipe');
+    }
+  }
+});

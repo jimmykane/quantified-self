@@ -515,3 +515,28 @@ describe('bounded early-Lap endings', () => {
       expect(() => parseWorkoutStructureV1(recipe({ ...ending, allowEarlyLap: false }))).toThrow();
     });
 });
+
+
+describe('explicit Garmin power averaging', () => {
+  const power = { kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200 } as const;
+  const recipe = (target: unknown) => ({ version: 1, sport: ActivityTypes.Running, nodes: [
+    { kind: 'repeat', id: 'set', count: 2, steps: [
+      { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [target] },
+    ] },
+  ] });
+  it.each([3, 10, 30] as const)('round-trips %i seconds without changing bounds or unit-aware values', seconds => {
+    const target = { ...power, garminPowerAveragingSeconds: seconds };
+    expect(deserializeWorkoutStructureV1(serializeWorkoutStructureV1(recipe(target)))).toEqual(recipe(target));
+    for (const units of [undefined, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      expect(formatWorkoutTargetV1(target, units)).toBe(`${formatWorkoutTargetV1(power, units)} · Garmin ${seconds}-second average`);
+    }
+    expect(parseWorkoutStructureV1(recipe(power))).toEqual(recipe(power));
+  });
+  it.each([undefined, null, 0, 1, 5, 10.5, '10', true, NaN, Infinity])('rejects an explicit invalid window %s', seconds => {
+    expect(() => parseWorkoutStructureV1(recipe({ ...power, garminPowerAveragingSeconds: seconds }))).toThrow();
+  });
+  it('rejects averaging on other target kinds', () => {
+    expect(() => parseWorkoutStructureV1(recipe({ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 120,
+      garminPowerAveragingSeconds: 10 }))).toThrow();
+  });
+});

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, output } from '@angular/core';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
-  isGarminPowerZoneSportV1, WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
+  GARMIN_POWER_AVERAGING_SECONDS, isGarminPowerZoneSportV1, WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
 import {
   WORKOUT_EDITOR_REFERENCE_OPTIONS, changeManualEditorTargetPresentation, createManualWorkoutEditorTarget,
   manualEditorTargetHasSavedReference, manualEditorTargetPreview, workoutEditorTargetUnit, type ManualWorkoutEditorTarget,
@@ -94,6 +94,15 @@ export class WorkoutTargetsEditorComponent {
       if (!option) return;
       changed = { ...target, referenceKind: option.value, referenceValue: null };
     } else return;
+    this.haptics.selection(); this.replace(index, changed);
+  }
+  averaging(index: number, value: number): void {
+    const target = this.targets()[index];
+    if (this.disabled() || target?.kind !== 'power' || (value !== 0 && !GARMIN_POWER_AVERAGING_SECONDS.some(seconds => seconds === value))
+      || (target.garminPowerAveragingSeconds ?? 0) === value) return;
+    const changed = { ...target };
+    if (value === 0) delete changed.garminPowerAveragingSeconds;
+    else changed.garminPowerAveragingSeconds = value as 3 | 10 | 30;
     this.haptics.selection(); this.replace(index, changed);
   }
   zone(index: number, value: number): void {

@@ -2273,9 +2273,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
-  it('persists Garmin zones through preview/apply/replay and blocks legacy replacement', async () => {
+  it.each([undefined, 3, 10, 30] as const)('persists Garmin zones through preview/apply/replay and blocks legacy replacement (averaging: %s)', async seconds => {
     const native = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
-      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] },
+      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) }] },
     ] }] };
     const input = { uid, connectionId: 'connection', scopes };
     const args = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'native', plan: null,
@@ -2297,6 +2297,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         workout: { ref: created.createdReferences[0].reference }, plan: null, localDate: '2026-09-18',
         title: 'Native zone', structure: retargeted } } }, deps);
     expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
+    if (seconds !== undefined) expect(retargetPreview.changes[0].summary).toContain(`Garmin power averaging used: ${seconds}s → ${seconds}s`);
     expect((await saved.ref.get()).get('structure')).toEqual(native);
     const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
       plan: null, localDate: '2026-09-19', title: 'Explicit numeric replacement', structure };
@@ -2305,9 +2306,54 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     const replacement = await previewPlannedWorkoutV4Changes({ ...input, arguments: {
       expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
     expect(replacement.changes[0].summary).toContain('Garmin power zones removed');
+    if (seconds !== undefined) expect(replacement.changes[0].summary).toContain(`${seconds}s → default`);
     await applyTrainingChanges({ ...input, arguments: { proposalRef: replacement.proposalRef, permissionMode: 'schedule' } }, deps);
     expect((await saved.ref.get()).get('structure')).toEqual(structure);
     await expect(previewPlannedWorkoutV4Change({ ...input, arguments: update }, deps)).rejects.toThrow('schedule changed');
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it.each(['single', 'batch'] as const)('keeps long Garmin %s reviews within the output bound without losing execution disclosures', async mode => {
+    const native = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [{
+      kind: 'repeat', id: 'set', count: 2, steps: Array.from({ length: 7 }, (_, index) => ({
+        kind: 'step', id: `zone-${index}`, purpose: 'work', ending: { kind: 'time', seconds: 60, allowEarlyLap: true },
+        targets: [{ kind: 'power', mode: 'garmin-zone', zone: index + 1, garminPowerAveragingSeconds: [3, 10, 30][index % 3] }],
+      })),
+    }] });
+    const input = { uid, connectionId: 'connection', scopes };
+    const planPreview = await previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: 1, changes: [{
+      kind: 'create-plan', localKey: 'plan', name: 'Native plan', startDate: '2026-09-18', endDate: '2026-09-18', activate: false,
+    }] } }, deps);
+    const planResult = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: planPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const plan = { ref: planResult.createdReferences[0].reference };
+    const createdPreview = await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: planResult.scheduleRevision,
+      change: { kind: 'create-workout', localKey: 'native', plan, localDate: '2026-09-18', title: 'Native zones', structure: native } } }, deps);
+    const created = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const updated = structuredClone(native);
+    for (const node of updated.nodes) for (const step of node.kind === 'step' ? [node] : node.steps) {
+      if (step.ending.kind === 'time') step.ending.allowEarlyLap = false;
+    }
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference }, plan,
+      localDate: '2026-09-19', title: 'A'.repeat(120), structure: updated };
+    const preview = mode === 'single'
+      ? await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, change } }, deps)
+      : await previewPlannedWorkoutV4Changes({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
+    const summary = preview.changes[0].summary;
+    expect(summary.length).toBeLessThanOrEqual(500);
+    expect(summary).toContain('Update');
+    expect(summary).toContain('on 2026-09-19');
+    expect(summary).toContain('Extend plan range: 2026-09-18 to 2026-09-19.');
+    expect(summary).toContain('Removed from 7 previously enabled steps.');
+    expect(summary).toContain('3s/10s/30s → 3s/10s/30s; device support varies.');
+    expect(summary).toContain('Z1, Z2, Z3, Z4, Z5, Z6, Z7 → Z1, Z2, Z3, Z4, Z5, Z6, Z7');
+    expect(summary).toContain('watts are unknown in QS (Garmin settings).');
+    await applyTrainingChanges({ ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('title')).toBe(change.title);
+    expect(saved.get('structure')).toEqual(updated);
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 

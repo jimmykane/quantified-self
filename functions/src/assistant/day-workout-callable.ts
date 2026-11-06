@@ -63,7 +63,7 @@ const nativeZoneGenerationStep = generationStep.extend({
     z.strictObject({ kind: z.literal('distance'), meters: z.number().finite().positive() }),
     z.strictObject({ kind: z.literal('manual') }),
   ]),
-  targets: z.array(TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA).max(1),
+  targets: z.array(TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA.omit({ garminPowerAveragingSeconds: true })).max(1),
 });
 const nativeZoneRecipe = z.strictObject({
   version: TRAINING_RECIPE_WITH_POOL_SCHEMA.shape.version,

@@ -3208,3 +3208,13 @@ The digest-bound pending change includes these additions and preserves earlier u
 baseline and transition history are unchanged. Bundled-skill validation uses a temporary fixture profile; run
 `npm run plugin:sync` separately after release/rescan. Detailed storage, progress bounds and daily event advice live
 in `docs/training-workspace.md#calendar-training-goals`.
+
+
+The unregistered pending Garmin recipe tools (scheduled v4 and saved v3, including focused/bulk previews) also
+allow explicit `garminPowerAveragingSeconds: 3 | 10 | 30` on power targets. It requests Garmin execution averaging
+without changing the target bounds or reference. Omission preserves default behavior. The current-tool full reads
+and app-owned reviews preserve the field; legacy recipe readers/replacements reject it rather than stripping it.
+Preview effects disclose the distinct previous/proposed windows and explicit removal, while full recipes preserve
+step assignments. No existing registered schema, permission, apply boundary or provider-consent authority is widened.
+The pending digest requires backend release and developer rescan; bundled guidance requires the normal separately
+authorized plugin refresh. See [Training](training-workspace.md#garmin-execution-power-averaging).

@@ -17,11 +17,19 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit Garmin averaging and the independent Suunto display limits', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Garmin power averaging:**', '**Default**, **3 seconds**, **10 seconds** or **30 seconds**',
+      'select Default before sending that recipe to another service', 'does not configure all of your watch screens',
+      'QS cycling Guides show lap-average power', 'Suunto sport-mode screens can separately show 10/30-second power',
+      'same option is available in daily preferences', 'this choice never enables provider sending']) expect(help).toContain(phrase);
+  });
+
   it('explains source-aware planning references and immutable generated prescriptions', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references',
       'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
-      'does not rewrite saved workouts', 'watch power smoothing is unchanged', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
+      'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
   });
   it('explains one dated threshold setting and independent reviewed MCP/Assistant changes', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');

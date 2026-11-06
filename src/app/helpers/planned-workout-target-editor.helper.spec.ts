@@ -276,3 +276,21 @@ describe('Garmin zone editing', () => {
     }
   });
 });
+
+
+describe('Garmin averaging in editor snapshots', () => {
+  it.each([3, 10, 30] as const)('preserves and explicitly clears %i seconds without changing watts/reference/zone', seconds => {
+    const targets = [
+      { kind: 'power', mode: 'absolute', minimumWatts: 150.123456789, maximumWatts: 200.123456789 },
+      { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'critical-power', watts: 250.123456789 } },
+      { kind: 'power', mode: 'garmin-zone', zone: 2 },
+    ] as const;
+    for (const target of targets) {
+      const averaged = { ...target, garminPowerAveragingSeconds: seconds };
+      const editor = workoutTargetToManualEditor(averaged, ActivityTypes.Running);
+      expect(manualEditorTargetToWorkout(editor, ActivityTypes.Running)).toEqual(averaged);
+      delete editor.garminPowerAveragingSeconds;
+      expect(manualEditorTargetToWorkout(editor, ActivityTypes.Running)).toEqual(target);
+    }
+  });
+});

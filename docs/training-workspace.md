@@ -5307,6 +5307,52 @@ before a frontend that depends on them. Garmin/Wahoo/Suunto delivery and exact-c
 
 ### Garmin workout/calendar adapter (#647)
 
+#### Garmin execution power averaging
+
+Power targets may explicitly carry `garminPowerAveragingSeconds: 3 | 10 | 30`, independent of absolute watts,
+relative FTP/CP snapshots or a single native Garmin zone. Absence retains the previous `POWER` payload, serialization
+and request digest. The canonical parser rejects other windows, strings, null, explicit undefined and the field on
+non-power targets. The editor preserves exact bounds/reference snapshots through selection changes and exposes
+Default/3/10/30 seconds with one selection haptic; Default removes the field. Copies, repeat children, library
+placements, history and full Assistant reviews retain the authored choice. Shared target formatting discloses it.
+
+Generation and daily preferences optionally select the same window. The default control omits the key to preserve
+legacy fingerprints. Server validation first checks the complete model prescription, rejects model-authored averaging,
+and then decorates only existing power targets with the selected window. No watt reference/target is inferred and
+rest/targetless advice is unchanged. Routine sport selection preserves a power-capable saved sport when the selected
+window would otherwise be lost. The choice grants no provider delivery consent.
+Local daily-provider capability probes apply the selected window to power targets, including symbolic Garmin zones.
+Model-facing capability guidance marks incompatible services before generation; a mapping-only retry cannot remove
+a prescribed explicit window to fit that service, including when the general target preference is Auto. Targetless
+recipes retain the existing format-correction behavior.
+
+Garmin Training API V2 (partner reference 1.0, 26 May 2025), pages 11–12, lists `POWER_3S`, `POWER_10S` and
+`POWER_30S` for primary and secondary targets. The serializer selects that type while leaving zone/range/value-type
+fields unchanged. Existing cycling secondary-target and sport/device limits remain. Averaging changes alter reviewed
+content/mapping digests; stale approval and uncertain-create recovery retain all existing fences and duplicate
+protection. Suunto, COROS and Wahoo fail compatibility before HTTP when this explicit Garmin-only field is present;
+no window is silently discarded. This is a workout target request, not authority to configure generic watch screens
+or evidence about actual gauge/alert/device execution. Those outcomes require separately authorized device tests.
+
+MCP impact: extend only the unregistered pending Garmin scheduled v4/saved v3 recipe tools from the parent PR.
+Their names are absent from the registered baseline; all registered legacy schemas remain frozen. Older full readers
+and recipe replacements reject averaging with current-tool guidance. Pending previews disclose distinct before/after
+windows, including removal to default; full recipes retain exact per-step assignments. Long scheduled previews omit
+optional recipe definition counts when needed to retain the complete title, date-range, early-Lap, averaging and
+native-zone disclosures within the unchanged 500-character change-summary bound. Existing read/write grants,
+revision/deletion checks, host approval and prepare-only Assistant boundaries remain. The pending digest and bundled
+Training/cross-domain guidance are updated; backend release, developer rescan and plugin/client refresh remain
+separate operations. No baseline/history promotion is performed.
+
+Monitoring decision: **covered/unchanged**. The existing Training Delivery dashboards, outcome metrics and failure/dead-letter
+alerts cover the same workers/dispatchers, leases, retries and terminal states. No new queues, Functions, credentials,
+Rules, indexes or telemetry labels are introduced. Provider regression and loopback transaction tests are synthetic
+verification, not live provider acceptance. No reparse or stored-data migration is required.
+
+Suunto scope: Guide `power` is documented as a three-second reading, or an aggregate over `manualLap`/`workout`.
+QS cycling retains lap-average power. Native Suunto sport-mode screens may offer Power 10 sec/30 sec independently
+of Guides; the Guide contract exposes no corresponding window selector or guarantee about gauge/alert averaging.
+
 #### Single Garmin power-zone targets
 
 A canonical `WorkoutTargetV1` can explicitly be `{kind:'power', mode:'garmin-zone', zone:2}`. `zone` is one
@@ -5338,7 +5384,7 @@ using previously defined zones. The primary export is `targetType:'POWER', targe
 modifiers. It does not send or configure FTP or zones. Running requires a device with native Running Power support;
 QS cannot verify the athlete's Garmin zones or device. The time at which Garmin resolves settings, and the effect of
 changing settings after synchronization, remain unverified. Do not claim dynamic updates or watch receipt. Zone spans,
-secondary zones, percentage-of-device-FTP and power smoothing are unsupported. Suunto, Wahoo and COROS fail compatibility
+secondary zones and percentage-of-device-FTP are unsupported. Explicit execution averaging is described above. Suunto, Wahoo and COROS fail compatibility
 before provider HTTP rather than freezing unknown watts or hiding the instruction in notes.
 
 MCP uses additive `get_planned_workout_v4`, `get_saved_workout_v3`, `preview_planned_workout_v4_change`,

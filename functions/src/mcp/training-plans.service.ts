@@ -7,7 +7,7 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { hasGarminPowerZoneTargetV1, formatWorkoutStepV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1, type WorkoutStructureV1 } from '../../../shared/planned-workout';
+import { hasGarminPowerAveragingV1, hasGarminPowerZoneTargetV1, formatWorkoutStepV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1, type WorkoutStructureV1 } from '../../../shared/planned-workout';
 import { buildTrainingDeliverySummaries } from '../../../shared/training-delivery-summary';
 import { assessPlannedWorkoutProviderMappingV1, PLANNED_WORKOUT_PROVIDER_IDS,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
@@ -292,6 +292,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     if (input.tool === 'get_saved_workout' || input.tool === 'get_saved_workout_v2' || input.tool === 'get_saved_workout_v3') {
       const a = TRAINING_READ_INPUTS[input.tool].parse(args.data);
       const item = await resolveSavedWorkout(a.savedWorkoutRef);
+      if (input.tool !== 'get_saved_workout_v3' && hasGarminPowerAveragingV1(item.structure))
+        throw new TrainingReadError('invalid_request', 'Read this recipe with get_saved_workout_v3 to preserve its Garmin power averaging.');
       if (input.tool !== 'get_saved_workout_v3' && hasGarminPowerZoneTargetV1(item.structure))
         throw new TrainingReadError('invalid_request', 'Read this recipe with get_saved_workout_v3 to preserve its Garmin power zone.');
       if (input.tool === 'get_saved_workout' && hasAuthoredEarlyLapV1(item.structure))
@@ -458,6 +460,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       await strengthForWorkout(doc, canonicalStructure);
       // Existing registered clients retain the frozen v1 projection. The additive
       // wire-v2 read returns the selected physical pool length when one was authored.
+      if (input.tool !== 'get_planned_workout_v4' && hasGarminPowerAveragingV1(canonicalStructure))
+        throw new TrainingReadError('invalid_request', 'Read this workout with get_planned_workout_v4 to preserve its Garmin power averaging.');
       if (input.tool !== 'get_planned_workout_v4' && hasGarminPowerZoneTargetV1(canonicalStructure))
         throw new TrainingReadError('invalid_request', 'Read this workout with get_planned_workout_v4 to preserve its Garmin power zone.');
       if (!['get_planned_workout_v3', 'get_planned_workout_v4'].includes(input.tool) && hasAuthoredEarlyLapV1(canonicalStructure))
