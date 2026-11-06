@@ -7,7 +7,7 @@ import { QueueResult } from '../queue-utils';
 import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { createHistoryRun, type ConnectionHistoryRun } from '../connection-history/model';
 import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
-import { GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS } from './health-backfill-cutoffs';
+import { GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS, garminHealthPermissionsRevision } from './health-backfill-cutoffs';
 
 const hoisted = vi.hoisted(() => ({
   requestGet: vi.fn(),
@@ -38,6 +38,7 @@ const tokenData = {
   tokenCredentialGeneration: 'token-generation-1',
   permissions: ['HEALTH_EXPORT'],
 };
+const permissionsRevision = garminHealthPermissionsRevision(tokenData)!;
 const tokenRef = {
   get: vi.fn(async () => ({ exists: true, data: () => tokenData })),
 };
@@ -355,7 +356,7 @@ describe('Garmin Health backfill processor', () => {
     const startMs = Date.parse('2026-01-01T00:00:00Z');
     vi.setSystemTime(startMs + 100_000);
     const run = seedHistoryRun(startMs, startMs + 20_000);
-    const cutoff = { minimumStartMs: startMs + 10_000, observedAtMs: Date.now() };
+    const cutoff = { minimumStartMs: startMs + 10_000, observedAtMs: Date.now(), permissionsRevision };
     run.garminHealthBackfillCutoffs = { dailies: cutoff };
     await processWithTimers(seedHistoryChild(startMs, startMs + 9_000));
     expect(hoisted.requestGet).toHaveBeenCalledTimes(9);
@@ -372,6 +373,7 @@ describe('Garmin Health backfill processor', () => {
     run.garminHealthBackfillCutoffs = Object.fromEntries(GARMIN_HEALTH_SUMMARY_TYPES.map(family => [family, {
       minimumStartMs: mode === 'invalid' ? Number.NaN : 1000,
       observedAtMs: mode === 'expired' ? Date.now() - GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS : Date.now(),
+      permissionsRevision,
     }]));
     if (mode === 'legacy') { delete item.connectionHistoryRunId; delete hoisted.queueData.connectionHistoryRunId; }
     if (mode === 'new-run') delete run.garminHealthBackfillCutoffs;
@@ -381,7 +383,7 @@ describe('Garmin Health backfill processor', () => {
 
   it('rechecks a cutoff lowered after the child loaded its run snapshot', async () => {
     const run = seedHistoryRun(0, 1000);
-    run.garminHealthBackfillCutoffs = { dailies: { minimumStartMs: 1000, observedAtMs: Date.now() } };
+    run.garminHealthBackfillCutoffs = { dailies: { minimumStartMs: 1000, observedAtMs: Date.now(), permissionsRevision } };
     const historyGuards = await hoisted.captureGuards();
     hoisted.captureGuards.mockImplementationOnce(async () => { run.garminHealthBackfillCutoffs!.dailies!.minimumStartMs = 0; return historyGuards; });
     await processWithTimers(seedHistoryChild(0, 0));

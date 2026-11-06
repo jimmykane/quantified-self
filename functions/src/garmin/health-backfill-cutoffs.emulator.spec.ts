@@ -17,10 +17,10 @@ vi.mock('./health-lifecycle', () => ({
   captureActiveGarminHealthWriteLifecycleGuards: async () => guards(),
   GarminHealthAccountValidationError: class extends Error {},
 }));
-vi.mock('./health-sync', () => ({
+vi.mock('./health-sync', async original => ({
+  ...await original<typeof import('./health-sync')>(),
   refreshAndCaptureGarminHealthGuards: mocks.refresh,
-  assertGarminHealthPermission: () => {}, verifyLegacyGarminProviderIdentity: async () => {},
-  GarminHealthPermissionError: class extends Error {},
+  verifyLegacyGarminProviderIdentity: async () => {},
 }));
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createHistoryRun, type ConnectionHistoryRun } from '../connection-history/model';
@@ -51,6 +51,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin Health run cutoff 
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.db = new Firestore({ projectId: `demo-garmin-cutoff-${randomUUID().slice(0, 8)}` });
+    mocks.db.settings({ ignoreUndefinedProperties: true });
     run = createHistoryRun('owner', ServiceNames.GarminAPI, {
       requested: true, rangePreset: '30_days', runId: randomUUID(), tokenPath, rootPath,
       providerUserId: 'account', credentialGeneration: 'credential',
@@ -143,9 +144,60 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin Health run cutoff 
     expect((await next.ref!.get()).data()).toMatchObject({ processed: true, resultStatus: 'success', garminHealthBackfillWindowsCompleted: 1 });
   });
 
+  it('retains the permission failure path when Health access is revoked after preflight', async () => {
+    await learn();
+    mocks.request.mockClear();
+    mocks.refresh.mockImplementationOnce(async () => {
+      const snapshot = await mocks.db.doc(tokenPath).get();
+      await mocks.db.doc(tokenPath).update({ permissions: [] });
+      return { tokenData: snapshot.data(), tokenSnapshot: snapshot, lifecycleGuards: guards(snapshot.data()) };
+    });
+    const next = await child();
+    expect(await processGarminHealthBackfillQueueItem(next)).toBe(QueueResult.MovedToDLQ);
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect((await next.ref!.get()).exists).toBe(false);
+    expect((await mocks.db.doc(`failed_jobs/${next.id}`).get()).data()).toMatchObject({
+      context: 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', garminHealthBackfillWindowsCompleted: 0,
+    });
+    expect((await mocks.db.doc('users/owner/healthSyncState/GarminAPI').get()).data()?.status).toBe('permission_missing');
+  });
+
+  it.each(['expanded-grants', 'same-grants-new-event'])('requests newly eligible history after %s', async change => {
+    await learn();
+    mocks.request.mockClear().mockResolvedValue('');
+    await mocks.db.doc(tokenPath).update({
+      permissions: change === 'expanded-grants' ? ['HEALTH_EXPORT', 'HISTORICAL_DATA_EXPORT'] : ['HEALTH_EXPORT'],
+      permissionsLastChangedAt: Math.floor(Date.now() / 1000),
+    });
+    const next = await child();
+    await processGarminHealthBackfillQueueItem(next);
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+    expect((await next.ref!.get()).data()).toMatchObject({ processed: true, resultStatus: 'success' });
+  });
+
+  it('does not publish evidence from a provider request that crossed a permission change', async () => {
+    mocks.request.mockImplementationOnce(async () => {
+      await mocks.db.doc(tokenPath).update({ permissionsLastChangedAt: Math.floor(Date.now() / 1000) });
+      throw { statusCode: 400, error: { minStartTimeInSeconds: 10 } };
+    });
+    await learn();
+    expect((await savedRun()).garminHealthBackfillCutoffs).toBeUndefined();
+    await learn();
+    expect(mocks.request).toHaveBeenCalledTimes(2);
+    expect((await savedRun()).garminHealthBackfillCutoffs?.dailies).toBeDefined();
+  });
+
   it('commits competing discoveries and each exact child cursor without losing progress', async () => {
     // Exercise Firestore retry/conflict behavior with real overlapping worker commits.
     await mocks.db.doc(`connectionHistoryImports/${run.id}`).update({ garminHealthSummaryTypes: ['dailies'] });
+    let arrivals = 0;
+    let release!: () => void;
+    const bothRequested = new Promise<void>(resolve => { release = resolve; });
+    mocks.request.mockImplementation(async () => {
+      if (++arrivals === 2) release();
+      await bothRequested;
+      throw { statusCode: 400, error: { minStartTimeInSeconds: 10 } };
+    });
     const children = await Promise.all([child(), child()]);
     await Promise.all(children.map(item => processGarminHealthBackfillQueueItem(item)));
     expect((await savedRun()).garminHealthBackfillCutoffs?.dailies?.minimumStartMs).toBe(10_000);

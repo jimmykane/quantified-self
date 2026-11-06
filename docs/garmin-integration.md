@@ -242,7 +242,10 @@ only when its inclusive end precedes a confirmed minimum observed less than one 
 that minimum retain the existing provider request and clipping path; the cache adds no boundary headroom. Evidence and
 cursor progress commit together under the existing queue revision and connection/deletion/Pro guards. Reuse rechecks the
 current run evidence in that transaction, does not renew its age, and cannot cross runs, accounts or credential/connection
-generations. Missing, invalid, expired or legacy evidence falls back to normal requests. Coordinator checkpoints preserve
+generations. Each cutoff also binds the permission list and Garmin permission-change timestamp seen before its provider
+request, stored as a private hash. Changed grants/events invalidate reuse even when OAuth generations stay the same;
+an in-flight permission change prevents publishing that request's cutoff. The existing transactional token read checks
+permission revocation without adding database reads. Missing, invalid, expired or legacy evidence falls back to normal requests. Coordinator checkpoints preserve
 child discoveries without changing task revisions or public progress projections. The existing completion log adds
 `unavailableFamiliesReused` beside actual `requestCount`; completion still means request processing, not callback ingestion.
 A deterministic 61-child, ten-family replay reduces 620 calls to 40 and pacing from 838.5 to 55.5 seconds with identical

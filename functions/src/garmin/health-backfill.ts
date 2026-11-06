@@ -2,6 +2,7 @@ import { assertHistoryWrite } from '../connection-history/context';
 import { getGarminHistorySummaryTypes } from './health-backfill-range';
 import {
   currentUnavailableGarminHealthMinimum,
+  garminHealthPermissionsRevision,
   knownUnavailableGarminHealthMinimum,
   readGarminHealthCutoffRun,
   rememberGarminHealthMinimum,
@@ -183,17 +184,17 @@ function documentMatchesExpectedFields(
     .every(([field, expected]) => data?.[field] === expected);
 }
 
-async function lifecycleMatchesInTransaction(
+async function readLifecycleTokenInTransaction(
   transaction: admin.firestore.Transaction,
   guards: GarminHealthWriteLifecycleGuards,
-): Promise<boolean> {
+): Promise<Record<string, unknown> | null> {
   const tokenSnapshot = await transaction.get(guards.requiredExistingDocumentRef);
   if (!tokenSnapshot.exists
     || !areTokenCredentialSnapshotsEqual(
       getTokenCredentialSnapshot(tokenSnapshot.data() as Record<string, unknown> | undefined),
       guards.requiredExistingTokenCredential,
     )) {
-    return false;
+    return null;
   }
   const fieldGuards = [
     ...(guards.requiredDocumentFieldValues ? [guards.requiredDocumentFieldValues] : []),
@@ -203,7 +204,7 @@ async function lifecycleMatchesInTransaction(
   return snapshots.every((snapshot, index) => documentMatchesExpectedFields(
     snapshot,
     fieldGuards[index].expectedFields,
-  ));
+  )) ? tokenSnapshot.data()! : null;
 }
 
 function cursorsMatch(
@@ -242,7 +243,7 @@ async function advanceCursorTransaction(
   total: number,
   guards: GarminHealthWriteLifecycleGuards,
   resetRetryCount: boolean,
-  minimum?: { learnedStartMs: number } | { reuse: true },
+  minimum?: { learnedStartMs: number; permissionsRevision: string | null } | { reuse: true },
 ): Promise<'advanced' | 'superseded' | 'deleted' | 'lifecycle_changed' | 'minimum_expired'> {
   const db = admin.firestore();
   const stateRef = db.collection('users').doc(queueItem.userID!)
@@ -278,25 +279,35 @@ async function advanceCursorTransaction(
     if (!cursorsMatch(currentCursor, expectedCursor)) {
       return 'superseded';
     }
-    if (!(await lifecycleMatchesInTransaction(transaction, guards))) {
-      // A parallel OAuth refresh can replace the token without changing the
-      // connection. Let the ordinary refresh/fence path recheck it before
-      // treating this cache-only transition as a terminal lifecycle change.
-      if (minimum && 'reuse' in minimum) return 'minimum_expired';
+    const reusingMinimum = !!minimum && 'reuse' in minimum;
+    const currentTokenData = await readLifecycleTokenInTransaction(transaction, guards);
+    if (!currentTokenData) {
+      // Re-enter the ordinary fresh-credential/permission path for a parallel
+      // token refresh or permission callback instead of completing cached work.
+      if (reusingMinimum) return 'minimum_expired';
       return 'lifecycle_changed';
+    }
+
+    if (reusingMinimum) {
+      try { assertGarminHealthPermission(currentTokenData, queueItem.userID!); }
+      catch (error) {
+        if (error instanceof GarminHealthPermissionError) return 'minimum_expired';
+        throw error;
+      }
     }
 
     if (minimum) {
       const run = await readGarminHealthCutoffRun(transaction, queueItem);
       const family = getGarminHistorySummaryTypes()[expectedCursor.summaryIndex];
+      const permissionsRevision = garminHealthPermissionsRevision(currentTokenData);
       if ('reuse' in minimum) {
         // Revalidate evidence transactionally: expiration, replacement, or a
         // newly lowered provider minimum must fall back to an ordinary request.
-        if (!run || knownUnavailableGarminHealthMinimum(run.cutoffs, family, current.rangeEndMs!) === null) {
+        if (!run || knownUnavailableGarminHealthMinimum(run.cutoffs, family, current.rangeEndMs!, permissionsRevision) === null) {
           return 'minimum_expired';
         }
       } else if (run) {
-        rememberGarminHealthMinimum(transaction, run, family, minimum.learnedStartMs);
+        rememberGarminHealthMinimum(transaction, run, family, minimum.learnedStartMs, minimum.permissionsRevision, permissionsRevision);
       }
     }
 
@@ -702,7 +713,7 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
   let minimumStartAttempts = 0;
   while (!isCompleteGarminHealthBackfillCursor(cursor)) {
     const family = getGarminHistorySummaryTypes()[cursor.summaryIndex];
-    const knownMinimum = currentUnavailableGarminHealthMinimum(queueItem, family);
+    const knownMinimum = currentUnavailableGarminHealthMinimum(queueItem, family, garminHealthPermissionsRevision(refreshed.tokenData));
     if (knownMinimum !== null) {
       if (!isGarminHealthSyncEnabled()) {
         return markBackfillSkipped(queueItem, parsed.total, 'provider_disabled', 'GARMIN_HEALTH_DISABLED');
@@ -781,6 +792,7 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
     }
     const window = getGarminHealthBackfillWindow(cursor, parsed.rangeEndMs);
     if (!window) return QueueResult.Processed;
+    const requestPermissionsRevision = garminHealthPermissionsRevision(refreshed.tokenData);
     let nextCursor: GarminHealthBackfillCursor;
     let minimumStartMs: number | null = null;
     try {
@@ -861,7 +873,9 @@ async function processHistoryGuardedGarminHealthBackfillQueueItem(
       parsed.total,
       currentGuards,
       minimumStartMs === null || familyAdvanced,
-      minimumStartMs === null ? undefined : { learnedStartMs: minimumStartMs },
+      minimumStartMs === null ? undefined : {
+        learnedStartMs: minimumStartMs, permissionsRevision: requestPermissionsRevision,
+      },
     );
     if (transition === 'deleted') {
       return markQueueItemSkipped(

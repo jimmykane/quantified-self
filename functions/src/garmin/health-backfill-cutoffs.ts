@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { createHash } from 'node:crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { currentHistoryExecution } from '../connection-history/context';
 import { CONNECTION_HISTORY_COLLECTION, type ConnectionHistoryRun } from '../connection-history/model';
@@ -9,16 +10,32 @@ import type { GarminHealthSummaryType } from './health-summary-types';
 export const GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS = 60 * 60 * 1_000;
 type Cutoffs = ConnectionHistoryRun['garminHealthBackfillCutoffs'];
 
+/** Permission callbacks do not rotate OAuth generations; retain their own authority. */
+export function garminHealthPermissionsRevision(tokenData: Record<string, unknown>): string | null {
+  const permissions = tokenData.permissions;
+  if (permissions != null && (!Array.isArray(permissions) || permissions.some(value => typeof value !== 'string'))) return null;
+  const changedAt = tokenData.permissionsLastChangedAt;
+  if (changedAt != null && ((typeof changedAt !== 'number' && typeof changedAt !== 'string')
+    || (typeof changedAt === 'string' && !changedAt.trim()) || !Number.isFinite(Number(changedAt)) || Number(changedAt) < 0)) return null;
+  return createHash('sha256').update(JSON.stringify([
+    permissions == null ? null : [...new Set(permissions as string[])].sort(),
+    changedAt == null ? null : Number(changedAt),
+  ])).digest('hex');
+}
+
 export function knownUnavailableGarminHealthMinimum(
   cutoffs: Cutoffs,
   family: GarminHealthSummaryType,
   rangeEndMs: number,
+  permissionsRevision: string | null,
   nowMs = Date.now(),
 ): number | null {
   const cutoff = cutoffs?.[family];
   if (!cutoff || !Number.isSafeInteger(cutoff.minimumStartMs) || cutoff.minimumStartMs < 0
     || cutoff.minimumStartMs > nowMs || !Number.isSafeInteger(cutoff.observedAtMs) || cutoff.observedAtMs < 0
     || cutoff.observedAtMs > nowMs || nowMs - cutoff.observedAtMs >= GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS
+    || typeof cutoff.permissionsRevision !== 'string' || !/^[0-9a-f]{64}$/.test(cutoff.permissionsRevision)
+    || cutoff.permissionsRevision !== permissionsRevision
     // Equality retains the inclusive final second; overlapping ranges still ask Garmin.
     || rangeEndMs >= cutoff.minimumStartMs) return null;
   return cutoff.minimumStartMs;
@@ -31,9 +48,11 @@ function matchesExecution(item: SleepSyncQueueItemInterface): boolean {
     && execution.providerUserId === item.providerUserId;
 }
 
-export function currentUnavailableGarminHealthMinimum(item: SleepSyncQueueItemInterface, family: GarminHealthSummaryType): number | null {
+export function currentUnavailableGarminHealthMinimum(
+  item: SleepSyncQueueItemInterface, family: GarminHealthSummaryType, permissionsRevision: string | null,
+): number | null {
   return matchesExecution(item)
-    ? knownUnavailableGarminHealthMinimum(currentHistoryExecution()?.garminHealthBackfillCutoffs, family, item.rangeEndMs!)
+    ? knownUnavailableGarminHealthMinimum(currentHistoryExecution()?.garminHealthBackfillCutoffs, family, item.rangeEndMs!, permissionsRevision)
     : null;
 }
 
@@ -59,9 +78,12 @@ export function rememberGarminHealthMinimum(
   run: NonNullable<Awaited<ReturnType<typeof readGarminHealthCutoffRun>>>,
   family: GarminHealthSummaryType,
   minimumStartMs: number,
+  permissionsRevision: string | null,
+  currentPermissionsRevision: string | null,
 ): void {
   const nowMs = Date.now();
-  if (!Number.isSafeInteger(minimumStartMs) || minimumStartMs < 0 || minimumStartMs > nowMs) return;
+  if (!Number.isSafeInteger(minimumStartMs) || minimumStartMs < 0 || minimumStartMs > nowMs
+    || permissionsRevision === null || permissionsRevision !== currentPermissionsRevision) return;
   // Use the latest response, including a lower minimum if Garmin expands availability.
-  transaction.update(run.ref, { [`garminHealthBackfillCutoffs.${family}`]: { minimumStartMs, observedAtMs: nowMs } });
+  transaction.update(run.ref, { [`garminHealthBackfillCutoffs.${family}`]: { minimumStartMs, observedAtMs: nowMs, permissionsRevision } });
 }

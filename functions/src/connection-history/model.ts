@@ -58,7 +58,9 @@ export interface ConnectionHistoryRun {
   derivedMetricsFlush?: { revision: number; generation: number | null };
   garminHealthSummaryTypes?: readonly GarminHealthSummaryType[];
   /** Private, short-lived provider evidence, scoped to this run and summary family. */
-  garminHealthBackfillCutoffs?: Partial<Record<GarminHealthSummaryType, { minimumStartMs: number; observedAtMs: number }>>;
+  garminHealthBackfillCutoffs?: Partial<Record<GarminHealthSummaryType, {
+    minimumStartMs: number; observedAtMs: number; permissionsRevision?: string;
+  }>>;
   steps: HistoryStep[];
   lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] } };
   leaseOwner?: string;
