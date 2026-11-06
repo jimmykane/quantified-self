@@ -107,8 +107,29 @@ describe('Workout power settings', () => {
     expect(save).toHaveBeenCalledWith('owner', head, []); expect(component.editingOverride()).toBe(false);
     expect(component.message()).toContain('uses shared FTP');
   });
+  it('lets a verified override be edited and saved while the independent shared FTP read is still pending', async () => {
+    let finish!: (value: null) => void;
+    loadSharedFtp.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const loading = component.load();
+    try {
+      await vi.waitFor(() => expect(component.head()).toEqual(head));
+      expect(component.sharedBusy()).toBe(true); expect(component.busy()).toBe(false);
+      expect(component.form.enabled).toBe(true); expect(component.form.controls.watts.value).toBe(250);
+      component.form.patchValue({ watts: 240 }); component.form.markAsDirty();
+      save.mockResolvedValueOnce({ ...head, revision: 2,
+        profiles: [{ ...profile, reference: { ...profile.reference, watts: 240 } }] });
+      await component.save();
+      expect(save).toHaveBeenCalledWith('owner', head,
+        [expect.objectContaining({ reference: { kind: 'critical-power', watts: 240 } })]);
+      expect(component.form.controls.watts.value).toBe(240); expect(component.form.pristine).toBe(true);
+      expect(success).toHaveBeenCalledOnce(); expect(selection).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
+    } finally { finish(null); await loading; }
+    await vi.waitFor(() => expect(component.sharedBusy()).toBe(false));
+    expect(component.form.controls.watts.value).toBe(240); expect(component.head()?.revision).toBe(2);
+  });
   it('keeps explicit overrides editable if the independent shared FTP read fails', async () => {
     loadSharedFtp.mockRejectedValueOnce(Error('offline')); await component.load();
+    await vi.waitFor(() => expect(component.sharedBusy()).toBe(false));
     expect(component.sharedError()).toBe(true); expect(component.form.controls.watts.value).toBe(250);
     component.form.patchValue({ watts: 240 }); component.form.markAsDirty(); await component.save();
     expect(save).toHaveBeenCalled();

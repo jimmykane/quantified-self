@@ -992,6 +992,9 @@ remain unchanged. Dirty drafts survive failed saves and shared-editor refreshes;
 **Retry shared FTP**, which repeats only that read and preserves the override draft. Initialization/background reads
 remain silent; an explicit retry has one selection haptic, reports a current failure and ignores duplicate pending
 retries or late account/sport results.
+Initial profile loading releases the form as soon as the override head is verified. Shared FTP loads independently
+under its own loading/error state; a slow or unavailable shared read must not delay editing or saving a verified
+override. Its late result updates only the shared reference, never the draft or the saved override revision.
 
 Manual day generation and new Pro daily suggestions resolve power after final sport selection, independently of optional
 Training-plan context. Only supported sports with Auto/Power targets read power settings. Nearby power references are

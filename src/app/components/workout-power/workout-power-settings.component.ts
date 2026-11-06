@@ -105,7 +105,9 @@ export class WorkoutPowerSettingsComponent implements OnChanges, OnDestroy {
     try {
       const head = await this.service.load(this.uid);
       if (generation !== this.generation) return;
-      this.head.set(head); this.reset(); await this.refreshSharedFtp();
+      this.head.set(head); this.reset();
+      // The separate shared read must not lock an already verified override editor.
+      void this.refreshSharedFtp();
     } catch {
       if (generation !== this.generation) return;
       this.failed.set(true); this.message.set('Power settings could not be verified. Reload to try again.');
