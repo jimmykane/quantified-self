@@ -107,8 +107,8 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').get());
             await assertSucceeds(owner.doc(path).delete());
         });
-        it('keeps history send receipts server-only for owners, other accounts and impersonation', async () => {
-            const receiptPath = 'users/push-owner/pushState/historyCompletion';
+        it.each(['historyCompletion', 'trainingSync', 'trainingSync/issues/issue'])('keeps %s send receipts server-only for owners, other accounts and impersonation', async receipt => {
+            const receiptPath = `users/push-owner/pushState/${receipt}`;
             await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(receiptPath).set({ attempts: [], providers: {} }); });
             for (const context of [testEnv.authenticatedContext('push-owner'), testEnv.authenticatedContext('other'),
                 testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }), testEnv.unauthenticatedContext()]) {
@@ -180,7 +180,7 @@ describe('Firestore Security Rules', () => {
         });
     });
 
-    describe.each(['history_import', 'activity_sync', 'activity_delivery'])('Notification category preferences: %s', category => {
+    describe.each(['history_import', 'activity_sync', 'activity_delivery', 'training_sync'])('Notification category preferences: %s', category => {
         const path = `users/category-owner/notificationPreferences/${category}`;
         const base = { schemaVersion: 1, enabled: false, revision: 1 };
         beforeEach(async () => {

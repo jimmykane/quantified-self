@@ -1068,6 +1068,18 @@ Existing import monitoring remains authoritative for ingestion. Live activation/
 Release checklist: deploy cutoff/OAuth writers, webhook admission, changed workers, sender and Rules/index; verify
 scheduler and monitoring before an approved production window. Never enable with only the frontend or sender deployed.
 
+### Training sync attention alerts
+
+The default-on Training sync notification category reports grouped, current upcoming-workout failures and connection
+problems. It observes existing committed delivery statuses without changing provider requests, retries or consent.
+Normal retries, success, historical/completed workouts and intentional pauses are silent; connection incidents share
+one receipt across affected workouts. Both beta and production receive alerts under shared category/device limits.
+The authoritative lifecycle and MCP impact review are in
+[Training sync attention notifications](training-workspace.md#training-sync-attention-notifications).
+Monitoring is **covered in source** by the extended Web Push bundle; existing Training delivery monitoring still owns
+provider backlog and dead letters. The new sender flag remains false until separately approved deployment, index,
+monitoring and device checks. This change adds no provider scope, credential, parser or original-file read.
+
 ### Shared history progress surfaces
 
 Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.

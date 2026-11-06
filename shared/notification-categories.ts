@@ -8,6 +8,9 @@ export const NOTIFICATION_CATEGORIES = [{
 }, {
   id: 'activity_delivery', label: 'Activity delivery',
   description: 'Results of sends you ask about, and grouped automatic sending failures that need attention.',
+}, {
+  id: 'training_sync', label: 'Training sync',
+  description: 'Grouped alerts when upcoming workout sync needs attention or a service needs reconnecting.',
 }] as const;
 export type NotificationCategoryId = typeof NOTIFICATION_CATEGORIES[number]['id'];
 export interface NotificationCategoryPreference { enabled: boolean; revision: number; }

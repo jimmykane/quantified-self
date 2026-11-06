@@ -44,7 +44,8 @@ describe('notification Settings', () => {
     const fixture = TestBed.createComponent(PushNotificationSettingsComponent); fixture.detectChanges();
     const toggle = fixture.debugElement.query(By.css('mat-slide-toggle')).componentInstance;
     expect(toggle.checked).toBe(true); expect(toggle.disabled).toBe(false);
-    expect(fixture.debugElement.queryAll(By.css('mat-slide-toggle'))).toHaveLength(3);
+    expect(fixture.debugElement.queryAll(By.css('mat-slide-toggle'))).toHaveLength(NOTIFICATION_CATEGORIES.length);
+    expect(fixture.nativeElement.textContent).toContain('Training sync');
     expect(fixture.nativeElement.textContent).toContain('New activities synced');
     expect(fixture.nativeElement.textContent).toContain('Activity delivery');
     expect(fixture.nativeElement.textContent).toContain('History imports are excluded');

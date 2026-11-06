@@ -19,6 +19,8 @@ describe('function target loader', () => {
       'sendTestPushNotification',
       'sendHistoryImportNotification',
       'sendActivityDeliveryNotifications',
+      'sendTrainingSyncNotifications',
+      'queueTrainingSyncNotification',
       'queueActivitySendNotification',
       'queueAutomaticDeliveryNotification',
       'sendActivitySyncNotifications',

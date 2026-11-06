@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { createHash, webcrypto } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -38,6 +38,7 @@ describe('Training delivery summaries on the workspace', () => {
     isReady: ReturnType<typeof vi.fn>; isVisible: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
   let open: ReturnType<typeof vi.fn>;
   let selection: ReturnType<typeof vi.fn>;
+  let query: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
   beforeEach(async () => {
     vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
     view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
@@ -45,16 +46,33 @@ describe('Training delivery summaries on the workspace', () => {
       isReady: vi.fn(() => false), isVisible: vi.fn(provider => provider !== 'coros'),
       isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
     open = vi.fn(); selection = vi.fn();
+    query = new BehaviorSubject(convertToParamMap({}));
     TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
     await TestBed.configureTestingModule({ imports: [TrainingDeliveryButtonComponent], providers: [provideRouter([]), provideNoopAnimations(),
       { provide: TrainingDeliveryService, useValue: service }, { provide: AppUserService, useValue: { user, user$ } },
       { provide: MatDialog, useValue: { open } }, { provide: AppHapticsService, useValue: { selection } },
+      { provide: ActivatedRoute, useValue: { queryParamMap: query } },
       { provide: AppEventService, useValue: {} },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     ] }).compileComponents();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it('opens sync history once from an attention notification without setup, permission or feedback', async () => {
+    query.next(convertToParamMap({ sync: 'attention' }));
+    const close = vi.fn(); open.mockReturnValue({ close });
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'history'); fixture.componentRef.setInput('entityId', 'current');
+    fixture.componentRef.setInput('title', 'Plans and standalone workouts'); fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); expect(open).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(open).toHaveBeenCalledExactlyOnceWith(expect.anything(), { data: { scope: 'history', id: 'current', title: 'Plans and standalone workouts' }, width: '640px', maxWidth: '95vw' });
+    query.next(convertToParamMap({ sync: 'attention' })); fixture.detectChanges(); await fixture.whenStable();
+    expect(open).toHaveBeenCalledOnce(); expect(selection).not.toHaveBeenCalled();
+    user.set({ uid: 'another-owner' }); user$.next(user()); fixture.detectChanges(); await fixture.whenStable();
+    expect(close).toHaveBeenCalled(); expect(open).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   async function render(scope: 'plan' | 'workout' = 'plan') {
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
     fixture.componentRef.setInput('scope', scope); fixture.componentRef.setInput('entityId', scope === 'plan' ? 'p' : 'w');

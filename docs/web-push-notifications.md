@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training, billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -79,7 +79,7 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), and `activity_delivery` (Activity delivery). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), and `training_sync` (Training sync). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -104,6 +104,30 @@ The import form links to category/device settings if unavailable.
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
 consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
 default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
+
+## Training sync attention
+
+Training alerts reuse existing device registrations, the key, category revision checks and private-state ownership.
+The authoritative policy, receipts, grouping, rollout and MCP review are in
+[Training sync attention notifications](training-workspace.md#training-sync-attention-notifications).
+The new operational parameter is `web_push_training_sync_enabled=false`. After separate approval, deploy:
+
+```sh
+npm run firebase -- deploy --only firestore:rules,firestore:indexes --project quantified-self-io
+```
+
+Wait for the `pushState.trainingDueAt` collection-group index to become ready, then deploy the Functions:
+
+```sh
+npm run firebase -- deploy --only functions:queueTrainingSyncNotification,functions:sendTrainingSyncNotifications --project quantified-self-io
+```
+
+Deploying the scheduled Function starts its minute sweeps even while the sender flag is false. Admission
+binds no secret; only the sender binds the existing VAPID key. Release the frontend and apply the updated monitoring
+bundle using the existing verified channel, then verify the new scheduler heartbeat and real devices before enabling
+the flag. The bundle covers fixed outcomes, both runtimes, overdue observations and idle/disabled sweeps. A never-seen
+heartbeat cannot bootstrap an absence alert: verify its initial series after deployment. Source tests are not live
+readback evidence. Provider queues and their retry/dead-letter monitoring remain unchanged.
 
 ## Manual history import completion
 

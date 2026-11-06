@@ -352,7 +352,8 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
+    // Notification help also covers grouped Training sync attention alerts (2026-11-06).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -486,7 +487,7 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
@@ -568,7 +569,7 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

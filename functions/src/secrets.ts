@@ -64,6 +64,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   sendHistoryImportNotification: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
   sendActivitySyncNotifications: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
   sendActivityDeliveryNotifications: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
+  sendTrainingSyncNotifications: [SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR],
   createStripePortalLink: [SECRET_PARAMS.STRIPE_BILLING_KEY],
   'ext-firestore-stripe-payments-createPortalLink': [SECRET_PARAMS.STRIPE_BILLING_KEY],
   stripeBillingWebhook: [SECRET_PARAMS.STRIPE_BILLING_WEBHOOK_SECRET],

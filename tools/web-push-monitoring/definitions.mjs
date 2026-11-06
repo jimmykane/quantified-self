@@ -1,4 +1,5 @@
 import { validateTarget } from '../monitoring/target.mjs';
+import { appendTrainingPushMonitoring } from './training-definitions.mjs';
 export const OWNER = 'qs-web-push-monitoring-v1';
 export function buildWebPushMonitoring(project, channel) {
   validateTarget(project, channel);
@@ -129,5 +130,6 @@ export function buildWebPushMonitoring(project, channel) {
   ]) bundle.dashboard.mosaicLayout.tiles.push({ yPos: 28 + index * 4, width: 12, height: 4, widget: { title,
     xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter, aggregation: { ...aggregate, groupByFields: groups } }, unitOverride: '1' } }],
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  appendTrainingPushMonitoring(bundle, project, channel, OWNER, runbook);
   return bundle;
 }

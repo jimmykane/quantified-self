@@ -63,6 +63,22 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each(['failed', 'needs_attention', 'reconnect_required', 'connection_repair'])(
+    'retains the existing %s sync projection independently of private notification receipts', async status => {
+      const f = fixture(); f.collections.scheduledWorkouts = { w1: workout(null) };
+      f.collections.trainingDeliverySettings.garmin = { scope: 'workout', scopeId: 'w1', provider: 'garmin', enabled: true,
+        suppressed: false, timeZone: 'UTC', destinationKey: 'private-destination', associationPlanId: null, updatedAtMs: 1 };
+      const id = await trainingDeliverySummaryIdentity('owner', 'garmin', 'private-destination', 'w1');
+      f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: null, provider: 'garmin', status,
+        differsFromQS: true, hasRemoteCopy: false, timeZone: 'UTC', lastAttemptAtMs: 1, lastAcceptedAtMs: null, updatedAtMs: 2 };
+      const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const args = { scope: 'workout', reference: workoutRef };
+      const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+      expect(result.services).toEqual([expect.objectContaining({ syncedWorkouts: 0, outcomes: [{ status, count: 1 }] })]);
+      expect(JSON.stringify(result)).not.toMatch(/private-destination|episode|trainingDueAt|categoryRevision/);
+      Object.assign(f.collections.trainingDeliveryStatuses[id], { notificationReceipt: { episode: 'private-episode', categoryRevision: 3 } });
+      await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+    });
   it('reads bounded standalone rest intent without a plan and excludes removal/storage metadata', async () => {
     const f = fixture(); delete f.collections.trainingPlans.p1;
     f.collections.trainingRestDays['2026-09-15'] = { schemaVersion: 1, localDate: '2026-09-15', isRestDay: true, revision: 1 };

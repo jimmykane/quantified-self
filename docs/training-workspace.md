@@ -2940,6 +2940,50 @@ show **Upcoming status incomplete**, not an allegedly complete total. Read/crypt
 **Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
 same-scope authored edits recompute the summary without reopening its Firestore listeners.
 
+#### Training sync attention notifications
+
+The default-on `training_sync` category is independent from provider Send/Enable consent and recorded-activity delivery.
+`queueTrainingSyncNotification` observes new transitions into `failed`, `needs_attention`, `reconnect_required` and
+`connection_repair` on the existing status projection. It changes no provider worker, HTTP request, retry, recipe or
+public status field. Routine rewrites, normal retries, successes, intentional pauses and historical/completed workouts
+do not admit alerts; there is no historical scan or backfill.
+
+Admission and final sending recheck the owner/deletion fence, current status and private delivery generation, current
+workout and active-plan lifecycle, deletion/restore locks, destination consent/settings revision, scope generation,
+connection epoch/generation, saved delivery-zone date, category revision and exact device generation/site. Only
+metadata is read from the workout and ledger; there is no provider I/O or prescription read. Stale/malformed sources
+fail closed. Edits, Stop, pauses, reconnects, category changes and device removal can cancel queued alerts.
+
+`users/{uid}/pushState/trainingSync` owns a two-minute first-event batch of at most 25 references and ten destinations,
+an indexed `trainingDueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
+production share preferences, receipts and limits. Capped/overflowed problems are suppressed, never a later backlog.
+Private `issues/{issueId}` descendants retain unresolved workout episodes through retries until a confirmed healthy
+delivery closes them. Connection problems share one receipt per provider/destination/connection generation, including
+new workouts affected by the same problem. Alternative affected workouts may join the original pending batch, so
+cancelling its first workout need not hide the connection issue. Recursive account cleanup owns these descendants;
+clients cannot read, list or reset them.
+
+`sendTrainingSyncNotifications` runs each minute with a bounded masked due-state query, claims before network I/O,
+rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best
+effort, at most one attempt per batch/destination; a crash after claim can lose an alert. The generic standard/declarative
+payload contains no workout names, metrics, provider IDs or errors. It opens `/training/plans?sync=attention` on the
+destination site. The existing history control opens Workout sync history once after owner/schedule readiness,
+without preview, permission, provider mutation or hydration haptics. Transport uses low urgency, ten-minute TTL,
+a stable tag and `renotify: false`.
+
+The new unconditional `web_push_training_sync_enabled` parameter defaults false. Shared `web_push_enabled` and the
+matching VAPID key remain required; only the sender binds the existing secret. Under separate approval, deploy Rules
+and the `trainingDueAt` index, wait for index readiness, then deploy both new Functions, the frontend and updated Web Push monitoring using the existing
+alert channel. Verify index readiness, scheduler/heartbeat and devices before enabling the new flag. Switching it off
+discards pending alerts without affecting sync. Accepted pushes cannot be recalled; never clear receipts or replay.
+
+Monitoring is **covered in source** by `tools/web-push-monitoring/`: admission/send failures, both native runtimes,
+bounded overdue observations, idle/disabled heartbeat and missing sweeps. Existing Training delivery monitoring owns
+provider backlog/retries/dead letters. Deployment, monitoring apply and live readback require separate approval.
+MCP impact: **no wire change**. Recipes, sync projections, scopes, proposal/apply and provider consent are unchanged;
+private notification preferences/receipts stay excluded. Extended read tests retain the four existing attention outcomes
+and reject private receipt fields. No plugin rebuild or registered schema change is needed.
+
 #### Reconciliation database work
 
 Each reconciliation transaction attempt owns one `ReconciliationReads` instance for its exact owner and page.

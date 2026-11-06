@@ -42,9 +42,9 @@ describe('account notification categories', () => {
   it('enables every category atomically using fresh revisions, including choices changed on another device', async () => {
     const service = setup(); await tick(); emit(undefined);
     tx.get.mockImplementation(async ref => ({ data: () => preference(false, ref.path.endsWith('activity_sync') ? 8 : 2) }));
-    tx.set.mockImplementation(() => expect(tx.get).toHaveBeenCalledTimes(3));
+    tx.set.mockImplementation(() => expect(tx.get).toHaveBeenCalledTimes(NOTIFICATION_CATEGORIES.length));
     expect(await service.enableAll()).toBe(true);
-    expect(tx.set).toHaveBeenCalledTimes(3);
+    expect(tx.set).toHaveBeenCalledTimes(NOTIFICATION_CATEGORIES.length);
     expect(tx.set).toHaveBeenCalledWith({ path: 'users/owner/notificationPreferences/activity_sync' },
       { ...preference(true, 9), updatedAt: 'server-time' });
     expect(service.categories().every(category => category.enabled)).toBe(true);
@@ -87,6 +87,9 @@ describe('account notification categories', () => {
     listeners[1].next({ data: () => preference(false, 1), metadata: { fromCache: false, hasPendingWrites: false } });
     expect(service.status()).toBe('loading');
     listeners[2].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.status()).toBe('loading');
+    listeners[3].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.isEnabled('training_sync')).toBe(true);
     expect(service.isEnabled('activity_delivery')).toBe(true);
     expect(service.isEnabled('history_import')).toBe(true); expect(service.isEnabled('activity_sync')).toBe(false);
     saved = preference(false, 1); await service.setEnabled('activity_sync', true);

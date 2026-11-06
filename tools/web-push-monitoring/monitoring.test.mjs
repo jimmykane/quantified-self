@@ -19,7 +19,7 @@ test('Monitoring alert and chart filters reject Logging-only grouped comparison 
 });
 test('scope, low-cardinality outcomes and sustained idle-safe failure policy', () => {
   const b = buildWebPushMonitoring(project, channel);
-  assert.equal(b.metrics.length, 8); assert.equal(b.policies.length, 4);
+  assert.equal(b.metrics.length, 11); assert.equal(b.policies.length, 5);
   assert.match(b.metrics[0].filter, /service_name="sendtestpushnotification"/);
   assert.match(b.metrics[0].filter, /jsonPayload.outcome=\("accepted" OR "expired" OR "failed"\)/);
   assert.deepEqual(b.metrics[0].metricDescriptor.labels.map(x => x.key), ['outcome']);
@@ -59,7 +59,7 @@ test('history monitoring isolates its function and fixed outcomes with idle-safe
     assert.doesNotMatch(c.conditionThreshold.filter, /cancelled|limited|expired|accepted/);
   }
   assert.match(b.policies[1].conditions[1].conditionThreshold.filter, /response_code_class="5xx"/);
-  assert.equal(b.dashboard.mosaicLayout.tiles.length, 10);
+  assert.equal(b.dashboard.mosaicLayout.tiles.length, 13);
 });
 test('upgrades the existing owned dashboard and reapplication preserves unrelated resources without duplicates', async () => {
   const bundle = buildWebPushMonitoring(project, channel);
@@ -85,8 +85,8 @@ test('upgrades the existing owned dashboard and reapplication preserves unrelate
     return saved;
   };
   await applyWebPushMonitoring(bundle, request); await applyWebPushMonitoring(bundle, request);
-  assert.equal(dashboards.length, 2); assert.equal(policies.length, 5); assert.equal(metrics.length, 9);
-  assert.equal(writes.filter(x => x.method === 'POST').length, 3);
+  assert.equal(dashboards.length, 2); assert.equal(policies.length, 6); assert.equal(metrics.length, 12);
+  assert.equal(writes.filter(x => x.method === 'POST').length, 4);
   assert.ok(writes.every(x => !/other|unrelated/.test(x.url)));
   assert.equal(dashboards[1].displayName, 'Unrelated'); assert.equal(policies[1].displayName, 'Unrelated');
 });
@@ -112,7 +112,7 @@ test('activity sender includes admission, backlog, idle heartbeat and native fai
 
 test('delivery notifications cover admission, runtime, overdue and missing sweeps on the existing channel', () => {
   const bundle = buildWebPushMonitoring(project, channel);
-  assert.deepEqual(bundle.metrics.slice(5).map(metric => metric.name), ['qs_activity_delivery_push_outcomes_v1', 'qs_activity_delivery_push_sweeps_v1', 'qs_activity_delivery_push_overdue_v1']);
+  assert.deepEqual(bundle.metrics.slice(5, 8).map(metric => metric.name), ['qs_activity_delivery_push_outcomes_v1', 'qs_activity_delivery_push_sweeps_v1', 'qs_activity_delivery_push_overdue_v1']);
   const policy = bundle.policies.find(policy => policy.userLabels.policy_id === 'delivery-sender');
   assert.deepEqual(policy.notificationChannels, [channel]); assert.equal(policy.conditions.length, 4);
   assert.match(policy.conditions[1].conditionThreshold.filter, /queueactivitysendnotification/);
@@ -121,4 +121,17 @@ test('delivery notifications cover admission, runtime, overdue and missing sweep
   assert.match(bundle.metrics[7].filter, /oldestDueAgeSeconds>=180/);
   assert.equal(policy.conditions[3].conditionAbsent.duration, '900s');
   assert.doesNotMatch(JSON.stringify(policy.conditions), /cancelled|limited|expired/);
+});
+
+test('training notifications cover both runtimes, due age, missing sweeps and the existing channel', () => {
+  const bundle = buildWebPushMonitoring(project, channel);
+  assert.deepEqual(bundle.metrics.slice(8).map(metric => metric.name), ['qs_training_sync_push_outcomes_v1', 'qs_training_sync_push_sweeps_v1', 'qs_training_sync_push_overdue_v1']);
+  const policy = bundle.policies.find(policy => policy.userLabels.policy_id === 'training-sender');
+  assert.deepEqual(policy.notificationChannels, [channel]); assert.equal(policy.conditions.length, 4);
+  assert.match(policy.conditions[1].conditionThreshold.filter, /queuetrainingsyncnotification/);
+  assert.match(policy.conditions[1].conditionThreshold.filter, /sendtrainingsyncnotifications/);
+  assert.match(bundle.metrics[10].filter, /oldestDueAgeSeconds>=180/);
+  assert.equal(policy.conditions[3].conditionAbsent.duration, '900s');
+  assert.doesNotMatch(JSON.stringify(policy.conditions), /cancelled|limited|expired|workoutId|uid|endpoint/);
+  assert.match(policy.documentation.content, /trainingDueAt/);
 });

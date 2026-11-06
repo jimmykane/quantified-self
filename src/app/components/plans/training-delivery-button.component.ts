@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, untracked } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, type MatDialogRef } from '@angular/material/dialog';
+import { ActivatedRoute } from '@angular/router';
 import { catchError, combineLatest, distinctUntilChanged, from, map, of, startWith, switchMap } from 'rxjs';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
 import { SharedModule } from '../../modules/shared.module';
@@ -43,6 +44,26 @@ export class TrainingDeliveryButtonComponent {
   private readonly users = inject(AppUserService);
   private readonly delivery = inject(TrainingDeliveryService);
   private readonly dialog = inject(MatDialog);
+  private readonly notificationRequested = toSignal(inject(ActivatedRoute).queryParamMap.pipe(
+    map(params => params.get('sync') === 'attention')), { initialValue: false });
+  private notificationHandled = false;
+  private notificationOwner: string | null = null;
+  private notificationDialog: MatDialogRef<TrainingDeliveryDialogComponent> | undefined;
+  private readonly notificationLinkEffect = effect(() => {
+    const uid = this.users.user()?.uid;
+    if (this.notificationOwner && this.notificationOwner !== uid) {
+      this.notificationDialog?.close(); this.notificationDialog = undefined;
+    }
+    if (!this.notificationRequested()) { this.notificationHandled = false; return; }
+    if (this.notificationHandled || this.scope() !== 'history' || !uid || this.disabled()
+      || !this.readState().loaded || this.readState().uid !== uid) return;
+    this.notificationHandled = true; this.notificationOwner = uid;
+    // A notification opens existing local status only. No initialProvider, preview, consent or haptic action.
+    this.notificationDialog = untracked(() => this.dialog.open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'history', id: 'current', title: 'Plans and standalone workouts' }, width: '640px', maxWidth: '95vw',
+    }));
+  });
+  constructor() { inject(DestroyRef).onDestroy(() => this.notificationDialog?.close()); }
   private readonly readContext = computed(() => ({ scope: this.scope(), id: this.entityId(),
     summaries: this.summaryWorkouts() !== null, parentPlanId: this.scope() === 'workout'
       ? this.summaryWorkouts()?.find(workout => workout.id === this.entityId())?.planId ?? null : null }));

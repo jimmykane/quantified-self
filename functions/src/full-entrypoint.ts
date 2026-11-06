@@ -280,3 +280,5 @@ export { sendActivitySyncNotifications } from './web-push/activity';
 
 export { queueActivitySendNotification, queueAutomaticDeliveryNotification } from './web-push/delivery-admission';
 export { sendActivityDeliveryNotifications } from './web-push/delivery';
+export { queueTrainingSyncNotification } from './web-push/training-admission';
+export { sendTrainingSyncNotifications } from './web-push/training';
