@@ -5,10 +5,10 @@ import { initializeApp as initializeSignerApp, type App } from 'firebase-admin/a
 import { getAuth } from 'firebase-admin/auth';
 import * as logger from 'firebase-functions/logger';
 import { localSecretPaths } from '../../shared/local-secret-paths';
+import { resolveFirebaseAdminRuntime } from './firebase-admin-runtime';
 
 // Firebase still advertises the legacy `.appspot.com` default in
 // FIREBASE_CONFIG. Storage writes intentionally use the migrated EU bucket.
-const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';
 const EMULATOR_SIGNER_APP = 'emulator-hosted-auth-signer';
 let initialized = false;
 
@@ -80,10 +80,11 @@ export function initializeFirebase(): void {
   if (initialized) return;
 
   if (admin.apps.length === 0) {
+    const runtime = resolveFirebaseAdminRuntime();
     admin.initializeApp({
-      projectId: process.env.GCLOUD_PROJECT,
-      databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
-      storageBucket: PRIMARY_STORAGE_BUCKET,
+      projectId: runtime.projectId,
+      databaseURL: runtime.databaseURL,
+      storageBucket: runtime.storageBucket,
     });
   }
 

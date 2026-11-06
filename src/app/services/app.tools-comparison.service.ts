@@ -163,8 +163,6 @@ function parseComparisonUploadResponse(payload: unknown): ToolComparisonUploadRe
   providedIn: 'root',
 })
 export class AppToolsComparisonService {
-  private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = 'localhost';
-  private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
 
   private app = inject(FirebaseApp);
   private auth = inject(Auth);
@@ -213,7 +211,9 @@ export class AppToolsComparisonService {
     }
 
     const idToken = await currentUser.getIdToken(true);
-    const appCheckToken = await this.appCheckReadiness.getToken();
+    const appCheckToken = this.shouldUseFunctionsEmulator()
+      ? null
+      : await this.appCheckReadiness.getToken();
     const projectID = this.app.options.projectId;
     if (!projectID) {
       throw new Error('Firebase project ID is not configured.');
@@ -237,10 +237,12 @@ export class AppToolsComparisonService {
     const functionURL = this.resolveFunctionUrl(config.region, config.name, projectID);
     const headers = new Headers({
       'Authorization': `Bearer ${idToken}`,
-      'X-Firebase-AppCheck': appCheckToken,
       'X-Tool-Comparison-Files-Encoded': encodeURIComponent(JSON.stringify(manifest)),
       'Content-Type': 'application/octet-stream',
     });
+    if (appCheckToken) {
+      headers.set('X-Firebase-AppCheck', appCheckToken);
+    }
     const comparisonEventIDHint = await this.generateComparisonEventIDHint(currentUser.uid, preparedFiles);
     if (comparisonEventIDHint) {
       headers.set(TOOL_COMPARISON_EVENT_ID_HEADER, comparisonEventIDHint);
@@ -436,13 +438,17 @@ export class AppToolsComparisonService {
 
   private resolveFunctionUrl(region: string, functionName: string, projectID: string): string {
     if (this.shouldUseFunctionsEmulator()) {
-      return `http://${AppToolsComparisonService.LOCAL_FUNCTIONS_EMULATOR_HOST}:${AppToolsComparisonService.LOCAL_FUNCTIONS_EMULATOR_PORT}/${projectID}/${region}/${functionName}`;
+      const emulatorConfig = environment.emulatorConfig;
+      if (!emulatorConfig) {
+        throw new Error('Functions emulator configuration is missing.');
+      }
+      return `http://${emulatorConfig.host}:${emulatorConfig.ports.functions}/${projectID}/${region}/${functionName}`;
     }
 
     return `https://${region}-${projectID}.cloudfunctions.net/${functionName}`;
   }
 
   private shouldUseFunctionsEmulator(): boolean {
-    return environment.localhost === true && environment.useFunctionsEmulator === true;
+    return environment.backendMode === 'emulator' && environment.useFunctionsEmulator === true;
   }
 }

@@ -5,7 +5,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
   'https://quantified-self.io',
   'https://beta.quantified-self.io',
-  /https?:\/\/localhost:\d+/
+  /^https?:\/\/(?:localhost|127\.0\.0\.1):\d+$/
 ];
 
 /**

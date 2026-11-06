@@ -33,6 +33,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { Auth, authState, user } from 'app/firebase/auth';
 import type { FirebaseUserType } from 'app/firebase/auth';
+import type { IdTokenResult } from 'firebase/auth';
 import { HttpClient } from '@angular/common/http';
 import {
   DateRanges,
@@ -307,6 +308,8 @@ export class AppUserService implements OnDestroy {
   private profilePublicationGeneration = 0;
   private lastPublishedProfileRead: { uid: string; generation: number } | null = null;
   private readonly corosBindingStateRequests = new Map<string, Promise<COROSBindingStateResult>>();
+  private consumedClaimsRefreshRevision: { uid: string; seconds: number; nanoseconds: number } | null = null;
+  private readonly pendingClaimsRefreshes = new Map<string, Promise<IdTokenResult>>();
   private readonly profileReadStateSignal = signal<AppUserProfileReadState>({ status: 'initializing' });
 
   public readonly profileReadState = this.profileReadStateSignal.asReadonly();
@@ -330,6 +333,8 @@ export class AppUserService implements OnDestroy {
       if (!firebaseUser) {
         this.usersWithIncompleteProfileReads.clear();
         this.lastPublishedProfileRead = null;
+        this.consumedClaimsRefreshRevision = null;
+        this.pendingClaimsRefreshes.clear();
         this.profileReadStateSignal.set({ status: 'signed-out' });
         return of(null);
       }
@@ -514,29 +519,69 @@ export class AppUserService implements OnDestroy {
     // Check for force-refresh (if DB was updated more recently than token issuance)
     const claimsUpdatedAt = identity.claimsUpdatedAt;
     if (claimsUpdatedAt) {
-      const updatedAtDate = claimsUpdatedAt.toDate();
+      const revisionSeconds = claimsUpdatedAt.seconds;
+      const revisionNanoseconds = claimsUpdatedAt.nanoseconds;
       const issuedAtSeconds = Number(claims['iat']);
-      const issuedAtMilliseconds = Number.isFinite(issuedAtSeconds) ? issuedAtSeconds * 1000 : null;
-      if (issuedAtMilliseconds !== null && updatedAtDate.getTime() > issuedAtMilliseconds + 2000) {
-        this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
-        try {
-          await firebaseUser.getIdToken(true);
-          const freshToken = await firebaseUser.getIdTokenResult();
-          const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
-          const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
-          if (freshStripeRole) {
-            identity.stripeRole = freshStripeRole;
-          }
-          if (freshGracePeriodUntil) {
-            identity.gracePeriodUntil = freshGracePeriodUntil;
-          }
-        } catch (e) {
-          this.logger.error('[AppUserService] Token refresh failed', e);
+      const revisionIsAfterToken = Number.isFinite(issuedAtSeconds)
+        && (revisionSeconds > issuedAtSeconds
+          || (revisionSeconds === issuedAtSeconds && revisionNanoseconds > 0));
+      const consumedRevision = this.consumedClaimsRefreshRevision;
+      const revisionAlreadyConsumed = consumedRevision?.uid === firebaseUser.uid
+        && (revisionSeconds < consumedRevision.seconds
+          || (revisionSeconds === consumedRevision.seconds
+            && revisionNanoseconds <= consumedRevision.nanoseconds));
+      const refreshGeneration = this.profileReadGeneration;
+      if (revisionIsAfterToken) {
+        // A concurrent merge must wait for the same refresh, never publish its
+        // pre-refresh token. A completed revision needs only a cached token read.
+        const freshToken = revisionAlreadyConsumed ? await firebaseUser.getIdTokenResult()
+          : await this.refreshClaimsRevision(firebaseUser, revisionSeconds, revisionNanoseconds, refreshGeneration);
+        if (this.auth.currentUser?.uid !== firebaseUser.uid || refreshGeneration !== this.profileReadGeneration) {
+          return identity;
+        }
+        const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
+        const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
+        if (freshStripeRole) {
+          identity.stripeRole = freshStripeRole;
+        }
+        if (freshGracePeriodUntil) {
+          identity.gracePeriodUntil = freshGracePeriodUntil;
+        } else {
+          delete identity.gracePeriodUntil;
         }
       }
     }
 
     return identity;
+  }
+
+  private refreshClaimsRevision(firebaseUser: FirebaseUserType, seconds: number, nanoseconds: number, generation: number): Promise<IdTokenResult> {
+    const key = JSON.stringify([firebaseUser.uid, seconds, nanoseconds, generation]);
+    const pending = this.pendingClaimsRefreshes.get(key);
+    if (pending) return pending;
+
+    // Register the promise before calling the SDK, which can re-emit through
+    // onIdTokenChanged. Errors remain visible to the bounded profile retry.
+    const refresh = Promise.resolve().then(async () => {
+      this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
+      await firebaseUser.getIdToken(true);
+      const freshToken = await firebaseUser.getIdTokenResult();
+      if (this.auth.currentUser?.uid === firebaseUser.uid && generation === this.profileReadGeneration) {
+        const completed = this.consumedClaimsRefreshRevision;
+        if (completed?.uid !== firebaseUser.uid || seconds > completed.seconds
+          || (seconds === completed.seconds && nanoseconds > completed.nanoseconds)) {
+          this.consumedClaimsRefreshRevision = { uid: firebaseUser.uid, seconds, nanoseconds };
+        }
+      }
+      return freshToken;
+    }).catch(error => {
+      this.logger.error('[AppUserService] Token refresh failed', error);
+      throw error;
+    }).finally(() => {
+      if (this.pendingClaimsRefreshes.get(key) === refresh) this.pendingClaimsRefreshes.delete(key);
+    });
+    this.pendingClaimsRefreshes.set(key, refresh);
+    return refresh;
   }
 
   private mergeClaimsWithAuthRetry(

@@ -105,6 +105,8 @@ import { MemoryStorage } from '../services/storage/memory.storage';
 
 import { signal } from '@angular/core';
 
+const defaultMockAuthDomain = environment.firebase.authDomain;
+
 // Mock dependencies
 const mockAuth = {
     currentUser: null
@@ -175,6 +177,7 @@ describe('AppAuthService', () => {
 
     afterEach(() => {
         resetMockEnvironmentLocalhost();
+        environment.firebase.authDomain = defaultMockAuthDomain;
         expect(getMockEnvironmentLocalhost()).toBe(getDefaultMockEnvironmentLocalhost());
     });
 
@@ -494,7 +497,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: 'https://localhost:4200/login',
+                    url: `${environment.appUrl}/login`,
                     handleCodeInApp: true,
                 })
             );
@@ -518,7 +521,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: 'https://localhost:4200/login?returnUrl=%2Ftools%2Fcompare%2Fsaved',
+                    url: `${environment.appUrl}/login?returnUrl=%2Ftools%2Fcompare%2Fsaved`,
                     handleCodeInApp: true,
                 })
             );
@@ -533,7 +536,7 @@ describe('AppAuthService', () => {
             await service.sendEmailLink('member@example.com', returnUrl);
 
             expect(sendSignInLinkToEmail).toHaveBeenCalledWith(mockAuth, 'member@example.com', expect.objectContaining({
-                url: 'https://localhost:4200/login?returnUrl=%2Fsubscriptions%3FpriceId%3Dprice_pro_yearly',
+                url: `${environment.appUrl}/login?returnUrl=%2Fsubscriptions%3FpriceId%3Dprice_pro_yearly`,
                 handleCodeInApp: true,
             }));
             expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, returnUrl);
@@ -551,7 +554,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 email,
                 expect.objectContaining({
-                    url: 'https://localhost:4200/login',
+                    url: `${environment.appUrl}/login`,
                     handleCodeInApp: true,
                 })
             );
@@ -581,6 +584,7 @@ describe('AppAuthService', () => {
             const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'prod-like@example.com';
             setMockEnvironmentLocalhost(false);
+            environment.firebase.authDomain = 'quantified-self.io';
             (sendSignInLinkToEmail as Mock).mockResolvedValueOnce(undefined);
 
             const result = await service.sendEmailLink(email);
@@ -734,7 +738,7 @@ describe('AppAuthService', () => {
                 mockAuth,
                 'reset@example.com',
                 expect.objectContaining({
-                    url: 'https://localhost:4200/login',
+                    url: `${environment.appUrl}/login`,
                 })
             );
             expect(mockSnackBar.open).toHaveBeenCalledWith(
@@ -763,6 +767,7 @@ describe('AppAuthService', () => {
         it('resetPassword should include linkDomain outside localhost', async () => {
             const { sendPasswordResetEmail } = await import('app/firebase/auth');
             setMockEnvironmentLocalhost(false);
+            environment.firebase.authDomain = 'quantified-self.io';
             (sendPasswordResetEmail as Mock).mockResolvedValueOnce(undefined);
 
             await service.resetPassword('reset-prod-like@example.com');

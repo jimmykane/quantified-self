@@ -34,7 +34,7 @@
   },
   "scripts": {
     "lint": "eslint . --fix",
-    "build": "rm -rf lib && tsc && mkdir -p lib/functions && cp -R templates lib/functions/templates",
+    "build": "node scripts/build.mjs",
     "build:watch": "tsc --watch --preserveWatchOutput",
     "serve": "npm run build && node ../tools/local-functions.mjs emulators:start --only functions",
     "shell": "npm run build && node ../tools/local-functions.mjs functions:shell",
