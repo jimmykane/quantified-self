@@ -806,6 +806,12 @@ repetition durations; recipes, strict proposal/confirmation contracts, scopes, c
 This frontend-only clarification requires no backend, Rules/index deployment or plugin refresh.
 
 Model output uses a sport-specific JSON shape derived from the existing MCP Training recipe/strength schemas.
+The first-party endurance decoder narrows standalone and repeated step endings to `time`, `distance` and `manual`,
+matching the generation validator. It must not advertise the full MCP editing union's `repetitions` or `kilojoules`:
+those can exhaust the one bounded correction and leave an included daily suggestion failed. Strength retains its
+separate repetitions/time schema. Pool length and the explicit Garmin-zone target choice are preserved.
+MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
+unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
 shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
 complexity limit; the canonical parsers and generation validator still enforce all of those limits after generation.
