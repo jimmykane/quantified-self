@@ -9,6 +9,6 @@ export function trainingSyncNotificationPayload(origin: string) {
     title: 'Quantified Self', body: 'Training sync needs attention. Open Quantified Self to review your upcoming workouts.',
     tag: 'qs-training-sync', renotify: false, icon: `${origin}/assets/favicons/android-chrome-192x192.png`,
     navigate: origin + TRAINING_SYNC_NOTIFICATION_PATH,
-    data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: TRAINING_SYNC_NOTIFICATION_PATH } } },
+    data: { onActionClick: { default: { operation: 'openWindow', url: TRAINING_SYNC_NOTIFICATION_PATH } } },
   } };
 }

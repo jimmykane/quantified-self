@@ -27,6 +27,6 @@ export function buildHistoryNotificationPayload(origin: string, service: string,
   return { web_push: 8030, notification: {
     title: 'Quantified Self', body, tag: 'qs-history-import', renotify: false,
     icon: `${origin}/assets/favicons/android-chrome-192x192.png`, navigate: origin + path,
-    data: { onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url: path } } },
+    data: { onActionClick: { default: { operation: 'openWindow', url: path } } },
   } };
 }

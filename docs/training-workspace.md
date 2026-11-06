@@ -2993,7 +2993,9 @@ clients cannot read, list or reset them.
 rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best
 effort, at most one attempt per batch/destination; a crash after claim can lose an alert. The generic standard/declarative
 payload contains no workout names, metrics, provider IDs or errors. It opens `/training/plans?sync=attention` on the
-destination site. The existing history control opens Workout sync history once after owner/schedule readiness,
+destination site. The [shared click policy](web-push-notifications.md#notification-click-routing) uses Angular's
+`openWindow` fallback so the browser can select the matching installed app; native declarative navigation retains
+the same URL. App selection remains browser-controlled. The existing history control opens Workout sync history once after owner/schedule readiness,
 without preview, permission, provider mutation or hydration haptics. Transport uses low urgency, ten-minute TTL,
 a stable tag and `renotify: false`.
 The automatic redirect to a remembered Standalone view preserves incoming query parameters, including the attention

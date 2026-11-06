@@ -353,6 +353,7 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Notification help also covers grouped Training sync attention alerts (2026-11-06).
+    // Notification clicks use browser app routing and require a matching beta/production installation (2026-11-06).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
   });
 
