@@ -5,6 +5,9 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
 import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
+import { createHistoryRun, type ConnectionHistoryRun } from '../connection-history/model';
+import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
+import { GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS } from './health-backfill-cutoffs';
 
 const hoisted = vi.hoisted(() => ({
   requestGet: vi.fn(),
@@ -25,6 +28,7 @@ const hoisted = vi.hoisted(() => ({
   transactionSet: vi.fn(),
   queueData: {} as Record<string, unknown>,
   sleepStateData: {} as Record<string, unknown>,
+  historyRun: undefined as ConnectionHistoryRun | undefined,
 }));
 
 const tokenData = {
@@ -82,6 +86,10 @@ const queueRef = {
   parent: { id: 'sleepSyncQueue' },
   get: vi.fn(async () => ({ exists: true, data: () => ({ ...hoisted.queueData }) })),
 };
+const historyRef = {
+  id: 'history-ref',
+  get: async () => ({ exists: !!hoisted.historyRun, data: () => hoisted.historyRun && structuredClone(hoisted.historyRun) }),
+};
 
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('firebase-admin', () => {
@@ -93,9 +101,11 @@ vi.mock('firebase-admin', () => {
   tokenQuery.where.mockReturnValue(tokenQuery);
   tokenQuery.limit.mockReturnValue(tokenQuery);
   const firestore = vi.fn(() => ({
+    doc: (path: string) => path.includes('/meta/') ? metaRef : path.includes('/tokens/') ? tokenRef : rootRef,
     collection: vi.fn((name: string) => ({
       doc: vi.fn(() => name === 'garminAPITokens'
         ? { collection: vi.fn(() => tokenQuery) }
+        : name === 'connectionHistoryImports' ? historyRef
         : { collection: vi.fn(() => ({ doc: vi.fn(() => ({ id: 'state-ref' })) })) }),
     })),
     runTransaction: vi.fn(async (runner: (transaction: {
@@ -110,18 +120,28 @@ vi.mock('firebase-admin', () => {
         if (ref === tokenRef) return tokenRef.get();
         if (ref === metaRef) return metaRef.get();
         if (ref === rootRef) return rootRef.get();
+        if (ref === historyRef) return historyRef.get();
         if ((ref as { id?: unknown })?.id === 'state-ref') {
           return { exists: true, data: () => ({ ...hoisted.sleepStateData }) };
         }
         return { exists: true, data: () => ({}) };
       },
-      update: (_ref, data) => Object.assign(hoisted.queueData, data),
+      update: (ref, data) => {
+        if (ref === historyRef) {
+          for (const [path, value] of Object.entries(data)) {
+            const family = path.split('.')[1] as typeof GARMIN_HEALTH_SUMMARY_TYPES[number];
+            hoisted.historyRun!.garminHealthBackfillCutoffs ??= {};
+            hoisted.historyRun!.garminHealthBackfillCutoffs[family] = value as never;
+          }
+        } else Object.assign(hoisted.queueData, data);
+      },
       set: (_ref, data, options) => hoisted.transactionSet(data, options),
     })),
   }));
   return { firestore };
 });
 vi.mock('../request-helper', () => ({ get: hoisted.requestGet }));
+vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: vi.fn(async () => true) }));
 vi.mock('../queue-utils', async importOriginal => ({
   ...(await importOriginal<typeof import('../queue-utils')>()),
   isCurrentSleepQueueTransition: vi.fn(() => true),
@@ -220,12 +240,46 @@ function seedRangeQueueItem(rangeStartMs: number, rangeEndMs: number, overrides 
   return queueItem;
 }
 
+function seedHistoryRun(startMs: number, endMs: number): ConnectionHistoryRun {
+  const run = createHistoryRun('user-1', ServiceNames.GarminAPI, {
+    requested: true, rangePreset: 'maximum', runId: '11111111-1111-4111-8111-111111111111',
+    rootPath: 'garminAPITokens/user-1', tokenPath: 'garminAPITokens/user-1/tokens/garmin-user-1',
+    providerUserId: 'garmin-user-1', credentialGeneration: 'token-generation-1',
+  }, 'connection-generation-1', Date.now());
+  Object.assign(run, { startMs, endMs });
+  hoisted.historyRun = run;
+  rootRef.get.mockResolvedValue({ exists: true, data: () => ({ activeOAuthCredentialGeneration: 'token-generation-1' }) });
+  metaRef.get.mockResolvedValue({ exists: true, data: () => ({ connectionState: 'connected', connectionStateGeneration: 'connection-generation-1' }) });
+  const historyGuards = { ...guards, rootOAuthCredentialGeneration: 'token-generation-1',
+    additionalRequiredDocumentFieldValues: [{ documentRef: rootRef, expectedFields: { activeOAuthCredentialGeneration: 'token-generation-1' } }] };
+  hoisted.captureGuards.mockResolvedValue(historyGuards);
+  hoisted.refreshGuards.mockResolvedValue({ tokenData, tokenSnapshot, lifecycleGuards: historyGuards });
+  return run;
+}
+
+function seedHistoryChild(startMs: number, endMs: number): SleepSyncQueueItemInterface {
+  return seedRangeQueueItem(startMs, endMs, {
+    connectionHistoryRunId: hoisted.historyRun!.id,
+    garminHealthRootOAuthCredentialGeneration: 'token-generation-1',
+  });
+}
+
+async function processWithTimers(item: SleepSyncQueueItemInterface): Promise<QueueResult> {
+  const work = processGarminHealthBackfillQueueItem(item);
+  await vi.dynamicImportSettled();
+  await vi.runAllTimersAsync();
+  return work;
+}
+
 describe('Garmin Health backfill processor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     hoisted.transactionSet.mockReset();
     tokenRef.get.mockReset().mockResolvedValue({ exists: true, data: () => tokenData });
+    metaRef.get.mockReset().mockResolvedValue({ exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) });
+    rootRef.get.mockReset().mockResolvedValue({ exists: true, data: () => ({ activeOAuthCredentialGeneration: 'root-generation-1' }) });
+    hoisted.historyRun = undefined;
     hoisted.getDeletionGuard.mockResolvedValue({ shouldSkip: false });
     hoisted.getDeletionGuardInTransaction.mockResolvedValue({ shouldSkip: false });
     hoisted.captureGuards.mockResolvedValue(guards);
@@ -251,6 +305,98 @@ describe('Garmin Health backfill processor', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('models the observed 61-job campaign with identical accepted windows and 580 fewer rejected requests', async () => {
+    const day = 86_400_000;
+    const startMs = Date.parse('2021-11-06T00:00:00Z');
+    const endMs = Date.parse('2026-11-06T00:00:00Z') - 1_000;
+    const minimumStartMs = startMs + 59 * 30 * day + 10 * day;
+    const benchmark = async (reuse: boolean) => {
+      vi.setSystemTime(endMs + day);
+      const run = seedHistoryRun(startMs, endMs);
+      const accepted: string[] = [];
+      let requests = 0;
+      let rejected = 0;
+      let pacingMs = 0;
+      hoisted.requestGet.mockImplementation(async ({ url }: { url: string }) => {
+        requests++;
+        const request = new URL(url);
+        if (Number(request.searchParams.get('summaryStartTimeInSeconds')) * 1_000 < minimumStartMs) {
+          rejected++;
+          throw { statusCode: 400, error: { minStartTimeInSeconds: minimumStartMs / 1_000 } };
+        }
+        accepted.push(url);
+      });
+      for (let i = 0; i < 61; i++) {
+        if (!reuse) delete run.garminHealthBackfillCutoffs;
+        const child = seedHistoryChild(startMs + i * 30 * day, Math.min(endMs, startMs + (i + 1) * 30 * day - 1_000));
+        const started = Date.now();
+        expect(await processWithTimers(child)).toBe(QueueResult.Processed);
+        pacingMs += Date.now() - started;
+        expect(hoisted.queueData).toMatchObject({ processed: true, resultStatus: 'success',
+          garminHealthBackfillSummaryIndex: 10, garminHealthBackfillWindowsCompleted: 10 });
+        // The coordinator observes settled children on its existing one-minute cadence.
+        vi.setSystemTime(Date.now() + 60_000);
+      }
+      return { requests, rejected, pacingMs, accepted };
+    };
+    const baseline = await benchmark(false);
+    const optimized = await benchmark(true);
+    expect(baseline).toMatchObject({ requests: 620, rejected: 600, pacingMs: 838_500 });
+    expect(optimized).toMatchObject({ requests: 40, rejected: 20, pacingMs: 55_500 });
+    expect(optimized.accepted).toEqual(baseline.accepted);
+    expect(optimized.accepted).toHaveLength(20);
+    expect(hoisted.moveDlq).not.toHaveBeenCalled();
+    expect(hoisted.increaseRetry).not.toHaveBeenCalled();
+  });
+
+  it('reuses only the unavailable family and retains its exact inclusive boundary on the next child', async () => {
+    const startMs = Date.parse('2026-01-01T00:00:00Z');
+    vi.setSystemTime(startMs + 100_000);
+    const run = seedHistoryRun(startMs, startMs + 20_000);
+    const cutoff = { minimumStartMs: startMs + 10_000, observedAtMs: Date.now() };
+    run.garminHealthBackfillCutoffs = { dailies: cutoff };
+    await processWithTimers(seedHistoryChild(startMs, startMs + 9_000));
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(9);
+    expect(hoisted.requestGet.mock.calls.some(([options]) => new URL(options.url).pathname.endsWith('/dailies'))).toBe(false);
+    hoisted.requestGet.mockClear();
+    await processWithTimers(seedHistoryChild(cutoff.minimumStartMs, cutoff.minimumStartMs));
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(10);
+    expect(hoisted.requestGet.mock.calls[0][0].url).toContain(`summaryStartTimeInSeconds=${cutoff.minimumStartMs / 1_000}&summaryEndTimeInSeconds=${cutoff.minimumStartMs / 1_000}`);
+  });
+
+  it.each(['expired', 'invalid', 'legacy', 'new-run'])('requests history normally with %s cutoff evidence', async mode => {
+    const run = seedHistoryRun(0, 1000);
+    const item = seedHistoryChild(0, 0);
+    run.garminHealthBackfillCutoffs = Object.fromEntries(GARMIN_HEALTH_SUMMARY_TYPES.map(family => [family, {
+      minimumStartMs: mode === 'invalid' ? Number.NaN : 1000,
+      observedAtMs: mode === 'expired' ? Date.now() - GARMIN_HEALTH_BACKFILL_CUTOFF_MAX_AGE_MS : Date.now(),
+    }]));
+    if (mode === 'legacy') { delete item.connectionHistoryRunId; delete hoisted.queueData.connectionHistoryRunId; }
+    if (mode === 'new-run') delete run.garminHealthBackfillCutoffs;
+    await processWithTimers(item);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(10);
+  });
+
+  it('rechecks a cutoff lowered after the child loaded its run snapshot', async () => {
+    const run = seedHistoryRun(0, 1000);
+    run.garminHealthBackfillCutoffs = { dailies: { minimumStartMs: 1000, observedAtMs: Date.now() } };
+    const historyGuards = await hoisted.captureGuards();
+    hoisted.captureGuards.mockImplementationOnce(async () => { run.garminHealthBackfillCutoffs!.dailies!.minimumStartMs = 0; return historyGuards; });
+    await processWithTimers(seedHistoryChild(0, 0));
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(10);
+  });
+
+  it('does not publish cutoff evidence for a superseded cursor', async () => {
+    const run = seedHistoryRun(0, 1000);
+    hoisted.requestGet.mockImplementationOnce(async () => {
+      hoisted.queueData.garminHealthBackfillWindowsCompleted = 1;
+      throw { statusCode: 400, error: { minStartTimeInSeconds: 1 } };
+    });
+    await processWithTimers(seedHistoryChild(0, 0));
+    expect(run.garminHealthBackfillCutoffs).toBeUndefined();
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
   it('emits one completed request campaign only after the terminal cursor commits', async () => {

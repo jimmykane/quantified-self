@@ -236,6 +236,18 @@ Sleep and Health use the shared provider policy to request up to the latest roll
 
 Health minimum-start clipping independently adds up to 30 seconds of headroom after rounding upward, capped at the inclusive range end so the final valid second is preserved. Three consecutive minimum-start failures in the same family per invocation persist the adjusted cursor and yield to the existing queue retry/exhaustion path instead of looping until the 30-minute deadline. Cutoff-only updates preserve the durable retry count, even when they credit older, unavailable windows; accepted/already-requested windows or advancing past an entirely unavailable family reset it. Normal cutoff adjustments log at INFO with the queue ID, fixed summary-family name, requested/provider-minimum/next timestamps, recovery attempt, outcome, and window counters. Reaching the recovery limit logs WARNING with the actual queue transition result; terminal exhaustion uses the existing failed-progress/DLQ path. Completion logs at INFO and means backfill request processing finished, not that Garmin callbacks have all been ingested. Never infer healthy progress from a fresh `updatedAtMs`, `running` status, or zero retry count alone: verify that completed-window/family counters advance. No provider response body, callback URL, or credential belongs in this telemetry.
 
+Connection-history Health children remember parsed `400` minimum-start responses privately on their existing import run,
+separately for each Health family. Later children can advance an entire remaining family range without a provider call
+only when its inclusive end precedes a confirmed minimum observed less than one hour ago. Ranges touching or crossing
+that minimum retain the existing provider request and clipping path; the cache adds no boundary headroom. Evidence and
+cursor progress commit together under the existing queue revision and connection/deletion/Pro guards. Reuse rechecks the
+current run evidence in that transaction, does not renew its age, and cannot cross runs, accounts or credential/connection
+generations. Missing, invalid, expired or legacy evidence falls back to normal requests. Coordinator checkpoints preserve
+child discoveries without changing task revisions or public progress projections. The existing completion log adds
+`unavailableFamiliesReused` beside actual `requestCount`; completion still means request processing, not callback ingestion.
+A deterministic 61-child, ten-family replay reduces 620 calls to 40 and pacing from 838.5 to 55.5 seconds with identical
+accepted windows. This models stable provider cutoffs; actual savings depend on availability, run duration and retries.
+
 Sleep and Health share the existing 30-day Garmin history cooldown, but their ranges are independent: a provider-discovered Sleep minimum does not shorten another Health family's range. The callable reports `sleepQueued` and `healthQueued` separately while retaining `queued` as the number of Sleep date-range requests. Garmin Summary Resender remains an operational recovery option for a deliberately bounded family/range after live delivery is healthy; it is not the normal user history flow, and no local credential migration script is required.
 
 ## Permission visibility and management

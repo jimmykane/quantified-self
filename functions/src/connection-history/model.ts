@@ -57,6 +57,8 @@ export interface ConnectionHistoryRun {
   // A task generation permits only exact-generation enqueue repair on redelivery.
   derivedMetricsFlush?: { revision: number; generation: number | null };
   garminHealthSummaryTypes?: readonly GarminHealthSummaryType[];
+  /** Private, short-lived provider evidence, scoped to this run and summary family. */
+  garminHealthBackfillCutoffs?: Partial<Record<GarminHealthSummaryType, { minimumStartMs: number; observedAtMs: number }>>;
   steps: HistoryStep[];
   lastOperation?: { key: string; result: { count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] } };
   leaseOwner?: string;
