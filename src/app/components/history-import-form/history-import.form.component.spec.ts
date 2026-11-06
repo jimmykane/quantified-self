@@ -1,3 +1,4 @@
+import { AppPushService } from '../../services/app.push.service';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HistoryImportFormComponent } from './history-import.form.component';
@@ -130,6 +131,7 @@ describe('HistoryImportFormComponent', () => {
             ],
             providers: [
                 { provide: AppEventService, useValue: mockEventService },
+                { provide: AppPushService, useValue: { historyNotificationsAvailable: vi.fn(() => false), canNotifyHistory: vi.fn(() => false), canEnable: vi.fn(() => false), operation: () => null, enable: vi.fn(), historyNotificationTarget: vi.fn() } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: LoggerService, useValue: mockLoggerService },
@@ -323,7 +325,7 @@ describe('HistoryImportFormComponent', () => {
             fixture.detectChanges();
             if (provider === ServiceNames.GarminAPI) {
                 expect(fixture.nativeElement.querySelector('app-status-info').title).toBe('History requested');
-                expect(fixture.nativeElement.textContent).toContain('Delivery may take hours or days');
+                expect(fixture.nativeElement.textContent).toContain('Garmin sends available records separately');
                 expect(fixture.nativeElement.textContent).not.toContain('Your selected history has been processed.');
             } else expect(fixture.nativeElement.textContent).toContain('Your selected history has been processed.');
             expect(component.formGroup.enabled).toBe(true);
@@ -2277,7 +2279,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isAllowedToDoHistoryImport).toBe(true);
             expect(component.formGroup.enabled).toBe(true);
-            expect(fixture.nativeElement.textContent).toContain('I understand this may take hours to days.');
+            expect(fixture.nativeElement.textContent).toContain('I understand this import continues in the background.');
         });
 
         it('disables a repeated import during the activity-based cooldown and renders its status', () => {
@@ -2343,4 +2345,109 @@ describe('HistoryImportFormComponent', () => {
             expect(fixture.nativeElement.textContent).toContain('Timing depends on the provider and queued work.');
         });
     });
+    describe('explicit completion notification', () => {
+        const target = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002' };
+        async function prepare() {
+            await fixture.whenStable();
+            const push = TestBed.inject(AppPushService);
+            vi.mocked(push.historyNotificationsAvailable).mockReturnValue(true);
+            vi.mocked(push.canNotifyHistory).mockReturnValue(true);
+            vi.mocked(push.historyNotificationTarget).mockResolvedValue(target);
+            component.formGroup.patchValue({ startDate: dayjs().subtract(1, 'day'), endDate: dayjs(), accepted: true });
+            fixture.detectChanges();
+            return push;
+        }
+        it('renders an unchecked opt-in and makes no permission request during initialization', async () => {
+            const push = await prepare();
+            const option = fixture.debugElement.query(By.css('.history-notification-option mat-checkbox'));
+            expect(option.componentInstance.checked).toBe(false);
+            expect(fixture.nativeElement.textContent).toContain('Up to two import alerts in 24 hours');
+            expect(push.enable).not.toHaveBeenCalled();
+            haptics.selection.mockClear();
+            option.componentInstance.change.emit({ checked: true });
+            expect(component.notifyHistory()).toBe(true); expect(haptics.selection).toHaveBeenCalledTimes(1);
+            component.onHistoryNotificationChange(true); expect(haptics.selection).toHaveBeenCalledTimes(1);
+        });
+        it('sends consent only for a checked import, using the starting account', async () => {
+            const push = await prepare(); component.onHistoryNotificationChange(true);
+            await component.onSubmit(new Event('submit'));
+            expect(push.historyNotificationTarget).toHaveBeenCalledWith('123');
+            expect(component.notifyHistory()).toBe(false);
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledWith(ServiceNames.COROSAPI,
+                expect.any(Date), expect.any(Date), '123', target);
+        });
+        it('allows unchecking after the device or feature becomes unavailable', async () => {
+            const push = await prepare(); component.onHistoryNotificationChange(true);
+            vi.mocked(push.canNotifyHistory).mockReturnValue(false);
+            vi.mocked(push.historyNotificationsAvailable).mockReturnValue(false); fixture.detectChanges();
+            const option = fixture.debugElement.query(By.css('.history-notification-option mat-checkbox'));
+            expect(option.componentInstance.disabled).toBe(false);
+            option.componentInstance.change.emit({ checked: false });
+            await component.onSubmit(new Event('submit'));
+            expect(push.historyNotificationTarget).not.toHaveBeenCalled();
+            expect(mockUserService.importServiceHistoryForCurrentUser.mock.calls[0]).toHaveLength(4);
+        });
+        it('directs an opted-out account to its category settings without prompting permission', async () => {
+            const push = await prepare(); vi.mocked(push.canNotifyHistory).mockReturnValue(false); fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('History imports category');
+            expect(fixture.debugElement.query(By.css('.history-notification-option mat-checkbox')).componentInstance.disabled).toBe(true);
+            expect(push.enable).not.toHaveBeenCalled();
+        });
+        it('does not start an import if its view closes while resolving device consent', async () => {
+            const push = await prepare(); component.onHistoryNotificationChange(true);
+            let resolve: (value: typeof target) => void;
+            vi.mocked(push.historyNotificationTarget).mockReturnValue(new Promise(done => { resolve = done; }));
+            const pending = component.onSubmit(new Event('submit')); component.ngOnDestroy(); resolve!(target); await pending;
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+        });
+        it.each(['replacement', undefined])('does not transfer a pending notification import to connection %s', async connectionStateGeneration => {
+            const push = await prepare();
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration: 'original' };
+            component.onHistoryNotificationChange(true);
+            let resolve: (value: typeof target) => void;
+            vi.mocked(push.historyNotificationTarget).mockReturnValue(new Promise(done => { resolve = done; }));
+            haptics.error.mockClear();
+            const pending = component.onSubmit(new Event('submit'));
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration };
+            component.ngOnChanges({}); resolve!(target); await pending;
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+            expect(component.notifyHistory()).toBe(false);
+            expect(component.isSubmitting).toBe(false);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+            expect(snackBar.open).toHaveBeenCalledWith(expect.stringContaining('Connection changed'), undefined, expect.anything());
+        });
+        it('allows a same-connection metadata refresh during the notification lookup', async () => {
+            const push = await prepare();
+            component.userMetaForService = { ...component.userMetaForService, connectionStateGeneration: 'original' };
+            component.onHistoryNotificationChange(true);
+            let resolve: (value: typeof target) => void;
+            vi.mocked(push.historyNotificationTarget).mockReturnValue(new Promise(done => { resolve = done; }));
+            const pending = component.onSubmit(new Event('submit'));
+            component.userMetaForService = { ...component.userMetaForService }; component.ngOnChanges({});
+            resolve!(target); await pending;
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledTimes(1);
+        });
+        it('hides the option for Garmin and resets consent after changing provider', async () => {
+            await prepare(); component.onHistoryNotificationChange(true);
+            component.serviceName = ServiceNames.GarminAPI; component.ngOnChanges({}); fixture.detectChanges();
+            expect(component.notifyHistory()).toBe(false);
+            expect(fixture.debugElement.query(By.css('.history-notification-option'))).toBeNull();
+        });
+        it('retains the unchecked option and reports failure haptics after permission fails', async () => {
+            const push = await prepare(); vi.mocked(push.canEnable).mockReturnValue(true);
+            vi.mocked(push.enable).mockRejectedValue(new Error('Permission denied'));
+            haptics.success.mockClear(); haptics.error.mockClear();
+            await component.enableHistoryNotifications();
+            expect(component.notifyHistory()).toBe(false); expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).toHaveBeenCalledTimes(1); expect(component.notificationError()).toContain('still import');
+        });
+        it('enables the device only from the button and retains the separate unchecked import choice', async () => {
+            const push = await prepare(); vi.mocked(push.canEnable).mockReturnValue(true);
+            vi.mocked(push.canNotifyHistory).mockReturnValue(false); haptics.selection.mockClear(); haptics.success.mockClear();
+            await component.enableHistoryNotifications();
+            expect(push.enable).toHaveBeenCalledTimes(1); expect(component.notifyHistory()).toBe(false);
+            expect(haptics.selection).toHaveBeenCalledTimes(1); expect(haptics.success).toHaveBeenCalledTimes(1);
+        });
+    });
+
 });

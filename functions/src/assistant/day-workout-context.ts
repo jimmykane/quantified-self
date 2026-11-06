@@ -1,7 +1,9 @@
+import type { WorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
+import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { DataFeeling, DataRPE } from '@sports-alliance/sports-lib';
-import { dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutReadinessSourcesEnabled, type DayWorkoutControls } from '../../../shared/day-workout';
+import { dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutReadinessSourcesEnabled, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { parseWorkoutStructureV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
 import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays, normalizeTrainingLocalDate, validateTrainingPlanDateRange } from '../../../shared/training-plans';
@@ -11,6 +13,8 @@ import { collectDailyWorkoutContext } from './daily-workout-context';
 import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
+import { readTrainingGoalSnapshot, readTrainingGoalsProgress } from '../training-goals/read';
+import { relevantTrainingGoals } from '../../../shared/training-goals';
 
 export const DAY_WORKOUT_CONTEXT_MAX_CHARACTERS = 160_000;
 type RecordValue = Record<string, unknown>;
@@ -25,6 +29,10 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  powerReference?: WorkoutPowerReferenceV1;
+  goalsRevision?: number;
+  eventGoals?: Array<{ name: string; localDate: string }>;
+  adviceOnly?: boolean;
   plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   evidence: RecordValue;
   usedContext: string[];
@@ -33,6 +41,8 @@ export interface DayWorkoutContext {
   references: WorkoutTargetV1[];
 }
 export interface DayWorkoutTrainingContext {
+  replacement?: { title: string; localDate: string; sport: string };
+  goals?: { revision: number; items: RecordValue[]; events: Array<{ name: string; localDate: string }> };
   plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   scheduleRevision: number;
   nearby: RecordValue[];
@@ -44,7 +54,7 @@ export interface DayWorkoutTrainingContext {
 
 /** Private, bounded summary reads; full strength companions are loaded only for five selected prescriptions. */
 export async function readDayWorkoutTrainingContext(uid: string, controls: DayWorkoutControls, now: Date,
-  db: FirebaseFirestore.Firestore = admin.firestore()): Promise<DayWorkoutTrainingContext> {
+  db: FirebaseFirestore.Firestore = admin.firestore(), replaceWorkout?: GenerateDayWorkoutRequest['replaceWorkout']): Promise<DayWorkoutTrainingContext> {
   if (!controls.trainingContext) throw new Error('Training context is disabled.');
   const reads = createFirestoreTrainingReads(() => db);
   const identity = 'first-party-assistant-v1:calendar-generation';
@@ -57,6 +67,17 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
   if (nearbyPage.size > 400) throw new Error('The nearby schedule could not be checked completely.');
   const nearbyRows = nearbyPage.docs.filter(doc => doc.get('lifecycle') !== 'deleted'
     && [null, before.activePlanId, controls.destinationPlanId].includes(doc.get('planId')));
+  let replacement: DayWorkoutTrainingContext['replacement'];
+  if (replaceWorkout) {
+    const target = nearbyRows.find(row => row.id === replaceWorkout.id);
+    if (!target || target.get('revision') !== replaceWorkout.revision || target.get('lifecycle') !== 'planned'
+      || target.get('localDate') !== controls.localDate || target.get('planId') !== controls.destinationPlanId
+      || target.get('structure.sport') !== controls.sport
+      || (await db.doc(`users/${uid}/${TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID}/${replaceWorkout.id}`).get()).exists) {
+      throw new Error('The workout to replace changed or is already completed. Reopen it before generating.');
+    }
+    replacement = { title: target.get('title'), localDate: controls.localDate, sport: controls.sport };
+  }
   const missing: string[] = [];
   let priorIds: string[] = [];
   if (isStrengthWorkoutSportV1(controls.sport) && controls.usePreviousWeights) {
@@ -130,7 +151,27 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
     .filter(other => other.kind === target.kind).every(other => other.mode === 'relative' && target.mode === 'relative'
       && JSON.stringify(other.reference) === JSON.stringify(target.reference)));
   if (references.length !== result.references.length) missing.push('Conflicting saved target references were omitted.');
-  return { ...result, references, scheduleRevision: after.revision, missing: [...new Set(missing)] };
+  let goals: DayWorkoutTrainingContext['goals'];
+  if (controls.goalsContext !== false) {
+    const snapshot = controls.activityContext === false
+      ? { ...await readTrainingGoalSnapshot(uid, db), progress: [], complete: false }
+      : await readTrainingGoalsProgress(uid, { localDate: controls.localDate, timeZone: controls.timeZone }, db);
+    const events = snapshot.goals.filter(goal => goal.lifecycle === 'active' && goal.kind === 'event'
+      && goal.targetLocalDate === controls.localDate && goal.startLocalDate <= controls.localDate);
+    const relevant = relevantTrainingGoals(snapshot.goals, controls.localDate, controls.sport);
+    const selected = [...new Map([...relevant, ...events].map(goal => [goal.id, goal])).values()];
+    goals = { revision: snapshot.revision, events: events.map(goal => ({ name: goal.name, localDate: goal.targetLocalDate! })),
+      items: selected.map(goal => ({ name: goal.name, kind: goal.kind, priority: goal.priority,
+        sportScope: goal.sportScope, sport: goal.sport, startLocalDate: goal.startLocalDate, targetLocalDate: goal.targetLocalDate,
+        objective: goal.objective, weeklyTarget: goal.weeklyTarget,
+        weeklyProgress: snapshot.progress.find(row => row.goalId === goal.id) ? (() => {
+          const { goalId: _id, goalRevision: _revision, ...progress } = snapshot.progress.find(row => row.goalId === goal.id)!;
+          return progress;
+        })() : null })) };
+    if (controls.activityContext === false) missing.push('Goal progress: turned off with Recent activities.');
+    else if (!snapshot.complete) missing.push('Goal progress is incomplete; do not interpret missing history as zero or prescribe catch-up volume.');
+  }
+  return { ...result, ...(replacement ? { replacement } : {}), references, ...(goals ? { goals } : {}), scheduleRevision: after.revision, missing: [...new Set(missing)] };
 }
 
 export async function collectDayWorkoutContext(controls: DayWorkoutControls, now: Date,
@@ -242,9 +283,12 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
       plannedRestDay: { localDate: controls.localDate, planName: 'Calendar', source: 'calendar' } };
     else if (calendarRest?.status !== 'none' && !training.plannedRestDay) throw new Error('Calendar rest days could not be checked.');
     usedContext.push('Selected-day schedule and completion links; nearby sessions within seven days');
+    if (training.replacement) usedContext.push('Replacement of one existing planned workout; saved only after approval.');
     if (training.plannedRestDay) usedContext.push(training.plannedRestDay.source === 'calendar' ? 'Authored calendar rest day' : 'Authored rest day in the selected plan');
     if (training.phase) usedContext.push('Selected plan and phase');
     if (training.previousStrength.length) usedContext.push('Up to five previous planned strength prescriptions');
+    if (controls.goalsContext !== false && training.goals?.items.length) usedContext.push(`Goals: ${training.goals.items.map(goal => goal.name).join(', ')}`.slice(0, 2000));
+    else if (controls.goalsContext === false) missingContext.push('Goals: turned off.');
     missingContext.push(...training.missing);
   } else missingContext.push('Training plan context and previous weights: access is off.');
   const feedbackResult = controls.feedbackContext === false ? {} : await read('query_metrics', {
@@ -276,10 +320,12 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
       if (routine.typicalDurationSeconds === null) missingContext.push('Training routine: usual session duration is unknown.');
     } else missingContext.push('Training routine could not be checked completely; no weekday habit was inferred.');
   } else missingContext.push('Training routine: turned off (requires Recent activities).');
-  const evidence: RecordValue = { daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
+  const evidence: RecordValue = { ...(training?.replacement ? { replacement: training.replacement } : {}), daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
+    ...(controls.goalsContext !== false && training?.goals ? { goals: training.goals.items } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
   if (JSON.stringify(evidence).length > DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
   return { evidence, usedContext, missingContext: [...new Set(missingContext)],
+    ...(controls.goalsContext !== false && training?.goals ? { goalsRevision: training.goals.revision, eventGoals: training.goals.events } : {}),
     ...(training?.plannedRestDay ? { plannedRestDay: training.plannedRestDay } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
 }

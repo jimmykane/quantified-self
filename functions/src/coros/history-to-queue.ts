@@ -1,5 +1,7 @@
 'use strict';
 
+import { readHistoryNotificationConsent } from '../web-push/history-consent';
+
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -25,6 +27,7 @@ interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
   background?: boolean;
+  notification?: unknown;
 }
 
 interface HistoryToQueueResponse {
@@ -140,11 +143,13 @@ export const addCOROSAPIHistoryToQueue = functions
       startDate = threeMonthsAgo;
     }
 
+    const notification = readHistoryNotificationConsent(data?.notification, context.rawRequest?.get?.('origin'), context.auth.token?.impersonatedBy);
+    if (notification && data?.background !== true) throw new functions.https.HttpsError('invalid-argument', 'Notifications require a background import.');
     if (data?.background === true) {
       const { startManualActivityHistory } = await import('../connection-history/manual-activity');
       // COROS accepts inclusive calendar dates, including the entire end day.
       const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate,
-        new Date(addUTCCalendarDays(endDate, 1).getTime() - 1));
+        new Date(addUTCCalendarDays(endDate, 1).getTime() - 1), ...(notification ? [notification] as const : [] as const));
       return { result: 'History import accepted', historyImport };
     }
 

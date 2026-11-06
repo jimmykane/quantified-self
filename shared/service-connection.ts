@@ -6,6 +6,19 @@ export const SERVICE_CONNECTION_STATES = {
 } as const;
 
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
+
+/** Resolve browser-safe accounts from the same metadata snapshot as lifecycle state. */
+export function serviceConnectionAccountsFromMeta(
+  meta: ServiceConnectionMetaFields | null | undefined,
+  allowConnectedStateFallback = false,
+): ServiceConnectionAccountProjection[] {
+  const accounts = Array.isArray(meta?.connectionAccounts) ? meta.connectionAccounts : [];
+  if (accounts.length) return accounts;
+  // Wahoo has no account projection; the other providers require one.
+  if (!allowConnectedStateFallback || meta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) return [];
+  const providerUserId = `${meta.providerUserId || ''}`.trim();
+  return providerUserId ? [{ providerUserId }] : [{}];
+}
 export type ProviderBindingState = 'bound' | 'unbound';
 
 export const SERVICE_OAUTH_COMPLETION_OUTCOMES = {
@@ -61,6 +74,9 @@ export interface ServiceDisconnectRetryDetails {
 }
 
 export interface ServiceConnectionMetaFields {
+  /** Server-owned cutoffs for recent live-sync notifications, never history catch-up. */
+  activityNotificationConnectedAtMs?: number;
+  activityNotificationHistoryEndMs?: number;
   /** Garmin's server-owned lower bound for automatic recorded-activity sending. */
   activitySyncCutoffMs?: number;
   connectionHistoryImport?: ConnectionHistoryStatusProjection;

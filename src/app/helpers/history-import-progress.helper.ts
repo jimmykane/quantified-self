@@ -30,7 +30,7 @@ export interface HistoryImportProgressView {
 const resourceNames: Record<HistoryResource, string> = {activities: 'Activities', sleep: 'Sleep', health: 'Health', routes: 'Saved routes'};
 const descriptions: Record<ConnectionHistoryStatus, string> = {
   queued: 'Queued', requesting: 'Requesting history', retrying: 'Waiting to retry',
-  requested: 'Requested; delivery may take hours or days', processed: 'Processed', skipped: 'Skipped', failed: 'Failed',
+  requested: 'Requested; delivery is not confirmed', processed: 'Processed', skipped: 'Skipped', failed: 'Failed',
 };
 const icons: Record<ConnectionHistoryStatus, string> = {
   queued: 'schedule', requesting: 'sync', retrying: 'update', requested: 'schedule',
@@ -103,7 +103,7 @@ function item(source: HistoryImportSource): HistoryImportProgressItem | null {
   }
   return {serviceName, name: getProviderDisplayName(serviceName), runId: value.runId, kind,
     label: (requestOnly ? requestLabels : labels)[kind], requestOnly,
-    rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active && kind === 'attention'};
+    rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active};
 }
 /** Latest persisted statuses for Connections, independent of notification dismissal and age. */
 export function buildHistoryImportItems(sources: readonly HistoryImportSource[]): HistoryImportProgressItem[] {

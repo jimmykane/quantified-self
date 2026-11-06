@@ -20,6 +20,7 @@ const MCP_SCOPE_ENTRIES = Object.entries(MCP_SCOPE_CONTENT) as Array<[
   typeof MCP_SCOPE_CONTENT[McpScope],
 ]>;
 const CHANGE_SCOPES = new Set<McpScope>([
+  'training-thresholds:write',
   'training-plans:write',
   'training-delivery:write',
   'timeline-notes:write',

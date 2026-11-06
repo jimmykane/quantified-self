@@ -6,6 +6,7 @@ export type PublicFeaturePreviewKey =
   | 'health-weight'
   | 'training-snapshot'
   | 'training-signals'
+  | 'training-hero'
   | 'training-readiness'
   | 'training-explorer'
   | 'training-plans'

@@ -1,3 +1,4 @@
+import { readHistoryNotificationConsent } from '../web-push/history-consent';
 import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
 import { type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
@@ -47,6 +48,7 @@ interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
   background?: boolean;
+  notification?: unknown;
 }
 
 interface WahooWorkoutsResponse {
@@ -343,7 +345,7 @@ export const addWahooAPIHistoryToQueue = onCall({
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
-  const { startDate: startValue, endDate: endValue, background } = (request.data || {}) as HistoryToQueueRequest;
+  const { startDate: startValue, endDate: endValue, background, notification: notificationValue } = (request.data || {}) as HistoryToQueueRequest;
   if (background !== undefined && typeof background !== 'boolean') {
     throw new HttpsError('invalid-argument', 'Invalid background option.');
   }
@@ -353,9 +355,11 @@ export const addWahooAPIHistoryToQueue = onCall({
     throw new HttpsError('invalid-argument', 'No valid start and/or end date was provided.');
   }
   if (startDate > endDate) throw new HttpsError('invalid-argument', 'Start date is after the end date.');
+  const notification = readHistoryNotificationConsent(notificationValue, request.rawRequest?.get?.('origin'), request.auth.token?.impersonatedBy);
+  if (notification && background !== true) throw new HttpsError('invalid-argument', 'Notifications require a background import.');
   if (background === true) {
     const { startManualActivityHistory } = await import('../connection-history/manual-activity');
-    const historyImport = await startManualActivityHistory(request.auth.uid, SERVICE_NAME, startDate, endDate);
+    const historyImport = await startManualActivityHistory(request.auth.uid, SERVICE_NAME, startDate, endDate, ...(notification ? [notification] as const : [] as const));
     return { result: 'History import accepted', historyImport };
   }
   const nextAllowedDate = await getNextAllowedHistoryImportDate(request.auth.uid, SERVICE_NAME);

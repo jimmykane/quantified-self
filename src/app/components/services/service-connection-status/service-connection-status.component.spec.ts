@@ -56,6 +56,18 @@ describe('ServiceConnectionStatusComponent', () => {
         component = fixture.componentInstance;
     });
 
+    it('distinguishes an unverified connection from a confirmed disconnected account', () => {
+        component.connected = false;
+        component.loading = true;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Checking connection');
+        expect(fixture.nativeElement.textContent).not.toContain('Not connected');
+        expect(component.statusIcon).toBe('sync');
+        component.loading = false;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Not connected');
+    });
+
     it('renders a compact disconnected status', () => {
         component.serviceLabel = 'Garmin';
         component.description = 'Required for history imports and auto-sync.';

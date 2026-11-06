@@ -1,4 +1,5 @@
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
+import { TrainingGoalsService } from '../../../services/training-goals.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { By } from '@angular/platform-browser';
 import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
@@ -595,6 +596,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     providers: [
       provideRouter([]),
       { provide: TrainingPlansService, useValue: {} },
+      { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false } },
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn(), isOwner: (uid: string) => uid === data.userId } },
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },

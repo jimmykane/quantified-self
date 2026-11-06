@@ -1,3 +1,10 @@
+@if (connectionReadError) {
+<app-status-info type="warning" title="Connection status unavailable" role="alert">
+  We couldn't check your COROS connection. Retry before reconnecting your account.
+  <button mat-button type="button" [disabled]="isLoading || isConnecting || isDisconnecting"
+    (click)="retryConnectionRead()">Retry</button>
+</app-status-info>
+} @else {
 <div
   class="service-container"
   [class.service-container--advanced]="showAdvancedTools"
@@ -85,9 +92,9 @@
 
     <div connection-actions class="tool-actions connection-history-actions">
       @if (isConnectedToService() && hasActiveSyncRoutesUsingService) {
-      <div class="active-sync-warning-pill">
-        <mat-icon>warning</mat-icon>
-        <span>{{ activeSyncRouteWarningLabel }}</span>
+      <div class="active-sync-usage">
+        <mat-icon aria-hidden="true">sync_alt</mat-icon>
+        <span>{{ activeSyncRouteUsageLabel }}</span>
       </div>
       }
       @if (shouldShowConnectAction) {
@@ -342,3 +349,4 @@
   </ng-template>
   }
 </div>
+}

@@ -58,6 +58,7 @@ const defaultDependencies: AssistantContentProposalDependencies = {
 
 function summaryFor(kind: AssistantContentProposalKind, args: Record<string, unknown>): string {
   switch (kind) {
+    case 'apply_training_threshold_change': return 'Save the reviewed training thresholds for future workouts.';
     case 'save_workout_reflection': return 'Save the athlete-reported reflection for the selected recording.';
     case 'delete_workout_reflection': return 'Permanently delete the selected reflection text.';
     case 'create_manual_measurement': return 'Create the reviewed manual Health measurement.';

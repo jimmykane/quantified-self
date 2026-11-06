@@ -26,7 +26,7 @@
     } @else if (backgroundImportNeedsAttention) {
     Some history could not be imported. Check History import in Connections for details and retry options.
     } @else if (garminRequests) {
-    History requests have been sent to Garmin. Delivery may take hours or days; this status does not confirm all activities have arrived.
+    History requests have been sent to Garmin. Garmin sends available records separately; this status does not confirm all activities have arrived.
     } @else {
     Your selected history has been processed.
     }
@@ -208,11 +208,28 @@
     <p>Only eligible FIT-backed workouts are included. Workouts from third-party fitness apps are excluded.</p>
     }
   </div>
+  @if (historyNotificationSupported && (push.historyNotificationsAvailable() || notifyHistory())) {
+  <div class="history-notification-option">
+    <mat-checkbox [checked]="notifyHistory()" [disabled]="(!push.canNotifyHistory() && !notifyHistory()) || formGroup.disabled"
+      (change)="onHistoryNotificationChange($event.checked)">
+      Notify me when this import finishes
+    </mat-checkbox>
+    <p>At most one alert for this import, on this device. Up to two import alerts in 24 hours.</p>
+    @if (push.canEnable()) {
+    <button mat-button type="button" [disabled]="formGroup.disabled" (click)="enableHistoryNotifications()">Enable notifications on this device</button>
+    } @else if (push.operation() === 'enable') {
+    <p role="status">Enabling notifications…</p>
+    } @else if (!push.canNotifyHistory()) {
+    <p>Check device permissions and the History imports category in <a routerLink="/settings" [queryParams]="{section: 'notifications'}">Settings → Notifications</a>.</p>
+    }
+    @if (notificationError()) { <p role="status">{{ notificationError() }}</p> }
+  </div>
+  }
   <div class="confirmation-section">
     <mat-checkbox formControlName="accepted" class="qs-checkbox-primary" (change)="onHistoryConfirmationChange()">
       <span class="checkbox-label">
         @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
-        I understand this may take hours to days.
+        I understand this import continues in the background.
         }
         @if (serviceName === serviceNames.GarminAPI) {
         I understand I can only import once every {{garminCooldownDays}} days (Garmin API limit).

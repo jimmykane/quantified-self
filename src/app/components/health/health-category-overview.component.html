@@ -15,6 +15,13 @@
     }
   </mat-chip-listbox>
 
+  @if (!exampleOnly() && (selectedCategory() === 'all' || selectedCategory() === 'fitness')) {
+    <section aria-label="Training thresholds">
+      <button mat-button type="button" (click)="openTrainingThresholds()">Manage FTP, threshold HR and CSS</button>
+      <p>Training calibration for future workouts. These settings are saved once and are also available in Training settings.</p>
+    </section>
+  }
+
   @if (selectedCategory() === 'all' && !exampleOnly()) {
     <app-health-change-summary summaryId="health-overview-changes" [scopeKey]="user().uid" [signals]="changeSignals()" />
   }
@@ -44,7 +51,7 @@
       </mat-card>
     }
     @if (!hasVisibleCards() && !hasOverviewHighlights() && !hasVitalsHighlights()) {
-      <p class="health-overview-empty" role="status">{{ categories().length ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
+      <p class="health-overview-empty" role="status">{{ hasRecordedCategories() ? 'Choose a category to explore your recorded Health metrics.' : 'No recorded Health metrics yet. Add a measurement or connect a service to get started.' }}</p>
     }
   </div>
 

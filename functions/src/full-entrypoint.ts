@@ -166,6 +166,7 @@ export { generateDayWorkout } from './assistant/day-workout-callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { observeDerivedMetricsHealth } from './derived-metrics/monitoring-schedule';
 export { queryHealthRange } from './health/callable';
+export { getTrainingGoalsProgress } from './training-goals/callable';
 export { saveTimelineNoteCallable as saveTimelineNote, deleteTimelineNoteCallable as deleteTimelineNote } from './timeline-notes/callable';
 export { queryActivityHealthRange } from './health/activity-callable';
 export {
@@ -274,3 +275,10 @@ export {
 } from './stripe/billing/handlers';
 
 export { sendTestPushNotification } from './web-push';
+export { sendHistoryImportNotification } from './web-push/history';
+export { sendActivitySyncNotifications } from './web-push/activity';
+
+export { queueActivitySendNotification, queueAutomaticDeliveryNotification } from './web-push/delivery-admission';
+export { sendActivityDeliveryNotifications } from './web-push/delivery';
+export { queueTrainingSyncNotification } from './web-push/training-admission';
+export { sendTrainingSyncNotifications } from './web-push/training';

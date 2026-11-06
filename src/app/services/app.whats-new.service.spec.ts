@@ -1,4 +1,7 @@
 import { TestBed } from '@angular/core/testing';
+import { TransferState } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { PUBLIC_RELEASES_TRANSFER_STATE_KEY, type PublicReleasePost } from './public-releases-snapshot';
 import { AppWhatsNewService, ChangelogPost, coerceChangelogPostDate } from './app.whats-new.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
@@ -85,6 +88,25 @@ describe('AppWhatsNewService', () => {
     it('should be created', () => {
         service = TestBed.inject(AppWhatsNewService);
         expect(service).toBeTruthy();
+    });
+
+    it('hydrates the resolver and feed immediately, then refreshes published posts from Firestore', async () => {
+        const posts: PublicReleasePost[] = [{ id: 'release', title: 'Release', description: 'Changes', date: '2026-11-04T00:00:00Z', published: true, type: 'minor' }];
+        const transferState = TestBed.inject(TransferState);
+        transferState.set(PUBLIC_RELEASES_TRANSFER_STATE_KEY, posts);
+        const livePosts = new Subject<ChangelogPost[]>();
+        collectionDataMock.mockReturnValue(livePosts);
+        service = TestBed.inject(AppWhatsNewService);
+
+        expect(service.changelogs()).toEqual(posts);
+        expect(transferState.hasKey(PUBLIC_RELEASES_TRANSFER_STATE_KEY)).toBe(false);
+        await expect(firstValueFrom(service.getChangelogsOnceLoaded())).resolves.toEqual(posts);
+        TestBed.tick();
+        expect(service.changelogs()).toEqual(posts);
+        expect(collectionDataMock).toHaveBeenCalledOnce();
+
+        livePosts.next([{ ...posts[0], title: 'Live update' }]);
+        expect(service.changelogs()[0].title).toBe('Live update');
     });
 
     it('should not subscribe to changelogs for a signed-out user until requested', () => {

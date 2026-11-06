@@ -672,3 +672,14 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+.assistant-plan-request {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 50%;
+  overflow-y: auto;
+  padding-block: 12px;
+  h2 { margin: 0 0 8px; font: var(--mat-sys-title-medium); }
+  p { margin: 0 0 12px; color: var(--mat-sys-on-surface-variant); }
+  > div { display: flex; flex-wrap: wrap; gap: 8px; }
+}

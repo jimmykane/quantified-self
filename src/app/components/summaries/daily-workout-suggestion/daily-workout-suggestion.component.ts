@@ -1,3 +1,4 @@
+import { dayWorkoutTargets, DAY_WORKOUT_SPORTS } from '@shared/day-workout';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -77,6 +78,9 @@ export class DailyWorkoutSuggestionComponent {
       .filter(workout => workout.lifecycle === 'planned');
   });
   readonly plannedWorkout = computed(() => this.plannedWorkouts()[0] ?? null);
+  readonly includedSuggestion = computed(() => this.status()?.result?.requestId === `daily-suggestion:${this.status()?.localDate}`);
+  readonly canRegenerate = computed(() => this.status()?.state === 'ready' && this.status()?.result?.kind !== 'event-advice'
+    || this.plannedWorkouts().length === 1 && DAY_WORKOUT_SPORTS.includes(this.plannedWorkout()!.structure.sport as typeof DAY_WORKOUT_SPORTS[number]));
   readonly plannedWorkoutRoute = computed(() => this.plannedWorkout() ? trainingPlansWorkoutRoute(this.plannedWorkout()!.id) : null);
   readonly plannedDeliveryWorkouts = computed(() => this.plannedWorkout() ? [this.plannedWorkout()!] : null);
   readonly plannedWorkoutPlan = computed(() => {
@@ -91,6 +95,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly summary = computed(() => {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
+      if (value.result.kind === 'event-advice') return `${value.result.events.map(event => event.name).join(' · ')} · Event-day guidance ready`;
       const draft = value.result.draft;
       return draft ? `${draft.title} · ${dayWorkoutReviewTiming(draft, this.users.user()?.settings?.unitSettings).summary}` : 'Rest day suggested';
     }
@@ -235,9 +240,9 @@ export class DailyWorkoutSuggestionComponent {
       },
     });
   }
-  async review(): Promise<void> {
+  async review(regenerate = false): Promise<void> {
     const uid = this.ownerUid();
-    if (this.busy() || this.status()?.state !== 'ready' || !this.preferences().enabled || !this.daily.eligible(uid)) return;
+    if (this.busy() || (this.status()?.state !== 'ready' && !(regenerate && this.canRegenerate())) || !this.preferences().enabled || !this.daily.eligible(uid)) return;
     const sequence = ++this.sequence;
     this.loading.set(true); this.error.set(null); this.actionError.set(null);
     let value: DailyWorkoutSuggestionStatus;
@@ -253,9 +258,42 @@ export class DailyWorkoutSuggestionComponent {
       }
       return;
     } finally { if (this.current(sequence, uid)) this.loading.set(false); }
+    if (regenerate && value.state === 'planned') {
+      const workout = this.plannedWorkout(), controls = this.preferences().controls;
+      if (!workout || this.plannedWorkouts().length !== 1 || workout.localDate !== controls.localDate || !this.canRegenerate()) return;
+      await this.generation.open(uid, workout.localDate, workout.structure.sport, {
+        initialControls: { ...controls, sport: workout.structure.sport as typeof controls.sport, destinationPlanId: workout.planId,
+          purpose: 'suggest', timing: 'approximate', target: dayWorkoutTargets(workout.structure.sport as typeof controls.sport)[0] },
+        replacement: { id: workout.id, revision: workout.revision, title: workout.title },
+        canExecute: () => this.current(sequence, uid),
+      });
+      return;
+    }
     if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.daily.event(uid, 'reviewed', 'ready');
-    await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result, dailyDelivery: this.deliveryPreferences(),
+    if (value.result.kind === 'event-advice') {
+      await this.generation.openEventGuidance(uid, value.result, () => this.current(sequence, uid));
+      return;
+    }
+    let expectedRequestId = value.result.requestId;
+    const reviewZone = value.controls.timeZone;
+    // A successful regeneration changes the cache sequence while the reviewed draft can still be edited.
+    const reviewCurrent = () => !this.destroy.destroyed && this.ownerUid() === uid && this.daily.eligible(uid)
+      && this.preferences().enabled && this.preferences().controls.localDate === value.localDate
+      && this.preferences().controls.timeZone === reviewZone;
+    await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls,
+      canExecute: reviewCurrent,
+      ...(regenerate ? {} : { initialResult: value.result }),
+      regenerateSuggestion: async (request, current) => {
+        const status = await this.daily.regenerate(uid, expectedRequestId, request, current);
+        if (!current() || status.state !== 'ready' || !status.result || status.result.kind === 'event-advice') {
+          throw Error('Today changed. Close the dialog and check your schedule.');
+        }
+        expectedRequestId = status.result.requestId;
+        if (!this.destroy.destroyed && this.ownerUid() === uid) this.status.set(status);
+        return status.result;
+      },
+      dailyDelivery: this.deliveryPreferences(),
       onAdded: kind => {
         if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;
         this.daily.event(uid, 'added', kind === 'rest' ? 'rest-day' : 'ready');

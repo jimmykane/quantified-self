@@ -171,7 +171,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   });
 
   it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.flatMap(sport => ['standalone', 'plan'].map(scope => ({ sport, scope }))))(
-    'requires current approval for $sport Generic in $scope and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
+    'syncs $sport Generic in $scope under existing consent and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
     const planId = scope === 'plan' ? 'p' : null;
     if (planId) await mutate({ kind: 'create-plan', planId, name: 'Synthetic Generic plan', startLocalDate: '2026-09-20',
       endLocalDate: '2026-09-27', activate: true });
@@ -188,16 +188,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     };
     if (planId) await planCommand('configure');
     const preview = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
-    expect(preview).toMatchObject({ workoutCompatibility: 'degraded', approvalRequiredCount: 1 });
+    expect(preview).toMatchObject({ workoutCompatibility: 'degraded', approvalRequiredCount: 0 });
     expect(preview.issues.join(' ')).toContain('Generic workout');
     expect(server.calls).toHaveLength(0);
     if (!planId) await command();
     await drain();
     const id = (await ledger()).id;
-    await processTrainingDelivery(runtime, uid, id); await drain();
-    expect((await ledger()).status).toBe('approval_required');
-    expect(server.calls).toHaveLength(0);
-    await command('approve', preview.approvalDigest!); await drain();
+    expect((await ledger()).status).toBe('pending');
+    expect(preview.approvalDigest).toBeNull();
     await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]); await drain();
     const original = (await ledger()).actual!;
     expect((await ledger()).status).toBe('delivered');
@@ -210,11 +208,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
       title: `Synthetic ${sport} revised`, structure: { ...structure, nodes: [{ ...structure.nodes[0],
         ending: { kind: 'time', seconds: 360 } }] }, confirmPlanRangeExtension: false });
     await drain(); await processTrainingDelivery(runtime, uid, id); await drain();
-    expect((await ledger()).status).toBe('approval_required');
-    await expect(command('approve', preview.approvalDigest!)).rejects.toMatchObject({ code: 'aborted' });
-    const revised = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
-    await command('approve', revised.approvalDigest!); await drain();
-    await processTrainingDelivery(runtime, uid, id); await drain();
+    expect((await ledger()).status).toBe('delivered');
     expect((await ledger()).actual!.ids).toEqual(original.ids);
     expect(server.workouts.get(original.ids.workout)).toMatchObject({ sport: 'GENERIC', segments: [{ steps: [{ durationValue: 360 }] }] });
     expect(server.schedules.get(original.ids.schedule)).toMatchObject({ date: '2026-09-21' });
@@ -466,12 +460,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect((await user().collection('trainingDeliverySettings').doc('plan_p_garmin').get()).get('enabled')).toBe(true);
     expect((await user().collection('trainingDeliverySettings').doc('workout_w_garmin').get()).get('suppressed')).toBe(false);
   });
-  it('preserves Generic mapping approval separately from replacement approval', async () => {
+  it('keeps informational Generic mapping separate from explicit replacement approval', async () => {
     const baseline = (await user().collection('scheduledWorkouts').doc('w').get()).data() as ScheduledWorkoutV1;
     await user().collection('scheduledWorkouts').doc('w').update({ structure: { ...baseline.structure, sport: ActivityTypes.Walking } });
     const mappingPreview = await command('send', undefined, true) as TrainingDeliveryPreviewV1;
     expect(mappingPreview.workoutCompatibility).toBe('degraded');
-    await command('send', mappingPreview.approvalDigest!); await drain();
+    expect(mappingPreview).toMatchObject({ approvalDigest: null, approvalRequiredCount: 0 });
+    await command('send'); await drain();
     const id = (await ledger()).id; await processTrainingDelivery(runtime, uid, id); await drain();
     await missingGarminCopy(true, id); await requestReplacement();
     expect((await user().collection('trainingDeliverySettings').doc('workout_w_garmin').get()).get('approvedDigest'))

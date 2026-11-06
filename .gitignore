@@ -96,3 +96,6 @@ docs/coros/
 # Isolated billing emulator runtime (contains test secrets)
 /.local/stripe-billing/
 /.billing-test.firebase.json
+
+# Ephemeral GitHub WIF credentials must never enter commits or build artifacts.
+gha-creds-*.json

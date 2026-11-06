@@ -1,4 +1,4 @@
-import { DAY_WORKOUT_SPORTS, dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutPurposes, dayWorkoutTargets } from '../../../shared/day-workout';
+import { DAY_WORKOUT_SPORTS, dayWorkoutSupportsGarminPowerAveraging, dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutPurposes, dayWorkoutTargets } from '../../../shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
 import type { DailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 import { buildDayWorkoutRoutine } from './day-workout-routine';
@@ -10,6 +10,7 @@ export function dailyWorkoutSuggestionRoutineSport(preferences: DailyWorkoutSugg
     .filter(item => {
       const sport = DAY_WORKOUT_SPORTS.find(sport => sport === item.sport)!;
       return item.status === 'available' && dayWorkoutPurposes(sport).includes(preferences.controls.purpose)
+        && (preferences.controls.garminPowerAveragingSeconds === undefined || dayWorkoutSupportsGarminPowerAveraging({ sport, target: preferences.controls.target }))
         && !(preferences.controls.timing === 'strict' && isStrengthWorkoutSportV1(sport));
     })
     .sort((a, b) => b.recordedDayCount - a.recordedDayCount);
@@ -33,7 +34,9 @@ export async function selectDailyWorkoutSuggestionSport(uid: string, preferences
       activities.push(...result.activities);
       if (result.scanComplete === true && !result.nextCursor) {
         const selected = dailyWorkoutSuggestionRoutineSport(preferences, now, activities);
-        const sport = dayWorkoutTargets(selected).includes(saved.target) || saved.target === 'auto' ? selected : saved.sport;
+        const sport = (dayWorkoutTargets(selected).includes(saved.target) || saved.target === 'auto')
+          && (saved.garminPowerAveragingSeconds === undefined || dayWorkoutSupportsGarminPowerAveraging({ sport: selected, target: saved.target }))
+          ? selected : saved.sport;
         return { ...saved, sport, purpose: dayWorkoutPurposes(sport).includes(saved.purpose) ? saved.purpose : 'suggest' as const,
           target: dayWorkoutTargets(sport).includes(saved.target) ? saved.target : dayWorkoutTargets(sport)[0],
           timing: saved.timing };

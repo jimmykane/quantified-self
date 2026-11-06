@@ -1,0 +1,13 @@
+<h2 mat-dialog-title>Event-day guidance</h2>
+<mat-dialog-content>
+  @for (event of data.advice.events; track $index) { <h3>{{ event.name }}</h3><p class="hint">{{ event.localDate }}</p> }
+  <p>{{ data.advice.rationale }}</p>
+  <p class="hint">Included with Pro. Guidance only; no extra workout is added or sent.</p>
+  <h3>Context</h3>
+  <ul>@for (item of data.advice.usedContext; track $index) { <li>{{ item }}</li> }</ul>
+  @if (data.advice.missingContext.length) {
+    <h3>Unavailable context</h3><ul>@for (item of data.advice.missingContext; track $index) { <li>{{ item }}</li> }</ul>
+  }
+  <p class="hint">Prepared with the context available at the time. Goal updates apply to your next daily suggestion.</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end"><button mat-button appHapticTap mat-dialog-close>Close</button></mat-dialog-actions>

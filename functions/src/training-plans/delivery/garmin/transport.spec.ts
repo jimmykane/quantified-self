@@ -697,4 +697,48 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     operation.artifact = null; operation.digest = 'unapproved-digest';
     await expect(execute()).rejects.toMatchObject({ kind: 'terminal' }); expect(writes()).toHaveLength(0);
   });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling])('sends and updates a symbolic %s zone through guarded transport', async sport => {
+    const native = (zone: number) => ({ version: 1 as const, sport, nodes: [{ kind: 'step' as const, id: 'zone', purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 600 }, targets: [{ kind: 'power' as const, mode: 'garmin-zone' as const, zone }] }] });
+    operation = nextOperation(operation, { structure: native(2) });
+    const first = (await execute())!;
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ segments: [{ steps: [{ targetType: 'POWER', targetValue: 2,
+      targetValueLow: null, targetValueHigh: null, targetValueType: null }] }] });
+    const previousDigest = operation.digest;
+    operation = nextOperation(operation, { structure: native(3), revision: 2 });
+    expect(operation.digest).not.toBe(previousDigest);
+    expect(await execute()).toEqual(first);
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ segments: [{ steps: [{ targetValue: 3, targetValueLow: null, targetValueHigh: null }] }] });
+    expect(writes().filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it.each([undefined, 3, 10, 30] as const)('keeps an uncertain native-zone create blocked without another POST (averaging: %s)', async seconds => {
+    const native = { ...operation.workout!.structure, nodes: [{ kind: 'step' as const, id: 'zone', purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 600 }, targets: [{ kind: 'power' as const, mode: 'garmin-zone' as const, zone: 2, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) }] }] };
+    operation = nextOperation(operation, { structure: native });
+    server.afterHandle = async request => {
+      if (request.method !== 'POST') return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await expect(execute()).rejects.toThrow();
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(server.workouts.size).toBe(1);
+    expect(writes()).toHaveLength(1);
+  });
+
+  it.each([3, 10, 30] as const)('sends %i-second power, updates its window, and fences stale approval', async seconds => {
+    const averaged = (window?: 3 | 10 | 30) => ({ ...operation.workout!.structure, nodes: [{ kind: 'step' as const, id: 'power', purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 600 }, targets: [{ kind: 'power' as const, mode: 'absolute' as const, minimumWatts: 150, maximumWatts: 200,
+        ...(window === undefined ? {} : { garminPowerAveragingSeconds: window }) }] }] });
+    operation = nextOperation(operation, { structure: averaged(seconds) });
+    const first = (await execute())!; const previousDigest = operation.digest;
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ segments: [{ steps: [{ targetType: `POWER_${seconds}S`, targetValueLow: 150, targetValueHigh: 200 }] }] });
+    operation.workout!.structure = averaged(); server.calls = [];
+    await expect(execute()).rejects.toThrow(); expect(server.calls).toHaveLength(0);
+    operation = nextOperation(operation); expect(operation.digest).not.toBe(previousDigest);
+    expect(await execute()).toEqual(first);
+    expect(server.workouts.get(first.ids.workout)).toMatchObject({ segments: [{ steps: [{ targetType: 'POWER', targetValueLow: 150, targetValueHigh: 200 }] }] });
+    expect(writes().filter(call => call.method === 'POST')).toHaveLength(0);
+  });
+
 });

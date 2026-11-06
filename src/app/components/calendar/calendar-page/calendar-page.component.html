@@ -6,11 +6,13 @@
         [queryParams]="dayBackNavigation().query" [attr.aria-label]="dayBackNavigation().ariaLabel" (click)="prepareDayBackNavigation()">
         <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ dayBackNavigation().label }}
       </a>
+      <app-training-goals-button [uid]="currentUser()?.uid" />
       <app-timeline-notes-workspace [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
     </header>
   } @else {
     <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title" variant="route"
       leadingIcon="calendar_month">
+      <app-training-goals-button pageHeaderTitleActions [uid]="currentUser()?.uid" />
       <app-timeline-notes-workspace pageHeaderTitleActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
       <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
         hideSingleSelectionIndicator [value]="routeState().view"
@@ -128,7 +130,7 @@
       }
     } @else {
     <div class="calendar-day-layout">
-    <app-activity-calendar-grid [model]="calendarModel()"
+    <app-activity-calendar-grid [model]="calendarModel()" [goalsByDate]="goalsByDate()"
       [calmMonth]="isGridView()"
       [hideOutsideDays]="false"
       [selectedDateKey]="selectedDay()?.dateKey ?? null"

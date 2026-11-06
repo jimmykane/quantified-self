@@ -1,3 +1,4 @@
+import { PlanGenerationService } from '../../services/plan-generation.service';
 import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
@@ -206,6 +207,7 @@ export class PlansWorkspaceComponent {
   private readonly userSettings = inject(AppUserSettingsQueryService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly dayWorkouts = inject(DayWorkoutService);
+  private readonly planGeneration = inject(PlanGenerationService);
   private generatedSaveRequest: MutateTrainingScheduleRequestV1 | null = null;
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
   private readonly libraryService = inject(WorkoutLibraryService);
@@ -796,7 +798,7 @@ export class PlansWorkspaceComponent {
       this.selectWorkoutScope(null, requested.localDate ?? todayLocalDate());
       this.scheduleDateSelection.set(null);
       const restored = { ...requested, standalone: true };
-      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true });
+      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true, queryParamsHandling: 'preserve' });
       return;
     }
     const plan = this.planOptions().find(candidate => candidate.id === requested.planId);
@@ -829,12 +831,13 @@ export class PlansWorkspaceComponent {
   private navigateWorkspace(
     commands: string[],
     requested: TrainingPlansRouteState,
-    options: { replaceUrl?: boolean; editorReturn?: boolean } = {},
+    options: { replaceUrl?: boolean; editorReturn?: boolean; queryParamsHandling?: 'preserve' } = {},
   ): void {
     const sequence = ++this.navigationSequence;
     this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
     const navigation: NavigationExtras = {
       queryParams: requested.localDate ? { date: requested.localDate } : undefined,
+      ...(options.queryParamsHandling ? { queryParamsHandling: options.queryParamsHandling } : {}),
       replaceUrl: options.replaceUrl,
       ...(options.editorReturn ? { state: { trainingPlansEditorReturn: { uid: this.currentUser()?.uid, url: this.router.url } } } : {}),
     };
@@ -1152,6 +1155,19 @@ export class PlansWorkspaceComponent {
       standalone: defaultDestination === null, localDate,
     };
     this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
+  }
+
+  async generatePlan(): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || !this.browsing() || this.libraryView() || this.view() !== 'plans'
+      || this.scheduleState().status !== 'ready' || this.busyAction() || this.generationOpen()) return;
+    const routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid && this.browsing()
+      && !this.libraryView() && this.view() === 'plans' && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    this.generationOpen.set(true);
+    try { await this.planGeneration.open(uid, current); }
+    catch (error) { if (current()) this.showError(error); }
+    finally { if (!this.destroyRef.destroyed) this.generationOpen.set(false); }
   }
 
   async generateWorkout(): Promise<void> {

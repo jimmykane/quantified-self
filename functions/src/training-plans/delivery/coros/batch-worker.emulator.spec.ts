@@ -117,7 +117,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(JSON.parse(client.mock.calls[0][0].data).Workouts).toHaveLength(2);
   });
 
-  it.each([false, true])('keeps the six additional subtype folds behind approval (%s) in the Firestore worker', async approved => {
+  it.each([false, true])('sends supported subtype folds with or without legacy approval metadata (%s)', async approved => {
     const sports = [ActivityTypes.IndoorRunning, ActivityTypes.VirtualRunning, ActivityTypes.VirtualCycling,
       ActivityTypes.Velomobile, ActivityTypes['Enduro MTB'], ActivityTypes.DownhillCycling];
     const ids = await seed(sports.length, sports);
@@ -132,14 +132,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     }
     await Promise.all(ids.map(id => processTrainingDelivery(runtime, uid, id)));
     const ledgers = await Promise.all(ids.map(id => user.collection(DELIVERY_LEDGER).doc(id).get()));
-    expect(ledgers.every(row => row.data()?.status === (approved ? 'delivered' : 'approval_required'))).toBe(true);
-    if (approved) {
-      // Concurrent dispatch may split the batch; every stable workout is still sent once.
-      const sent = client.mock.calls.flatMap(([request]) => JSON.parse(request.data).Workouts)
-        .sort((a, b) => a.WorkoutDay.localeCompare(b.WorkoutDay));
-      expect(sent.map(entry => entry.WorkoutType)).toEqual(['run', 'run', 'bike', 'bike', 'bike', 'bike']);
-      expect(new Set(sent.map(entry => entry.Id)).size).toBe(sports.length);
-    } else expect(client).not.toHaveBeenCalled();
+    expect(ledgers.every(row => row.data()?.status === 'delivered' && row.data()?.approvalDigest === null)).toBe(true);
+    // Concurrent dispatch may split the batch; every stable workout is still sent once.
+    const sent = client.mock.calls.flatMap(([request]) => JSON.parse(request.data).Workouts)
+      .sort((a, b) => a.WorkoutDay.localeCompare(b.WorkoutDay));
+    expect(sent.map(entry => entry.WorkoutType)).toEqual(['run', 'run', 'bike', 'bike', 'bike', 'bike']);
+    expect(new Set(sent.map(entry => entry.Id)).size).toBe(sports.length);
     const authored = await Promise.all(sports.map((_, index) => user.collection('scheduledWorkouts').doc(`w${index}`).get()));
     expect(authored.map(row => row.data()?.structure.sport)).toEqual(sports);
   });
@@ -397,6 +395,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
       .toMatchObject({ status: 'pending', attempt: null, lease: null, issues: [] });
     expect((await db.collection('users').doc(uid).collection('trainingDeliveryState').doc('current')
       .collection('batches').get()).docs[0].data()).toMatchObject({ state: 'superseded' });
+  });
+
+  it('suppresses a stale batch when an omitted QS edit arrives before the provider write', async () => {
+    const [id] = await seed(1);
+    const assessment = transport.assess(workout(0), 'destination', 'Europe/Helsinki');
+    vi.spyOn(transport, 'assess').mockReturnValue(assessment);
+    let posted = false;
+    client.mockImplementationOnce(async (_request, beforeSend) => {
+      await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w0')
+        .update({ title: 'New full prescription outside the provider payload' });
+      await beforeSend();
+      posted = true;
+      return { status: 200, body: { result: '0000', data: { StartDate: '20260918', EndDate: '20260918' } } };
+    });
+    await processTrainingDelivery(runtime, uid, id);
+    expect(posted).toBe(false);
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection(DELIVERY_LEDGER).doc(id).get()).data())
+      .toMatchObject({ status: 'pending', attempt: null, lease: null, actual: null });
+    expect((await user.collection('trainingDeliveryState').doc('current').collection('batches').get()).docs[0].get('state'))
+      .toBe('superseded');
   });
 
   it('retains a late accepted removal even after lease ownership changes', async () => {

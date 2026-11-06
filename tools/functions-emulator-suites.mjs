@@ -4,6 +4,8 @@ import { join, resolve } from 'node:path';
 // Exact emulator files only: the ordinary Functions suite already covers mocks.
 export const EMULATOR_SUITES = {
   delivery: [
+    'src/web-push/training.emulator.spec.ts',
+    'src/web-push/delivery.emulator.spec.ts',
     'src/activity-sync/wahoo-cooldown.emulator.spec.ts',
     'src/activity-send/activity-send.emulator.spec.ts',
     'src/training-plans/delivery/monitoring.emulator.spec.ts',
@@ -30,16 +32,19 @@ export const EMULATOR_SUITES = {
     'src/admin/handlers/training-delivery-queue.stats.emulator.spec.ts',
   ],
   'mcp-data': [
+    'src/training-goals/goals.emulator.spec.ts',
     'src/assistant/day-workout.emulator.spec.ts',
     'src/reparse/monitoring.emulator.spec.ts',
     'src/derived-metrics/monitoring.emulator.spec.ts',
     'src/email/monitoring.emulator.spec.ts',
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
+    'src/web-push/activity.emulator.spec.ts',
     'src/coros/history-import-lease.emulator.spec.ts',
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',
     'src/sleep/monitoring.emulator.spec.ts',
+    'src/sleep/coros-polling.emulator.spec.ts',
     'src/health/sync-status.emulator.spec.ts',
     'src/queue/import-monitoring.emulator.spec.ts',
     'src/mcp/training-plans.emulator.spec.ts',
@@ -49,6 +54,7 @@ export const EMULATOR_SUITES = {
     'src/mcp/content-write.emulator.spec.ts',
     'src/mcp/workout-reflections.emulator.spec.ts',
     'src/mcp/manual-measurements.emulator.spec.ts',
+    'src/mcp/training-thresholds.emulator.spec.ts',
     'src/derived-metrics/derived-metrics-reuse.emulator.spec.ts',
     'src/events/event-tag-catalog.emulator.spec.ts',
     'src/admin/marketing/marketing.emulator.spec.ts',

@@ -310,6 +310,28 @@ Deployment remains a separate approved release step. The hosted MCP contract, re
 and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
 independent of these content permissions and use their own conversation-bound proposal flow described above.
 
+## Independent Training thresholds
+
+**Examples & data access → Training thresholds** starts off for fresh, legacy and New chats. Opt-in grants only
+safe current/dated threshold reads and one prepare-only change for future workouts. It is independent of Health,
+manual measurements, activity metrics and Training plans. Permission changes replace the server-owned generation;
+requests, retries, responses and app Apply bind that choice. New chat removes access and pending proposals.
+
+When authoring a new FTP-relative Running/Cycling workout, use the matching shared FTP only when this independent
+choice is enabled and the focused read is advertised. Freeze the returned watts in the recipe. Effective since is not
+a test/measurement date. With no access/value, ask for an explicit reference or keep guidance target-free; never
+convert FTP into CP or borrow another family. Private Workout power overrides are unavailable to general plan chats.
+Keep saved/copied targets unchanged unless retargeting is explicit. The separate first-party day generator's use of
+shared FTP/private overrides does not enable threshold access in a conversation.
+
+Discover current family settings first. FTP is explicit watts for independent Running/Cycling settings; HR is bpm;
+CSS needs seconds per 100 metres or yards. Never invent athlete calibration, infer CSS from a normal swim or turn a
+threshold into a Health observation. Preserve omitted values; null explicitly clears one. A real MCP preview creates
+one short-lived app content proposal with before/after display values and units. Gemini cannot invoke the public
+Apply tool. Only the signed-in user's app Apply rechecks proposal identity, exact arguments, expiry, generation,
+revision and deletion/grant fences. The model must say nothing was changed until that apply succeeds. No provider or
+historical rewrite is offered. Compact evidence never stores raw policies, opaque references or frozen weight provenance.
+
 ## Manual Health measurements
 
 **Examples & data access** includes independent **Manual Health measurements**, on for a fresh/New chat. Existing

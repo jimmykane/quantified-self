@@ -27,7 +27,7 @@ import { processTrainingBulkShift, reconcileTrainingBulkShifts } from '../traini
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { BULK_SHIFT_LEASE_MS } from '../training-plans/staged-shift';
 import { applyTrainingChanges, getTrainingChangeStatus, previewCreatePlannedWorkout, previewTrainingChanges,
-  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewPlannedWorkoutV3Changes, previewTrainingDeletion,
+  previewStrengthWorkoutChange, previewPlannedWorkoutV2Change, previewPlannedWorkoutV3Change, previewPlannedWorkoutV3Changes, previewPlannedWorkoutV4Change, previewPlannedWorkoutV4Changes, previewTrainingDeletion,
   previewGarminWorkoutReplacement, loadAssistantTrainingWorkoutReviews,
   type TrainingWriteDependencies } from './training-plans-write.service';
 import { TRAINING_CHANGE_STATUS_OUTPUT, TRAINING_DELIVERY_WRITE_SCOPE, TRAINING_PLANS_SCOPE,
@@ -1425,7 +1425,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     ]);
   });
 
-  it('discloses a degraded mapping and approves it with the original Send confirmation', async () => {
+  it('discloses supported adjustments while preserving the native first-Send confirmation', async () => {
     transport!.level = 'degraded';
     const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Mountain ride',
@@ -1433,19 +1433,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'garmin',
       warningCount: 1, summary: expect.stringContaining('Test target mapping warning') })]);
-    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    expect(preview.providerPreviews[0].summary).toContain('No separate mapping approval is needed');
 
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
     expect(applied.status).toBe('applied');
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied',
-      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+      message: expect.stringContaining('reconciliation was queued') })]);
     const user = db.collection('users').doc(uid);
     const workouts = await user.collection('scheduledWorkouts').get();
     expect(workouts.size).toBe(1);
     const setting = user.collection('trainingDeliverySettings').doc(`workout_${workouts.docs[0].id}_garmin`);
     expect((await setting.get()).data()).toMatchObject({ enabled: true });
-    expect((await setting.get()).get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+    expect((await setting.get()).get('approvedDigest')).toBeNull();
     expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
   });
 
@@ -1460,18 +1460,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
           nodes: [{ ...structure.nodes[0], note: longNote }] },
         delivery: { providers: ['suunto'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'suunto', warningCount: 1,
-      summary: expect.stringContaining('Suunto will shorten long step instructions') })]);
-    expect(preview.providerPreviews[0].summary).toContain('shortened to 40 characters on the watch');
+      summary: expect.stringContaining('Suunto step text is limited to 54 characters') })]);
+    expect(preview.providerPreviews[0].summary).toContain('Suunto cannot show other fields alongside text longer than 40 characters');
 
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'suunto', status: 'applied',
-      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+      message: expect.stringContaining('reconciliation was queued') })]);
     const user = db.collection('users').doc(uid);
     const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
     expect(workout.get('structure.nodes')[0].note).toBe(longNote);
     expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_suunto`).get())
-      .get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+      .get('approvedDigest')).toBeNull();
 
     for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
     const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
@@ -1542,7 +1542,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(preview).toMatchObject({ requiresConfirmation: true, permissionMode: 'combined',
       providerPreviews: [{ provider: 'garmin', warningCount: 1, summary: expect.stringContaining('Generic workout') }] });
     expect(preview.providerPreviews[0].summary).toContain('only on some devices');
-    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    expect(preview.providerPreviews[0].summary).toContain('No separate mapping approval is needed');
     const user = db.collection('users').doc(uid);
     expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
@@ -1553,7 +1553,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     await expect(applyTrainingChanges(confirmation, deps)).resolves.toEqual(applied);
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied' })]);
     expect((await user.collection('scheduledWorkouts').get()).docs[0].get('structure.sport')).toBe(sport);
-    expect((await user.collection('trainingDeliverySettings').get()).docs[0].get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+    expect((await user.collection('trainingDeliverySettings').get()).docs[0].get('approvedDigest')).toBeNull();
     for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page++) { /* drain */ }
     const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
     await Promise.all([processTrainingDelivery(deps.runtime, uid, ledger.id), processTrainingDelivery(deps.runtime, uid, ledger.id)]);
@@ -1630,7 +1630,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(preview).toMatchObject({ permissionMode: 'delivery', requiresConfirmation: true,
       providerPreviews: [{ provider: 'wahoo', availability: ending !== 'repetitions' ? 'ready' : 'unavailable', warningCount: 1 }] });
     if (ending !== 'repetitions') expect(preview.providerPreviews[0].summary).toContain('not native rep/load tracking');
-    if (ending === 'rounded-load') expect(preview.providerPreviews[0].summary).toContain('Review the rounded load');
+    if (ending === 'rounded-load') expect(preview.providerPreviews[0].summary).toContain('The rounded load is guidance only');
     expect(wahoo.calls).toHaveLength(0);
     const user = db.collection('users').doc(uid);
     expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
@@ -1780,16 +1780,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview.providerPreviews).toEqual([expect.objectContaining({ provider: 'wahoo', warningCount: 1,
       summary: expect.stringContaining('not ELEMNT computers or RIVAL') })]);
-    expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    expect(preview.providerPreviews[0].summary).toContain('No separate mapping approval is needed');
 
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
     expect(applied.providers).toEqual([expect.objectContaining({ provider: 'wahoo', status: 'applied',
-      message: expect.stringContaining('previewed mapping adjustment were approved') })]);
+      message: expect.stringContaining('reconciliation was queued') })]);
     const user = db.collection('users').doc(uid);
     const workout = (await user.collection('scheduledWorkouts').get()).docs[0];
     expect((await user.collection('trainingDeliverySettings').doc(`workout_${workout.id}_wahoo`).get())
-      .get('approvedDigest')).toMatch(/^[a-f0-9]{64}$/);
+      .get('approvedDigest')).toBeNull();
 
     for (let page = 0; page < 20 && await reconcileTrainingDeliveryPage(deps.runtime, uid); page += 1) { /* drain */ }
     const ledger = (await user.collection('trainingDeliveryLedger').get()).docs[0];
@@ -1812,7 +1812,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
         structure: { ...structure, sport }, delivery: { providers: ['wahoo'], timeZone: 'Europe/Helsinki' } } }, deps);
     expect(preview).toMatchObject({ permissionMode: 'combined', requiresConfirmation: true });
     expect(preview.providerPreviews[0]).toMatchObject({ provider: 'wahoo', availability: 'ready', warningCount: level === 'degraded' ? 1 : 0 });
-    if (level === 'degraded') expect(preview.providerPreviews[0].summary).toContain('Confirming this proposal approves');
+    if (level === 'degraded') expect(preview.providerPreviews[0].summary).toContain('No separate mapping approval is needed');
     expect(JSON.stringify(preview)).not.toMatch(/workout_type|workout_token|external_id|destinationKey/);
     expect(wahoo.calls).toHaveLength(0);
     const input = { uid, connectionId: 'connection', scopes,
@@ -1919,27 +1919,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(wahoo.calls).toHaveLength(0);
   });
 
-  it('blocks a degraded Send when the mapping changes after its preview', async () => {
+  it('allows supported mapping updates after preview without removing native Send confirmation', async () => {
     transport!.level = 'degraded';
     const preview = await previewCreateAndSend();
     transport!.mappingVersion = 'changed-after-preview';
     const applied = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
-    expect(applied.status).toBe('partially_applied');
-    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'blocked',
-      message: expect.stringContaining('compatibility preview changed') })]);
-    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(applied.status).toBe('applied');
+    expect(applied.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'applied' })]);
+    const settings = await db.collection('users').doc(uid).collection('trainingDeliverySettings').get();
+    expect(settings.docs.map(row => row.data())).toEqual([expect.objectContaining({ enabled: true, approvedDigest: null })]);
   });
 
-  it('does not approve mapping loss that cannot fit in the bounded public preview', async () => {
+  it('keeps extensive informational warnings bounded without removing native confirmation', async () => {
     transport!.level = 'degraded';
     transport!.assess = () => ({ level: 'degraded',
       mappingVersion: 'test-v1', digest: 'a'.repeat(64),
       issues: Array.from({ length: 20 }, (_, index) => `Distinct provider mapping change ${index + 1}`) });
-    await expect(previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
+    const preview = await previewCreatePlannedWorkout({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Complex ride',
-        structure, delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps))
-      .rejects.toThrow('too extensive for one safe preview');
+        structure, delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' } } }, deps);
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(preview.providerPreviews[0].warningCount).toBe(1);
+    expect(preview.providerPreviews[0].summary).toContain('Review each workout');
+    expect(preview.providerPreviews[0].summary.length).toBeLessThanOrEqual(500);
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).empty).toBe(true);
   });
 
@@ -2110,29 +2114,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect(result.providers).toEqual([expect.objectContaining({ provider: 'garmin', status: 'blocked' })]);
   });
 
-  it('binds compatibility approval to the exact mapping digest shown in the preview', async () => {
+  it('redirects obsolete mapping-approval requests to normal sync without creating another confirmation', async () => {
     const initialPreview = await previewCreateAndSend();
     const initial = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { proposalRef: initialPreview.proposalRef, permissionMode: 'combined' } }, deps);
     const workoutRef = initial.createdReferences.find(item => item.kind === 'workout')!.reference;
     transport!.level = 'degraded';
-    const approvalPreview = await previewTrainingChanges({ uid, connectionId: 'connection', scopes,
+    await expect(previewTrainingChanges({ uid, connectionId: 'connection', scopes,
       arguments: { expectedScheduleRevision: initial.scheduleRevision, changes: [
         { kind: 'provider-delivery', targetType: 'workout', target: { ref: workoutRef },
           providers: ['garmin'], action: 'approve' },
-      ] } }, deps);
-    expect(approvalPreview.providerPreviews).toEqual([
-      expect.objectContaining({ provider: 'garmin', availability: 'ready', warningCount: 1 }),
-    ]);
-
-    transport!.mappingVersion = 'test-v2';
-    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
-      arguments: { proposalRef: approvalPreview.proposalRef, permissionMode: 'delivery' } }, deps);
-
-    expect(result.status).toBe('partially_applied');
-    expect(result.providers).toEqual([expect.objectContaining({
-      provider: 'garmin', status: 'blocked', message: expect.stringContaining('compatibility preview changed'),
-    })]);
+      ] } }, deps)).rejects.toThrow('No separate mapping approval is needed');
+    const user = db.collection('users').doc(uid);
+    expect((await user.collection('trainingMcpProposals').get()).size).toBe(1);
+    expect((await user.collection('trainingDeliverySettings').get()).docs[0].data())
+      .toMatchObject({ enabled: true, approvedDigest: null });
   });
 
   it('rejects stale schedule state and connection-bound proposal replay', async () => {
@@ -2275,6 +2271,90 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).toEqual(applied);
     await expect(previewPlannedWorkoutV3Change({ uid, connectionId: 'connection', scopes, arguments: args }, deps)).rejects.toThrow('schedule changed');
     expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it.each([undefined, 3, 10, 30] as const)('persists Garmin zones through preview/apply/replay and blocks legacy replacement (averaging: %s)', async seconds => {
+    const native = { ...structure, nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+      { ...structure.nodes[0], targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) }] },
+    ] }] };
+    const input = { uid, connectionId: 'connection', scopes };
+    const args = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'native', plan: null,
+      localDate: '2026-09-18', title: 'Native zone', structure: native } };
+    await expect(previewPlannedWorkoutV4Change({ ...input, scopes: [TRAINING_PLANS_SCOPE], arguments: args }, deps)).rejects.toThrow('permission');
+    const preview = await previewPlannedWorkoutV4Change({ ...input, arguments: args }, deps);
+    expect(preview.changes[0].summary).toContain('watts are unknown in QS');
+    expect(preview.changes[0].summary).toContain('none → Z2');
+    const apply = { ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } };
+    const created = await applyTrainingChanges(apply, deps);
+    expect(await applyTrainingChanges(apply, deps)).toEqual(created);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('structure')).toEqual(native);
+    expect((await saved.ref.collection('revisions').get()).docs.map(doc => doc.get('snapshot.structure'))).toContainEqual(native);
+    const retargeted = structuredClone(native); retargeted.nodes[0].steps[0].targets[0].zone = 3;
+    const retargetPreview = await previewPlannedWorkoutV4Change({ ...input, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, change: { kind: 'update-workout',
+        workout: { ref: created.createdReferences[0].reference }, plan: null, localDate: '2026-09-18',
+        title: 'Native zone', structure: retargeted } } }, deps);
+    expect(retargetPreview.changes[0].summary).toContain('Z2 → Z3');
+    if (seconds !== undefined) expect(retargetPreview.changes[0].summary).toContain(`Garmin power averaging used: ${seconds}s → ${seconds}s`);
+    expect((await saved.ref.get()).get('structure')).toEqual(native);
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference },
+      plan: null, localDate: '2026-09-19', title: 'Explicit numeric replacement', structure };
+    const update = { expectedScheduleRevision: created.scheduleRevision, change };
+    await expect(previewPlannedWorkoutV3Change({ ...input, arguments: update }, deps)).rejects.toThrow('v4');
+    const replacement = await previewPlannedWorkoutV4Changes({ ...input, arguments: {
+      expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
+    expect(replacement.changes[0].summary).toContain('Garmin power zones removed');
+    if (seconds !== undefined) expect(replacement.changes[0].summary).toContain(`${seconds}s → default`);
+    await applyTrainingChanges({ ...input, arguments: { proposalRef: replacement.proposalRef, permissionMode: 'schedule' } }, deps);
+    expect((await saved.ref.get()).get('structure')).toEqual(structure);
+    await expect(previewPlannedWorkoutV4Change({ ...input, arguments: update }, deps)).rejects.toThrow('schedule changed');
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
+
+  it.each(['single', 'batch'] as const)('keeps long Garmin %s reviews within the output bound without losing execution disclosures', async mode => {
+    const native = parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [{
+      kind: 'repeat', id: 'set', count: 2, steps: Array.from({ length: 7 }, (_, index) => ({
+        kind: 'step', id: `zone-${index}`, purpose: 'work', ending: { kind: 'time', seconds: 60, allowEarlyLap: true },
+        targets: [{ kind: 'power', mode: 'garmin-zone', zone: index + 1, garminPowerAveragingSeconds: [3, 10, 30][index % 3] }],
+      })),
+    }] });
+    const input = { uid, connectionId: 'connection', scopes };
+    const planPreview = await previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: 1, changes: [{
+      kind: 'create-plan', localKey: 'plan', name: 'Native plan', startDate: '2026-09-18', endDate: '2026-09-18', activate: false,
+    }] } }, deps);
+    const planResult = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: planPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const plan = { ref: planResult.createdReferences[0].reference };
+    const createdPreview = await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: planResult.scheduleRevision,
+      change: { kind: 'create-workout', localKey: 'native', plan, localDate: '2026-09-18', title: 'Native zones', structure: native } } }, deps);
+    const created = await applyTrainingChanges({ ...input,
+      arguments: { proposalRef: createdPreview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const updated = structuredClone(native);
+    for (const node of updated.nodes) for (const step of node.kind === 'step' ? [node] : node.steps) {
+      if (step.ending.kind === 'time') step.ending.allowEarlyLap = false;
+    }
+    const change = { kind: 'update-workout', workout: { ref: created.createdReferences[0].reference }, plan,
+      localDate: '2026-09-19', title: 'A'.repeat(120), structure: updated };
+    const preview = mode === 'single'
+      ? await previewPlannedWorkoutV4Change({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, change } }, deps)
+      : await previewPlannedWorkoutV4Changes({ ...input, arguments: { expectedScheduleRevision: created.scheduleRevision, changes: [change] } }, deps);
+    const summary = preview.changes[0].summary;
+    expect(summary.length).toBeLessThanOrEqual(500);
+    expect(summary).toContain('Update');
+    expect(summary).toContain('on 2026-09-19');
+    expect(summary).toContain('Extend plan range: 2026-09-18 to 2026-09-19.');
+    expect(summary).toContain('Removed from 7 previously enabled steps.');
+    expect(summary).toContain('3s/10s/30s → 3s/10s/30s; device support varies.');
+    expect(summary).toContain('Z1, Z2, Z3, Z4, Z5, Z6, Z7 → Z1, Z2, Z3, Z4, Z5, Z6, Z7');
+    expect(summary).toContain('watts are unknown in QS (Garmin settings).');
+    await applyTrainingChanges({ ...input, arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps);
+    const user = db.collection('users').doc(uid);
+    const saved = (await user.collection('scheduledWorkouts').get()).docs[0];
+    expect(saved.get('title')).toBe(change.title);
+    expect(saved.get('structure')).toEqual(updated);
+    expect((await user.collection('trainingDeliverySettings').get()).empty).toBe(true);
   });
 
 });

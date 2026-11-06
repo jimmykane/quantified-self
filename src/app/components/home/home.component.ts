@@ -1,4 +1,4 @@
-import { Component, OnInit, DestroyRef, ElementRef, PLATFORM_ID, afterEveryRender, inject, signal } from '@angular/core';
+import { Component, OnInit, DestroyRef, ElementRef, PLATFORM_ID, afterEveryRender, afterNextRender, inject, signal } from '@angular/core';
 import { DOCUMENT, Location, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -16,6 +16,7 @@ import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-prev
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
 import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
 import { HomeRevealDirective } from './home-reveal.directive';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 
 const HOME_FEATURES = [
   { id: 'training', label: 'Training' },
@@ -67,6 +68,23 @@ export class HomeComponent implements OnInit {
   private currentFeatureFragment = '';
   private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
   readonly features = HOME_FEATURES;
+  readonly heroMotionPaused = signal(false);
+  readonly heroMotionSuspended = signal(true);
+  readonly heroProviders = [
+    { icon: 'garmin', name: 'Garmin', tooltip: 'Garmin Connect',
+      path: 'M 2 36 C 44 36 40 168 84 168', mobilePath: 'M 50 0 C 50 38 200 24 200 64' },
+    { icon: 'suunto', name: 'Suunto', tooltip: 'Suunto App',
+      path: 'M 2 124 C 42 124 44 168 84 168', mobilePath: 'M 150 0 C 150 28 200 36 200 64' },
+    { icon: 'coros', name: 'COROS', tooltip: 'COROS',
+      path: 'M 2 212 C 42 212 44 168 84 168', mobilePath: 'M 250 0 C 250 28 200 36 200 64' },
+    { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo',
+      path: 'M 2 300 C 44 300 40 168 84 168', mobilePath: 'M 350 0 C 350 38 200 24 200 64' },
+  ].map(provider => ({
+    ...provider,
+    // One continuous curve through the junction, ending exactly at the card border.
+    flowPath: `${provider.path} H 136`,
+    mobileFlowPath: `${provider.mobilePath} V 104`,
+  }));
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
@@ -98,6 +116,36 @@ export class HomeComponent implements OnInit {
     { id: 'exports', question: 'Can I export my original activity files?',
       answer: 'Yes. Download your original activity files for a backup, a change of service, or analysis elsewhere.' },
   ];
+
+  constructor() {
+    afterNextRender(() => this.observeHeroMotion());
+  }
+
+  private observeHeroMotion(): void {
+    if (!this.isBrowser) return;
+    const visual = this.host.nativeElement.querySelector('.hero-visual');
+    if (!visual) return;
+    const canObserve = BrowserCompatibilityService.checkIntersectionObserverSupport();
+    let inViewport = !canObserve;
+    const update = () => {
+      if (!this.destroyRef.destroyed) {
+        this.heroMotionSuspended.set(!inViewport || this.document.visibilityState === 'hidden');
+      }
+    };
+    update();
+    if (canObserve) {
+      const observer = new IntersectionObserver(entries => {
+        const entry = entries.find(candidate => candidate.target === visual);
+        if (!entry) return;
+        inViewport = entry.isIntersecting;
+        update();
+      });
+      observer.observe(visual);
+      this.destroyRef.onDestroy(() => observer.disconnect());
+    }
+    this.document.addEventListener('visibilitychange', update);
+    this.destroyRef.onDestroy(() => this.document.removeEventListener('visibilitychange', update));
+  }
 
   ngOnInit(): void {
     if (!this.isBrowser) return;
@@ -215,6 +263,11 @@ export class HomeComponent implements OnInit {
     if (this.featureScrollFrame === null) return;
     this.document.defaultView?.cancelAnimationFrame(this.featureScrollFrame);
     this.featureScrollFrame = null;
+  }
+
+  toggleHeroMotion(): void {
+    this.heroMotionPaused.update(paused => !paused);
+    this.haptics.selection();
   }
 
   toggleFaq(id: string): void {

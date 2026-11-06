@@ -2,6 +2,7 @@
   class="compact-row"
   [class.compact-row--stacked]="layout() === 'stacked'"
   [class.compact-row--columns]="layout() === 'columns'"
+  [class.compact-row--journey]="layout() === 'journey'"
   [class.compact-row--compact]="density() === 'compact'"
   [attr.aria-labelledby]="titleId()"
   [class.compact-row--without-icon]="!icon()"

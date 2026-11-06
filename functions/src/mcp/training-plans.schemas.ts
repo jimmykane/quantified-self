@@ -32,17 +32,17 @@ export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
 export const TRAINING_READ_EXTENSION_TOOLS = ['get_training_calendar_rest_days', 'get_training_plan_rest_days', 'get_training_plan_phases', 'query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
-  'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_workout_prescription_analysis'] as const;
+  'get_planned_workout_v2', 'get_planned_workout_v3', 'get_planned_workout_v4', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_saved_workout_v3', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
 export const TRAINING_PREVIEW_TOOLS = ['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_create_planned_workout', 'preview_training_changes',
-  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
+  'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v4_change', 'preview_planned_workout_v3_changes', 'preview_planned_workout_v4_changes', 'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'preview_saved_workout_v3_change',
   'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
-export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes',
-  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
+export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v4_change', 'preview_planned_workout_v3_changes', 'preview_planned_workout_v4_changes',
+  'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'preview_saved_workout_v3_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
   try { return normalizeTrainingLocalDate(value) === value; } catch { return false; }
@@ -96,6 +96,7 @@ export const TRAINING_READ_INPUTS = {
   get_planned_workout: z.strictObject({ workoutRef: ref }),
   get_planned_workout_v2: z.strictObject({ workoutRef: ref }),
   get_planned_workout_v3: z.strictObject({ workoutRef: ref }),
+  get_planned_workout_v4: z.strictObject({ workoutRef: ref }),
   get_strength_workout_details: z.strictObject({ workoutRef: ref }),
   get_training_sync_status: z.strictObject({ scope: z.enum(['plan', 'workout']), reference: ref }),
   get_planned_workout_completion: z.strictObject({ workoutRef: ref }),
@@ -106,6 +107,7 @@ export const TRAINING_READ_INPUTS = {
     cursor: z.string().min(1).max(8192).optional() }),
   get_saved_workout: z.strictObject({ savedWorkoutRef: ref }),
   get_saved_workout_v2: z.strictObject({ savedWorkoutRef: ref }),
+  get_saved_workout_v3: z.strictObject({ savedWorkoutRef: ref }),
   get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref }),
 };
 
@@ -156,12 +158,14 @@ export const MCP_WORKOUT_RECIPE_VARIANT_COVERAGE = {
   targetModes: {
     absolute: true,
     relative: true,
+    'garmin-zone': true,
   } satisfies Record<WorkoutTargetModeV1, true>,
   targetVariants: {
     'heart-rate:absolute': true,
     'heart-rate:relative': true,
     'power:absolute': true,
     'power:relative': true,
+    'power:garmin-zone': true,
     'speed:absolute': true,
     'speed:relative': true,
     'cadence:absolute': true,
@@ -243,6 +247,19 @@ export const TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA = z.strictObject({ ...TRAININ
     steps: z.array(earlyLapStep).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
 }).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
 
+/** Pending wire v4: explicit Garmin zone identity and optional execution averaging. Legacy schemas stay frozen. */
+const garminAveraging = { garminPowerAveragingSeconds: z.union([z.literal(3), z.literal(10), z.literal(30)]).optional() };
+export const TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA = z.strictObject({ kind: z.literal('power'), mode: z.literal('garmin-zone'),
+  zone: z.number().int().min(1).max(7), ...garminAveraging });
+const garminZoneStep = earlyLapStep.extend({ targets: z.array(z.union([target.options[0], target.options[1], target.options[2].extend(garminAveraging),
+  target.options[3].extend(garminAveraging), ...target.options.slice(4), TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA]))
+  .max(WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP) });
+export const TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA = z.strictObject({ ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape,
+  nodes: z.array(z.union([garminZoneStep, z.strictObject({ kind: z.literal('repeat'), id: nodeId,
+    count: z.number().int().min(1).max(WORKOUT_STRUCTURE_MAX_REPEAT_COUNT),
+    steps: z.array(garminZoneStep).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
+}).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
+
 const plan = z.strictObject({ planRef: ref, name: z.string().min(1).max(120), lifecycle,
   startDate: trainingDate, endDate: trainingDate, revision: count, currentWorkoutCount: count.max(400),
   color: z.string().max(32).nullable(), createdAtMs: count, updatedAtMs: count });
@@ -306,6 +323,11 @@ export const TRAINING_READ_OUTPUTS = {
     revision: count.positive(), createdAtMs: count, updatedAtMs: count,
     structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional(),
   }) }),
+  get_saved_workout_v3: z.strictObject({ libraryRevision: count, savedWorkout: z.strictObject({
+    savedWorkoutRef: ref, title: z.string().min(1).max(120), status: z.enum(['active', 'archived']),
+    revision: count.positive(), createdAtMs: count, updatedAtMs: count,
+    structure: TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional(),
+  }) }),
   get_training_plan: z.strictObject({ scheduleRevision: count, plan }),
   query_planned_workouts: z.strictObject({ ...envelope, startDate: trainingDate, endDate: trainingDate,
     scope: z.enum(['calendar', 'standalone', 'plan', 'all']), workouts: z.array(workout).max(100) }),
@@ -319,6 +341,9 @@ export const TRAINING_READ_OUTPUTS = {
       text: z.string().max(2000) })).max(100) }) }),
   get_planned_workout_v3: z.strictObject({ scheduleRevision: count, workout: workout.extend({
     structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA, displaySteps: z.array(z.strictObject({ nodeId,
+      text: z.string().max(2000) })).max(100) }) }),
+  get_planned_workout_v4: z.strictObject({ scheduleRevision: count, workout: workout.extend({
+    structure: TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA, displaySteps: z.array(z.strictObject({ nodeId,
       text: z.string().max(2000) })).max(100) }) }),
   get_strength_workout_details: z.strictObject({ scheduleRevision: count, workoutRef: ref,
     details: TRAINING_STRENGTH_DETAILS_SCHEMA.omit({ workoutId: true }) }),
@@ -431,9 +456,13 @@ export const TRAINING_WORKOUT_V3_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
   workoutV2Create.extend({ structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA }),
   workoutV2Update.extend({ structure: TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA }),
 ]);
+export const TRAINING_WORKOUT_V4_CHANGE_SCHEMA = z.discriminatedUnion('kind', [
+  workoutV2Create.extend({ structure: TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA }),
+  workoutV2Update.extend({ structure: TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA }),
+]);
 export const TRAINING_CREATE_WORKOUT_INPUT_WITHOUT_DELIVERY = z.strictObject(focusedWorkoutPreviewInput);
 
-const savedWorkoutChangeWithRecipe = (recipe: typeof TRAINING_RECIPE_WITH_POOL_SCHEMA | typeof TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA) => z.discriminatedUnion('kind', [
+const savedWorkoutChangeWithRecipe = (recipe: typeof TRAINING_RECIPE_WITH_POOL_SCHEMA | typeof TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA | typeof TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA) => z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('create'), title: z.string().trim().min(1).max(120),
     structure: recipe, strength: TRAINING_STRENGTH_DRAFT_SCHEMA.optional() }),
   z.strictObject({ kind: z.literal('save-workout'), workoutRef: ref, expectedWorkoutRevision: count.positive() }),
@@ -454,6 +483,7 @@ const savedWorkoutChangeWithRecipe = (recipe: typeof TRAINING_RECIPE_WITH_POOL_S
 
 const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POOL_SCHEMA);
 const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
+const savedWorkoutV3Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_GARMIN_ZONES_SCHEMA);
 
 export const TRAINING_WRITE_INPUTS = {
   preview_training_calendar_rest_day: z.strictObject({ localDate: trainingDate, isRestDay: z.boolean() }),
@@ -482,10 +512,16 @@ export const TRAINING_WRITE_INPUTS = {
     change: TRAINING_WORKOUT_V2_CHANGE_SCHEMA }),
   preview_planned_workout_v3_change: z.strictObject({ expectedScheduleRevision: count,
     change: TRAINING_WORKOUT_V3_CHANGE_SCHEMA }),
+  preview_planned_workout_v4_change: z.strictObject({ expectedScheduleRevision: count,
+    change: TRAINING_WORKOUT_V4_CHANGE_SCHEMA }),
   preview_planned_workout_v3_changes: z.strictObject({ expectedScheduleRevision: count,
     changes: z.array(TRAINING_WORKOUT_V3_CHANGE_SCHEMA).min(1).max(25) }),
+  preview_planned_workout_v4_changes: z.strictObject({ expectedScheduleRevision: count,
+    changes: z.array(TRAINING_WORKOUT_V4_CHANGE_SCHEMA).min(1).max(25) }),
   preview_saved_workout_v2_change: z.strictObject({ expectedScheduleRevision: count,
     expectedLibraryRevision: count, change: savedWorkoutV2Change }),
+  preview_saved_workout_v3_change: z.strictObject({ expectedScheduleRevision: count,
+    expectedLibraryRevision: count, change: savedWorkoutV3Change }),
   preview_saved_workout_change: z.strictObject({ expectedScheduleRevision: count,
     expectedLibraryRevision: count, change: savedWorkoutChange }),
   apply_training_changes: z.strictObject({ proposalRef: ref,
@@ -536,8 +572,11 @@ export const TRAINING_WRITE_OUTPUTS = {
   preview_planned_workout_v2_change: trainingPreviewOutput,
   preview_saved_workout_change: trainingPreviewOutput,
   preview_saved_workout_v2_change: trainingPreviewOutput,
+  preview_saved_workout_v3_change: trainingPreviewOutput,
   preview_planned_workout_v3_change: trainingPreviewOutput,
+  preview_planned_workout_v4_change: trainingPreviewOutput,
   preview_planned_workout_v3_changes: trainingPreviewOutput,
+  preview_planned_workout_v4_changes: trainingPreviewOutput,
   apply_training_changes: z.strictObject({ proposalRef: ref,
     status: z.enum(['applied', 'partially_applied']), scheduleRevision: count,
     changes: z.array(appliedChange).max(25), providers: z.array(providerResult).max(100),

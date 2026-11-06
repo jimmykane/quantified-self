@@ -58,6 +58,89 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('persists an explicit regenerated suggestion across reload without another model request', async () => {
+    const { service, call, saved, result } = setup();
+    const initial = result(); service.remember('owner', initial);
+    const next = { ...initial, result: { ...initial.result!, requestId: 'day-workout:regenerated' } };
+    call.mockResolvedValue({ data: next });
+    const request = { requestId: next.result.requestId, controls: initial.controls! };
+    expect(await service.regenerate('owner', initial.result!.requestId, request, () => true)).toEqual(next);
+    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'regenerate',
+      expectedRequestId: initial.result!.requestId, request }, expect.anything());
+    const recreated = setup(saved);
+    expect(recreated.service.cached('owner')?.status).toEqual(next);
+    expect(await recreated.service.request('owner', 'prepare', () => true)).toEqual(next);
+    expect(recreated.call).not.toHaveBeenCalled();
+  });
+  it('keeps the previous cached suggestion when regeneration fails or the account changes', async () => {
+    const { service, call, result, auth } = setup(); const previous = result(); service.remember('owner', previous);
+    call.mockRejectedValueOnce(Error('Unavailable'));
+    await expect(service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true)).rejects.toThrow('Unavailable');
+    expect(service.cached('owner')?.status).toEqual(previous);
+    auth.currentUser = { uid: 'other' };
+    await expect(service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true)).rejects.toThrow();
+    expect(call).toHaveBeenCalledOnce();
+  });
+  it.each(['coverage', 'dismissal'] as const)('does not let a late regeneration overwrite newer %s cache state', async change => {
+    const { service, call, result, revisions } = setup();
+    const previous = result(); service.remember('owner', previous);
+    let resolve!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true);
+    const rejected = expect(pending).rejects.toThrow('access changed');
+    if (change === 'coverage') revisions.next({ uid: 'owner', revision: 2 });
+    const latest: DailyWorkoutSuggestionStatus = { localDate: previous.localDate, state: change === 'coverage' ? 'planned' : 'dismissed' };
+    service.remember('owner', latest);
+    resolve({ data: { ...previous, result: { ...previous.result!, requestId: 'new-generation' } } });
+    await rejected; expect(service.cached('owner')?.status).toEqual(latest);
+    expect(call).toHaveBeenCalledOnce();
+  });
+  it.each(['planned', 'completed', 'rest-day', 'dismissed'] as const)('keeps a newer %s status read ahead of a late regeneration response', async state => {
+    const { service, call, result } = setup();
+    const previous = result(); service.remember('owner', previous);
+    let resolve!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = service.regenerate('owner', previous.result!.requestId,
+      { requestId: 'new-generation', controls: previous.controls! }, () => true);
+    const latest: DailyWorkoutSuggestionStatus = { localDate: previous.localDate, state };
+    call.mockResolvedValueOnce({ data: latest });
+    await service.request('owner', 'status', () => true, undefined, true);
+    const rejected = expect(pending).rejects.toThrow('access changed');
+    resolve({ data: { ...previous, result: { ...previous.result!, requestId: 'new-generation' } } });
+    await rejected;
+    expect(service.cached('owner')?.status).toEqual(latest);
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+  it.each(['previous', 'same-request', 'another-request'] as const)('handles a concurrent ready status for %s during regeneration', async source => {
+    const { service, call, result } = setup();
+    const previous = result(); service.remember('owner', previous);
+    const next = { ...previous, result: { ...previous.result!, requestId: 'new-generation' } };
+    let resolve!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = service.regenerate('owner', previous.result!.requestId,
+      { requestId: next.result.requestId, controls: previous.controls! }, () => true);
+    const latest = { ...previous, result: { ...previous.result!, requestId: source === 'previous' ? previous.result!.requestId
+      : source === 'same-request' ? next.result.requestId : 'another-regeneration' } };
+    call.mockResolvedValueOnce({ data: latest });
+    await service.request('owner', 'status', () => true, undefined, true);
+    const settled = source === 'another-request' ? expect(pending).rejects.toThrow('access changed') : expect(pending).resolves.toEqual(next);
+    resolve({ data: next }); await settled;
+    expect(service.cached('owner')?.status).toEqual(source === 'another-request' ? latest : next);
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('retains versioned event guidance across recreation without another generation ', async () => {
+    const { service, call, saved, result } = setup();
+    const ready = { ...result(), result: { version: 1 as const, kind: 'event-advice' as const, requestId: 'daily-suggestion:2026-10-30',
+      observedAt: new Date().toISOString(), rationale: 'Follow your event routine.', events: [{ name: 'Race', localDate: '2026-10-30' }],
+      draft: null, previousLoads: [] as [], usedContext: ['Goals'], missingContext: [] } };
+    call.mockResolvedValue({ data: ready }); await service.request('owner', 'prepare', () => true);
+    const recreated = setup(saved);
+    expect(recreated.service.cached('owner')?.status.result).toEqual(ready.result);
+    expect(await recreated.service.request('owner', 'prepare', () => true)).toEqual(ready); expect(recreated.call).not.toHaveBeenCalled();
+  });
   it.each(['functions/unavailable', 'functions/internal', 'deadline-exceeded'])('retries a transient status read once (%s) and shares the retry', async code => {
     const { service, call, logger } = setup();
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
@@ -165,7 +248,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(service.cached('owner')).toBeNull(); call.mockResolvedValueOnce({ data: result() });
     expect((await service.request('owner', 'status', () => true)).state).toBe('ready');
     expect(call).toHaveBeenCalledTimes(2);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'status' }, expect.anything());
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'status' }, expect.anything());
   });
   it('moves the shared rest listener to the new saved-zone date without changing the user object', async () => {
     const { service, setRest } = setup(); TestBed.flushEffects();
@@ -237,11 +320,11 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(service.saving()).toBe(true); acknowledge(); await write; expect(service.saving()).toBe(false);
     expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true } } } });
     await service.request('owner', 'prepare', () => true);
-    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'prepare' }, expect.any(Object));
+    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
     await expect(service.request('owner', 'use-available-data', () => true)).rejects.toThrow('displayed day');
     await service.request('owner', 'use-available-data', () => true, preferences.controls.localDate);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
     service.event('owner', 'reviewed', 'ready'); expect(logEvent).toHaveBeenCalledWith('daily_workout_suggestion', { action: 'reviewed', state: 'ready' });
     auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' });
     expect(call.mock.calls[0][2].canExecute()).toBe(false);
@@ -298,7 +381,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const fallback = service.request('owner', 'use-available-data', () => true, '2026-10-30');
     expect(call).toHaveBeenCalledOnce(); finish({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } }); await check;
     expect((await fallback).state).toBe('ready'); expect(call).toHaveBeenCalledTimes(2);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: '2026-10-30' }, expect.anything());
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'use-available-data', localDate: '2026-10-30' }, expect.anything());
     expect(service.cached('owner')?.status).toEqual(result());
   });
   it('shares an explicit available-data generation with a later automatic preparation', async () => {

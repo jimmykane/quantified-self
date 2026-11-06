@@ -247,9 +247,11 @@ describe('AppAuthService', () => {
         expect(redirectSpy).toHaveBeenCalled();
     });
 
-    it.each(HISTORY_IMPORT_PROVIDERS)('keeps dismissed %s results hidden after actual logout, service recreation and login', async serviceName => {
+    it.each(HISTORY_IMPORT_PROVIDERS.flatMap(serviceName =>
+        ['failed', 'skipped', 'processed', 'requested'].map(status => ({serviceName, status}))
+    ))('keeps dismissed $serviceName $status results hidden after actual logout, service recreation and login', async ({serviceName, status}) => {
         const projection = {runId: 'finished-run', rangePreset: '30_days', active: false, updatedAtMs: Date.now(),
-            steps: [{id: 'activities', resources: ['activities'], status: 'failed', count: 7}]};
+            steps: [{id: 'activities', resources: ['activities'], status, count: 7}]};
         const metadata = new BehaviorSubject({connectionState: 'connected', connectionHistoryImport: projection});
         mockUserService.getUserMetaForService.mockImplementation((_user, provider) => provider === serviceName ? metadata : of(undefined));
         const login = (uid: string) => {

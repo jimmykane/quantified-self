@@ -261,3 +261,36 @@ describe('ordered manual workout targets', () => {
     expect(manualEditorTargetPreview(workoutTargetToManualEditor(targets[10], ActivityTypes.Running), ActivityTypes.Running)).toContain('unavailable');
   });
 });
+
+
+describe('Garmin zone editing', () => {
+  it('round-trips every single zone and never fabricates watts or a reference', () => {
+    for (let zone = 1; zone <= 7; zone++) {
+      const canonical = { kind: 'power', mode: 'garmin-zone', zone } as const;
+      const editor = workoutTargetToManualEditor(canonical, ActivityTypes.Running);
+      expect(editor).toMatchObject({ mode: 'garmin-zone', rangeMode: 'single', minimum: zone, referenceValue: null });
+      expect(manualEditorTargetToWorkout(copyManualWorkoutEditorTarget(editor), ActivityTypes.Running)).toEqual(canonical);
+      expect(manualEditorTargetPreview(editor, ActivityTypes.Running)).toBe(`Garmin power zone ${zone}`);
+      expect(() => manualEditorTargetToWorkout({ ...editor, rangeMode: 'range' }, ActivityTypes.Running)).toThrow();
+      expect(() => manualEditorTargetToWorkout(editor, ActivityTypes.Swimming)).toThrow();
+    }
+  });
+});
+
+
+describe('Garmin averaging in editor snapshots', () => {
+  it.each([3, 10, 30] as const)('preserves and explicitly clears %i seconds without changing watts/reference/zone', seconds => {
+    const targets = [
+      { kind: 'power', mode: 'absolute', minimumWatts: 150.123456789, maximumWatts: 200.123456789 },
+      { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'critical-power', watts: 250.123456789 } },
+      { kind: 'power', mode: 'garmin-zone', zone: 2 },
+    ] as const;
+    for (const target of targets) {
+      const averaged = { ...target, garminPowerAveragingSeconds: seconds };
+      const editor = workoutTargetToManualEditor(averaged, ActivityTypes.Running);
+      expect(manualEditorTargetToWorkout(editor, ActivityTypes.Running)).toEqual(averaged);
+      delete editor.garminPowerAveragingSeconds;
+      expect(manualEditorTargetToWorkout(editor, ActivityTypes.Running)).toEqual(target);
+    }
+  });
+});

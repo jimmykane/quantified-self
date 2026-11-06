@@ -30,6 +30,7 @@
         @let dayNotes = timelineNotesByDate.get(day.dateKey);
         @let plannedDay = plannedWorkoutsByDate?.[day.dateKey];
         @let planPhase = planPhasesByDate?.[day.dateKey];
+        @let goal = goalsByDate[day.dateKey];
         @if (day.inPrimaryPeriod || (!hideOutsideDays && model.view !== 'year')) {
           <button type="button" class="activity-calendar-day activity-calendar-day-button"
             [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
@@ -37,7 +38,7 @@
             [class.activity-calendar-day--selected]="selectedDateKey === day.dateKey"
             [class.activity-calendar-day--weekend]="day.isWeekend"
             [attr.aria-pressed]="selectedDateKey ? selectedDateKey === day.dateKey : null"
-            [attr.aria-label]="(day.isToday ? 'Today. ' : '') + (dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + (calmMonth && plannedDay.visibleEntries[0] ? '. First: ' + plannedDay.visibleEntries[0].workout.title : '') + '.' : plannedWorkoutsByDate && plannedWorkoutsComplete ? ' No planned workouts.' : '') + (plannedWorkoutsByDate && !plannedWorkoutsComplete ? ' Planned workout coverage unknown.' : '') + (planPhase ? ' ' + planPhase.ariaLabel : '')"
+            [attr.aria-label]="(day.isToday ? 'Today. ' : '') + (dayNotes?.ariaLabel ?? day.ariaLabel) + (plannedDay ? ' ' + plannedDay.ariaLabel + (calmMonth && plannedDay.visibleEntries[0] ? '. First: ' + plannedDay.visibleEntries[0].workout.title : '') + '.' : plannedWorkoutsByDate && plannedWorkoutsComplete ? ' No planned workouts.' : '') + (plannedWorkoutsByDate && !plannedWorkoutsComplete ? ' Planned workout coverage unknown.' : '') + (planPhase ? ' ' + planPhase.ariaLabel : '') + (goalsByDate[day.dateKey] ? ' ' + goalsByDate[day.dateKey].ariaLabel : '')"
             matRipple
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number" [class.activity-calendar-day-number--month-label]="isCalmGrid && ($first || day.dayNumber === 1)"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span>@if (isCalmGrid && ($first || day.dayNumber === 1)) { <span class="activity-calendar-day-month">{{ day.monthLabel }}</span> }</span>
@@ -49,6 +50,11 @@
               </span>
             }
             <span class="activity-calendar-day-indicators">
+              @if (goal) {
+                <span class="activity-calendar-goal" aria-hidden="true">
+                  <mat-icon aria-hidden="true">flag</mat-icon><span class="activity-calendar-goal-name">{{ goal.label }}</span>@if (goal.count > 1) { <span>+{{ goal.count - 1 }}</span> }
+                </span>
+              }
               @if (day.eventCount) {
               <span class="activity-calendar-marker-stage"
                 [class.activity-calendar-marker-stage--concentric]="!calmMonth && (compact || model.view === 'year')">
@@ -120,7 +126,7 @@
     </section>
     }
   </div>
-  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans || hasVisibleRestDays)) {
+  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans || hasVisibleRestDays || hasVisibleGoals)) {
     <div class="activity-calendar-calm-legend" aria-label="Calendar markers">
       @for (family of legendFamilies; track family.id) {
         <span><i [style.background-color]="family.color" aria-hidden="true"></i>{{ family.label }}</span>
@@ -131,6 +137,7 @@
       @if (hasVisibleNotes) { <span><i class="activity-calendar-calm-legend-note" aria-hidden="true"></i>Timeline note</span> }
       @if (hasVisiblePlans) { <span><i class="activity-calendar-calm-legend-plan" aria-hidden="true"></i>Planned workout</span> }
       @if (hasVisibleRestDays) { <span><i class="activity-calendar-calm-legend-rest" aria-hidden="true"></i>Rest day</span> }
+      @if (hasVisibleGoals) { <span class="activity-calendar-calm-legend-goal"><mat-icon aria-hidden="true">flag</mat-icon>Goal</span> }
     </div>
   }
 </section>

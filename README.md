@@ -264,7 +264,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
-- [Standard and Declarative Web Push, device lifecycle and activation](docs/web-push-notifications.md)
+- [Standard and Declarative Web Push, activity sync/delivery alerts, history-import results and activation](docs/web-push-notifications.md)
 
 - [Analytics collection, attribution boundaries, and rollout checks](docs/analytics-attribution.md)
 - [Firestore stats index allowlist, query audit and two-phase rollout](docs/firestore-stats-indexes.md)
@@ -313,6 +313,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Connected-provider attribution audit](docs/connected-provider-attribution-audit.md)
 - [Event merge idempotency and recovery](docs/event-merge-idempotency.md)
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
+- [Public pricing and release-note prerendering](docs/public-pricing-prerender.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
 - [Delete User Data extension replacement and recovery](docs/delete-user-data-migration.md)
 

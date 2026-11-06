@@ -20,6 +20,7 @@
         <mat-button-toggle value="30d">30 days</mat-button-toggle>
       </mat-button-toggle-group>
       @if (viewSaving()) { <mat-spinner diameter="16" aria-label="Saving calendar view"></mat-spinner> }
+      <app-training-goals-button [uid]="goalOwner()" />
     </div>
   }
 
@@ -41,6 +42,19 @@
     </nav>
   }
 
+  @if (!dayContextEnabled()) { <app-training-goals-button [uid]="goalOwner()" /> }
+
+  @if (showPeriodTotals()) {
+    <dl class="calendar-period-totals-strip" [attr.aria-label]="calendarModel().periodLabel + ' activity totals'" [attr.aria-busy]="isLoading()">
+      @for (metric of periodTotals(); track metric.label) {
+        <div>
+          <dt><mat-icon aria-hidden="true">{{ metric.icon }}</mat-icon>{{ metric.label }}</dt>
+          <dd>{{ metric.value }}@if (metric.coverage) { <small>{{ metric.coverage }}</small> }</dd>
+        </div>
+      }
+    </dl>
+  }
+
   <div class="activity-calendar-day-layout">
     <div class="activity-calendar-month-pane">
       <div class="activity-calendar-tile-progress">
@@ -59,7 +73,7 @@
         </div>
       }
       <app-activity-calendar-grid
-        [model]="calendarModel()"
+        [model]="calendarModel()" [goalsByDate]="goalsByDate()"
         [selectedDateKey]="dayContextEnabled() ? selectedDay()?.dateKey ?? null : null"
         [compact]="true"
         [fillHeight]="fillHeight()"

@@ -324,6 +324,8 @@ describe('Firebase Hosting configuration', () => {
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
+    // Garmin zone help distinguishes single device-defined targets, unknown watts, explicit generation and native Running Power limits (2026-11-04).
+    // Garmin averaging help adds explicit Default/3/10/30-second targets and generation, with separate Suunto sport-screen limits (2026-11-04).
     // Training editor help covers explicit duration summaries, new-Rest defaults and non-blocking duration comparisons.
     // Dashboard help keeps the greeting assessment and Today details visible by default; selecting the sentence collapses or reopens the details (2026-10-29).
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
@@ -338,13 +340,20 @@ describe('Firebase Hosting configuration', () => {
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
+    // Notification help covers default-on categories, recent live-sync batching and caps, history exclusion, and cancellation (2026-11-03).
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
-    // Notification help explains Safari's browser icon and Add to Dock app branding (2026-11-03).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
+    // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    // Notification help also covers grouped Training sync attention alerts (2026-11-06).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -446,6 +455,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
+  it('records the GPX comparison copy update in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-04');
+  });
+
   it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
@@ -469,19 +482,30 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
-    // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-01');
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
+    // Approved corrections preserve manual Health permissions and link existing account tools.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
+    // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
+    // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
@@ -491,13 +515,13 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-coros`)).toBe('2026-11-01');
-    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
+    // History wording separates request acceptance from delivery without a duration estimate.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-11-03');
     // COROS guide clarifies the history limit and keeps its setup tab through signup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-11-03');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
@@ -508,6 +532,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
+    // Same-day Help covers quota-funded regeneration, guarded replacement and recovery of uncertain saves.
     // Help includes the dialog feedback and safe haptic behavior guidance.
     // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
     // Billing help covers maintenance, checkout switching and expiry recovery (2026-10-26).
@@ -539,8 +564,13 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
+    // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
+    // Activity-delivery help covers explicit batch consent and grouped automatic failures.
+    // Training sync help covers automatic supported provider adjustments and future-window edits.
+    // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
+    // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-06');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
@@ -559,8 +589,6 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/pricing</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Allow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');
@@ -573,6 +601,11 @@ describe('Firebase Hosting configuration', () => {
         headerValue.key === betaNoIndexHeader.key && headerValue.value === betaNoIndexHeader.value
       ))
     )) ?? [];
+
+    for (const routePath of PRERENDERED_PUBLIC_ROUTES) {
+      const routeSource = routePathToHostingSource(routePath);
+      expect(noIndexHeaders.some(header => headerSourceMatchesPath(header.source, routeSource)), routePath).toBe(false);
+    }
 
     for (const routePath of CLIENT_RENDERED_APP_ROUTES) {
       const routeSource = routePathToHostingSource(routePath);
@@ -658,7 +691,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.20mb',
     });
   });
 

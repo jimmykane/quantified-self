@@ -12,6 +12,13 @@ import { AppFunctionsService } from './app.functions.service';
 import { AuthSessionCleanupService } from './auth-session-cleanup.service';
 import { isPushId, isPushOrigin, isPushRegistration, isVapidPublicKey, type PushRegistration, type PushTestRequest, type PushTestResponse } from '../../../shared/web-push';
 import { environment } from '../../environments/environment';
+import { isAutomaticPushOrigin } from '../../../shared/web-push';
+import type { DeliveryNotificationTarget } from '../../../shared/activity-delivery-notifications';
+import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
+import { AppNotificationPreferencesService } from './app.notification-preferences.service';
+import { pushDeviceInfo } from '../helpers/push-device.helper';
+import { isPushDeviceInfo } from '@shared/web-push';
+import { AppNotificationInvitationService } from './app.notification-invitation.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
 interface LocalInstallation { uid: string; installationId: string; }
@@ -21,6 +28,8 @@ export class AppPushService {
   private readonly auth = inject(Auth);
   private readonly firestore = inject(Firestore);
   private readonly config = inject(AppRemoteConfigService);
+  private readonly preferences = inject(AppNotificationPreferencesService);
+  private readonly invitation = inject(AppNotificationInvitationService);
   private readonly functions = inject(AppFunctionsService);
   private readonly storage = inject(APP_STORAGE);
   private readonly windows = inject(AppWindowService);
@@ -33,9 +42,26 @@ export class AppPushService {
   readonly operation = signal<'enable' | 'disable' | 'test' | null>(null);
   readonly message = signal('');
   readonly registered = signal(false);
-  readonly canEnable = computed(() => this.state() === 'disabled' && !this.operation());
+  private readonly permissionUnasked = signal(false);
+  private readonly retryableEnable = signal(false);
+  private readonly siteAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && isVapidPublicKey(this.config.webPushPublicKey())
+    && isPushOrigin(this.origin(), environment.useFunctionsEmulator === true));
+  readonly unavailableReason = signal('');
+  /** Granted-but-unregistered legacy devices may have been explicitly disabled. Offer only in the tray. */
+  readonly canInvite = computed(() => this.state() === 'disabled' && this.canEnable() && this.permissionUnasked());
+  readonly canEnable = computed(() => !this.operation() && (this.state() === 'disabled'
+    || this.state() === 'unavailable' && this.retryableEnable()) && this.siteAvailable());
   readonly canTest = computed(() => this.state() === 'enabled' && !this.operation());
   readonly canDisable = computed(() => this.registered() && !this.operation() && this.state() !== 'impersonating');
+  readonly historyNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && this.config.webPushHistoryEnabled() && isAutomaticPushOrigin(this.origin()));
+  readonly canNotifyHistory = computed(() => this.historyNotificationsAvailable() && this.canTest()
+    && this.preferences.isEnabled('history_import'));
+  readonly deliveryNotificationsAvailable = computed(() => this.browser && this.config.webPushEnabled()
+    && this.config.webPushDeliveryEnabled() && isAutomaticPushOrigin(this.origin()));
+  readonly canNotifyDelivery = computed(() => this.deliveryNotificationsAvailable() && this.canTest()
+    && this.preferences.isEnabled('activity_delivery'));
   private manager: PushManager | null = null;
   private subscription: PushSubscription | null = null;
   private owner: FirebaseUserType | null = null;
@@ -82,6 +108,12 @@ export class AppPushService {
     } catch { return null; }
   }
   private origin(): string { return this.windows.windowRef.location.origin; }
+  isCurrentDevice(installationId: string, origin: string): boolean {
+    const local = this.readLocal();
+    return this.browser && !!this.owner && this.auth.currentUser === this.owner
+      && local?.uid === this.owner.uid && local.installationId === installationId && origin === this.origin();
+  }
+  async refreshRegistration(): Promise<void> { await this.refresh(); }
   private async pushManager(): Promise<PushManager | null> {
     const window = this.windows.windowRef as Window & { pushManager?: PushManager };
     if (window.pushManager) return window.pushManager;
@@ -99,6 +131,8 @@ export class AppPushService {
     const epoch = ++this.epoch;
     const owner = this.owner;
     this.registered.set(false);
+    this.permissionUnasked.set(false);
+    this.retryableEnable.set(false); this.unavailableReason.set('');
     this.state.set('loading');
     try {
       if (!owner || this.auth.currentUser !== owner) {
@@ -124,10 +158,15 @@ export class AppPushService {
       }
       // iOS browser tabs can hide these APIs until the app is opened from the Home Screen.
       if (!this.compatibility.checkPushSupport()) { this.state.set('unsupported'); return; }
+      this.retryableEnable.set(Notification.permission !== 'denied' && this.siteAvailable());
       const manager = await this.pushManager();
       if (!this.current(owner, epoch)) return;
       this.manager = manager;
-      if (!manager) { this.state.set('unavailable'); return; }
+      if (!manager) {
+        this.unavailableReason.set(this.retryableEnable() ? 'Your browser’s notification service is not ready. Turn On to retry.'
+          : 'Notifications are not available from this site right now.');
+        this.state.set('unavailable'); return;
+      }
       let subscription = await manager.getSubscription();
       if (!this.current(owner, epoch)) return;
       this.subscription = subscription;
@@ -137,13 +176,16 @@ export class AppPushService {
         subscription = null;
       }
       this.registered.set(!!subscription);
+      this.permissionUnasked.set(Notification.permission === 'default' && !local && !subscription);
       if (Notification.permission === 'denied') {
         const cleanupEpoch = local?.uid === owner.uid ? await this.detach() : epoch;
         if (this.current(owner, cleanupEpoch)) this.state.set('denied');
         return;
       }
-      if (!this.config.webPushEnabled() || !isVapidPublicKey(this.config.webPushPublicKey())
-        || !isPushOrigin(this.origin(), environment.useFunctionsEmulator === true)) { this.state.set('unavailable'); return; }
+      if (!this.siteAvailable()) {
+        this.unavailableReason.set('Notifications are not available from this site right now.');
+        this.state.set('unavailable'); return;
+      }
       if (Notification.permission !== 'granted') { this.state.set('disabled'); return; }
       if (!subscription && local?.uid === owner.uid) {
         await this.detach(); return;
@@ -175,9 +217,16 @@ export class AppPushService {
       const current = subscription.toJSON();
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
         await this.persist(owner, local.installationId, subscription, epoch, true);
+      } else if (!isPushDeviceInfo(saved.device)) {
+        // Optional labels must not block a valid subscription. Update-only cannot recreate a removed document.
+        void updateDoc(ref, { device: pushDeviceInfo(window.navigator), updatedAt: serverTimestamp() }).catch(() => undefined);
       }
       if (this.current(owner, epoch)) this.state.set('enabled');
-    } catch { if (this.epoch === epoch) this.state.set('unavailable'); }
+    } catch { if (this.epoch === epoch) {
+      this.unavailableReason.set(this.retryableEnable()
+        ? 'Could not check this device. Turn On to retry.' : 'Could not check notification availability. Retry to check again.');
+      this.state.set('unavailable');
+    } }
   }
   private encodeKey(key: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(key))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -189,7 +238,7 @@ export class AppPushService {
       vapidPublicKey: this.config.webPushPublicKey(), endpoint: json.endpoint ?? '', keys: { p256dh: json.keys?.['p256dh'] ?? '', auth: json.keys?.['auth'] ?? '' } };
     if (!isPushRegistration(value, environment.useFunctionsEmulator === true)) throw new Error('Invalid subscription.');
     const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${id}`);
-    const record = { ...value, updatedAt: serverTimestamp() };
+    const record = { ...value, device: pushDeviceInfo(this.windows.windowRef.navigator), updatedAt: serverTimestamp() };
     // Background rotation must not resurrect consent removed after our server read.
     if (reconcile) await updateDoc(ref, record); else await setDoc(ref, record);
     if (!this.current(owner, epoch)) {
@@ -199,29 +248,83 @@ export class AppPushService {
     }
     if (!reconcile) this.storage.setItem(STORAGE_KEY, JSON.stringify({ uid: owner.uid, installationId: id }));
   }
-  async enable(): Promise<void> {
-    if (!this.canEnable() || !this.manager || !this.owner) return;
+  async historyNotificationTarget(expectedUserID: string): Promise<HistoryNotificationTarget> {
+    return this.notificationTarget(expectedUserID, () => this.canNotifyHistory(),
+      'Enable this device and the History imports category in Settings, or uncheck the import notification option.');
+  }
+  async deliveryNotificationTarget(expectedUserID: string): Promise<DeliveryNotificationTarget> {
+    return this.notificationTarget(expectedUserID, () => this.canNotifyDelivery(),
+      'Enable this device and the Activity delivery category, or uncheck the send notification option.');
+  }
+  private async notificationTarget(expectedUserID: string, canNotify: () => boolean, hint: string): Promise<DeliveryNotificationTarget> {
+    const owner = this.owner, epoch = this.epoch, local = this.readLocal();
+    if (!canNotify() || !owner || owner.uid !== expectedUserID || local?.uid !== expectedUserID) {
+      throw new Error(hint);
+    }
+    const snapshot = await getDocFromServer(doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`));
+    const saved = snapshot.data();
+    if (!this.current(owner, epoch) || !this.sameInstallation(local) || !canNotify()
+      || !isPushRegistration(saved) || saved.origin !== this.origin() || saved.vapidPublicKey !== this.config.webPushPublicKey()) {
+      throw new Error('Notification registration changed. Please check this device and retry.');
+    }
+    return { installationId: local.installationId, generation: saved.generation };
+  }
+  async enable(expectedUid = this.owner?.uid): Promise<void> {
+    if (!this.canEnable() || !this.owner || this.owner.uid !== expectedUid || this.auth.currentUser !== this.owner) return;
     const owner = this.owner; const epoch = ++this.epoch;
+    const retry = this.state() === 'unavailable', key = this.config.webPushPublicKey();
+    let local = this.readLocal();
     // Request synchronously in the button gesture, before any network or worker awaits.
     const permission = Notification.requestPermission();
     this.operation.set('enable'); this.message.set('');
     try {
-      if (await permission !== 'granted') throw new Error('Permission was not granted.');
-      if (!this.current(owner, epoch)) throw new Error('Account changed.');
-      const id = this.compatibility.createRandomUUID(); if (!id) throw new Error('Device storage unavailable.');
-      const key = this.config.webPushPublicKey();
+      if (await permission !== 'granted') {
+        if (this.current(owner, epoch)) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
+        throw new Error('Permission was not granted.');
+      }
+      if (!this.current(owner, epoch) || !this.siteAvailable() || this.config.webPushPublicKey() !== key
+        || !this.sameInstallation(local)) throw new Error('Registration context changed.');
+      const manager = this.manager ?? await this.pushManager();
+      if (!this.current(owner, epoch) || !manager) throw new Error('Browser notification service unavailable.');
+      this.manager = manager;
+      const retainedId = local?.uid === owner.uid ? local.installationId : null;
+      if (retry) {
+        // A failed check did not establish subscription ownership. Repeat that check
+        // before adopting an endpoint or reusing this account's existing installation.
+        const observed = await manager.getSubscription();
+        if (!this.current(owner, epoch) || !this.sameInstallation(local)) throw new Error('Registration context changed.');
+        const actualKey = observed?.options.applicationServerKey;
+        if (local && local.uid !== owner.uid
+          || observed && (local?.uid !== owner.uid || !actualKey || this.encodeKey(actualKey) !== key)) {
+          if (!await this.revokeBrowser(local, observed)) throw new Error('Browser cleanup superseded.');
+          local = null;
+        }
+      }
+      if (!this.current(owner, epoch) || !this.siteAvailable() || this.config.webPushPublicKey() !== key
+        || !this.sameInstallation(local)) throw new Error('Registration context changed.');
+      const id = retainedId ?? this.compatibility.createRandomUUID();
+      if (!id) throw new Error('Device storage unavailable.');
       const bytes = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-      const subscription = await this.manager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+      const subscription = await manager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+      if (!this.sameInstallation(local)) {
+        if (this.owner !== owner || this.auth.currentUser !== owner) await subscription.unsubscribe();
+        throw new Error('Registration context changed.');
+      }
       this.subscription = subscription;
-      try { await this.persist(owner, id, subscription, epoch); } catch (error) { await subscription.unsubscribe(); throw error; }
+      try {
+        if (!this.siteAvailable() || this.config.webPushPublicKey() !== key) throw new Error('Site configuration changed.');
+        await this.persist(owner, id, subscription, epoch);
+      } catch (error) { await subscription.unsubscribe(); throw error; }
       this.registered.set(true); this.state.set('enabled'); this.message.set('Notifications enabled on this device.');
+      this.invitation.recordDeviceChoice(owner.uid, 'enabled');
     } catch { this.message.set('Notifications could not be enabled. Check permission and try again.'); throw new Error('Notification enable failed.'); }
     finally { this.operation.set(null); void this.refresh(); }
   }
-  async disable(): Promise<void> {
-    if (!this.canDisable()) return;
+  async disable(expectedUid = this.owner?.uid): Promise<void> {
+    if (!this.canDisable() || !this.owner || this.owner.uid !== expectedUid || this.auth.currentUser !== this.owner) return;
     const owner = this.owner;
     this.operation.set('disable'); this.message.set('');
+    if (owner) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
     try {
       const epoch = await this.detach();
       if (this.current(owner, epoch)) this.message.set('Notifications disabled on this device.');

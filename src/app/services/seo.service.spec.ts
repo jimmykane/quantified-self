@@ -109,6 +109,23 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image:alt', content: DEFAULT_SOCIAL_IMAGE_ALT });
     });
 
+    it('applies GPX comparison metadata with one brand suffix and matching social tags', () => {
+        const title = 'Compare GPX & FIT Files';
+        const description = 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.';
+        mockActivatedRoute.data = of({ title, description });
+        mockRouter.url = '/tools/compare';
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
+
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('Compare GPX & FIT Files - Quantified Self');
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'description', content: description });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Compare GPX & FIT Files - Quantified Self' });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:title', content: 'Compare GPX & FIT Files - Quantified Self' });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: description });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:description', content: description });
+    });
+
     it('uses a page social image and resets it to the safe default on the next route', () => {
         const trainingImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
         mockActivatedRoute.data = of({

@@ -1842,6 +1842,14 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
+        it('supports server-confirmed service metadata without treating cached absence as disconnected', async () => {
+            const metadata = { connectionAccounts: [{ providerUserId: 'garmin-account' }] };
+            (docData as any).mockReturnValueOnce(of(metadata));
+            expect(await firstValueFrom(service.getUserMetaForService({ uid: 'owner' } as any,
+                ServiceNames.GarminAPI, { waitForServer: true }))).toEqual(metadata);
+            expect(docData).toHaveBeenCalledWith(expect.anything(), { waitForServer: true });
+        });
+
         it('getServiceToken should read Suunto accounts from safe service metadata', async () => {
             const user = { uid: 'u1' } as any;
             const accounts = [{ providerUserId: 'suunto-user' }];
@@ -2328,7 +2336,7 @@ describe('AppUserService', () => {
             expect(mockFunctionsService.call).not.toHaveBeenCalled();
         });
 
-        it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
+        it('strips server-owned Training and independently revised power settings while retaining workspace preferences', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
             const updates = {
                 displayName: 'New Name',
@@ -2340,6 +2348,7 @@ describe('AppUserService', () => {
                             sportShortcuts: ['running', 'cycling'],
                         },
                     },
+                    workoutPower: { version: 1, revision: 1, profiles: [] },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
@@ -2363,12 +2372,28 @@ describe('AppUserService', () => {
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
         });
 
+        it.each(['profile', 'properties'])('does not replay a stale notification invitation in a %s save', async mode => {
+            const invitation = { version: 1, choice: 'snoozed', until: 100 };
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', notificationInvitation: invitation } } } as AppUserInterface;
+            if (mode === 'profile') await service.updateUser(owner);
+            else await service.updateUserProperties(owner, { settings: owner.settings });
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), { appSettings: { theme: 'dark' } }, { merge: true });
+            expect(owner.settings.appSettings.notificationInvitation).toEqual(invitation);
+        });
+
+        it.each([{}, { notificationInvitation: { version: 1, choice: 'snoozed', until: 100 } }])(
+            'does not erase the invitation through an empty general settings map', async appSettings => {
+                await service.updateUserProperties({ uid: 'u1' } as AppUserInterface, { settings: { appSettings } });
+                expect(setDoc).not.toHaveBeenCalled();
+            });
+
         it.each(['profile', 'properties'])('preserves newer chart acknowledgements in a stale %s save', async mode => {
             const set = vi.fn();
             vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
                 get: async () => ({ data: () => ({ appSettings: { dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 } } }) }), set,
             } as never));
-            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 } } } } as AppUserInterface;
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 },
+                notificationInvitation: { version: 1, choice: 'snoozed', until: 100 } } } } as AppUserInterface;
             if (mode === 'profile') await service.updateUser(owner);
             else await service.updateUserProperties(owner, { settings: owner.settings });
             expect(set).toHaveBeenCalledWith(expect.anything(), { appSettings: {
@@ -2578,12 +2603,13 @@ describe('AppUserService', () => {
             expect(writtenData.privacy).toBeUndefined();
         });
 
-        it('does not include server-owned training settings in full user writes', async () => {
+        it('does not replay server-owned Training or independently revised power settings in full user writes', async () => {
             const user = {
                 uid: 'test-uid',
                 displayName: 'Test User',
                 settings: {
                     appSettings: { theme: 'dark' },
+                    workoutPower: { version: 1, revision: 1, profiles: [] },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
@@ -2726,6 +2752,15 @@ describe('AppUserService', () => {
         });
 
         describe('importServiceHistoryForCurrentUser', () => {
+            it('includes explicit one-import consent only for supported providers', async () => {
+                const notification = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002' };
+                await service.importServiceHistoryForCurrentUser(ServiceNames.WahooAPI, startDate, endDate, undefined, notification);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', expect.objectContaining({ notification }), { canExecute: expect.any(Function) });
+                mockFunctionsService.call.mockClear();
+                await expect(service.importServiceHistoryForCurrentUser(ServiceNames.GarminAPI, startDate, endDate, undefined, notification)).rejects.toThrow();
+                expect(mockFunctionsService.call).not.toHaveBeenCalled();
+            });
+
             it('should call cloud function for COROS', async () => {
                 const serviceName = 'COROS API' as any; // Matches encoded value
                 await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);

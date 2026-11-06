@@ -21,7 +21,7 @@ describe('provider-aware daily recipe context', () => {
       reference: { kind: 'max-heart-rate' as const, bpm: 190 } };
     const context = dayWorkoutProviderContext(controls, [provider], [reference, reference]);
     expect(context.evidence.commonExactEndings).toContain('time');
-    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded', requiresReview: true,
+    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded', requiresReview: false,
       issues: [expect.stringContaining(provider === 'wahoo' ? 'not ELEMNT computers or RIVAL' : 'stored reference snapshot must be frozen to an absolute range')] }]);
     expect(context.evidence).not.toHaveProperty('digest');
   });
@@ -42,9 +42,9 @@ describe('provider-aware daily recipe context', () => {
       version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
     } }, controls);
     const original = structuredClone(suggestion);
-    expect(context.correction(suggestion)).toContain('Suunto: degraded');
+    expect(context.correction(suggestion)).toBeNull();
     expect(context.limitations(suggestion)).toEqual([expect.stringContaining('Suunto Guide name')]);
-    expect(context.limitations(suggestion)[0]).toContain('needs Review sync');
+    expect(context.limitations(suggestion)[0]).not.toContain('needs Review sync');
     expect(context.limitations({ ...suggestion, draft: { ...suggestion.draft!, title: 'Easy run' } })).toEqual([]);
     expect(suggestion).toEqual(original);
   });
@@ -93,4 +93,47 @@ describe('provider-aware daily recipe context', () => {
     expect(suggestion).toEqual(before);
     expect(context.correction({ kind: 'rest', rationale: 'Recovery', draft: null, previousLoads: [] })).toBeNull();
   });
+});
+
+
+it('checks the explicitly selected symbolic zone without an athlete reference or a provider lookup', () => {
+  const context = dayWorkoutProviderContext({ ...controls, target: 'garmin-power-zone' }, ['garmin', 'suunto', 'wahoo', 'coros'], []);
+  expect(context.evidence.providers[0].targets).toEqual([{ kind: 'power', level: 'exact', requiresReview: false, issues: [] }]);
+  for (const provider of context.evidence.providers.slice(1)) expect(provider.targets[0]).toMatchObject({ kind: 'power', level: 'unsupported', requiresReview: true });
+  for (const provider of context.evidence.providers) for (const target of provider.targets) {
+    expect(target).not.toHaveProperty('reference');
+    expect(target).not.toHaveProperty('minimumWatts');
+    expect(target).not.toHaveProperty('maximumWatts');
+  }
+});
+
+it.each([3, 10, 30] as const)('checks the selected Garmin %i-second window and retains it without a provider-only retry', seconds => {
+  const power = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+    reference: { kind: 'critical-power', watts: 250 } } as const;
+  for (const target of ['auto', 'power', 'garmin-power-zone'] as const) {
+    const selected = { ...controls, target, garminPowerAveragingSeconds: seconds };
+    const references = [power];
+    const before = structuredClone(references);
+    const context = dayWorkoutProviderContext(selected, PLANNED_WORKOUT_PROVIDER_IDS, references);
+    for (const provider of context.evidence.providers.filter(provider => provider.provider !== 'garmin')) {
+      expect(provider.targets[0]).toMatchObject({ kind: 'power', level: 'unsupported', requiresReview: true });
+      expect(provider.targets[0].issues.join(' ')).toContain('requires Garmin');
+    }
+    expect(context.evidence.providers.find(provider => provider.provider === 'garmin')!.targets[0].level).not.toBe('unsupported');
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Power run', rationale: 'Use the selected power target.',
+      structure: { version: 1, sport: selected.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [target === 'garmin-power-zone'
+          ? { kind: 'power', mode: 'garmin-zone', zone: 2 } : power] }] } }, selected, [], references);
+    const original = structuredClone(suggestion);
+    expect(context.correction(suggestion)).toBeNull();
+    expect(context.limitations(suggestion).join(' ')).toContain('requires Garmin');
+    expect(suggestion).toEqual(original);
+    expect(references).toEqual(before);
+    if (target === 'auto') {
+      const targetless = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Easy run', rationale: 'Use effort guidance.',
+        structure: { version: 1, sport: selected.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+          ending: { kind: 'distance', meters: 1000 }, targets: [] }] } }, selected);
+      expect(context.correction(targetless)).toContain('Prefer a locally exact recipe');
+    }
+  }
 });

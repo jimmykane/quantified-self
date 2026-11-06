@@ -1,4 +1,7 @@
-import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { TRAINING_PREVIEW_TOOLS as PLAN_PREVIEW_TOOLS, TRAINING_READ_TOOLS as PLAN_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { GOAL_READ_TOOLS, GOAL_PREVIEW_TOOLS } from '../mcp/training-goals.schemas';
+const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS] as const;
+const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS] as const;
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
@@ -74,6 +77,44 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it.each([true, false])('shares one content review slot between threshold and local proposals (threshold first: %s)', async thresholdFirst => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', true, false, false, false, undefined, true);
+    const threshold = () => session.callTool('preview_training_threshold_change', {});
+    const local = () => session.callTool('prepare_activity_tag_change', { activityRef: 'activity', expectedTags: [], tags: ['Easy'] });
+    try {
+      const first = thresholdFirst ? threshold() : local();
+      await expect(thresholdFirst ? local() : threshold()).rejects.toThrow('only one content change');
+      await first;
+      await expect(thresholdFirst ? local() : threshold()).rejects.toThrow('only one content change');
+    } finally { await session.close(); }
+  });
+  it('releases the content slot when a remote threshold preview fails', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_training_threshold_change' }),
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', true, false, false, false, undefined, true);
+    try {
+      await expect(session.callTool('preview_training_threshold_change', {})).rejects.toThrow();
+      await expect(session.callTool('prepare_activity_tag_change', { activityRef: 'activity', expectedTags: [], tags: ['Easy'] }))
+        .resolves.toHaveProperty('structuredContent');
+    } finally { await session.close(); }
+  });
+  it('exposes threshold reads and preview only after independent opt-in, never model apply', async () => {
+    let captured: AuthenticatedMcpRequest | undefined;
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: auth => { captured = auth; return createTestServer(); },
+    }, 'coordinate_free', false, false, false, false, 'threshold-chat', false, false, false, false, undefined, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('get_training_thresholds');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_threshold_change');
+      expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_threshold_change');
+      expect(captured?.scopes).toContain(MCP_OAUTH_SCOPES.TrainingThresholdsRead);
+      expect(captured?.scopes).toContain(MCP_OAUTH_SCOPES.TrainingThresholdsWrite);
+      expect(captured?.scopes).not.toContain(MCP_OAUTH_SCOPES.TrainingPlansWrite);
+      await expect(session.callTool('apply_training_threshold_change' as never, {})).rejects.toThrow(/available/);
+    } finally { await session.close(); }
+  });
   it('retains only a sanitized snapshot of an SDK client failure', async () => {
     const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
       createServer: () => createTestServer(),
@@ -362,14 +403,18 @@ describe('Assistant MCP session', () => {
     { mode: 'Training read', plans: true }, { mode: 'Training edits', plans: true, edits: true },
     { mode: 'Training delivery', plans: true, delivery: true },
     { mode: 'all Training', plans: true, edits: true, delivery: true },
+    { mode: 'thresholds', thresholds: true },
+    { mode: 'Training edits with thresholds', plans: true, edits: true, thresholds: true },
+    { mode: 'Training delivery with thresholds', plans: true, delivery: true, thresholds: true },
+    { mode: 'all Training with thresholds', plans: true, edits: true, delivery: true, thresholds: true },
   ] satisfies Array<{ mode: string; precise?: boolean; tags?: boolean; notes?: boolean; noteChanges?: boolean;
-    manual?: boolean; reflections?: boolean; plans?: boolean; edits?: boolean; delivery?: boolean }>)(
+    manual?: boolean; reflections?: boolean; plans?: boolean; edits?: boolean; delivery?: boolean; thresholds?: boolean }>)(
     'does not recommend hidden public tools in $mode instructions or descriptions', async (mode) => {
       const enabled = (key: string) => (mode as Record<string, unknown>)[key] === true;
       const session = await createAssistantMcpSession('synthetic-owner', 'https://quantified-self.io', undefined,
         enabled('precise') ? 'precise_activity' : 'coordinate_free', enabled('notes'), enabled('plans'),
         enabled('edits'), enabled('delivery'), 'synthetic-conversation', enabled('tags'), enabled('noteChanges'),
-        enabled('manual'), enabled('reflections'));
+        enabled('manual'), enabled('reflections'), undefined, enabled('thresholds'));
       try {
         const names = new Set<string>(session.tools.map(tool => tool.name));
         const guidance = [session.instructions, ...session.tools.map(tool => tool.description)].join(' ');
@@ -377,6 +422,9 @@ describe('Assistant MCP session', () => {
         const hidden = [...PUBLIC_MCP_TOOL_NAMES, ...ASSISTANT_MCP_TOOL_NAMES]
           .filter(name => referenced.has(name) && !names.has(name));
         expect(hidden).toEqual([]);
+        expect(names.has('get_training_thresholds')).toBe(enabled('thresholds'));
+        expect(names.has('preview_training_threshold_change')).toBe(enabled('thresholds'));
+        expect(names.has('apply_training_threshold_change')).toBe(false);
         expect(session.instructions).toContain('model cannot apply changes');
         expect(session.instructions).toContain('Examples & data access');
         expect(session.instructions).not.toContain('native approval UI');
@@ -509,6 +557,7 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'get_workout_reflection' && name !== 'query_timeline_notes'
+        && name !== 'get_training_thresholds' && name !== 'preview_training_threshold_change'
         && name !== 'query_activities_with_tags'
         && name !== 'query_editable_timeline_notes'
         && !['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement'].includes(name)

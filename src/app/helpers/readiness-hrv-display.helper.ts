@@ -28,7 +28,7 @@ export function buildReadinessHrvDisplay(
     const statusText = !range ? 'No current HRV' : range.reason === 'building_baseline'
       ? `Building range · ${range.observationDayCount}/14 nights`
       : `Not enough recent HRV · ${range.currentObservationDayCount}/3 nights`;
-    return { valueText, statusText, rangeText: '60-day personal range', latestText, tone: 'neutral' as const };
+    return { valueText, statusText, rangeStatusText: statusText, trend: null, rangeText: '60-day personal range', latestText, tone: 'neutral' as const };
   }
   const lower = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRateVariability, Math.max(0, range.normalRange.min), unitSettings)!;
   const upper = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRateVariability, range.normalRange.max, unitSettings)!;
@@ -39,7 +39,7 @@ export function buildReadinessHrvDisplay(
   const statusText = recentTrend
     ? `${rangeStatus} · ${recentTrend}`
     : range.reason === 'within_range' ? 'Within personal range' : `${direction} personal range`;
-  return { valueText, statusText,
+  return { valueText, statusText, rangeStatusText: recentTrend ? rangeStatus : statusText, trend: recentTrend,
     rangeText: `60-day range ${rangeValue}`,
     latestText, tone: range.tone === 'caution' ? 'neutral' as const : range.tone };
 }

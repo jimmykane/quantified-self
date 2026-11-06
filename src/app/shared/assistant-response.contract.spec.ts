@@ -9,6 +9,17 @@ import {
 } from '@shared/assistant-response.contract';
 
 describe('complete first-party workout review boundary', () => {
+  it('requires exact threshold review values and rejects private neighbors before Apply', () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const proposal = { proposalRef: 'app-review', kind: 'apply_training_threshold_change', expiresAtMs: 1000,
+      summary: 'Change future thresholds.', requiresConfirmation: true, arguments: { proposalRef: 'sealed-server-proposal' },
+      thresholdReview: { family: 'cycling', familyLabel: 'Cycling', before: empty, after: { ...empty,
+        functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' } } } };
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+    expect(isAssistantContentProposal({ ...proposal, thresholdReview: undefined })).toBe(false);
+    expect(isAssistantContentProposal({ ...proposal, thresholdReview: { ...proposal.thresholdReview, sourceRecordId: 'private' } })).toBe(false);
+    expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, uid: 'foreign' } })).toBe(false);
+  });
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
     requiresConfirmation: true, summary: 'Review a workout.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery edit.' }],
     providerPreviews: [], workoutReviews: [workoutReviewFixture()] };
@@ -513,6 +524,22 @@ describe('standalone calendar rest review boundary', () => {
       { calendarRestDayReview: { ...preview.calendarRestDayReview, after: 'true' } },
       { calendarRestDayReview: { ...preview.calendarRestDayReview, localDate: '2026-02-29' } },
       { calendarRestDayReview: { ...preview.calendarRestDayReview, revision: 7 } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});
+
+ describe('goal-only Assistant reviews', () => {
+  const after = { name: 'Race', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+    sportScope: 'all', sport: null, objective: 'Finish', planName: null, weeklyTarget: null };
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 0, requiresConfirmation: true,
+    summary: 'Create goal', changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], providerPreviews: [], goalReview: { before: null, after } };
+  it('requires the full review, rejects private fields and never mixes provider or recipe changes', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ goalReview: undefined }, { permissionMode: 'combined' }, { workoutReviews: [] },
+      { goalReview: { before: null, after: { ...after, planId: 'PRIVATE' } } },
+      { goalReview: { before: null, after: { ...after, targetLocalDate: '2026-02-30' } } },
+      { changes: [...preview.changes, { index: 1, kind: 'create-workout', summary: 'Not approved' }] }]) {
       expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
     }
   });

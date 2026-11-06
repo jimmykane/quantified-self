@@ -1,3 +1,4 @@
+import { supportsHistoryNotification, isHistoryNotificationTarget, type HistoryNotificationTarget } from '@shared/history-import-notifications';
 import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
 import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
@@ -118,7 +119,7 @@ import {
   isReconnectRequiredServiceConnection,
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
-  SERVICE_CONNECTION_STATES,
+  serviceConnectionAccountsFromMeta,
   type ServiceOAuthCompletionResult,
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
@@ -1098,18 +1099,7 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.GarminAPI:
       case ServiceNames.WahooAPI:
         return this.getUserMetaForService(user, serviceName).pipe(
-          switchMap(serviceMeta => {
-            const accounts = Array.isArray(serviceMeta?.connectionAccounts)
-              ? serviceMeta.connectionAccounts
-              : [];
-            if (accounts.length > 0) return of(accounts);
-            if (serviceName !== ServiceNames.WahooAPI
-              || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
-              return of([]);
-            }
-            const providerUserId = `${serviceMeta.providerUserId || ''}`.trim();
-            return of(providerUserId ? [{ providerUserId }] : [{}]);
-          }),
+          map(serviceMeta => serviceConnectionAccountsFromMeta(serviceMeta, serviceName === ServiceNames.WahooAPI)),
           catchError(() => of([])),
         );
     }
@@ -1258,9 +1248,14 @@ export class AppUserService implements OnDestroy {
     this.applyRouteDeliverySyncRouteSettingsToUser(user, routeDeliverySyncRoutes);
   }
 
-  public getUserMetaForService(user: User, serviceName: string): Observable<AppUserServiceMetaInterface | undefined> {
+  public getUserMetaForService(
+    user: User,
+    serviceName: string,
+    options?: { waitForServer: boolean },
+  ): Observable<AppUserServiceMetaInterface | undefined> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
-    return docData(metaDoc).pipe(map((d) => {
+    const metadata = options?.waitForServer ? docData(metaDoc, { waitForServer: true }) : docData(metaDoc);
+    return metadata.pipe(map((d) => {
       return d as AppUserServiceMetaInterface | undefined;
     }));
   }
@@ -1410,7 +1405,7 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string, notification?: HistoryNotificationTarget) {
     const canExecute = this.captureHistoryImportAccount(expectedUserID);
     let functionName: FunctionName;
     let payload: any;
@@ -1440,6 +1435,10 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
 
+    if (notification !== undefined) {
+      if (!supportsHistoryNotification(serviceName) || !isHistoryNotificationTarget(notification)) throw new Error('Unsupported import notification.');
+      payload.notification = notification;
+    }
     const result = await this.functionsService.call(functionName, payload, { canExecute });
     return result.data;
   }
@@ -1737,8 +1736,18 @@ export class AppUserService implements OnDestroy {
     // Metric-affecting Training settings and benchmarks are written only by
     // validated callables. Client-owned workspace navigation preferences live
     // under appSettings and remain writable through the normal settings path.
-    // Generic profile saves must not replay a stale server-owned value.
-    const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;
+    // Workout power has a dedicated revision-checked writer; generic profile saves
+    // must not replay a stale planning profile or server-owned metric setting.
+    const { trainingSettings: _trainingSettings, workoutPower: _workoutPower, ...clientWritableSettings } = settings as Record<string, unknown>;
+    const appSettings = clientWritableSettings['appSettings'];
+    if (appSettings && typeof appSettings === 'object' && !Array.isArray(appSettings)) {
+      // Only the invitation/device services own this choice. A profile captured before a
+      // dismissal on another tab must never replay its old snooze or clear the preference.
+      const generalAppSettings = { ...appSettings } as Record<string, unknown>;
+      delete generalAppSettings['notificationInvitation'];
+      if (Object.keys(generalAppSettings).length) clientWritableSettings['appSettings'] = generalAppSettings;
+      else delete clientWritableSettings['appSettings']; // Firestore merges an empty map by replacing it.
+    }
     return clientWritableSettings;
   }
 

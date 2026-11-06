@@ -1,3 +1,5 @@
+import { GOAL_TOOLS } from './training-goals.schemas';
+import { TRAINING_THRESHOLD_TOOLS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -445,7 +447,14 @@ const derivedPayloadFixtures = {
 } as const satisfies Record<DerivedMetricKind, unknown>;
 
 
+const nativeZoneRecipe = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'zone', purpose: 'work',
+  ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2, garminPowerAveragingSeconds: 10 }] }] };
 const trainingReadFixtures = {
+ get_planned_workout_v4: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Zone', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: nativeZoneRecipe, displaySteps: [{ nodeId: 'zone', text: 'Garmin power zone 2 · Garmin 10-second average' }] } },
+ get_saved_workout_v3: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Zone', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: nativeZoneRecipe } },
  get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference', revision: 1,
    scheduleRevision: 1, libraryRevision: null, sport: ActivityTypes.Running,
    analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
@@ -572,6 +581,16 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
 const service = {
+    trainingThresholds: vi.fn(async (tool: string) => {
+      const thresholds = { functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' },
+        lactateThresholdHR: null, swimThresholdSpeed: null };
+      const policy = { family: 'cycling', familyLabel: 'Cycling', revision: 1, effectiveAt: '2026-07-01T08:00:00Z',
+        policyRef: 'opaque-threshold-policy', thresholds };
+      if (tool === 'get_training_thresholds') return { asOf: '2026-07-01T08:00:00Z', policies: [policy] };
+      if (tool === 'apply_training_threshold_change') return { status: 'applied', policy };
+      return { proposalRef: 'opaque-threshold-proposal', expiresAtMs: DAY_MS + 60000, requiresConfirmation: true,
+        appliesTo: 'future-workouts', review: { family: 'cycling', familyLabel: 'Cycling', before: thresholds, after: thresholds } };
+    }),
     workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
       ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
       : { activityRef: ACTIVITY_REF, target: 'activity', revision: 1, present: true,
@@ -599,6 +618,14 @@ const service = {
         readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
+    readTrainingGoals: vi.fn(async ({ tool }: { tool: string }) => tool === 'list_training_goals'
+      ? { goalsRevision: 1, goals: [goalFixture], nextCursor: null }
+      : tool === 'get_training_goal' ? { goalsRevision: 1, goal: goalFixture }
+      : { goalsRevision: 1, localDate: '2026-07-02', timeZone: 'UTC', weekStartsOn: 1, complete: true,
+        progress: [{ goalRef: 'opaque-goal', goalRevision: 1, startLocalDate: '2026-07-01', endLocalDate: '2026-07-05',
+          partialWeek: true, kind: 'workouts', value: 2, target: 3, complete: true, met: false, displayValue: '2 workouts', displayTarget: '3 workouts' }] }),
+    previewTrainingGoalChange: vi.fn().mockResolvedValue(goalPreviewFixture),
+    applyTrainingGoalChange: vi.fn().mockResolvedValue({ status: 'applied', goalsRevision: 1, goal: goalFixture }),
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -616,6 +643,9 @@ const service = {
     previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
       changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
     previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV4Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV4Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewPlannedWorkoutV3Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewSavedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
@@ -1409,10 +1439,26 @@ const service = {
   return service;
 }
 
+const goalFieldsFixture = { name: 'Run consistently', kind: 'ongoing', lifecycle: 'active', priority: 'normal',
+  startLocalDate: '2026-07-01', targetLocalDate: null, sportScope: 'sport', sport: 'Running', objective: '',
+  weeklyTarget: { kind: 'workouts', value: 3 } };
+const goalFixture = { ...goalFieldsFixture, goalRef: 'opaque-goal', revision: 1, planRef: null, planName: null, linkedPlanAvailable: false };
+const goalPreviewFixture = { proposalRef: 'opaque-goal-proposal', permissionMode: 'schedule', expiresAtMs: DAY_MS + 60000,
+  scheduleRevision: 0, summary: 'Create goal', requiresConfirmation: true,
+  changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal' }], providerPreviews: [],
+  goalReview: { before: null, after: { ...goalFieldsFixture, planName: null } } };
 const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  get_training_thresholds: { family: 'cycling' },
+  preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { functionalThresholdPower: 220 } },
+  apply_training_threshold_change: { proposalRef: 'opaque-threshold-proposal' },
+  list_training_goals: {},
+  get_training_goal: { goalRef: 'opaque-goal' },
+  get_training_goals_progress: { localDate: '2026-07-02', timeZone: 'UTC', goalRefs: ['opaque-goal'] },
+  preview_training_goal_change: { goalRef: null, expectedRevision: 0, goal: { ...goalFieldsFixture, planRef: null } },
+  apply_training_goal_change: { proposalRef: 'opaque-goal-proposal' },
   preview_garmin_workout_replacement: { workoutRef: 'opaque-workout-reference', expectedScheduleRevision: 1, expectedWorkoutRevision: 1 },
   list_saved_workouts: {},
   get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
@@ -1431,6 +1477,8 @@ const successfulToolArguments: Record<
   query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
   query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_v4: { workoutRef: 'opaque-workout-reference' },
+  get_saved_workout_v3: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_planned_workout_v3: { workoutRef: 'opaque-workout-reference' },
   get_saved_workout_v2: { savedWorkoutRef: 'opaque-saved-workout-reference' },
   get_planned_workout_v2: { workoutRef: 'opaque-workout-reference' },
@@ -1458,6 +1506,12 @@ const successfulToolArguments: Record<
     strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
       ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
   } },
+  preview_planned_workout_v4_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'native', plan: null, localDate: '2026-07-02', title: 'Zone', structure: nativeZoneRecipe } },
+  preview_planned_workout_v4_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'create-workout', localKey: 'native', plan: null, localDate: '2026-07-02', title: 'Zone', structure: nativeZoneRecipe }] },
+  preview_saved_workout_v3_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'create', title: 'Zone', structure: nativeZoneRecipe } },
   preview_planned_workout_v3_change: { expectedScheduleRevision: 1, change: {
     kind: 'create-workout', localKey: 'early-lap', plan: null, localDate: '2026-07-02', title: 'Lap option',
     structure: trainingReadFixtures.get_planned_workout_v3.workout.structure } },
@@ -2087,7 +2141,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }).success).toBe(false);
   });
 
-  it('advertises strict schemas and validates every successful tool call', async () => {
+  it('advertises strict schemas within each explicit discovery budget', async () => {
     const dataService = createFixtureDataService();
     const connection = await connectFixtureServer(dataService);
     connections.push(connection);
@@ -2106,7 +2160,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_rest_days', 'get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_planned_workout_v4', 'get_saved_workout_v3', 'get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_rest_days', 'get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
     expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
@@ -2119,7 +2173,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_planned_workout_v4_change', 'preview_planned_workout_v4_changes', 'preview_saved_workout_v3_change', 'preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2130,7 +2184,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['preview_training_calendar_rest_day', 'get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
+    for (const name of ['get_planned_workout_v4', 'get_saved_workout_v3', 'preview_planned_workout_v4_change', 'preview_planned_workout_v4_changes', 'preview_saved_workout_v3_change', 'preview_training_calendar_rest_day', 'get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
@@ -2150,12 +2204,16 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const goalTools = tools.filter(tool => (GOAL_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(goalTools), 'utf8')).toBeLessThan(40 * 1024);
     const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
+    const thresholdTools = tools.filter(tool => (TRAINING_THRESHOLD_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(thresholdTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !thresholdTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2186,118 +2244,59 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       Object.values(DERIVED_METRIC_KINDS).length,
     );
 
-    const ajv = createAjv();
-    const validators = new Map(tools.map(tool => [
-      tool.name,
-      ajv.compile(tool.outputSchema as AnySchema),
-    ]));
-    const trainingValidator = validators.get('get_training_metric')!;
-    expect(trainingValidator({
-      metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
-      updatedAtMs: DAY_MS,
-      sourceEventCount: 0,
-      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
-    })).toBe(false);
+  });
 
-    const healthFixture = await dataService.queryHealthMetric({
-      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
-      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
-    });
-    expect(validators.get('query_health_metric')!({
-      ...healthFixture,
-      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
-    })).toBe(false); // Body composition must not expose otherwise-valid source series.
+  it.each(PUBLIC_MCP_TOOL_NAMES)('validates successful %s output and JSON-text equivalence', async toolName => {
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === toolName)!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: toolName, arguments: successfulToolArguments[toolName] });
+    expect(result.isError, toolName).not.toBe(true);
+    expect(result.structuredContent, toolName).toBeDefined();
+    expect(validator(result.structuredContent), `${toolName}: ${JSON.stringify(validator.errors)}`).toBe(true);
+    const text = result.content.find(content => content.type === 'text');
+    expect(text?.type).toBe('text');
+    if (text?.type === 'text') expect(JSON.parse(text.text)).toEqual(result.structuredContent);
 
-    for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
-      const result = await connection.client.callTool({
-        name: toolName,
-        arguments: successfulToolArguments[toolName],
-      });
-      expect(result.isError, toolName).not.toBe(true);
-      expect(result.structuredContent, toolName).toBeDefined();
-      const validator = validators.get(toolName)!;
-      expect(
-        validator(result.structuredContent),
-        `${toolName}: ${JSON.stringify(validator.errors)}`,
-      ).toBe(true);
-      const text = result.content.find(content => content.type === 'text');
-      expect(text?.type).toBe('text');
-      if (text?.type === 'text') {
-        expect(JSON.parse(text.text)).toEqual(result.structuredContent);
-      }
+    if (toolName === 'get_training_metric') expect(validator({ metricKind: DERIVED_METRIC_KINDS.Form,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION, updatedAtMs: DAY_MS, sourceEventCount: 0,
+      payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend] })).toBe(false);
+    if (toolName === 'query_health_metric') {
+      const fixture = await dataService.queryHealthMetric({ uid: 'user-1', metricId: 'heart_rate',
+        startDate: '2026-07-01', endDate: '2026-07-02', mode: 'summaries', maxPoints: 200, measurementsAllowed: false });
+      expect(validator({ ...fixture, metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat') }))
+        .toBe(false); // Body composition cannot expose otherwise-valid source series.
     }
-    expect(dataService.listActivities).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        limit: 1,
-      }),
-    );
-    expect(dataService.queryActivitiesWithTags).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        activityTypes: ['Running'],
-        tags: ['Race'],
-        tagMatch: 'all',
-        limit: 1,
-      }),
-    );
-    await connection.client.callTool({
-      name: 'list_activities',
-      arguments: {
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      },
-    });
-    expect(dataService.listActivities).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        startTimeMs: undefined,
-        endTimeMs: undefined,
-        relativePeriod: 'today',
-        timeZone: 'Europe/Helsinki',
-        limit: 1,
-      }),
-    );
-    expect(dataService.listRoutes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        activityTypes: ['Running'],
-        search: 'ridge',
-      }),
-      undefined, // External calls never receive an internal Assistant family.
-    );
-
-    const distanceChart = await connection.client.callTool({
-      name: 'get_activity_chart_data',
-      arguments: {
-        activityRef: ACTIVITY_REF,
-        metrics: ['heart_rate'],
-        xAxis: 'distance',
-        includeLocation: false,
-      },
-    });
-    expect(distanceChart.structuredContent).toMatchObject({
-      xAxis: 'distance',
-      xAxisUnit: 'meters',
-    });
-
-    for (const metricKind of Object.values(DERIVED_METRIC_KINDS)) {
-      const result = await connection.client.callTool({
-        name: 'get_training_metric',
-        arguments: { metricKind },
-      });
-      expect(result.isError, metricKind).not.toBe(true);
-      expect(
-        validators.get('get_training_metric')!(result.structuredContent),
-        `${metricKind}: ${JSON.stringify(
-          validators.get('get_training_metric')!.errors,
-        )}`,
-      ).toBe(true);
+    if (toolName === 'list_activities') {
+      expect(dataService.listActivities).toHaveBeenCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, activityTypes: ['Running'], limit: 1 }));
+      await connection.client.callTool({ name: toolName,
+        arguments: { relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 } });
+      expect(dataService.listActivities).toHaveBeenLastCalledWith(expect.objectContaining({
+        startTimeMs: undefined, endTimeMs: undefined, relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 }));
     }
-  }, 30_000);
+    if (toolName === 'query_activities_with_tags') expect(dataService.queryActivitiesWithTags)
+      .toHaveBeenCalledWith(expect.objectContaining({ startTimeMs: undefined, endTimeMs: undefined,
+        activityTypes: ['Running'], tags: ['Race'], tagMatch: 'all', limit: 1 }));
+    if (toolName === 'list_routes') expect(dataService.listRoutes).toHaveBeenCalledWith(
+      expect.objectContaining({ activityTypes: ['Running'], search: 'ridge' }),
+      undefined); // External calls never receive an internal Assistant family.
+    if (toolName === 'get_activity_chart_data') {
+      const distance = await connection.client.callTool({ name: toolName,
+        arguments: { activityRef: ACTIVITY_REF, metrics: ['heart_rate'], xAxis: 'distance', includeLocation: false } });
+      expect(distance.structuredContent).toMatchObject({ xAxis: 'distance', xAxisUnit: 'meters' });
+    }
+  });
+
+  it.each(Object.values(DERIVED_METRIC_KINDS))('validates the complete %s derived payload', async metricKind => {
+    const connection = await connectFixtureServer(createFixtureDataService()); connections.push(connection);
+    const tool = (await connection.client.listTools()).tools.find(tool => tool.name === 'get_training_metric')!;
+    const validator = createAjv().compile(tool.outputSchema as AnySchema);
+    const result = await connection.client.callTool({ name: 'get_training_metric', arguments: { metricKind } });
+    expect(result.isError, metricKind).not.toBe(true);
+    expect(validator(result.structuredContent), `${metricKind}: ${JSON.stringify(validator.errors)}`).toBe(true);
+  });
 
   it('rejects private Health ordering fields and arbitrary categorical values at the output boundary', async () => {
     const dataService = createFixtureDataService();
@@ -3177,6 +3176,30 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(page.structuredContent).toMatchObject({ scanComplete: false, nextCursor: 'opaque-cursor' });
   });
 
+  it.each(TRAINING_THRESHOLD_TOOLS)('isolates %s grants, strict inputs and private output on every transport', async name => {
+    const service = createFixtureDataService();
+    for (const scopes of [[MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsWrite, MCP_OAUTH_SCOPES.TrainingPlansRead],
+      [MCP_OAUTH_SCOPES.TrainingThresholdsWrite], [MCP_OAUTH_SCOPES.TrainingThresholdsRead]]) {
+      const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      const allowed = scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsRead)
+        && (name === 'get_training_thresholds' || scopes.includes(MCP_OAUTH_SCOPES.TrainingThresholdsWrite));
+      expect(names.includes(name)).toBe(allowed);
+      if (!allowed) await expect(connection.client.callTool({ name, arguments: successfulToolArguments[name] })).rejects.toThrow(/not found/);
+    }
+    const scopes = [MCP_OAUTH_SCOPES.TrainingThresholdsRead, MCP_OAUTH_SCOPES.TrainingThresholdsWrite];
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const invalid = await connection.client.callTool({ name, arguments: { ...successfulToolArguments[name], uid: 'foreign-owner' } });
+    expect(invalid.isError).toBe(true); expect(service.trainingThresholds).not.toHaveBeenCalled();
+    const valid = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+    expect(valid.isError).not.toBe(true);
+    expect(service.trainingThresholds).toHaveBeenCalledWith(name, expect.objectContaining({ uid: 'user-1', scopes }));
+    service.trainingThresholds = vi.fn().mockResolvedValue({ ...(valid.structuredContent as object),
+      healthWeight: 'PRIVATE-WEIGHT-PROVENANCE', rawPolicy: { included: false } });
+    const leaked = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+    expect(leaked.isError).toBe(true); expect(leaked).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(leaked)).not.toMatch(/PRIVATE-WEIGHT-PROVENANCE|rawPolicy/);
+  });
   it('isolates reflection grants, native approval annotations and private projections on every transport', async () => {
     const service = createFixtureDataService();
     for (const scopes of [[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.WorkoutReflectionsRead],

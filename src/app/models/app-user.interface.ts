@@ -1,3 +1,4 @@
+import type { WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
 import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
   User,
@@ -128,6 +129,7 @@ export type AppDashboardAutoTiles = Partial<Record<AppDashboardAutoTileId, AppDa
     & Record<string, AppDashboardAutoTileState | undefined>;
 
 export type AppDashboardActionPromptId =
+    | 'enableNotifications'
     | 'unitSetup'
     | 'firstActivityUpload'
     | 'connectActivityService'
@@ -240,6 +242,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
     dashboardActionPrompts?: AppDashboardActionPrompts;
+    notificationInvitation?: import('../helpers/notification-invitation.helper').NotificationInvitation;
     trainingWorkspace?: TrainingWorkspacePreferences;
     dailyWorkoutSuggestion?: import('@shared/daily-workout-suggestion').DailyWorkoutSuggestionPreferences;
     dailyWorkoutDelivery?: import('../helpers/daily-workout-delivery.helper').DailyWorkoutDeliveryPreferences;
@@ -303,6 +306,7 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
+    workoutPower?: WorkoutPowerSettingsV1;
     suuntoSwimmingGuide?: SuuntoSwimmingGuideSettings;
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;

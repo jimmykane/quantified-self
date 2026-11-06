@@ -103,3 +103,61 @@ describe('day workout contract and prescription validation', () => {
     expect(validateDayWorkoutSuggestion(value, options, history).draft?.strength?.exercises[0].sets[0].externalLoadKg).toBe(0);
   });
 });
+
+
+describe('explicit Garmin zone generation', () => {
+  const zone = { kind: 'power', mode: 'garmin-zone', zone: 2 };
+  const suggestion = () => ({ ...endurance(), structure: { version: 1, sport: ActivityTypes.Running,
+    nodes: [{ ...step(), targets: [zone] }] } });
+  it('accepts symbolic zones without any FTP evidence and preserves them through repeats', () => {
+    const result = validateDayWorkoutSuggestion(suggestion(), { ...controls, target: 'garmin-power-zone' });
+    expect(result.draft?.structure.nodes[0]).toMatchObject({ targets: [zone] });
+    const repeated = suggestion(); repeated.structure.nodes = [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: repeated.structure.nodes } as never];
+    expect(validateDayWorkoutSuggestion(repeated, { ...controls, target: 'garmin-power-zone' }).draft?.structure.nodes[0]).toMatchObject({ count: 2 });
+  });
+  it('requires explicit selection, one zone and a supported exact sport', () => {
+    for (const target of ['auto', 'power', 'heart-rate', 'none'] as const) expect(() => validateDayWorkoutSuggestion(suggestion(), { ...controls, target })).toThrow();
+    expect(() => validateDayWorkoutSuggestion(endurance(), { ...controls, target: 'garmin-power-zone' })).toThrow(/Include a Garmin/);
+    expect(() => parseGenerateDayWorkoutRequest({ requestId: 'native-zone', controls: { ...controls, target: 'garmin-power-zone', sport: ActivityTypes.TrailRunning } }, new Date('2026-10-28T12:00Z'))).toThrow();
+    expect(() => validateDayWorkoutSuggestion({ ...suggestion(), structure: { ...suggestion().structure, nodes: [{ ...step(), targets: [{ ...zone, zone: 8 }] }] } }, { ...controls, target: 'garmin-power-zone' })).toThrow();
+  });
+});
+
+
+it.each([false, true])('does not introduce an unrequested early-Lap setting (%s) while generating a native zone', allowEarlyLap => {
+  const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step(),
+    ending: { kind: 'time', seconds: 600, allowEarlyLap }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] } };
+  expect(() => validateDayWorkoutSuggestion(row, { ...controls, target: 'garmin-power-zone' })).toThrow('early Lap');
+});
+
+
+describe('explicit generation power averaging', () => {
+  const power = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'critical-power', watts: 250 } } as const;
+  it.each([3, 10, 30] as const)('applies %i seconds only to validated power in steps and repeats', seconds => {
+    const selected = { ...controls, target: 'power' as const, garminPowerAveragingSeconds: seconds };
+    expect(parseGenerateDayWorkoutRequest({ requestId: 'request-avg', controls: selected }, new Date('2026-10-28T12:00Z')).controls).toEqual(selected);
+    const replacement = { requestId: 'replacement-avg', controls: selected, replaceWorkout: { id: 'saved-workout', revision: 3 } };
+    expect(parseGenerateDayWorkoutRequest(replacement, new Date('2026-10-28T12:00Z'))).toEqual(replacement);
+    const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [
+      { ...step(), id: 'warmup' }, { kind: 'repeat', id: 'repeats', count: 2, steps: [{ ...step(), targets: [power] }] },
+    ] } };
+    const original = JSON.stringify(row);
+    const result = validateDayWorkoutSuggestion(row, selected, [], [power]);
+    expect(result.draft?.structure.nodes[1]).toMatchObject({ steps: [{ targets: [{ ...power, garminPowerAveragingSeconds: seconds }] }] });
+    expect(JSON.stringify(row)).toBe(original);
+    expect(result.draft?.structure.nodes[0]).toMatchObject({ targets: [] });
+    expect(validateDayWorkoutSuggestion(row, controls, [], [power]).draft?.structure).toEqual(row.structure);
+    const native = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step(), targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] } };
+    expect(validateDayWorkoutSuggestion(native, { ...selected, target: 'garmin-power-zone' }).draft?.structure.nodes[0])
+      .toMatchObject({ targets: [{ mode: 'garmin-zone', zone: 2, garminPowerAveragingSeconds: seconds }] });
+  });
+  it('rejects invalid controls and model-invented averaging', () => {
+    for (const seconds of [undefined, null, 0, 5, '10', 10.5]) expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-avg',
+      controls: { ...controls, garminPowerAveragingSeconds: seconds } }, new Date('2026-10-28T12:00Z'))).toThrow('averaging');
+    for (const target of ['none', 'heart-rate', 'speed']) expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-avg',
+      controls: { ...controls, target, garminPowerAveragingSeconds: 10 } }, new Date('2026-10-28T12:00Z'))).toThrow('averaging');
+    const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step(), targets: [{ ...power, garminPowerAveragingSeconds: 10 }] }] } };
+    expect(() => validateDayWorkoutSuggestion(row, controls, [], [power])).toThrow('explicit controls');
+  });
+});

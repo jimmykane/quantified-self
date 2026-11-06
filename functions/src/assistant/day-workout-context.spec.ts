@@ -24,6 +24,26 @@ function session(fail?: string) {
   }) };
 }
 describe('Calendar generation context boundaries', () => {
+  it('exposes only the selected replacement summary while retaining other scheduled sessions', async () => {
+    const replacement = { title: 'Original run', localDate: controls.localDate, sport: controls.sport };
+    const result = await collectDayWorkoutContext({ ...controls, trainingContext: true }, now, session(), async () => ({ ...training, replacement,
+      nearby: [{ title: 'Other workout' }] }));
+    expect(result.evidence.replacement).toEqual(replacement);
+    expect(result.evidence.nearby).toEqual([{ title: 'Other workout' }]);
+    expect(result.usedContext).toContain('Replacement of one existing planned workout; saved only after approval.');
+  });
+  it('includes goal evidence only with Training and Goals enabled, without changing sport', async () => {
+    const withGoals = { ...training, goals: { revision: 4, items: [{ name: 'Race', objective: 'Finish', priority: 'high' }], events: [{ name: 'Race', localDate: controls.localDate }] } };
+    const selected = { ...controls, trainingContext: true, goalsContext: true };
+    const result = await collectDayWorkoutContext(selected, now, session(), async () => withGoals);
+    expect(result).toMatchObject({ goalsRevision: 4, eventGoals: withGoals.goals.events });
+    expect(result.evidence.goals).toEqual(withGoals.goals.items);
+    for (const disabled of [{ ...selected, goalsContext: false }, { ...selected, trainingContext: false }]) {
+      const without = await collectDayWorkoutContext(disabled, now, session(), async () => withGoals);
+      expect(without.evidence).not.toHaveProperty('goals'); expect(without.goalsRevision).toBeUndefined(); expect(without.eventGoals).toBeUndefined();
+    }
+    expect(selected.sport).toBe(controls.sport);
+  });
   it('respects calendar rest without a plan and treats unavailable rest evidence as unknown', async () => {
     const source = session(), original = source.callTool.getMockImplementation()!;
     source.callTool.mockImplementation(async (name, input) => name === 'get_training_calendar_rest_days'

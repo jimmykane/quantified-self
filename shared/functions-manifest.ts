@@ -31,6 +31,8 @@ export const FUNCTIONS_MANIFEST = {
     grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
     sendTestPushNotification: { name: 'sendTestPushNotification', region: 'europe-west2' },
+    sendHistoryImportNotification: { name: 'sendHistoryImportNotification', region: 'europe-west2' },
+    sendActivitySyncNotifications: { name: 'sendActivitySyncNotifications', region: 'europe-west2' },
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
@@ -38,6 +40,7 @@ export const FUNCTIONS_MANIFEST = {
     decideMcpAuthorization: { name: 'decideMcpAuthorization', region: 'europe-west2' },
     listMcpConnections: { name: 'listMcpConnections', region: 'europe-west2' },
     revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
+    getTrainingGoalsProgress: { name: 'getTrainingGoalsProgress', region: 'europe-west2' },
     queryHealthRange: { name: 'queryHealthRange', region: 'europe-west2' },
     queryActivityHealthRange: { name: 'queryActivityHealthRange', region: 'europe-west2' },
     saveManualHealthMeasurement: { name: 'saveManualHealthMeasurement', region: 'europe-west2' },

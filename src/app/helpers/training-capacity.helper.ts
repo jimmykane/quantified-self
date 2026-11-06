@@ -1,5 +1,5 @@
-import { DataVO2Max, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { DataFTP, DataVO2Max, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib/metrics';
+import { resolveUnitAwareDisplayFromValue, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import type {
   DashboardTrainingCapacityContext,
   DashboardTrainingCapacityImportedMetric,
@@ -21,6 +21,35 @@ export interface TrainingCapacityDisciplineViewModel {
   importedVo2Max: TrainingCapacityMarkerViewModel | null;
   referenceVo2Max: TrainingCapacityMarkerViewModel | null;
   evidenceText: string;
+}
+
+export interface TrainingFtpSuggestion {
+  value: number;
+  displayText: string;
+  detailText: string;
+}
+export type TrainingFtpSuggestions = Partial<Record<'running' | 'cycling', TrainingFtpSuggestion>>;
+
+/** Reuse imported settings; a recent file observation does not establish when FTP was measured. */
+export function buildRecentTrainingFtpSuggestions(
+  context: DashboardTrainingCapacityContext | null,
+  nowMs: number,
+  unitSettings?: UserUnitSettingsInterface | null,
+): TrainingFtpSuggestions {
+  const suggestions: TrainingFtpSuggestions = {};
+  // Capacity is calendar-sensitive in Training: yesterday's ready snapshot is stale too.
+  if (!context || !Number.isFinite(nowMs)
+    || context.asOfDayMs !== Math.floor(nowMs / 86400000) * 86400000) return suggestions;
+  for (const { discipline, ftpSetting } of context.disciplines) {
+    if (!ftpSetting || ftpSetting.lastSeenAtMs > nowMs
+      || ftpSetting.lastSeenAtMs < nowMs - 90 * 24 * 60 * 60 * 1000) continue;
+    const display = resolveUnitAwareDisplayFromValue(DataFTP.type, ftpSetting.value, unitSettings);
+    if (!display) continue;
+    const source = formatSource(ftpSetting.sourceKey);
+    suggestions[discipline] = { value: ftpSetting.value, displayText: display.text,
+      detailText: `${source ? `${source} · ` : ''}last seen ${formatDate(ftpSetting.lastSeenAtMs)}` };
+  }
+  return suggestions;
 }
 
 function formatNumber(value: number, fractionDigits = 0): string {

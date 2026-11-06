@@ -51,16 +51,102 @@ function evidence(): DayWorkoutContext {
 function dependencies() {
   const preferences = { enabled: true, followRoutine: true, controls: dailyControls };
   let status: any = { localDate: '2026-10-30', state: 'waiting' };
-  const store = { read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
+  const store = { replace: vi.fn(async (_uid, _preferences, _expected, controls, result) => { status = { localDate: controls.localDate, state: 'ready', controls, result }; return status; }), read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
     assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
-  return { store, now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
+  return { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
     importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
       usage?.({ available: true, inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }); return { kind: 'rest', rationale: 'Keep today easy.' };
     }), log: vi.fn() } satisfies DailyWorkoutSuggestionDependencies;
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it.each(['override', 'shared'] as const)('resolves %s power after routine sport selection and retains it after settings change', async origin => {
+    const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
+    const powerReference = origin === 'shared' ? { kind: 'training-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
+      revision: 3, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 280 } }
+      : { sport: ActivityTypes.Cycling, provider: 'garmin' as const, source: 'Bike power meter',
+        reference: { kind: 'functional-threshold-power' as const, watts: 240 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    deps.selectSport.mockResolvedValue(controls);
+    deps.context.mockImplementation(async (_uid, request) => {
+      expect(request.controls.sport).toBe(ActivityTypes.Cycling);
+      return { ...evidence(), powerReference, references: [{ kind: 'power', mode: 'relative' as const,
+        minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] };
+    });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy ride', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result.result).toMatchObject({ kind: 'workout', powerReference });
+    deps.context.mockResolvedValue(evidence());
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+
+  it('does not attribute an unused power source to a prepared effort-only workout', async () => {
+    const deps = dependencies();
+    const powerReference = { sport: dailyControls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    deps.context.mockResolvedValue({ ...evidence(), powerReference });
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } } as never);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.result?.kind).toBe('workout'); expect(result.result).not.toHaveProperty('powerReference');
+  });
+
+  it('regenerates explicitly through the quota-funded generator and replaces only a current ready suggestion', async () => {
+    const deps = dependencies();
+    const previous = { requestId: 'daily-suggestion:2026-10-30', kind: 'rest', draft: null };
+    deps.store.read.mockResolvedValue({ preferences: { enabled: true, followRoutine: true, controls: dailyControls },
+      status: { localDate: dailyControls.localDate, state: 'ready', controls: dailyControls, result: previous } });
+    const request = { requestId: 'manual-regeneration', controls: dailyControls };
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'regenerate', expectedRequestId: previous.requestId, request }, identity, deps);
+    expect(deps.regenerate).toHaveBeenCalledWith(expect.objectContaining(request), identity, expect.objectContaining({ context: expect.any(Function) }));
+    expect(deps.store.replace).toHaveBeenCalledWith('owner', expect.anything(), previous.requestId, expect.objectContaining(dailyControls),
+      expect.objectContaining({ requestId: request.requestId }));
+    expect(deps.store.begin).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    deps.coverage.mockResolvedValue('planned'); deps.regenerate.mockClear();
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'regenerate', expectedRequestId: previous.requestId, request }, identity, deps))
+      .rejects.toMatchObject({ code: 'aborted' });
+    expect(deps.regenerate).not.toHaveBeenCalled();
+  });
+  it('preserves the previous suggestion when explicit regeneration fails', async () => {
+    const deps = dependencies();
+    deps.store.read.mockResolvedValue({ preferences: { enabled: true, followRoutine: true, controls: dailyControls },
+      status: { localDate: dailyControls.localDate, state: 'ready', result: { requestId: 'daily-suggestion:2026-10-30', kind: 'rest' } } });
+    deps.regenerate.mockRejectedValue(Error('Unavailable'));
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'regenerate', expectedRequestId: 'daily-suggestion:2026-10-30',
+      request: { requestId: 'manual-regeneration', controls: dailyControls } }, identity, deps)).rejects.toThrow('Unavailable');
+    expect(deps.store.replace).not.toHaveBeenCalled(); expect(deps.store.finish).not.toHaveBeenCalled();
+  });
+  it('prepares event guidance once, without a workout or provider context, and replays it after goal edits', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 4, eventGoals: [{ name: 'Marathon', localDate: dailyControls.localDate }] });
+    deps.generate.mockResolvedValue({ kind: 'event-advice', rationale: 'Follow your practiced event routine.' } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toMatchObject({ state: 'ready', result: { version: 1, kind: 'event-advice', draft: null, previousLoads: [] } });
+    expect(deps.generate.mock.calls[0][1]).toMatchObject({ adviceOnly: true });
+    expect(deps.generate.mock.calls[0][1].evidence).not.toHaveProperty('deliveryProviders');
+    expect(deps.store.charge).toHaveBeenCalledWith('owner', dailyControls.localDate, 'lease', false, 4);
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 5, eventGoals: [] });
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(await runDailyWorkoutSuggestion({ ...input, resultVersion: undefined, action: 'status' }, identity, deps)).toEqual({ localDate: dailyControls.localDate, state: 'failed' });
+  });
+  it('does not spend an old client’s daily receipt on unsupported event guidance', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 1, eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+    expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).state).toBe('failed');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+  });
+  it.each(['planned', 'completed', 'rest-day'] as const)('preserves %s coverage ahead of event guidance', async coverage => {
+    const deps = dependencies(); deps.coverage.mockResolvedValue(coverage);
+    deps.context.mockResolvedValue({ ...evidence(), goalsRevision: 1, eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+    expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 }, identity, deps)).state).toBe(coverage);
+    expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+  });
   it('requires authentication, App Check, Pro and legal access before accessing private state', async () => {
     const deps = dependencies();
     await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, {}, deps)).rejects.toMatchObject({ code: 'unauthenticated' });
@@ -414,6 +500,7 @@ describe('daily sport preference from recorded weekday history', () => {
   it('chooses repeated strength Fridays, excludes today and falls back for sparse or tied evidence', () => {
     const strength = activities(ActivityTypes.StrengthTraining, ['2026-10-09', '2026-10-16', '2026-10-30']);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, strength)).toBe(ActivityTypes.StrengthTraining);
+    expect(dailyWorkoutSuggestionRoutineSport({ ...preferences, controls: { ...preferences.controls, garminPowerAveragingSeconds: 30 } }, dailyNow, strength)).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport({ ...preferences, controls: { ...dailyControls, timing: 'strict' } }, dailyNow, strength)).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, strength.slice(0, 1))).toBe(ActivityTypes.Running);
     expect(dailyWorkoutSuggestionRoutineSport(preferences, dailyNow, [...strength,

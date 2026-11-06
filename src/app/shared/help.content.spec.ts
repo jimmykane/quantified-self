@@ -17,10 +17,54 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit Garmin averaging and the independent Suunto display limits', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Garmin power averaging:**', '**Default**, **3 seconds**, **10 seconds** or **30 seconds**',
+      'select Default before sending that recipe to another service', 'does not configure all of your watch screens',
+      'QS cycling Guides show lap-average power', 'Suunto sport-mode screens can separately show 10/30-second power',
+      'same option is available in daily preferences', 'this choice never enables provider sending']) expect(help).toContain(phrase);
+  });
+
+  it('explains source-aware planning references and immutable generated prescriptions', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references', 'Enter it once', '**Effective since**',
+      'An exact-sport override takes precedence over shared FTP', 'never converts FTP into critical power', 'separate **Training thresholds**',
+      'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
+      'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
+  });
+  it('explains one dated threshold setting and independent reviewed MCP/Assistant changes', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['Health → Fitness → Manage FTP, threshold HR and CSS', 'Running and Cycling FTP are independent',
+      'not a duplicate Health measurement', 'no age expiry', 'training-thresholds:read', 'training-thresholds:write',
+      'resets off on New chat', 'Later weigh-ins or edits do not recalculate that saved result',
+      'only when MET is selected or needed as a fallback', 'without reparsing the original file']) expect(copy).toContain(text);
+  });
+  it('describes imported FTP as an optional draft proposal, not a new test or automatic correction', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['last seen within 90 days', 'not a new FTP test', '**Use** only fills the draft',
+      '**Save** confirms it for future workouts', 'missing or stale snapshots show no suggestion']) expect(copy).toContain(text);
+  });
+  it('limits Health read-only claims to read permission and protects imported measurements', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    expect(copy).toContain('This read permission cannot add, edit, delete or backfill measurements');
+    expect(copy).toContain('measurements:write');
+    expect(copy).toContain('Imported Health and Sleep readings cannot be changed');
+    expect(copy).toContain('Existing clients must authorize again');
+    expect(copy).toContain('The MCP host controls whether it asks on every call');
+    expect(copy).not.toContain('MCP cannot add, edit, delete or backfill measurements');
+  });
+
+  it('explains plan setup, optional goals, normal allowance and explicit Assistant review', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const text of ['**Generate plan**', '**Create goal**', 'Goals are optional', '**Start plan chat**', '**Open Assistant**', '**Retry goals**',
+      '**Suggest from goals & routine**', '**Suggest from recorded routine**',
+      'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
+  });
+
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
-      'Beta supports tests', 'automatic notification categories are not available yet', 'Already delivered notifications cannot be recalled']) {
+      'Activity delivery', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
     }
   });
@@ -58,9 +102,11 @@ describe('help.content', () => {
 
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(help).toContain('suggestion row sits inside the Today card, below its metrics');
+    expect(help).toContain('It stays visible when you collapse Today’s state details');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
       'Provider selection stays in Preferences', '**Skip sending today**',
-      'Standard Suunto strength manual transitions are informational', 'unsupported mappings and adjustments needing extra approval require Review sync',
+      'Supported provider adjustments are informational and need no separate approval', 'unsupported mappings require Review sync',
       'Active activity, Sleep or Health history imports', 'Routes-only imports do not block it',
       '**Fallback sport** is used when no suitable routine is available', '**Sport** for every daily suggestion',
       'New daily suggestions consider the selected services', 'Changing providers keeps today’s cached suggestion',
@@ -105,6 +151,8 @@ describe('help.content', () => {
     expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
     expect(copy).toContain('QS does not promise a completion time from those counts');
     expect(copy).toContain('not an expected finish date');
+    expect(copy).toContain('Garmin sends available records separately; request acceptance does not confirm delivery');
+    expect(HELP_SECTIONS.map(section => section.content).join('\n')).not.toMatch(/hours\s+(?:or|to)\s+days/i);
   });
 
   it('explains shared provider import progress and distinguishes requests from delivery', () => {
@@ -922,6 +970,12 @@ describe('help.content', () => {
 
   it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('**Regenerate** beside a ready suggestion');
+    expect(content).toContain('a failure keeps the previous one');
+    expect(content).toContain('**Replace workout**');
+    expect(content).toContain('Completed workouts cannot be replaced');
+    expect(content).toContain('**Retry replacement** checks the same update');
+    expect(content).toContain('Existing workout sync settings still apply');
     expect(content).toContain('blocks automatic generation');
     expect(content).toContain('does not reset the daily allowance');
     expect(content).toContain('reuses the daily status across navigation and reloads');
@@ -988,16 +1042,26 @@ describe('help.content', () => {
     expect(content).toContain('describes planned-workout delivery, not whether the service can record that sport or heart rate');
   });
 
-  it('distinguishes standard Suunto strength guidance from additional mapping-loss approval', () => {
+  it('explains automatic supported Suunto strength adjustments without claiming native tracking', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('rep-based sets require manual transitions');
     expect(content).toContain('not native rep/load tracking');
     expect(content).toContain('no separate approval for each workout or edit');
-    expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
+    expect(content).toContain('Other supported adjustments, such as shortened exercise instructions, are explained as warnings and sync automatically too');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
     expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units & formatting**');
     expect(content).toContain('QS queues unit changes automatically, usually within a couple of minutes, and updates eligible synced Guides');
-    expect(content).toContain('changing units keeps an existing approval only when those losses are unchanged');
+    expect(content).toContain('the full prescription stays in QS');
+  });
+
+  it('explains plan-wide automatic provider adjustments and the independent initial consent', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const text of ['across sports and services, with no separate per-workout approval',
+      'Later dates sync when they enter the service’s scheduling window',
+      'you do not need to return weekly to approve them', 'Unsupported workouts stay blocked',
+      'a changed provider account still needs fresh sync consent',
+      'the authored change and initial delivery', '**Awaiting sync refresh**']) expect(content).toContain(text);
+    expect(content).not.toContain('adjustments needing extra approval');
   });
 
   it('explains lap-button endings and their provider and completion boundaries', () => {
@@ -1022,7 +1086,7 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('Treadmill, Indoor Running and Virtual Running use the broad Run mapping');
     expect(content).toContain('Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, Enduro MTB and Downhill Cycling use Bike');
-    expect(content).toContain('subtype substitutions need mapping review and keep your authored QS sport');
+    expect(content).toContain('subtype substitutions are disclosed as warnings and keep your authored QS sport');
     expect(content).toContain('Walking, Hiking, Rowing, Indoor Rowing and Open-water swimming have no supported COROS workout-delivery mapping');
     expect(content).toContain('does not make them available through its partner API');
     expect(content).toContain('Local compatibility is not delivery or watch-receipt evidence');
@@ -1048,7 +1112,7 @@ describe('help.content', () => {
     expect(copy).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
     expect(copy).toContain('Repetition sets are unsupported; QS never estimates their duration');
     expect(copy).toContain('not native rep/load tracking');
-    expect(copy).toContain('rounded load instructions need mapping approval');
+    expect(copy).toContain('rounded load instructions are disclosed as warnings and sync automatically');
   });
 
   it('documents regional formatting scope, precedence, and stable export dates', () => {
@@ -1091,9 +1155,9 @@ describe('help.content', () => {
     expect(content).toContain('These cosmetic adjustments happen automatically');
     expect(content).toContain('requests removal of its prior Guide');
     expect(content).not.toContain('removes its old Guide');
-    expect(content).toContain('**Not sent · Needs review**');
+    expect(content).toContain('**Awaiting sync refresh**');
     expect(content).toContain('**Exclude from plan sync**');
-    expect(content).toContain('Opening Review never sends or approves anything by itself');
+    expect(content).toContain('they do not need another approval after each edit');
     expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stopping workout sync keeps your connected account');
     expect(content).toContain('If you separately disconnect the service or delete your Quantified Self account');
@@ -1747,6 +1811,10 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('planned workouts never contribute');
     expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
     expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
+    expect(calendarSection?.content).toContain('compact totals strip below its date controls');
+    expect(calendarSection?.content).toContain('**Month** or **30 days** period, excluding adjacent grid dates');
+    expect(calendarSection?.content).toContain('**Recorded TSS** sums available activity TSS, not estimated training load');
+    expect(calendarSection?.content).toContain('partial metric coverage');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
     expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({
@@ -1835,7 +1903,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('pool length');
     expect(planningSection?.content).toContain('Garmin receives broad Running/Cycling families');
     expect(planningSection?.content).toContain('Garmin can deliver open-water workouts as **Generic**, not a native swim profile');
-    expect(planningSection?.content).toContain('Garmin delivers these four profiles as **Generic**, after mapping review');
+    expect(planningSection?.content).toContain('Garmin delivers these four profiles as **Generic**, with a disclosed mapping warning');
     expect(planningSection?.content).toContain('Generic works only on some devices');
     expect(planningSection?.content).toContain('QS keeps your authored sport');
     expect(planningSection?.content).toContain('repetition/kJ endings and secondary targets are unsupported');
@@ -2616,6 +2684,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep is synced automatically from your connected services');
     expect(serviceConnectionsSection?.content).toContain('automatically importing daily Health and sleep data from a rolling recent window');
+    expect(serviceConnectionsSection?.content).toContain('COROS Sleep and Health are checked **hourly**');
+    expect(serviceConnectionsSection?.content).toContain('daily seven-day reconciliation');
+    expect(serviceConnectionsSection?.content).toContain('history-import cooldown does not pause these automatic checks');
     expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
     expect(serviceConnectionsSection?.content).toContain('COROS does not send sleep stages through this connection');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
@@ -3111,4 +3182,10 @@ describe('dashboard performance history guidance', () => {
     expect(content).toContain('A saved context is retained when its evidence disappears');
     expect(content).toContain('provider estimates and manually recorded tests retain their separate meanings');
   });
+});
+
+it('explains Calendar goals, weekly progress, event guidance and explicit goal approval', () => {
+  const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')!.content;
+  for (const text of ['## Calendar goals', '**Add goal**', '**Training days**', '**Event-day guidance**',
+    'incomplete', 'never regenerates', 'explicit approval']) expect(calendar).toContain(text);
 });

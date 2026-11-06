@@ -2,8 +2,6 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { MaterialModule } from '../../../modules/material.module';
 import { DashboardActionPromptViewModel } from '../../../helpers/dashboard-action-prompt.helper';
@@ -95,15 +93,11 @@ describe('DashboardActionPromptsComponent', () => {
     expect(cards[4].textContent).toContain('Sync Suunto routes to Garmin courses');
   });
 
-  it('uses a responsive grid so prompt cards can form columns when they fit', () => {
-    const styles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component.scss'),
-      'utf8',
-    );
-
-    expect(styles).toContain('display: grid');
-    expect(styles).toContain('repeat(auto-fit');
-    expect(styles).toContain('grid-template-columns: minmax(0, 1fr)');
+  it('uses compact prompts within one shared dashboard frame', () => {
+    const rows = fixture.debugElement.queryAll(By.directive(DashboardActionPromptComponent));
+    expect(rows.every(row => row.componentInstance.compact)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.dashboard-action-prompts.qs-glass-card-panel')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('mat-card.qs-glass-card-panel')).toHaveLength(0);
   });
 
   it('renders unit setup controls through the shared prompt projection slot', () => {

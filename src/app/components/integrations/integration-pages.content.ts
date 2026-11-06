@@ -460,7 +460,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'bedtime',
         title: 'Daily COROS Health and sleep',
-        copy: 'COROS data imports every 24 hours with sleep timing, steps, the provider calorie value, resting and sleep heart rate, overnight HRV, and available detailed HRV samples. Pro users can also request the available three-month Sleep and Health history from Connections. Missing values stay missing, and the current COROS API does not expose sleep stages.',
+        copy: 'COROS data is checked hourly for sleep timing, steps, the provider calorie value, resting and sleep heart rate, overnight HRV, and available detailed HRV samples. New data can take about an hour to appear after COROS makes it available, plus processing time. Recent dates are checked routinely, with a daily seven-day reconciliation for late uploads and corrections. Pro users can also request the available three-month Sleep and Health history from Connections. Missing values stay missing, and the current COROS API does not expose sleep stages.',
       },
       {
         icon: 'verified_user',

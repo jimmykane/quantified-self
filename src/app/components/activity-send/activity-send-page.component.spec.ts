@@ -1,3 +1,5 @@
+import { AppPushService } from '../../services/app.push.service';
+import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
@@ -14,14 +16,18 @@ import { ActivitySendBatch, ActivitySendRow } from '@shared/activity-send';
 describe('activity sending workspace', () => {
   const batchValue: ActivitySendBatch = { id: 'batch-1', provider: 'suunto', source: 'files', state: 'draft', revision: 2, accountLabel: 'Connected Suunto account', createdAt: 1, updatedAt: 1, reviewed: true, total: 1, finished: 0 };
   const row: ActivitySendRow = { id: 'row-1', name: 'Morning.fit', sport: 'Running', startDate: 1, size: 500, warnings: [], status: 'ready', recovery: 'none', message: 'Ready', attempts: 0 };
+  let push: Record<string, any>;
+  let preferences: Record<string, any>;
   let sends: Record<string, any>;
   let users: Record<string, any>;
   let haptics: Record<string, any>;
   beforeEach(() => {
+    push = { deliveryNotificationsAvailable: signal(false), canNotifyDelivery: signal(false), state: signal('disabled'), operation: signal(null), canEnable: signal(true), enable: vi.fn(), deliveryNotificationTarget: vi.fn() };
+    preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), saving: signal(null), setEnabled: vi.fn() };
     sends = { batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
-    TestBed.configureTestingModule({ imports: [ActivitySendPageComponent, NoopAnimationsModule], providers: [provideRouter([]), { provide: ActivitySendService, useValue: sends }, { provide: AppUserService, useValue: users }, { provide: AppHapticsService, useValue: haptics }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'batch-1' } }] });
+    TestBed.configureTestingModule({ imports: [ActivitySendPageComponent, NoopAnimationsModule], providers: [provideRouter([]), { provide: AppPushService, useValue: push }, { provide: AppNotificationPreferencesService, useValue: preferences }, { provide: ActivitySendService, useValue: sends }, { provide: AppUserService, useValue: users }, { provide: AppHapticsService, useValue: haptics }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'batch-1' } }] });
   });
   function render() {
     const fixture = TestBed.createComponent(ActivitySendPageComponent);
@@ -35,6 +41,112 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.querySelector('input[type=file]')).toBeNull();
     expect(sends.command).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('offers device enablement beside Send without prompting or selecting notification consent automatically', async () => {
+    push.deliveryNotificationsAvailable.set(true);
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Know when your send finishes');
+    const enable = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(button => button.textContent?.includes('Enable notifications on this device'))!;
+    expect(enable).toBeDefined(); expect(push.enable).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    push.enable.mockImplementation(async () => { push.state.set('enabled'); push.canNotifyDelivery.set(true); });
+    await fixture.componentInstance.enableNotifications(); fixture.detectChanges();
+    expect(push.enable).toHaveBeenCalledOnce(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+    expect(fixture.nativeElement.querySelector('mat-checkbox input').checked).toBe(false);
+    expect(fixture.nativeElement.querySelector('.delivery-notification-choice').textContent).not.toContain('Enable notifications');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('sends consent only after an explicit checkbox choice and a fresh owner-bound device lookup', async () => {
+    push.deliveryNotificationsAvailable.set(true); push.canNotifyDelivery.set(true); push.state.set('enabled');
+    const target = { installationId: 'device', generation: 'generation' }; push.deliveryNotificationTarget.mockResolvedValue(target);
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
+    const checkbox = fixture.nativeElement.querySelector('mat-checkbox input') as HTMLInputElement; checkbox.click(); fixture.detectChanges();
+    expect(fixture.componentInstance.notifyWhenFinished()).toBe(true); expect(sends.command).not.toHaveBeenCalled();
+    await fixture.componentInstance.confirm();
+    expect(push.deliveryNotificationTarget).toHaveBeenCalledWith('owner');
+    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'confirm', batchId: 'batch-1', revision: 2, notification: target }, 'owner');
+  });
+  it('shows device setup progress beside Send without a selection-checking banner', async () => {
+    push.deliveryNotificationsAvailable.set(true);
+    let finish!: () => void;
+    push.enable.mockImplementation(() => {
+      push.operation.set('enable'); push.canEnable.set(false);
+      return new Promise<void>(resolve => { finish = resolve; });
+    });
+    const fixture = render(); sends.batch.set(batchValue); fixture.detectChanges();
+    const pending = fixture.componentInstance.enableNotifications(); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('mat-spinner')?.closest('button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true); expect(button.textContent).toContain('Enable notifications on this device');
+    expect(fixture.nativeElement.textContent).not.toContain('Checking your selection');
+    expect(haptics.success).not.toHaveBeenCalled();
+    finish(); await pending;
+    expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+  });
+  it.each(['denied', 'install-required', 'unsupported', 'unavailable'])('explains %s without preventing an ordinary send', async state => {
+    push.deliveryNotificationsAvailable.set(true); push.state.set(state); push.canEnable.set(false);
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-notification-choice').textContent).toMatch(/blocked|Home Screen|support|unavailable/);
+    expect(fixture.componentInstance.canConfirm()).toBe(true); await fixture.componentInstance.confirm();
+    expect(sends.command).toHaveBeenCalled(); expect(push.enable).not.toHaveBeenCalled(); expect(push.deliveryNotificationTarget).not.toHaveBeenCalled();
+  });
+  it('lets an unavailable notification be unchecked so sending can continue', async () => {
+    push.deliveryNotificationsAvailable.set(true); push.canNotifyDelivery.set(true);
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
+    fixture.componentInstance.chooseNotification(true); push.canNotifyDelivery.set(false); push.state.set('denied'); fixture.detectChanges();
+    const checkbox = fixture.nativeElement.querySelector('mat-checkbox input') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true); expect(checkbox.disabled).toBe(false); checkbox.click(); fixture.detectChanges();
+    await fixture.componentInstance.confirm(); expect(push.deliveryNotificationTarget).not.toHaveBeenCalled(); expect(sends.command).toHaveBeenCalled();
+  });
+  it.each(['owner', 'revision', 'provider', 'permission', 'rollout'])('fences a pending device lookup when %s changes', async changed => {
+    push.deliveryNotificationsAvailable.set(true); push.canNotifyDelivery.set(true);
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges(); fixture.componentInstance.chooseNotification(true);
+    let resolve!: (target: unknown) => void; push.deliveryNotificationTarget.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const pending = fixture.componentInstance.confirm();
+    if (changed === 'owner') users.user.set({ uid: 'other' });
+    if (changed === 'revision') sends.batch.set({ ...batchValue, revision: 3 });
+    if (changed === 'provider') fixture.componentInstance.provider.set('wahoo');
+    if (changed === 'permission') push.canNotifyDelivery.set(false);
+    if (changed === 'rollout') { push.canNotifyDelivery.set(false); push.deliveryNotificationsAvailable.set(false); fixture.detectChanges(); expect(fixture.nativeElement.querySelector('mat-checkbox')).not.toBeNull(); }
+    resolve({ installationId: 'device', generation: 'generation' }); await pending;
+    expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('enables the account category explicitly and never checks the batch choice', async () => {
+    push.deliveryNotificationsAvailable.set(true); push.state.set('enabled'); preferences.isEnabled.mockReturnValue(false);
+    preferences.setEnabled.mockResolvedValue(true);
+    const fixture = render(); sends.batch.set(batchValue); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Turn on Activity delivery');
+    await fixture.componentInstance.enableDeliveryCategory();
+    expect(preferences.setEnabled).toHaveBeenCalledWith('activity_delivery', true); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+    expect(push.enable).not.toHaveBeenCalled();
+  });
+  it('keeps the category action visible and disabled with a spinner while its save is pending', async () => {
+    push.deliveryNotificationsAvailable.set(true); push.state.set('enabled'); preferences.isEnabled.mockReturnValue(false);
+    let finish!: (saved: boolean) => void;
+    preferences.setEnabled.mockImplementation(() => {
+      preferences.saving.set('activity_delivery'); preferences.canEdit.set(false);
+      return new Promise<boolean>(resolve => { finish = resolve; });
+    });
+    const fixture = render(); sends.batch.set(batchValue); fixture.detectChanges();
+    const pending = fixture.componentInstance.enableDeliveryCategory(); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('mat-spinner')?.closest('button') as HTMLButtonElement;
+    expect(button).toBeDefined(); expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Turn on Activity delivery');
+    expect(fixture.nativeElement.textContent).not.toContain('Checking your selection');
+    expect(haptics.success).not.toHaveBeenCalled();
+    finish(true); await pending;
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+  });
+  it('does not report success when the category service declines a stale action', async () => {
+    preferences.isEnabled.mockReturnValue(false); preferences.setEnabled.mockResolvedValue(false);
+    const fixture = render(); await fixture.componentInstance.enableDeliveryCategory();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled(); expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
+  });
+  it('reports a failed category save and keeps notification consent unchecked', async () => {
+    preferences.isEnabled.mockReturnValue(false); preferences.setEnabled.mockRejectedValue(new Error('Could not save the notification preference.'));
+    const fixture = render(); await fixture.componentInstance.enableDeliveryCategory();
+    expect(fixture.componentInstance.error()).toContain('Could not save');
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.notifyWhenFinished()).toBe(false);
   });
   it('requires explicit confirmation of the reviewed revision', async () => {
     const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); fixture.detectChanges();
@@ -375,5 +487,6 @@ describe('activity sending workspace', () => {
     expect(fixture.componentInstance.error()).toBeNull(); expect(fixture.componentInstance.canConfirm()).toBe(true);
     expect(sends.command.mock.calls.every(([request]) => request.action === 'prepare')).toBe(true);
   });
+
 
 });

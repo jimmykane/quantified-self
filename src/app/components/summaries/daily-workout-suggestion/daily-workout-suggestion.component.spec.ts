@@ -83,7 +83,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const cacheRevision = signal(0), cached = vi.fn(() => cachedStatus ? { status: cachedStatus, sleepKey: 'night-a' } : null);
   const observeSleep = vi.fn(), remember = vi.fn();
   const event = vi.fn(), save = vi.fn(async (_uid, value) => { preferences.set(value); });
-  const open = vi.fn().mockResolvedValue(undefined);
+  const open = vi.fn().mockResolvedValue(undefined), openEventGuidance = vi.fn().mockResolvedValue(undefined);
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
   const workouts = new BehaviorSubject<ScheduledWorkoutV1[]>([]);
   const watchCalendarSchedule = vi.fn(() => workouts.pipe(map(items => savedSchedule(items))));
@@ -94,7 +94,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     provideRouter([]), delivery, { provide: AppEventService, useValue: {} },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
-    { provide: DayWorkoutService, useValue: { open } }, { provide: AppHapticsService, useValue: haptics },
+    { provide: DayWorkoutService, useValue: { open, openEventGuidance } }, { provide: AppHapticsService, useValue: haptics },
     { provide: AppUserService, useValue: { user, user$: of(user()) } },
     { provide: TrainingPlansService, useValue: { watchCalendarSchedule } },
   ] });
@@ -106,10 +106,59 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
   return { fixture, preferences, owner, pro, saving, importActive, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
-    delivery: delivery.useValue, deliveryOpen, cached, cacheRevision };
+    delivery: delivery.useValue, deliveryOpen, cached, cacheRevision, openEventGuidance };
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
+  it('offers Regenerate for one saved workout and opens an explicit replacement review without generating immediately', async () => {
+    const { fixture, request, open, workouts } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    workouts.next([savedWorkout()]); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(0); fixture.detectChanges();
+    request.mockResolvedValue({ localDate: '2026-10-30', state: 'planned' });
+    expect(fixture.nativeElement.textContent).toContain('Regenerate');
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList.contains('compact-row-host--mobile-action-full')).toBe(true);
+    await fixture.componentInstance.review(true);
+    expect(open).toHaveBeenCalledWith('owner', '2026-10-30', ActivityTypes.Running, expect.objectContaining({
+      replacement: { id: 'saved-workout', revision: 1, title: 'Saved easy run' },
+      initialControls: expect.objectContaining({ destinationPlanId: null, sport: ActivityTypes.Running }) }));
+    expect(request.mock.calls.every(([, action]) => action === 'status')).toBe(true);
+    workouts.next([savedWorkout(), savedWorkout({ id: 'second' })]); fixture.detectChanges();
+    expect(fixture.componentInstance.canRegenerate()).toBe(false);
+  });
+  it('opens regeneration options from a ready suggestion and stops if fresh coverage now blocks it', async () => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready',
+      controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), result: { requestId: 'daily-suggestion:2026-10-30',
+        kind: 'rest', observedAt: new Date().toISOString(), rationale: 'Rest.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } };
+    const { fixture, request, open } = setup(true, ready); request.mockResolvedValue(ready);
+    await fixture.componentInstance.review(true);
+    expect(open.mock.calls[0][3]).toMatchObject({ initialControls: ready.controls, regenerateSuggestion: expect.any(Function) });
+    expect(open.mock.calls[0][3]).not.toHaveProperty('initialResult');
+    fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, requestId: 'day-workout:replacement' } }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Regenerated'); expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
+    open.mockClear(); request.mockResolvedValue({ localDate: '2026-10-30', state: 'completed' });
+    await fixture.componentInstance.review(true); expect(open).not.toHaveBeenCalled();
+  });
+  it.each(['view', 'disabled', 'day', 'zone'] as const)('retires a ready review when its %s changes, but keeps same-day cache updates valid', async change => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready',
+      controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), result: { requestId: 'daily-suggestion:2026-10-30',
+        kind: 'rest', observedAt: '2026-10-30T07:00Z', rationale: 'Rest.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } };
+    const { fixture, request, open, preferences, cached, cacheRevision } = setup(true, ready);
+    request.mockResolvedValue(ready);
+    await fixture.componentInstance.review(true);
+    const canExecute = open.mock.calls[0][3].canExecute;
+    expect(canExecute).toBeTypeOf('function'); expect(canExecute()).toBe(true);
+    // Regeneration publishes a new cache revision before an Edit workout handoff can close the review.
+    cached.mockReturnValue({ status: { ...ready, result: { ...ready.result!, requestId: 'regenerated-result' } }, sleepKey: 'night-a' });
+    cacheRevision.update(value => value + 1); fixture.detectChanges();
+    expect(canExecute()).toBe(true);
+    if (change === 'view') fixture.destroy();
+    else {
+      preferences.update(value => ({ ...value, enabled: change !== 'disabled', controls: { ...value.controls,
+        ...(change === 'day' ? { localDate: '2026-10-31' } : {}), ...(change === 'zone' ? { timeZone: 'UTC' } : {}) } }));
+      fixture.detectChanges();
+    }
+    expect(canExecute()).toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+  });
   it('shows import deferral and resumes once from shared import completion without refreshing a ready result', async () => {
     const { fixture, importActive, request, setVisible } = setup(true, { localDate: '2026-10-30', state: 'waiting-import' });
     importActive.set(true); fixture.detectChanges();
@@ -449,6 +498,18 @@ describe('compact daily workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     saving.set(false); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(1600);
     expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+  });
+  it('opens guidance after a fresh coverage check without offering to add or send a workout', async () => {
+    const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready', controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'),
+      result: { version: 1, kind: 'event-advice', requestId: 'daily-suggestion:2026-10-30', observedAt: '2026-10-30T07:00Z',
+        rationale: 'Follow your event routine.', events: [{ name: 'Race day', localDate: '2026-10-30' }], draft: null, previousLoads: [], usedContext: [], missingContext: [] } };
+    const { fixture, request, open, openEventGuidance } = setup(true, ready);
+    await vi.advanceTimersByTimeAsync(0); fixture.detectChanges(); request.mockResolvedValue(ready);
+    expect(fixture.nativeElement.textContent).toContain('View guidance');
+    expect(fixture.nativeElement.textContent).not.toContain('Add & send');
+    await fixture.componentInstance.review();
+    expect(request).toHaveBeenLastCalledWith('owner', 'status', expect.any(Function), undefined, true);
+    expect(openEventGuidance).toHaveBeenCalledWith('owner', ready.result, expect.any(Function)); expect(open).not.toHaveBeenCalled();
   });
   it('waits for Today data, prepares once, and opens the existing review without saving', async () => {
     const { fixture, request, event, open, haptics } = setup();

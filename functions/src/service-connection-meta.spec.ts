@@ -281,6 +281,8 @@ describe('service-connection-meta', () => {
     const connectedGeneration = hoisted.metaData.connectionStateGeneration;
     expect(connectedGeneration).toEqual(expect.any(String));
     expect(connectedGeneration).not.toBe(reconnectGeneration);
+    expect(hoisted.metaData.activityNotificationConnectedAtMs).toBeGreaterThan(0);
+    expect(hoisted.metaData.activityNotificationConnectedAtMs).toBeLessThanOrEqual(Date.now());
 
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
       'user-1',

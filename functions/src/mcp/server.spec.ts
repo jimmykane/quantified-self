@@ -935,17 +935,21 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'apply_saved_workout_change',
       'apply_training_changes',
+      'apply_training_goal_change',
       'assess_planned_workout_compatibility',
       'get_planned_workout',
       'get_planned_workout_completion',
       'get_planned_workout_completions',
       'get_planned_workout_v2',
       'get_planned_workout_v3',
+      'get_planned_workout_v4',
       'get_saved_workout',
       'get_saved_workout_v2',
+      'get_saved_workout_v3',
       'get_strength_workout_details',
       'get_training_calendar_rest_days',
       'get_training_change_status',
+      'get_training_goal',
       'get_training_plan',
       'get_training_plan_phases',
       'get_training_plan_rest_days',
@@ -953,24 +957,54 @@ describe('MCP HTTP scope enforcement', () => {
       'get_workout_prescription_analysis',
       'list_activity_types',
       'list_saved_workouts',
+      'list_training_goals',
       'list_training_plans',
       'preview_create_planned_workout',
       'preview_garmin_workout_replacement',
       'preview_planned_workout_v2_change',
       'preview_planned_workout_v3_change',
       'preview_planned_workout_v3_changes',
+      'preview_planned_workout_v4_change',
+      'preview_planned_workout_v4_changes',
       'preview_saved_workout_change',
       'preview_saved_workout_v2_change',
+      'preview_saved_workout_v3_change',
       'preview_strength_workout_change',
       'preview_training_calendar_rest_day',
       'preview_training_changes',
       'preview_training_deletion',
+      'preview_training_goal_change',
       'preview_training_plan_phases',
       'preview_training_rest_days',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
     ]);
   }, 15_000);
+
+  it.each([
+    { label: 'no Training grant', scopes: [MCP_OAUTH_SCOPES.MetricsRead], expected: [] },
+    { label: 'write without read', scopes: [MCP_OAUTH_SCOPES.TrainingPlansWrite], expected: [] },
+    { label: 'read', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead],
+      expected: ['get_training_goal', 'list_training_goals'] },
+    { label: 'read and metrics', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.MetricsRead],
+      expected: ['get_training_goal', 'get_training_goals_progress', 'list_training_goals'] },
+    { label: 'read and write', scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite],
+      expected: ['apply_training_goal_change', 'get_training_goal', 'list_training_goals', 'preview_training_goal_change'] },
+  ])('advertises calendar goal tools for $label', async ({ scopes, expected }) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1', scopes }, 'https://quantified-self.io');
+    const client = new Client({ name: 'goal-scope-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      expect((await client.listTools()).tools.map(tool => tool.name)
+        .filter(name => name.includes('training_goal')).sort()).toEqual(expected);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 
   it('describes complete strength alias reads and preserves the existing strength-create shape', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -1020,10 +1054,10 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.TrainingPlansWrite,
     ]);
     expect(writeInstructions).toContain('Construct non-strength workout recipes using stable unique node IDs');
-    expect(writeInstructions).toContain('Use get_planned_workout_v3 for the complete non-strength recipe');
+    expect(writeInstructions).toContain('Use get_planned_workout_v4 for the complete non-strength recipe');
     expect(writeInstructions).toContain(TRAINING_STRENGTH_READ_GUIDANCE);
     expect(writeInstructions).toContain(TRAINING_STRENGTH_WRITE_GUIDANCE);
-    expect(writeInstructions).toContain('use preview_planned_workout_v3_change');
+    expect(writeInstructions).toContain('use preview_planned_workout_v4_change');
     expect(writeInstructions).toContain('query_planned_workouts_by_date');
     expect(writeInstructions).toContain('get_planned_workout_completions');
     expect(writeInstructions).toContain('local mapping assessment, not a live provider/account check');
@@ -1045,7 +1079,9 @@ describe('MCP HTTP scope enforcement', () => {
     expect(combinedWriteInstructions).toContain('Use preview_training_deletion');
     expect(writeInstructions).toContain('cannot request older service-copy cleanup');
     expect(combinedWriteInstructions).toContain('keep necessary concise instructions within 40 characters');
-    expect(combinedWriteInstructions).toContain('One approved Send proposal also approves the previewed digest-bound adjustment');
+    expect(combinedWriteInstructions).toContain('do not request separate mapping approval');
+    expect(combinedWriteInstructions).toContain('later workouts entering the scheduling window, across sports and providers');
+    expect(combinedWriteInstructions).toContain('Native confirmation of authored plan/workout changes remains required');
     expect(combinedWriteInstructions).not.toContain('provider delivery is not available on this connection');
 
     const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
@@ -1423,11 +1459,15 @@ describe('MCP HTTP scope enforcement', () => {
       await client.connect(clientTransport);
       const instructions = client.getInstructions() || '';
       expect(instructions.includes(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE)).toBe(writable);
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('independent training-thresholds:read');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('effective since is not a measurement/test date');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('Keep copied/saved targets unchanged');
       expect(instructions.includes(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE)).toBe(writable);
       expect(instructions.includes(TRAINING_PLAN_NEXT_STEPS_GUIDANCE)).toBe(writable);
       const names = (await client.listTools()).tools.map(tool => tool.name);
       expect(names.includes('apply_training_changes')).toBe(writable);
       expect(names).toContain('get_planned_workout_v3');
+      expect(names).not.toContain('get_training_thresholds'); // Planning grants never imply threshold access.
     } finally {
       await client.close();
       await server.close();

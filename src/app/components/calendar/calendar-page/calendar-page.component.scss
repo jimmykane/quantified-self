@@ -12,6 +12,7 @@
 
 .calendar-day-toolbar {
   display: flex;
+  flex-wrap: wrap;
   min-height: 44px;
   align-items: center;
   justify-content: space-between;

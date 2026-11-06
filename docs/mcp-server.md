@@ -1,5 +1,46 @@
 # MCP Server
 
+## Dated Training threshold tools
+
+`get_training_thresholds` reads one family or the bounded registry (at most 50). Optional offset-bearing `asOf` reads
+an immutable policy effective by that instant, with no editable reference. Outputs contain family labels, policy
+revision/effective instant and three nullable canonical/display quantities: FTP in watts (Running/Cycling), threshold
+HR in bpm and CSS in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
+calibration a workout used. No method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
+Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
+reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
+
+For newly authored FTP-relative Running/Cycling recipes, shared authoring guidance uses the matching family's
+current saved FTP only with advertised threshold reads and independent `training-thresholds:read` permission. Common
+planning guidance describes that capability without naming a tool hidden by the current grant. Threshold-specific
+instructions and catalogs remain conditional on the independent permission.
+Freeze watts in the existing recipe reference. Effective since is not a measurement/test date; do not infer FTP,
+convert FTP to CP, borrow another family or retarget copied/saved recipes implicitly. Missing access/value requires
+an explicit reference or target-free guidance. Private Workout power source overrides and generation provenance are
+not exposed to general plan chats. Existing planned-workout reads retain frozen targets without current-policy reads.
+The first-party manual/daily generator uses this same shared policy by default, with exact-sport private overrides;
+it does not widen MCP grants. This instruction change updates the compatible pending digest, not registered schemas.
+
+`preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
+`policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an
+ambiguous pace string. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
+15-minute proposal shows exact before/after values and future-workout effect, preserving method, inclusion and other
+thresholds. `apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction
+rechecks grant generation, deletion, expiry and optimistic head revision, then appends a server-timestamped immutable
+revision. A competing edit requires reread/review. A replay returns the same saved revision; receipts expire after
+30 days through the existing proposal TTL. Thresholds do not create Health observations, retarget plan recipes,
+reparse workouts, update existing load snapshots or call providers.
+
+New scopes require reauthorization; refresh cannot widen an existing grant. Requested consent starts checked but
+requires approval. The external host owns per-call approval; QS cannot detect automatic approval settings. Disable
+threshold writes in unattended modes when individual review is required. The built-in Assistant independently defaults
+threshold access off, exposes read/preview only to the model, and requires the app's Apply with current conversation
+and proposal checks. Compact evidence pairs display values with units and excludes opaque/private metadata.
+
+This is an additive contract; registered schemas/history remain unchanged and the pending digest covers new tools.
+Backend deployment, registered-client rescan and validated plugin refresh remain separate authorized rollout actions.
+See [Training rules](training-workspace.md#dated-training-thresholds-and-swimming-css).
+
 ## Private workout reflections (Item 10)
 
 Three additive tools expose a deliberately separate athlete-context surface. `get_workout_reflection` requires both
@@ -249,20 +290,25 @@ slow warning for operational investigation.
 
 Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
 They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
-by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
+by preview; explicit providers return independent blocked/success results. Pro, supported compatibility, horizon,
 connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
 schedule changes, and MCP itself makes no direct provider HTTP request.
-For a degraded standalone create-and-send (for example, a Suunto step instruction that must be shortened), the public
-preview names the bounded, safe mapping warnings before the host's native approval. The approved Send proposal may carry
-the server-computed digest into the existing delivery command, which rechecks the current destination and payload in the
-write transaction; a changed mapping blocks delivery rather than silently approving new loss. This removes a second
-approval for the same unchanged workout. Browser Send without a digest and later plan-workout changes retain their
-existing per-workout review behavior. An applied Send result means consent and any disclosed adjustment were recorded
-and reconciliation was queued; it is not a provider acceptance or watch-receipt claim. For Suunto-bound new workouts,
-clients should omit unrequested step notes and keep necessary instructions watch-sized (40 characters alongside a
-duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
-If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
-without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
+For supported provider adjustments (for example, shortened Suunto instructions), the public preview discloses bounded
+safe mapping warnings before the host's native confirmation. Initial Send/Enable records account-bound sync consent;
+eligible future edits and workouts entering the provider window then sync automatically without separate per-workout
+mapping approval. The full authored prescription stays in QS. Unsupported recipes and changed account authority still
+block delivery. Extensive informational warnings use the existing bounded summary and direct users to compatibility
+details rather than preventing the proposal. An applied Send means preferences were recorded and reconciliation queued,
+not provider or watch receipt. Obsolete mapping `approve` proposals are rejected with guidance to use normal sync; frozen
+schema/action and historical status enums remain readable. Native proposal approval, grant/revision/expiry checks,
+initial delivery consent and explicit replacement/fresh-Guide recovery confirmations remain independent.
+Suunto-bound generated notes should be omitted when unrequested or kept watch-sized (40 characters alongside a duration
+or target, 54 for manual-only steps), without dropping requested meaning merely to avoid a warning. See the
+[Training policy](training-workspace.md#supported-provider-adjustments-and-ongoing-sync-november-2026) for historical
+status refresh, content-digest fencing, monitoring and coordinated release. No new scope or registered tool/schema is required; read coverage includes current pending and historical approval
+statuses without private evidence. Runtime instruction metadata is updated in the existing pending candidate; the registered
+baseline/history stay unchanged. Deploy separately and refresh/rescan the registered app before claiming client availability. Bundled Training guidance now explains automatic supported adjustments. Validate the
+source and fixture package, then refresh installed guidance with a separately requested `npm run plugin:sync`.
 An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
 skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
 The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
@@ -407,7 +453,7 @@ recipe schema already accepts the complete Sports Lib activity-type enum, and fo
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
 `RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport. Garmin's
 explicit folds cover the QS running and cycling Training profiles, including indoor/virtual running, virtual cycling,
-velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
+velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains a disclosed degradation under initial Send/Enable consent; clients must
 not rewrite the authored sport just to satisfy a provider.
 
 The provider-name preservation preparation extends the pending Training recipe and prescription-analysis sport enums
@@ -415,7 +461,7 @@ with the explicit canonical names in `shared/activity-type-compatibility.ts`, al
 sports. The catalog's `Unknown Sport` placeholder remains invalid for workout recipes.
 Scheduled and saved recipe reads and complete-recipe proposals keep the exact authored sport through JSON round trips;
 unknown labels, provider profile fields and private source identifiers remain rejected. This does not imply delivery
-support for every catalog sport: existing local compatibility assessment and mapping approval still apply. The registered
+support for every catalog sport: existing local compatibility assessment and initial delivery consent still apply. The registered
 baseline contains no Training recipe tools, so these enum additions belong to the existing pending metadata transition;
 they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
 digest after integration and use the existing explicit deployment/client-refresh lifecycle.
@@ -495,7 +541,7 @@ tests prove only local behavior, not live cloud or device acceptance. No registe
 Wahoo assesses timed, untargeted outdoor Walking/Hiking, Rowing/Indoor Rowing and pool/open-water swimming as exact
 when no authored pool length is dropped. All 21 profiles have owner-confirmed native profile/timed playback (#789);
 obsolete validation warnings are removed. Distance/manual endings and intensity targets remain unsupported for these
-sports. An authored pool length still produces a degraded mapping requiring review because Wahoo cannot receive it.
+sports. An authored pool length still produces a degraded mapping warning because Wahoo cannot receive it.
 Existing substitutions and Strength losses remain disclosed.
 Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.
 Selected pool length remains canonical but is not sent to Wahoo. Strict compatibility and recipe reads cover all 21
@@ -552,7 +598,7 @@ accepts one complete create/update draft, derives the v1 summary server-side and
 owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
 consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
 need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
-delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+delivery preview without separate per-workout/per-edit mapping approval; other supported mapping loss is informational too.
 COROS compatibility reads use the full validated companion and report exact named/set/reps-or-time/rest/fixed-kg mappings.
 Missing, malformed, foreign or mismatched companions fail the read; they never return a partial prescription.
 Its delivery preview performs no provider I/O and apply keeps independent
@@ -561,7 +607,7 @@ boundary used by the app and MCP; local assessment and synthetic delivery tests 
 or completion evidence (#741). Normal owner/grant-bound MCP proposal confirmation and apply remain required for admitted
 providers. No registered schema, scope, permission, provider action or response field changes for this policy. Wahoo #783 uses the
 validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
-Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
+Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding is disclosed as an informational warning.
 Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
 owner/revision/expiry binding, native/app confirmation and idempotency. Existing strict mapping issue codes are reused;
 there is no new registered tool, schema, response field, scope, consent or provider action.
@@ -690,6 +736,32 @@ day/grace/check timers, with a six-hour full repair. These scheduling fields and
 results. Existing consent, proposal approval, source-freshness checks, bounded sync reads and provider actions remain
 unchanged. The 400-workout/four-provider MCP fixture includes private coordinator canaries and retains the same safe
 output; this change requires no tool schema, scope, plugin or registered-client metadata update.
+
+### Complete recipes with single Garmin power zones
+
+The latest additive full reads are `get_planned_workout_v4` and `get_saved_workout_v3`. Their explicit strict target
+variant is `{kind:'power',mode:'garmin-zone',zone:2}`: integer 1–7, exact Running/Cycling only, no reference or watt bounds.
+Use `preview_planned_workout_v4_change`, `preview_planned_workout_v4_changes` (1–25 complete creates/updates) and
+`preview_saved_workout_v3_change` under the existing independent Training planning read/write grants. They retain early
+Lap, pool length and existing native approval/Apply, owner, revision, expiry and idempotency boundaries. No new
+mutation kind, delivery consent or provider action is granted. Older recipe schemas stay frozen; old reads and full
+replacement previews fail with latest-tool guidance when they cannot preserve native zones. Summaries, saved placements,
+analysis timing and existing delivery compatibility reads use the same safe projections; no private athlete power
+profile, credential or Garmin zone table is exposed. Analysis never estimates watts or speed from the zone number. Compact zone-effect text lists the distinct
+before/after zone numbers used; full recipes retain the per-step assignments.
+
+A device-zone request requires explicit intent; do not infer it from a bare zone label or convert an authored span.
+These instructions use Garmin's sport/device settings and require compatible native Running Power for running.
+QS cannot verify zone watts or when Garmin resolves later settings changes. Other providers and secondary placement
+are unsupported; fixed watts and stored FTP/CP snapshots keep their original semantics. Assistant uses latest full
+recipes and remains prepare-only. Scheduled changes have full before/after app review; saved-library changes retain
+their compact proposal review and require full-recipe read-back. Source guidance lives in
+[Training workspace](training-workspace.md#single-garmin-power-zone-targets).
+
+This is local implementation pending a separately approved backend release and exact digest-bound developer refresh/
+rescan plus client catalog/plugin refresh. Registered baseline and transition history are unchanged. The bundled
+Training and cross-domain guidance changed and needs normal local plugin sync after release; no profile installation,
+cloud change, provider send or production verification is performed here.
 
 ### Full recipes with optional early Lap
 
@@ -1178,6 +1250,10 @@ behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
+- `training-thresholds:read` independently reads safe current or dated FTP, threshold HR and CSS settings;
+- `training-thresholds:write`, dependent on that read grant, previews and separately applies threshold-only changes
+  for future workouts. Neither grant exposes private policies/controls, Health weight or provenance;
+
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
@@ -1202,6 +1278,11 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `routes:read` for non-location saved-route summaries; and
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
+
+Training-load Health weight is prepared only when MET is needed or selected. A later owner MET selection uses the
+existing server trigger, without adding an MCP mutation or exposing Health input/provenance. While preparation is
+pending, Training impact reports its existing unavailable-load coverage rather than a stale fallback score. The
+registered output schemas and threshold grants are unchanged; this internal behavior needs no plugin rebuild.
 
 The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
@@ -3099,3 +3180,52 @@ provider-only cross-sport window authorization and write-reservation certificate
 `sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
 schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
 activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.
+
+### Calendar Training goals
+
+Five additive tools extend the existing Training surface without changing any registered tool schema:
+
+| Tool | Permission | Contract |
+| --- | --- | --- |
+| `list_training_goals` | `training-plans:read` | Current (default), archived or all goals; 25 per page, opaque revision-bound 15-minute cursor |
+| `get_training_goal` | `training-plans:read` | One complete authored goal with opaque goal/plan references and explicit unavailable plan link |
+| `get_training_goals_progress` | Training read + `metrics:read` | 1–25 selected goal references, explicit local date/IANA timezone, optional week start; identity-free weekly values and canonical display text |
+| `preview_training_goal_change` | Training read + `training-plans:write` | Full authored replacement; null reference/revision 0 creates; existing reference/current revision edits; complete before/after review |
+| `apply_training_goal_change` | Training read + Training write | Only an opaque proposal reference; native-host approved, revision/grant/expiry/owner-bound, idempotent Apply |
+
+Authored projection includes name, event/milestone/ongoing kind, active/paused/completed/archived lifecycle,
+high/normal/low priority, local start/target date, sport or family, objective, optional plan link and weekly target.
+Canonical seconds/metres and integer workout/day counts remain distinct. Goal progress excludes event/activity
+identities, exact activity timestamps, source/provider/device data, titles and streams. It counts actual recordings,
+not scheduled workouts; incomplete imports and missing values remain explicitly incomplete. Weekly progress starts
+on the goal's start date; future goals remain readable but have no progress row before then. Completed achievements
+are user-declared. A plan deletion retains the independent goal; a plan move never shifts the goal date.
+
+Goals have separate revisions from workout schedules. Preview stores only a private owner/connection-bound proposal;
+Apply checks the original consent generation, current goal revision, linked-plan identity and account deletion guard
+inside its transaction. Replaying Apply returns the original result. Changing goals does not authorize sending,
+editing a plan or regenerating the charged daily suggestion. No new OAuth scope is introduced. Consent descriptions,
+Settings (which share those descriptions), Help, Policies, public MCP content and bundled Training/cross-domain
+instructions include goals. Activity tools and their grants are unchanged.
+
+The built-in Assistant advertises read and focused preview tools only. Its model never gets public Apply; the app
+renders the full goal review and confirms through `applyAssistantTrainingProposal`, retaining the server-owned
+conversation generation. Goal text is untrusted context. Goal writes are distinct from changes to plans, workout
+recipes or provider delivery. An absent advertised tool is a permission/catalog availability issue, not evidence that
+no goals exist. External MCP hosts own native approval; automatic approval settings cannot be detected by the server.
+
+These tools require a backend release, developer refresh/rescan of the registered app, and refreshed client catalog.
+The digest-bound pending change includes these additions and preserves earlier unpromoted additions. The registered
+baseline and transition history are unchanged. Bundled-skill validation uses a temporary fixture profile; run
+`npm run plugin:sync` separately after release/rescan. Detailed storage, progress bounds and daily event advice live
+in `docs/training-workspace.md#calendar-training-goals`.
+
+
+The unregistered pending Garmin recipe tools (scheduled v4 and saved v3, including focused/bulk previews) also
+allow explicit `garminPowerAveragingSeconds: 3 | 10 | 30` on power targets. It requests Garmin execution averaging
+without changing the target bounds or reference. Omission preserves default behavior. The current-tool full reads
+and app-owned reviews preserve the field; legacy recipe readers/replacements reject it rather than stripping it.
+Preview effects disclose the distinct previous/proposed windows and explicit removal, while full recipes preserve
+step assignments. No existing registered schema, permission, apply boundary or provider-consent authority is widened.
+The pending digest requires backend release and developer rescan; bundled guidance requires the normal separately
+authorized plugin refresh. See [Training](training-workspace.md#garmin-execution-power-averaging).

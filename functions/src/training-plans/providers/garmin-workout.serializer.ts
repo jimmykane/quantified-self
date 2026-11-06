@@ -23,11 +23,11 @@ import {
 export type GarminWorkoutSportV1 = GarminWorkoutSportFamilyV1;
 export type GarminWorkoutIntensityV1 = 'REST' | 'WARMUP' | 'COOLDOWN' | 'RECOVERY' | 'ACTIVE';
 export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST' | 'REPS';
-export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
+export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'POWER_3S' | 'POWER_10S' | 'POWER_30S' | 'OPEN';
 
 interface GarminTargetFieldsV1 {
     targetType: GarminWorkoutTargetTypeV1 | null;
-    targetValue: null;
+    targetValue: number | null;
     targetValueLow: number | null;
     targetValueHigh: number | null;
     targetValueType: null;
@@ -167,6 +167,7 @@ function absoluteTargetRange(target: WorkoutTargetV1): {
     low: number;
     high: number;
 } {
+    if (target.mode === 'garmin-zone') throw new Error('A Garmin zone is not an absolute watt range.');
     const scale = (value: number, percent: number): number => value * percent / 100;
     if (target.mode === 'absolute') {
         switch (target.kind) {
@@ -213,6 +214,11 @@ function absoluteTargetRange(target: WorkoutTargetV1): {
     }
 }
 
+function powerTargetType(target: WorkoutTargetV1, fallback: Exclude<GarminWorkoutTargetTypeV1, 'OPEN'>): Exclude<GarminWorkoutTargetTypeV1, 'OPEN'> {
+    return target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined
+        ? ({ 3: 'POWER_3S', 10: 'POWER_10S', 30: 'POWER_30S' } as const)[target.garminPowerAveragingSeconds] : fallback;
+}
+
 function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: boolean): GarminTargetFieldsV1 {
     if (!target) {
         return {
@@ -223,9 +229,13 @@ function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: bool
             targetValueType: null,
         };
     }
+    if (target.mode === 'garmin-zone') return {
+        targetType: powerTargetType(target, 'POWER'), targetValue: target.zone,
+        targetValueLow: null, targetValueHigh: null, targetValueType: null,
+    };
     const range = absoluteTargetRange(target);
     return {
-        targetType: range.type,
+        targetType: powerTargetType(target, range.type),
         targetValue: null,
         targetValueLow: range.low,
         targetValueHigh: range.high,
@@ -245,7 +255,7 @@ function secondaryTargetFields(target: WorkoutTargetV1 | undefined): GarminSecon
     }
     const range = absoluteTargetRange(target);
     return {
-        secondaryTargetType: range.type,
+        secondaryTargetType: powerTargetType(target, range.type),
         secondaryTargetValue: null,
         secondaryTargetValueLow: range.low,
         secondaryTargetValueHigh: range.high,

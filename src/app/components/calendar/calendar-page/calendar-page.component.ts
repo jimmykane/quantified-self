@@ -1,3 +1,6 @@
+import { TrainingGoalsService } from '../../../services/training-goals.service';
+import { TrainingGoalsButtonComponent } from '../../training-goals/training-goals-button.component';
+import { trainingGoalMarkers } from '@shared/training-goals';
 import type { EventRead } from '@shared/event-read';
 import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
@@ -86,7 +89,7 @@ interface CalendarViewOption {
 @Component({
   selector: 'app-calendar-page',
   standalone: true,
-  imports: [
+  imports: [TrainingGoalsButtonComponent,
     SharedModule,
     CalendarPeriodSummaryComponent,
     CalendarMonthTotalsComponent,
@@ -161,6 +164,11 @@ export class CalendarPageComponent {
   });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
+  readonly goalsService = inject(TrainingGoalsService);
+  readonly goalOwner = computed(() => this.currentUser()?.uid);
+  readonly goalsState = toSignal(toObservable(this.goalOwner).pipe(switchMap(uid => this.goalsService.watch(uid))),
+    { initialValue: { status: 'loading' as const, goals: [] } });
+  readonly goalsByDate = computed(() => trainingGoalMarkers(this.goalsState().goals));
   readonly eventState = toSignal(combineLatest([
     this.userService.user$,
     this.routeState$,
@@ -318,6 +326,11 @@ export class CalendarPageComponent {
     );
   });
   readonly isLoading = computed(() => this.eventState().status === 'loading');
+  private readonly goalProgressInvalidation = effect(() => {
+    const events = this.eventState();
+    const uid = this.goalOwner();
+    if (uid && events.status === 'ready') this.goalsService.invalidateProgress(uid);
+  });
   readonly hasError = computed(() => this.eventState().status === 'error');
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)

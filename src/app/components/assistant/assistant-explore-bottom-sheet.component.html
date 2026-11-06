@@ -55,6 +55,12 @@
       <h3 id="assistant-content-access">Measurements, reflections, tags and notes</h3>
       <p class="assistant-training-intro">Changes start a fresh chat. New chat resets these choices: manual measurement changes start on, as do private workout reflections; other optional access starts off. You review every change.</p>
       <div class="assistant-training-options">
+        <app-compact-row title="Training thresholds" titleId="assistant-thresholds-title" icon="speed" density="compact">
+          <p id="assistant-thresholds-summary" class="assistant-training-summary">Read FTP, threshold HR and CSS settings and prepare changes for future workouts. Off for new chats. You review values before Apply; existing workouts and Health measurements stay unchanged.</p>
+          <mat-slide-toggle compactRowAction [checked]="data.trainingThresholdsEnabled === true"
+            aria-label="Training thresholds — changing this starts a new chat" aria-describedby="assistant-thresholds-summary"
+            (change)="setTrainingThresholds($event.checked)"></mat-slide-toggle>
+        </app-compact-row>
         <app-compact-row title="Manual Health measurements" titleId="assistant-measurements-title"
           icon="monitor_weight" density="compact">
           <p id="assistant-measurements-summary" class="assistant-training-summary">Find, add, edit or permanently delete manual entries such as weight and blood pressure. Provider imports stay read-only. On for new chats; nothing changes until you approve it.</p>
@@ -111,7 +117,7 @@
       <div class="assistant-training-options">
         <app-compact-row title="Training plans" titleId="assistant-training-plans-title"
           icon="event_note" density="compact">
-          <p id="assistant-training-plans-summary" class="assistant-training-summary">Read plan and workout names, dates, instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
+          <p id="assistant-training-plans-summary" class="assistant-training-summary">Read calendar goals, priorities and objectives, plus plan and workout names, dates, instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
           <mat-slide-toggle compactRowAction [checked]="data.trainingPlansEnabled === true"
             aria-label="Training plans access — changing this starts a new chat"
             aria-describedby="assistant-training-plans-summary"
@@ -124,7 +130,7 @@
 
         <app-compact-row title="Plan and workout changes" titleId="assistant-training-plan-changes-title"
           icon="edit_calendar" iconTone="secondary" density="compact">
-          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare create, edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
+          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare goal create, edit, pause, complete, archive or restore changes, and plan/workout create, edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
           <mat-slide-toggle compactRowAction [checked]="data.trainingPlanChangesEnabled === true"
             aria-label="Training plan changes — changing this starts a new chat"
             aria-describedby="assistant-training-plan-changes-summary"

@@ -294,3 +294,48 @@ separate. Sustainable distance is neither distance travelled nor distance remain
 summaries and the final sampled reading can differ; preserve the reported minimum, zeros, null gaps and rebounds.
 Never sum or blend these estimates across activities or devices, infer a missing FIT stream, or interpret them as
 Training load or medical evidence. Missing original-file data cannot be recovered by a different query.
+
+Calendar goals are authored intentions, separate from measured recovery and activity history. Route goal-only
+questions and explicit goal changes through the focused Training skill. For cross-domain advice, read relevant goals
+only with Training permission; their weekly progress also requires activity metrics permission. Respect multiple
+priorities, fixed event dates, selected sport, explicit rest and existing workouts. Incomplete history is unknown and
+a goal never overrides recovery or proves achievement. Goal edits require the focused preview/approval workflow and
+do not authorize changes to plans, provider sending or regeneration of today's included suggestion.
+
+
+For explicitly requested Garmin device power zones, discover the latest complete scheduled/saved recipe reads and
+full-recipe previews. A target has kind power, mode garmin-zone and one integer zone 1–7; only exact Running/Cycling
+and primary Garmin placement are supported. It uses Garmin sport/device zones, with unknown watts in QS and no QS FTP
+requirement. Never infer this mode from a bare zone label, assume standard boundaries, replace fixed prescriptions or
+collapse a zone span. Running needs compatible native Running Power. Other services reject it; do not convert unknown
+watts or promise when later Garmin settings changes take effect. Preserve the target through edits and read-back;
+old tools must not erase it. A recipe save grants no new provider consent and proves neither cloud nor watch receipt.
+
+When a complete power target includes `garminPowerAveragingSeconds`, preserve its explicit 3, 10 or 30-second choice
+through full-recipe reads and previews. Omission retains the default; add or remove averaging only on explicit user
+intent and disclose the change. The choice is for Garmin workout execution and unsupported destinations must not
+silently drop it. It does not change watt/FTP/zone values, configure every watch data screen, or prove watch receipt.
+
+## Shared FTP for new workout targets
+
+When authoring a new FTP-relative Running/Cycling workout, discover the existing focused threshold read only if
+advertised and independently permitted. Freeze the matching family's saved watts into the recipe reference;
+**effective since** is not a measurement/test date. An explicit user-supplied source-specific FTP/CP can override
+that default for the requested source/sport. Private Workout power overrides are not automatically available here.
+Never borrow the other family's FTP, convert FTP to CP or invent a value. Without access or a valid reference,
+ask for one or keep guidance target-free. Copied/saved prescriptions retain their frozen targets unless the user
+explicitly requests retargeting. Updating shared FTP does not rewrite existing workouts or prepared suggestions.
+The app's separate day generator uses this shared default and its private explicit overrides automatically;
+that behavior grants no threshold access to an external client or general Assistant plan chat.
+
+## Training threshold settings
+
+For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.
+They need independent threshold read permission and its dependent write grant; Health, measurement and plan grants
+are insufficient. Thresholds are dated calibration settings, not Health observations or evidence of which file inputs
+a workout used. Running/Cycling FTP stays separate in watts, HR uses bpm, and CSS requires an explicit per-100-metre
+or per-100-yard pace. Read current settings first, preserve unrequested values, use null only for explicit removal,
+review before/after values and future-workout effect, then use separate native host approval. Never invent a threshold,
+backdate, retarget recipes, rewrite old workouts or access private frozen weight provenance. A missing tool needs
+reauthorization/catalog refresh after release, never a substitute mutation. The built-in Assistant independently starts
+this access off, can prepare only, and needs app-owned Apply. Report success only from the accepted apply result.

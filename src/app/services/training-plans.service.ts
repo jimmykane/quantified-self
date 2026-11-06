@@ -227,6 +227,17 @@ export class TrainingPlansService {
     return combineLatest(streams$).pipe(timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }), map(batches => batches.flat()));
   }
 
+  /** Plan metadata for selectors; does not read scheduled workouts or delivery state. */
+  watchPlans(userId: string | null | undefined): Observable<TrainingPlanV1[]> {
+    const uid = `${userId || ''}`.trim();
+    if (!uid) return of([]);
+    return collectionData(collection(this.firestore, 'users', uid, TRAINING_PLANS_COLLECTION_ID), { idField: 'id' }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      map(values => (values as unknown[]).map(parseTrainingPlanV1)
+        .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id.localeCompare(right.id))),
+    );
+  }
+
   watchSchedule(userId: string | null | undefined): Observable<CurrentTrainingScheduleV1> {
     const uid = `${userId || ''}`.trim();
     if (!uid) return of(emptyTrainingSchedule());
@@ -234,7 +245,6 @@ export class TrainingPlansService {
     if (existing) return existing;
 
     const userPath = ['users', uid] as const;
-    const plansRef = collection(this.firestore, ...userPath, TRAINING_PLANS_COLLECTION_ID);
     const workoutsRef = collection(this.firestore, ...userPath, SCHEDULED_WORKOUTS_COLLECTION_ID);
     const availabilityRef = doc(this.firestore, ...userPath, TRAINING_PLAN_STATE_COLLECTION_ID,
       TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
@@ -244,16 +254,12 @@ export class TrainingPlansService {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
         return combineLatest([
           this.watchVerifiedCurrentState(uid),
-          collectionData(plansRef, { idField: 'id' }).pipe(
-            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
-          ),
+          this.watchPlans(uid),
           collectionData(query(workoutsRef, where('lifecycle', 'in', ['planned', 'skipped'])), { idField: 'id' }).pipe(
             timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
           ),
         ]).pipe(
-          map(([stateValue, planValues, workoutValues]) => {
-            const plans = (planValues as unknown[]).map(parseTrainingPlanV1)
-              .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id.localeCompare(right.id));
+          map(([stateValue, plans, workoutValues]) => {
             const workouts = (workoutValues as unknown[]).map(parseScheduledWorkoutV1)
               .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id));
             const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);

@@ -4,6 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import type { HealthProvider } from '@shared/health';
 import type { AppDashboardHealthMetricSettings, AppHealthMetricSources, AppUserInterface } from '../../models/app-user.interface';
 import {
@@ -29,7 +30,7 @@ export interface HealthMetricSourceSelection {
 @Component({
   selector: 'app-health-category-overview',
   standalone: true,
-  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressSpinnerModule, DashboardHealthChartComponent, HealthChangeSummaryComponent],
+  imports: [MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressSpinnerModule, MatDialogModule, DashboardHealthChartComponent, HealthChangeSummaryComponent],
   templateUrl: './health-category-overview.component.html',
   styleUrls: ['./health-category-overview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,6 +55,7 @@ export class HealthCategoryOverviewComponent {
   readonly readingOpened = output<HealthMetricSourceSelection>();
   private readonly owner = computed(() => this.user().uid);
   private readonly haptics = inject(AppHapticsService);
+  private readonly dialog = inject(MatDialog);
   private readonly category = signal<HealthOverviewCategoryId | 'all'>('all');
   private readonly sourceSettings = signal<Partial<Record<HealthWorkspaceMetricSelection, AppDashboardHealthMetricSettings>>>({});
   private readonly observedAvailability = signal<Partial<Record<HealthWorkspaceMetricSelection, { scope: string; empty: boolean }>>>({});
@@ -61,8 +63,21 @@ export class HealthCategoryOverviewComponent {
   private readonly availabilityScope = computed(() => JSON.stringify([
     this.owner(), this.referenceDate(), [...this.providerFilter()].sort(),
   ]));
-  readonly categories = computed(() => buildHealthOverviewCategories(this.groups(), this.showSleep()));
+  readonly categories = computed(() => {
+    const categories = buildHealthOverviewCategories(this.groups(), this.showSleep());
+    return !this.exampleOnly() && !categories.some(category => category.id === 'fitness')
+      ? [...categories, { id: 'fitness' as const, label: 'Fitness', icon: 'fitness_center', metrics: [] }] : categories;
+  });
+  async openTrainingThresholds(): Promise<void> {
+    if (this.exampleOnly()) return;
+    const uid = this.owner();
+    const { TrainingThresholdsDialogComponent } = await import('../training-load/training-thresholds-dialog.component');
+    if (uid !== this.owner()) return;
+    this.haptics.selection();
+    this.dialog.open(TrainingThresholdsDialogComponent, { data: { uid }, width: '640px', maxWidth: '96vw' });
+  }
   readonly selectedCategory = computed(() => this.categories().some(category => category.id === this.category()) ? this.category() : 'all');
+  readonly hasRecordedCategories = computed(() => this.categories().some(category => category.metrics.length > 0));
   readonly hasOverviewHighlights = computed(() => this.selectedCategory() === 'all' && this.highlightedMetrics().length > 0);
   readonly hasVitalsHighlights = computed(() => this.selectedCategory() === 'vitals' && this.vitalsHighlightedMetrics().length > 0);
   readonly cards = computed(() => {

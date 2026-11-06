@@ -19,7 +19,7 @@ import {
   PUBLIC_GUIDE_PATHS,
 } from './components/public-seo/public-seo-pages.paths';
 import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
-import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
+import { lazyPublicPricingJsonLdResolver, lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
 import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
@@ -176,11 +176,13 @@ const topLevelRoutes: Routes = [
     loadComponent: () => import('./components/public-pricing/public-pricing.component').then(m => m.PublicPricingComponent),
     // Public route
     canMatch: [pricingRedirectGuard],
+    resolve: {
+      jsonLd: lazyPublicPricingJsonLdResolver,
+    },
     data: {
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-      robots: 'noindex, nofollow',
     }
   },
   {
@@ -316,17 +318,17 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'Compare FIT & GPX Files | Workout Data Comparison Tool',
+      title: 'Compare GPX & FIT Files',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings side by side. Review GNSS, heart-rate, altitude, power, and other recorded metrics. Sign in to compare files.',
+      description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',
-        name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',
+        name: 'GPX & FIT File Comparison Tool',
         applicationCategory: 'HealthApplication',
         operatingSystem: 'Web',
-        description: 'Create saved benchmark comparisons from FIT, GPX, TCX, JSON, and SML workout files with GNSS, heart-rate, and altitude error metrics.',
+        description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
         url: 'https://quantified-self.io/tools/compare',
         inLanguage: 'en',
         featureList: [
@@ -600,7 +602,13 @@ const topLevelRoutes: Routes = [
       preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
-      robots: 'noindex, nofollow',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Release Notes',
+        description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
+        url: 'https://quantified-self.io/releases',
+      },
     }
   },
   {

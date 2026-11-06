@@ -1,4 +1,6 @@
 export type McpScope =
+  | 'training-thresholds:read'
+  | 'training-thresholds:write'
   | 'workout-reflections:read'
   | 'workout-reflections:write'
   | 'training-plans:read'
@@ -19,6 +21,7 @@ export type McpScope =
   | 'route-location:read';
 
 export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
+  'training-thresholds:write': 'training-thresholds:read',
   'workout-reflections:read': 'activity-details:read',
   'workout-reflections:write': 'workout-reflections:read',
   'training-plans:write': 'training-plans:read',
@@ -34,6 +37,14 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'training-thresholds:read': {
+    title: 'Training thresholds',
+    description: 'Read current or dated FTP, threshold HR and CSS settings by sport family. These are saved calibration settings; valid file calibration takes precedence. This does not grant Health measurement history or private activity metadata.',
+  },
+  'training-thresholds:write': {
+    title: 'Change Training thresholds',
+    description: 'Preview and apply explicit FTP, threshold HR or CSS changes for future workouts using your client’s approval controls. Requires Training thresholds read access. Changes create dated revisions and preserve existing workouts, TSS controls, recorded scores and Health measurements. Existing connections must reauthorize; token refresh cannot add permission.',
+  },
   'workout-reflections:read': {
     title: 'Private workout reflections',
     description: 'Read your full private reflection text for an explicitly selected activity or recording. Text may contain sensitive health, personal or location information. Requires Individual activity details. Existing clients must reauthorize; revocation cannot erase copies already received. Imported RPE, planned targets and completion stay separate.',
@@ -44,11 +55,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'training-plans:read': {
     title: 'Training plans and planned workouts',
-    description: 'Read your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, plan and standalone calendar rest dates, authored plan phases and optional descriptions, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
+    description: 'Read calendar goals with names, dates, sports, priorities, status, objectives and optional plan links, plus your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, plan and standalone calendar rest dates, authored plan phases and optional descriptions, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Goal progress additionally requires activity metrics permission. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',
   },
   'training-plans:write': {
     title: 'Change Training plans and workouts',
-    description: 'Create and edit plans, their named phases and planned workouts, mark or remove independent calendar rest days, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. You can also create, save, copy, edit, archive, restore or permanently delete an undated saved workout recipe, and place independent copies on explicit dates. Deleting a recipe does not remove scheduled copies or grant provider sync. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
+    description: 'Create, edit, pause, complete, archive or restore calendar goals independently of plans. Create and edit plans, their named phases and planned workouts, mark or remove independent calendar rest days, move or copy workouts, change plan dates and lifecycle, mark workouts skipped, move workouts to recoverable history, and explicitly delete a plan. You can also create, save, copy, edit, archive, restore or permanently delete an undated saved workout recipe, and place independent copies on explicit dates. Deleting a recipe does not remove scheduled copies or grant provider sync. Plan deletion is reviewed alone and requires choosing whether its workouts become standalone or are permanently deleted; the plan and its history are permanently removed. Every proposal is previewed before a separate apply tool governed by your client\'s approval controls. Permanent single-workout deletion and history restore are not allowed.',
   },
   'training-delivery:write': {
     title: 'Change planned-workout sync',
@@ -68,7 +79,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'health:read': {
     title: 'Health metrics',
-    description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. No measurements can be added, edited or deleted.',
+    description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. This read permission cannot add, edit or delete measurements. Managing manual entries requires the separate Manage manual Health measurements permission; provider imports remain protected.',
   },
   'metrics:read': {
     title: 'Activity and Training metrics',

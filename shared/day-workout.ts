@@ -1,5 +1,6 @@
+import type { WorkoutPowerReferenceV1 } from './workout-power-settings';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, type WorkoutStructureV1 } from './planned-workout';
+import { GARMIN_POWER_AVERAGING_SECONDS, type GarminPowerAveragingSeconds, MANUAL_WORKOUT_EDITOR_SPORTS_V1, isGarminPowerZoneSportV1, type WorkoutStructureV1 } from './planned-workout';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, isStrengthWorkoutSportV1, type StrengthWorkoutDraftV1 } from './strength-workout';
 import { normalizeTrainingLocalDate } from './training-plans';
 
@@ -9,7 +10,7 @@ export const DAY_WORKOUT_SPORTS = [...MANUAL_WORKOUT_EDITOR_SPORTS_V1,
 export const DAY_WORKOUT_EQUIPMENT = ['bodyweight', 'dumbbells', 'barbell', 'kettlebell', 'bands', 'machines'] as const;
 export type DayWorkoutEquipment = typeof DAY_WORKOUT_EQUIPMENT[number];
 export type DayWorkoutPurpose = 'suggest' | 'recovery' | 'endurance' | 'intervals' | 'general-strength' | 'muscle-building' | 'muscular-endurance';
-export type DayWorkoutTarget = 'auto' | 'heart-rate' | 'power' | 'speed' | 'none';
+export type DayWorkoutTarget = 'auto' | 'heart-rate' | 'power' | 'garmin-power-zone' | 'speed' | 'none';
 export const DAY_WORKOUT_SIGNAL_OPTIONS = [
   { key: 'freshnessContext', label: 'Freshness & training load' },
   { key: 'hrvContext', label: 'HRV' },
@@ -19,6 +20,7 @@ export const DAY_WORKOUT_SIGNAL_OPTIONS = [
   { key: 'activityContext', label: 'Recent activities' },
   { key: 'feedbackContext', label: 'Feeling / RPE' },
   { key: 'routineContext', label: 'Training routine' },
+  { key: 'goalsContext', label: 'Goals' },
 ] as const;
 export type DayWorkoutSignalKey = typeof DAY_WORKOUT_SIGNAL_OPTIONS[number]['key'];
 // Omitted signal choices preserve automatic use and request fingerprints for older clients.
@@ -30,6 +32,7 @@ export interface DayWorkoutControls extends Partial<Record<DayWorkoutSignalKey, 
   purpose: DayWorkoutPurpose;
   timing: 'approximate' | 'strict';
   target: DayWorkoutTarget;
+  garminPowerAveragingSeconds?: GarminPowerAveragingSeconds;
   structure: 'auto' | 'simple';
   destinationPlanId: string | null;
   equipment: DayWorkoutEquipment[];
@@ -38,7 +41,11 @@ export interface DayWorkoutControls extends Partial<Record<DayWorkoutSignalKey, 
   trainingContext: boolean;
   timelineContext: boolean;
 }
-export interface GenerateDayWorkoutRequest { requestId: string; controls: DayWorkoutControls }
+export interface GenerateDayWorkoutRequest {
+  requestId: string; controls: DayWorkoutControls;
+  /** First-party replacement intent only. Saving still requires a separate revision-bound approval. */
+  replaceWorkout?: { id: string; revision: number };
+}
 export function dayWorkoutReadinessSourcesEnabled(controls: DayWorkoutControls): boolean {
   return controls.freshnessContext !== false && controls.hrvContext !== false
     && controls.sleepContext !== false && controls.overnightHeartRateContext !== false;
@@ -52,6 +59,8 @@ export interface DayWorkoutDraft {
   estimatedMinutes?: { minimum: number; maximum: number };
 }
 export interface GenerateDayWorkoutResponse {
+  /** Immutable first-party review snapshot; never a canonical workout field or public MCP grant. */
+  powerReference?: WorkoutPowerReferenceV1;
   requestId: string;
   observedAt: string;
   kind: 'workout' | 'rest';
@@ -77,14 +86,20 @@ export function dayWorkoutPurposes(sport: ActivityTypes): DayWorkoutPurpose[] {
 }
 export function dayWorkoutTargets(sport: ActivityTypes): DayWorkoutTarget[] {
   if (isStrengthWorkoutSportV1(sport)) return ['none'];
-  return ['auto', 'heart-rate', ...(/swim|walk|hik|trek/i.test(sport) ? [] : ['power'] as const), 'speed', 'none'];
+  return ['auto', 'heart-rate', ...(/swim|walk|hik|trek/i.test(sport) ? [] : ['power'] as const),
+    ...(isGarminPowerZoneSportV1(sport) ? ['garmin-power-zone'] as const : []), 'speed', 'none'];
 }
+export function dayWorkoutSupportsGarminPowerAveraging(controls: Pick<DayWorkoutControls, 'sport' | 'target'>): boolean {
+  return !isStrengthWorkoutSportV1(controls.sport) && dayWorkoutTargets(controls.sport).includes('power')
+    && ['auto', 'power', 'garmin-power-zone'].includes(controls.target);
+}
+
 export function defaultDayWorkoutControls(localDate: string, timeZone: string, sport: ActivityTypes = ActivityTypes.Running): DayWorkoutControls {
   return { localDate, timeZone, sport, minutes: 30, purpose: 'suggest', timing: 'approximate',
     target: isStrengthWorkoutSportV1(sport) ? 'none' : 'auto', structure: 'auto', destinationPlanId: null,
     equipment: ['bodyweight'], strengthFocus: 'full-body', usePreviousWeights: true,
     trainingContext: true, timelineContext: true, freshnessContext: true, hrvContext: true, sleepContext: true,
-    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true, routineContext: true };
+    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true, routineContext: true, goalsContext: true };
 }
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {
@@ -93,9 +108,9 @@ function object(value: unknown, keys: string[]): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date()): GenerateDayWorkoutRequest {
-  const request = object(value, ['requestId', 'controls']);
+  const request = object(value, ['requestId', 'controls', 'replaceWorkout']);
   if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(request.requestId)) throw new Error('Invalid request identifier.');
-  const c = object(request.controls, Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')));
+  const c = object(request.controls, [...Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')), 'garminPowerAveragingSeconds']);
   if (typeof c.timeZone !== 'string' || c.timeZone.length > 100) throw new Error('Choose a valid time zone.');
   const today = dayWorkoutLocalDate(now, c.timeZone);
   const localDate = normalizeTrainingLocalDate(c.localDate);
@@ -121,8 +136,21 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
     if (typeof c[key] !== 'boolean') throw new Error('Choose valid personalization options.');
     signals[key] = c[key] as boolean;
   }
+  if ('garminPowerAveragingSeconds' in c && (!GARMIN_POWER_AVERAGING_SECONDS.includes(c.garminPowerAveragingSeconds as GarminPowerAveragingSeconds)
+    || !dayWorkoutSupportsGarminPowerAveraging({ sport, target: c.target as DayWorkoutTarget }))) {
+    throw new Error('Choose Garmin power averaging of 3, 10 or 30 seconds for a power-capable sport and target.');
+  }
+  let replaceWorkout: GenerateDayWorkoutRequest['replaceWorkout'];
+  if (request.replaceWorkout !== undefined) {
+    const target = object(request.replaceWorkout, ['id', 'revision']);
+    if (typeof target.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(target.id)
+      || !Number.isSafeInteger(target.revision) || Number(target.revision) < 1 || c.trainingContext !== true) {
+      throw new Error('Choose a current workout with Training context enabled.');
+    }
+    replaceWorkout = { id: target.id, revision: Number(target.revision) };
+  }
   // Construct an allowlisted, stable-key object for request fingerprinting.
-  return { requestId: request.requestId, controls: {
+  return { requestId: request.requestId, ...(replaceWorkout ? { replaceWorkout } : {}), controls: {
     localDate, timeZone: c.timeZone, sport, minutes: c.minutes as number, purpose: c.purpose as DayWorkoutPurpose,
     timing: c.timing as DayWorkoutControls['timing'], target: c.target as DayWorkoutTarget,
     structure: c.structure as DayWorkoutControls['structure'], destinationPlanId: c.destinationPlanId as string | null,
@@ -130,5 +158,6 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
     usePreviousWeights: c.usePreviousWeights as boolean, trainingContext: c.trainingContext as boolean,
     timelineContext: c.timelineContext as boolean,
     ...signals,
+    ...('garminPowerAveragingSeconds' in c ? { garminPowerAveragingSeconds: c.garminPowerAveragingSeconds as GarminPowerAveragingSeconds } : {}),
   } };
 }

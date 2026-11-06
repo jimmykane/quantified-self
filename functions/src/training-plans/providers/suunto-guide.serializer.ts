@@ -256,6 +256,7 @@ function endingCondition(ending: WorkoutEndingV1): SuuntoGuideConditionV1 {
 }
 
 function absoluteTargetValues(target: WorkoutTargetV1): { minimum: number; maximum: number } {
+    if (target.mode === 'garmin-zone') throw new Error('Garmin power zones cannot be converted to watts.');
     if (target.mode === 'absolute') {
         switch (target.kind) {
             case 'heart-rate': return { minimum: target.minimumBpm, maximum: target.maximumBpm };

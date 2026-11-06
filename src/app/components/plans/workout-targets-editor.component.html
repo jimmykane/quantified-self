@@ -26,6 +26,9 @@
       <mat-form-field subscriptSizing="dynamic"><mat-label>Target mode</mat-label>
         <mat-select [value]="row.target.mode" [disabled]="disabled()" (selectionChange)="select(index, 'mode', $event.value)">
           <mat-option value="absolute">Absolute</mat-option><mat-option value="relative">Percent of reference</mat-option>
+          @if (row.target.kind === 'power' && (supportsGarminZone() || row.target.mode === 'garmin-zone')) {
+            <mat-option value="garmin-zone">Garmin power zone</mat-option>
+          }
         </mat-select>
       </mat-form-field>
       @if (row.target.kind === 'speed') {
@@ -35,6 +38,23 @@
           </mat-select>
         </mat-form-field>
       }
+      @if (row.target.kind === 'power') {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Garmin power averaging</mat-label>
+          <mat-select [value]="row.target.garminPowerAveragingSeconds ?? 0" [disabled]="disabled()"
+            (selectionChange)="averaging(index, $event.value)">
+            <mat-option [value]="0">Default</mat-option>
+            <mat-option [value]="3">3 seconds</mat-option><mat-option [value]="10">10 seconds</mat-option>
+            <mat-option [value]="30">30 seconds</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+      @if (row.target.mode === 'garmin-zone') {
+        <mat-form-field subscriptSizing="dynamic"><mat-label>Garmin power zone</mat-label>
+          <mat-select [value]="row.target.minimum" [disabled]="disabled()" (selectionChange)="zone(index, $event.value)">
+            @for (value of zones; track value) { <mat-option [value]="value">Zone {{ value }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      } @else {
       <mat-form-field subscriptSizing="dynamic"><mat-label>Bounds</mat-label>
         <mat-select [value]="row.target.rangeMode" [disabled]="disabled()" (selectionChange)="select(index, 'rangeMode', $event.value)">
           <mat-option value="range">Range</mat-option><mat-option value="single">Single value</mat-option>
@@ -75,12 +95,19 @@
           </mat-form-field>
         }
       }
+      }
     </div>
     @if (row.target.mode === 'relative') {
       <p class="target-hint">{{ row.savedReference ? 'Saved reference snapshot' : 'Enter an explicit reference' }}. Percentages use 80 for 80%. Changing the reference changes this prescription.</p>
     }
+    @if (row.target.mode === 'garmin-zone') {
+      <p class="target-hint">Uses the zones configured for this sport on Garmin. QS does not know their watts. Send as the first target to Garmin; running requires a compatible native Running Power device.</p>
+    }
     @if (row.target.kind === 'cadence') {
       <p class="target-hint">Canonical cadence. Swimming and rowing targets do not imply a stroke-rate conversion; provider support varies.</p>
+    }
+    @if (row.target.kind === 'power' && row.target.garminPowerAveragingSeconds !== undefined) {
+      <p class="target-hint">Requests an averaged Garmin workout target. Device behavior varies; other services cannot receive this choice. Select Default to remove it.</p>
     }
     <p class="target-preview" aria-live="polite">{{ row.preview }}</p>
   </div>

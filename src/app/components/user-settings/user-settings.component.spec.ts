@@ -593,6 +593,7 @@ describe('UserSettingsComponent', () => {
             'units',
             'dashboard',
             'training',
+            'workout-power',
             'charts',
             'map',
             'notifications',
@@ -610,7 +611,7 @@ describe('UserSettingsComponent', () => {
         expect(groups[1].querySelector('.settings-group-title').textContent).toBe('Privacy & account');
         const triggers = Array.from(fixture.nativeElement.querySelectorAll('.settings-section-trigger')) as HTMLButtonElement[];
         expect(triggers.map(button => button.getAttribute('aria-label'))).toEqual([
-            'Units & formatting', 'Dashboard', 'Training load', 'Charts', 'Maps', 'Notifications', 'Privacy & emails', 'Account', 'Data management',
+            'Units & formatting', 'Dashboard', 'Training load', 'Workout power', 'Charts', 'Maps', 'Notifications', 'Privacy & emails', 'Account', 'Data management',
         ]);
         expect(triggers.every(button => button.classList.contains('mat-mdc-button'))).toBe(true);
         expect(triggers.every(button => button.type === 'button')).toBe(true);
@@ -808,7 +809,7 @@ describe('UserSettingsComponent', () => {
         const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
 
-        expect(panels).toHaveLength(9);
+        expect(panels).toHaveLength(10);
         expect(profilePanel.hidden).toBe(false);
         expect(mapPanel.hidden).toBe(true);
 

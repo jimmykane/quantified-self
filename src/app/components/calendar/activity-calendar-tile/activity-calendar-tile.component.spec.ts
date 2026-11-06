@@ -1,3 +1,5 @@
+import { TrainingGoalsService, type TrainingGoalsState } from '../../../services/training-goals.service';
+import type { TrainingGoalV1 } from '@shared/training-goals';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -45,6 +47,8 @@ describe('ActivityCalendarTileComponent', () => {
     prepareWorkoutDestination: ReturnType<typeof vi.fn>;
   };
 
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(async () => {
     viewer = signal<{ uid: string } | null>(user);
     viewer$ = new BehaviorSubject<{ uid: string } | null>(user);
@@ -62,6 +66,7 @@ describe('ActivityCalendarTileComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
       providers: [
+        { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [] }), isOwner: () => false, open: vi.fn(), invalidateProgress: vi.fn() } },
         { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
@@ -78,6 +83,177 @@ describe('ActivityCalendarTileComponent', () => {
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
+  });
+
+  it.each([[false, false], [false, true], [true, false], [true, true]])('offers one owner-only Goals action alongside optional totals (day context: %s, totals: %s)', async (dayContext, showTotals) => {
+    const goals = TestBed.inject(TrainingGoalsService);
+    vi.spyOn(goals, 'isOwner').mockImplementation(uid => uid === viewer()?.uid);
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', dayContext);
+    fixture.componentRef.setInput('showPeriodTotals', showTotals);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const buttons = fixture.nativeElement.querySelectorAll('app-training-goals-button button') as NodeListOf<HTMLButtonElement>;
+    expect(buttons).toHaveLength(1);
+    expect(!!fixture.nativeElement.querySelector('.calendar-period-totals-strip')).toBe(showTotals);
+    expect(buttons[0].getAttribute('aria-label')).toBe('Goals');
+    if (dayContext) expect(buttons[0].closest('.activity-calendar-view-controls')).toBeTruthy();
+    buttons[0].click(); fixture.detectChanges();
+    expect(goals.open).toHaveBeenCalledExactlyOnceWith(planningUserUid);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-training-goals-button button')).toBeNull();
+  });
+
+  it('keeps live goals, selected-day details and recorded totals together without extra reads', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 30, 12));
+    const race = createGoal('race', 'Autumn race', '2026-10-30');
+    const weekly: TrainingGoalV1 = { ...createGoal('weekly', 'Weekly consistency', '2026-10-01'),
+      kind: 'ongoing', targetLocalDate: null, weeklyTarget: { kind: 'duration', value: 10800 } };
+    const goalState = new BehaviorSubject<TrainingGoalsState>({ status: 'ready', goals: [race, weekly] });
+    const goals = TestBed.inject(TrainingGoalsService);
+    vi.spyOn(goals, 'isOwner').mockImplementation(uid => uid === viewer()?.uid);
+    const watchGoals = vi.spyOn(goals, 'watch').mockReturnValue(goalState);
+    const events = new BehaviorSubject([
+      createEvent(new Date(2026, 8, 30), 'context'),
+      createEvent(new Date(2026, 9, 1), 'first'),
+      createEvent(new Date(2026, 9, 31), 'last'),
+    ]);
+    watchEvents.mockReturnValue(events);
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-period-totals-strip')).toBeNull();
+    expect(fixture.componentInstance.periodTotals()).toEqual([]);
+    const selectedDayPanel = fixture.nativeElement.querySelector('app-calendar-day-context');
+    const markers = () => Array.from(fixture.nativeElement.querySelectorAll('.activity-calendar-goal-name'))
+      .map((element: Element) => element.textContent?.trim());
+    expect(markers()).toEqual(['Weekly consistency', 'Autumn race']);
+    expect(selectedDayPanel.querySelector('.goal-title')?.textContent).toBe('Autumn race');
+    const readCount = watchEvents.mock.calls.length;
+    const goalReadCount = watchGoals.mock.calls.length;
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges();
+    const values = () => Array.from(fixture.nativeElement.querySelectorAll('.calendar-period-totals-strip dd'))
+      .map((element: Element) => element.textContent?.trim());
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBe(selectedDayPanel);
+    expect(watchEvents).toHaveBeenCalledTimes(readCount);
+    const renamedRace = { ...race, name: 'Autumn 10K', revision: 2 };
+    goalState.next({ status: 'ready', goals: [renamedRace, weekly] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(markers()).toEqual(['Weekly consistency', 'Autumn 10K']);
+    expect(selectedDayPanel.querySelector('.goal-title')?.textContent).toBe('Autumn 10K');
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(watchEvents).toHaveBeenCalledTimes(readCount);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    (selectedDayPanel.querySelector('[aria-label="Edit goal Autumn 10K"]') as HTMLButtonElement).click();
+    expect(goals.open).toHaveBeenCalledExactlyOnceWith(planningUserUid, undefined, renamedRace);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    const invalidationCount = vi.mocked(goals.invalidateProgress).mock.calls.length;
+    events.next([...events.value, createEvent(new Date(2026, 9, 30), 'today')]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['3', '3h', '--', '--', '--']);
+    expect(markers()).toEqual(['Weekly consistency', 'Autumn 10K']);
+    expect(goals.invalidateProgress).toHaveBeenCalledTimes(invalidationCount + 1);
+    expect(watchEvents).toHaveBeenCalledTimes(readCount);
+    fixture.componentInstance.selectView('30d');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(markers()).toEqual(['Weekly consistency', 'Autumn 10K']);
+    fixture.componentInstance.navigateMonth(-1);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    // Adjacent grid dates keep their goal markers but do not contribute to this period's totals.
+    expect(markers()).toEqual(['Weekly consistency']);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--outside .activity-calendar-goal-name')?.textContent)
+      .toBe('Weekly consistency');
+    expect(fixture.componentInstance.calendarModel().periodLabel).not.toContain('30 Oct');
+    fixture.componentInstance.navigateMonth(1);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['2', '2h', '--', '--', '--']);
+    expect(markers()).toEqual(['Weekly consistency', 'Autumn 10K']);
+    expect(fixture.nativeElement.querySelectorAll('app-training-goals-button button')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('app-calendar-day-context')).toBe(selectedDayPanel);
+    expect(watchGoals).toHaveBeenCalledTimes(goalReadCount);
+    vi.useRealTimers();
+  });
+
+  it('isolates goal and totals failures, recovers activity reads, and drops the old account data', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 30, 12));
+    const race = createGoal('race', 'Autumn race', '2026-10-30');
+    const goalState = new BehaviorSubject<TrainingGoalsState>({ status: 'loading', goals: [] });
+    const goals = TestBed.inject(TrainingGoalsService);
+    vi.spyOn(goals, 'isOwner').mockImplementation(uid => uid === viewer()?.uid);
+    vi.spyOn(goals, 'watch').mockImplementation(uid => uid === user.uid ? goalState : of({ status: 'ready', goals: [] }));
+    const pendingEvents = new Subject<EventInterface[]>();
+    const retryEvents = new BehaviorSubject<EventInterface[]>([]);
+    watchEvents.mockReturnValueOnce(pendingEvents).mockReturnValueOnce(retryEvents)
+      .mockReturnValue(of([createEvent(new Date(2026, 9, 30), 'other-user-event')]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const values = () => Array.from(fixture.nativeElement.querySelectorAll('.calendar-period-totals-strip dd'))
+      .map((element: Element) => element.textContent?.trim());
+    expect(values()).toEqual(['--', '--', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-training-goals-day')?.textContent).toContain('Loading goals');
+
+    pendingEvents.next([createEvent(new Date(2026, 9, 30))]);
+    goalState.next({ status: 'error', goals: [] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-training-goals-day')?.textContent).toContain('Goals are unavailable');
+    expect(fixture.nativeElement.querySelector('app-training-goals-button button')).toBeTruthy();
+
+    goalState.next({ status: 'ready', goals: [race] });
+    pendingEvents.error(new Error('offline'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['--', '--', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-goal-name')?.textContent).toBe('Autumn race');
+    expect(fixture.nativeElement.querySelector('app-training-goals-day .goal-title')?.textContent).toBe('Autumn race');
+    (fixture.nativeElement.querySelector('[aria-label="Retry loading calendar"]') as HTMLButtonElement).click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['0', '0m', '0.0 m', '0 m', '--']);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-goal-name')?.textContent).toBe('Autumn race');
+    expect(watchEvents).toHaveBeenCalledTimes(2);
+
+    fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    expect(fixture.nativeElement.querySelector('app-training-goals-button button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-goal-name')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-training-goals-day .goal-title')).toBeNull();
+    goalState.next({ status: 'ready', goals: [{ ...race, name: 'Old account update' }] });
+    retryEvents.next(['old-1', 'old-2', 'old-3'].map(id => createEvent(new Date(2026, 9, 30), id)));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(values()).toEqual(['1', '1h', '--', '--', '--']);
+    expect(fixture.nativeElement.textContent).not.toContain('Old account update');
+    expect(watchEvents).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('does not present unloaded or failed period totals as zero', async () => {
+    const events = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(events.asObservable());
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showPeriodTotals', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const strip = fixture.nativeElement.querySelector('.calendar-period-totals-strip') as HTMLElement;
+    expect(strip.getAttribute('aria-busy')).toBe('true');
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    events.next([]);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals()[0].value).toBe('0');
+    expect(strip.getAttribute('aria-busy')).toBe('false');
+    events.error(new Error('offline'));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.periodTotals().every(metric => metric.value === '--')).toBe(true);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Calendar unavailable');
   });
 
   it('switches the visible Month / 30 days buttons once and disables them during a preference save', async () => {
@@ -996,6 +1172,12 @@ function plannedWorkout(
 function currentLocalDate(day: number): string {
   const now = new Date();
   return [now.getFullYear(), `${now.getMonth() + 1}`.padStart(2, '0'), `${day}`.padStart(2, '0')].join('-');
+}
+
+function createGoal(id: string, name: string, targetLocalDate: string): TrainingGoalV1 {
+  return { schemaVersion: 1, id, name, kind: 'event', lifecycle: 'active', priority: 'normal',
+    startLocalDate: '2026-10-01', targetLocalDate, sportScope: 'all', sport: null, objective: '',
+    planId: null, weeklyTarget: null, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 }
 
 function createEvent(startDate?: Date, eventId = 'event-1'): EventInterface {

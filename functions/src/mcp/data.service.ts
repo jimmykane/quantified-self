@@ -542,6 +542,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  trainingThresholdDependencies?: import('./training-thresholds.service').TrainingThresholdDependencies;
   manualMeasurementDependencies?: import('./manual-measurements.service').ManualMeasurementDependencies;
   activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
@@ -6584,6 +6585,20 @@ export function createMcpDataService(
       }
     },
 
+    async readTrainingGoals(input: import('./training-plans-write.service').TrainingWriteInput & {
+      tool: typeof import('./training-goals.schemas').GOAL_READ_TOOLS[number];
+    }) {
+      const { readTrainingGoals } = await import('./training-goals.service');
+      return readTrainingGoals(input);
+    },
+    async previewTrainingGoalChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingGoalChange } = await import('./training-goals.service');
+      return previewTrainingGoalChange(input);
+    },
+    async applyTrainingGoalChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applyTrainingGoalChange } = await import('./training-goals.service');
+      return applyTrainingGoalChange(input);
+    },
     async previewTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewTrainingChanges } = await import('./training-plans-write.service');
       return previewTrainingChanges(input);
@@ -6626,13 +6641,25 @@ export function createMcpDataService(
       const { previewPlannedWorkoutV3Change } = await import('./training-plans-write.service');
       return previewPlannedWorkoutV3Change(input);
     },
+    async previewPlannedWorkoutV4Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV4Change } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV4Change(input);
+    },
     async previewPlannedWorkoutV3Changes(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewPlannedWorkoutV3Changes } = await import('./training-plans-write.service');
       return previewPlannedWorkoutV3Changes(input);
     },
+    async previewPlannedWorkoutV4Changes(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV4Changes } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV4Changes(input);
+    },
     async previewSavedWorkoutV2Change(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
       return previewSavedWorkoutChange(input, undefined, 'v2');
+    },
+    async previewSavedWorkoutV3Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input, undefined, 'v3');
     },
     async previewSavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
@@ -6707,6 +6734,17 @@ export function createMcpDataService(
 
     async createTimelineNote(input: McpContentWriteInput) {
       return runMcpContentWrite(input, createMcpTimelineNote, 'Timeline note could not be created safely. Try again later.');
+    },
+
+    async trainingThresholds(tool: import('./training-thresholds.schemas').TrainingThresholdTool, input: McpContentWriteInput) {
+      const { runMcpTrainingThresholds } = await import('./training-thresholds.service');
+      try {
+        return await runMcpTrainingThresholds(tool, input, dependencies.trainingThresholdDependencies);
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Training thresholds could not be managed safely.');
+      }
     },
 
     async manualMeasurement(tool: McpManualMeasurementTool, input: McpContentWriteInput) {

@@ -7,6 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
+import { transformProductsForPricing } from './pricing-product-catalog';
 import { LoggerService } from './logger.service';
 import { defer, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -97,7 +98,7 @@ const mockAuth = {
 const mockFunctions = {};
 const mockDialog = { open: () => ({ afterClosed: () => of(true) }) };
 const mockFunctionsService = {
-    call: vi.fn().mockResolvedValue({ data: {} })
+  call: vi.fn().mockResolvedValue({ data: {} })
 };
 
 const productionAnalyticsEnvironment = {
@@ -1192,7 +1193,7 @@ describe('AppPaymentService', () => {
 
     describe('transformProductsForPricing', () => {
         it('should keep monthly and yearly recurring prices for role-split products', () => {
-            const result = (service as any).transformProductsForPricing([
+            const result = transformProductsForPricing([
                 {
                     id: 'prod_role_split',
                     metadata: {},
@@ -1239,7 +1240,7 @@ describe('AppPaymentService', () => {
         });
 
         it('should keep fallback products when they only have yearly prices', () => {
-            const result = (service as any).transformProductsForPricing([
+            const result = transformProductsForPricing([
                 {
                     id: 'prod_legacy_yearly_only',
                     metadata: { role: 'basic' },
@@ -1278,7 +1279,7 @@ describe('AppPaymentService', () => {
         });
 
         it('should merge same-role recurring prices across separate Stripe products into one pricing card', () => {
-            const result = (service as any).transformProductsForPricing([
+            const result = transformProductsForPricing([
                 {
                     id: 'prod_basic_monthly',
                     metadata: { role: 'basic' },

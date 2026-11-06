@@ -326,6 +326,20 @@ describe('importWahooHistory account fencing', () => {
     const request = (): TestRequest => ({ auth: { uid: 'user-1' }, app: { appId: 'test-app' }, data: { ...data } });
     const invoke = addWahooAPIHistoryToQueue as unknown as (request: TestRequest) => Promise<unknown>;
 
+    it.each(['valid', 'beta', 'unsupported site', 'impersonated', 'legacy', 'forged origin'])('handles %s notification consent at the callable boundary', async kind => {
+      const target = { installationId: '00000000-0000-4000-8000-000000000001', generation: '00000000-0000-4000-8000-000000000002' };
+      const input: any = request();
+      input.auth = { ...input.auth, token: kind === 'impersonated' ? { impersonatedBy: 'admin' } : {} };
+      input.rawRequest = { get: () => kind === 'unsupported site' ? 'https://evil.example' : kind === 'beta' ? 'https://beta.quantified-self.io' : 'https://quantified-self.io' };
+      input.data = { ...input.data, background: kind !== 'legacy', notification: { ...target, ...(kind === 'forged origin' ? { origin: 'https://quantified-self.io' } : {}) } };
+      if (kind === 'valid' || kind === 'beta') {
+        await invoke(input);
+        expect(vi.mocked(startManualActivityHistory).mock.calls[0][4]).toEqual({ ...target, origin: kind === 'beta' ? 'https://beta.quantified-self.io' : 'https://quantified-self.io' });
+      } else {
+        await expect(invoke(input)).rejects.toMatchObject({ code: ['unsupported site', 'impersonated'].includes(kind) ? 'permission-denied' : 'invalid-argument' });
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+      }
+    });
     it('accepts exact selected dates without fetching credentials, scanning Wahoo or queuing workouts', async () => {
       const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
       vi.mocked(startManualActivityHistory).mockResolvedValue(projection);

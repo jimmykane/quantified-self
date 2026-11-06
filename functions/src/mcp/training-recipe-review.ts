@@ -33,3 +33,31 @@ export function describeTrainingRecipeSteps(structure: WorkoutStructureV1,
   }
   return ''; // Existing shape summary remains; do not displace lifecycle/range/Lap consent disclosures.
 }
+
+
+/** Distinct zones, not per-step assignments or inferred watt boundaries. */
+export function describeGarminPowerZoneRecipeEffect(before: WorkoutStructureV1 | undefined, after: WorkoutStructureV1): string {
+  const zones = (structure?: WorkoutStructureV1) => [...new Set(structure?.nodes
+    .flatMap(node => node.kind === 'step' ? [node] : node.steps)
+    .flatMap(step => step.targets.flatMap(target => target.mode === 'garmin-zone' ? [target.zone] : [])) ?? [])]
+    .sort((a, b) => a - b);
+  const previous = zones(before), current = zones(after);
+  if (!previous.length && !current.length) return '';
+  const label = (values: number[]) => values.length ? values.map(value => `Z${value}`).join(', ') : 'none';
+  return current.length
+    ? ` Garmin power zones used: ${label(previous)} → ${label(current)}; watts are unknown in QS (Garmin settings).`
+    : ` Garmin power zones removed: ${label(previous)} → none; targets no longer use Garmin zone settings.`;
+}
+
+
+/** Distinct execution windows; full recipes retain exact per-step assignments. */
+export function describeGarminPowerAveragingRecipeEffect(before: WorkoutStructureV1 | undefined, after: WorkoutStructureV1): string {
+  const windows = (structure?: WorkoutStructureV1) => [...new Set(structure?.nodes
+    .flatMap(node => node.kind === 'step' ? [node] : node.steps)
+    .flatMap(step => step.targets.flatMap(target => target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined
+      ? [target.garminPowerAveragingSeconds] : [])) ?? [])].sort((a, b) => a - b);
+  const previous = windows(before), current = windows(after);
+  if (!previous.length && !current.length) return '';
+  const label = (values: number[]) => values.length ? values.map(value => `${value}s`).join('/') : 'default';
+  return ` Garmin power averaging used: ${label(previous)} → ${label(current)}; device support varies.`;
+}

@@ -5,7 +5,7 @@ import { GenkitError, genkit, type GenerateResponseData } from 'genkit';
 import { ValidationError } from 'genkit/schema';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { assistantGenkit } from './model';
-import { defaultDayWorkoutControls } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { DAY_WORKOUT_SYSTEM, generateDayWorkout, generateDayWorkoutSuggestion, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
 import { runDailyWorkoutSuggestion } from './daily-workout-suggestion';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
@@ -42,6 +42,48 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it.each(['override', 'shared'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
+    const deps = dependencies();
+    const powerReference = origin === 'shared' ? { kind: 'training-ftp' as const, sport: request.controls.sport, family: 'running' as const,
+      revision: 3, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 280 } }
+      : { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+        reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [],
+      powerReference, references: [{ kind: 'power', mode: 'relative', minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Power run', rationale: 'Use the confirmed reference.',
+      structure: { version: 1, sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 600 }, targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: powerReference.reference }] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.powerReference).toEqual(powerReference);
+    expect(JSON.stringify(result.draft)).not.toContain('suunto');
+    vi.mocked(deps.store.begin).mockResolvedValueOnce({ response: structuredClone(result) });
+    vi.mocked(deps.context).mockRejectedValue(Error('Settings changed'));
+    expect(await runGenerateDayWorkout(request, auth, deps)).toEqual(result);
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+
+  it.each(['effort-only', 'heart-rate'] as const)('does not attribute an unused power source to an %s generated workout', async preference => {
+    const deps = dependencies();
+    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [] };
+    const heartRate = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: { kind: 'max-heart-rate', bpm: 180 } } as const;
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], powerReference, references: [heartRate] });
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Easy effort', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: preference === 'heart-rate' ? [heartRate] : [] }] } });
+    const result = await runGenerateDayWorkout(request, auth, deps);
+    expect(result.kind).toBe('workout'); expect(result).not.toHaveProperty('powerReference');
+  });
+
+  it('accepts only bounded replacement identity and revision with Training context', () => {
+    expect(parseGenerateDayWorkoutRequest({ ...request, replaceWorkout: { id: 'workout', revision: 2 } }, new Date('2026-10-28T12:00Z')))
+      .toMatchObject({ replaceWorkout: { id: 'workout', revision: 2 } });
+    for (const replaceWorkout of [{ id: '../other', revision: 2 }, { id: 'workout', revision: 0 }, { id: 'workout', revision: 2, uid: 'other' }]) {
+      expect(() => parseGenerateDayWorkoutRequest({ ...request, replaceWorkout }, new Date('2026-10-28T12:00Z'))).toThrow();
+    }
+    expect(() => parseGenerateDayWorkoutRequest({ ...request, controls: { ...request.controls, trainingContext: false },
+      replaceWorkout: { id: 'workout', revision: 2 } }, new Date('2026-10-28T12:00Z'))).toThrow();
+    expect(DAY_WORKOUT_SYSTEM).toContain('unless evidence.replacement');
+  });
   it('dispatches the first-party daily-suggestion mode through the existing callable', async () => {
     const input = { mode: 'daily-suggestion', action: 'status' };
     const status = { localDate: '2026-10-28', state: 'waiting' as const };
@@ -111,6 +153,51 @@ describe('generateDayWorkout callable', () => {
     expect(DAY_WORKOUT_SYSTEM).toContain('time budget, not a requirement to fill it');
     expect(DAY_WORKOUT_SYSTEM).toContain('conditional on rechecking recovery');
     expect(DAY_WORKOUT_SYSTEM).toContain('do not claim an unavailable signal');
+  });
+  it('advertises only supported native-zone generation fields without widening the ordinary decoder', async () => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    for (const target of ['garmin-power-zone', 'auto'] as const) {
+      vi.mocked(assistantGenkit.generate).mockReset().mockResolvedValueOnce({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
+      await generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target } }, evidence);
+      const options = vi.mocked(assistantGenkit.generate).mock.calls.at(-1)![0] as { output: { jsonSchema: object } };
+      const schema = JSON.stringify(options.output.jsonSchema);
+      if (target === 'garmin-power-zone') {
+        expect(schema).toContain('garmin-zone');
+        for (const forbidden of ['minimumWatts', 'minimumPercent', 'reference', 'allowEarlyLap', 'kilojoules', 'repetitions', 'poolLength']) {
+          expect(schema).not.toContain(`"${forbidden}"`);
+        }
+      } else {
+        expect(schema).not.toContain('garmin-zone');
+        expect(schema).toContain('minimumPercent');
+      }
+    }
+  });
+  it.each([undefined, 3, 10, 30] as const)('corrects a native-zone reply and replays the selected averaging (%s) without another charge', async seconds => {
+    const reply = { kind: 'workout', title: 'Garmin zone run', rationale: 'Use your Garmin sport zones.',
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'set', count: 2,
+        steps: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+          targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] }] } };
+    const invalid = structuredClone(reply); invalid.structure.nodes[0].steps[0].targets[0].zone = 8;
+    const { provider, generate } = mockSdkOutputs(JSON.stringify(invalid), JSON.stringify(reply));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    const generationRequest = { ...request, controls: { ...request.controls, target: 'garmin-power-zone' as const, ...(seconds === undefined ? {} : { garminPowerAveragingSeconds: seconds }) } };
+    try {
+      const response = await runGenerateDayWorkout(generationRequest, auth, deps);
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).not.toContain('omit targets without available references');
+      expect(correction).toContain('one primary Garmin power zone from 1 to 7');
+      expect(correction).toContain('no athlete reference');
+      const expected = structuredClone(reply.structure);
+      if (seconds !== undefined) Object.assign(expected.nodes[0].steps[0].targets[0], { garminPowerAveragingSeconds: seconds });
+      expect(response.draft?.structure).toEqual(expected);
+      expect(response).not.toHaveProperty('powerReference');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(deps.release).not.toHaveBeenCalled();
+      vi.mocked(deps.store.begin).mockResolvedValue({ response });
+      await expect(runGenerateDayWorkout(generationRequest, auth, deps)).resolves.toEqual(response);
+      expect(provider).toHaveBeenCalledTimes(2);
+    } finally { generate.mockReset(); }
   });
   it('checks authentication, App Check and legal acceptance before any context/model call', async () => {
     const deps = dependencies();

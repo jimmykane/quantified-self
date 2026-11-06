@@ -35,6 +35,10 @@
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
   },
+  "src/app/components/notification-offer/notification-offer.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles dashboard and tray offer templates with Material controls, reactive permission/preference state, async click handling, account changes and haptics."
+  },
   "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Today rest-day indicator with TestBed to verify owner-fenced signal inputs, shared plan reads, date changes, Material navigation, haptic ownership and destruction cleanup."
@@ -42,6 +46,10 @@
   "src/app/components/plans/day-workout-dialog.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."
+  },
+  "src/app/components/plans/plan-generation-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders Material controls and the shared sport picker in TestBed to verify live goal selection, optional creation, quota, consent defaults, validation and account-safe dialog closure."
   },
   "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
     "environment": "angular",
@@ -111,6 +119,10 @@
     "environment": "angular",
     "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
   },
+  "src/app/components/training-goals/training-goals-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Material goal editor, details and event guidance with signal inputs, account-change effects, validation, haptics and actual rendered actions."
+  },
   "src/app/components/training-load/training-load-dialog.component.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection context and Material dialog providers to exercise reactive forms, component lifecycle, subscription teardown and asynchronous save/reload haptics without opening real overlays."
@@ -118,6 +130,18 @@
   "src/app/components/training-load/training-load-settings.component.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
+  },
+  "src/app/components/workout-power/workout-power-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the standalone Material settings controls and verifies Angular form binding, lifecycle ownership, retained drafts and mutation haptics."
+  },
+  "src/app/helpers/markdown.pipe.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection of the Markdown pipe, DomSanitizer and PendingTasks to verify lazy parsing holds SSR stability through success and failure."
+  },
+  "src/app/resolvers/public-pricing-json-ld.resolver.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the route resolver produces structured pricing data from the injected public catalog service."
   },
   "src/app/services/activity-ascent.service.spec.ts": {
     "environment": "angular",
@@ -130,6 +154,18 @@
   "src/app/services/app-check-diagnostics.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
+  },
+  "src/app/services/app.notification-devices.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed for injected Auth, Firestore and push services, reactive view signals, owner changes and DestroyRef teardown during pending device reads and removal transactions."
+  },
+  "src/app/services/app.notification-invitation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed and DestroyRef to verify Auth lifecycle, authoritative Firestore preference snapshots, account changes and persisted opt-out state."
+  },
+  "src/app/services/app.notification-preferences.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed, injected Auth/Firestore, signals and DestroyRef to verify account-scoped category listeners, transaction retries and stale-session cancellation."
   },
   "src/app/services/app.push.service.spec.ts": {
     "environment": "angular",
@@ -151,6 +187,14 @@
     "environment": "angular",
     "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
   },
+  "src/app/services/plan-generation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and DestroyRef to verify account-bound, single-use Assistant handoffs and lazy dialog navigation."
+  },
+  "src/app/services/public-pricing-catalog.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the catalog service consumes Angular TransferState without a duplicate Firestore read."
+  },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection and the current-user signal to verify bounded owner-only Firestore SDK reads, cancellation and same-UID account replacement fences."
@@ -163,6 +207,10 @@
     "environment": "angular",
     "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
   },
+  "src/app/services/training-goals.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Exercises injected Firestore transactions, user signals, shared progress observables and import invalidation effects with TestBed."
+  },
   "src/app/services/training-load.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
@@ -174,5 +222,9 @@
   "src/app/services/training-workout-added.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses injected Material snackbar/dialog services, DestroyRef and child EnvironmentInjector teardown to verify the owner-bound action survives source-view navigation and cancels on account changes."
+  },
+  "src/app/services/workout-power-settings.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection for Auth, owner-scoped Firestore transactions and lazy Lite reads, including owner/session changes and optimistic concurrency."
   }
 }

@@ -10,6 +10,7 @@ import { MAT_ICON_DEFAULT_OPTIONS, MatIconRegistry } from '@angular/material/ico
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 import type { MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1 } from '@shared/training-plans';
 import { Auth } from 'app/firebase/auth';
 import type { GenerateDayWorkoutResponse } from '@shared/day-workout';
@@ -118,7 +119,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
-      { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate, mutateWithDelivery,
+      { provide: TrainingPlansService, useValue: { watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])), watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate, mutateWithDelivery,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { preview: vi.fn(), mutate: vi.fn(), watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
         watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
@@ -133,6 +134,140 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+
+  it.each(['override', 'shared'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
+    const component = fixture.componentInstance;
+    const draft = response('source-review');
+    draft.powerReference = origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
+      revision: 2, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 280 } }
+      : { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
+        reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    component.controls.set(defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.Running));
+    draft.draft = { title: 'Easy power run', structure: { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: draft.powerReference.reference }] }] } };
+    draft.previousLoads = []; draft.usedContext = ['Manually confirmed power reference for the selected sport']; draft.missingContext = [];
+    component.result.set(draft); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    if (origin === 'shared') {
+      expect(fixture.nativeElement.textContent).toContain('Shared Running FTP 280 watt');
+      expect(fixture.nativeElement.textContent).toContain('Effective since 2026-10-25T12:00:00.000Z');
+      expect(fixture.nativeElement.textContent).not.toContain('Reference date');
+    } else {
+      expect(fixture.nativeElement.textContent).toContain('Suunto · Watch running power · Critical power 250 watt');
+      expect(fixture.nativeElement.textContent).toContain('Reference date 2026-10-25');
+      expect(fixture.nativeElement.textContent).toContain('Z2: 150 watt to below 200 watt');
+    }
+    expect(fixture.nativeElement.textContent).toContain('Saved target values stay fixed');
+    exportDailySuggestionDialogQa(fixture.nativeElement, `power-${origin}-review`);
+  });
+  it('reviews a replacement, saves the same workout with revision guards and preserves provider preferences', async () => {
+    const completion = new BehaviorSubject<TrainingWorkoutCompletionV1[]>([]);
+    vi.mocked(TestBed.inject(TrainingPlansService).watchWorkoutCompletionsForWorkouts).mockReturnValue(completion);
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    const original = { schemaVersion: 1 as const, id: 'existing-workout', planId: null, localDate: '2026-10-28',
+      title: 'Original strength', structure: response('original').draft!.structure, lifecycle: 'planned' as const,
+      revision: 3, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(data, { initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining),
+      replacement: { id: original.id, revision: original.revision, title: original.title }, dailyDelivery: { enabled: true, providers: ['garmin'] } });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('only after approval');
+    component.set('sport', ActivityTypes.Running); expect(component.controls().sport).toBe(ActivityTypes.StrengthTraining);
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(generate.mock.calls[0][1].replaceWorkout).toEqual({ id: original.id, revision: 3 });
+    expect(mutate).not.toHaveBeenCalled(); expect(component.primaryLabel()).toBe('Replace workout');
+    expect(component.showDailyDelivery()).toBe(false);
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'replacement-review');
+    mutate.mockRejectedValueOnce(Error('Response lost')).mockResolvedValue({ mutationId: 'saved', state: { ...schedule.value.state, revision: 8 },
+      plans: [], workouts: [{ ...original, title: 'Replacement strength', revision: 4 }], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
+    await component.add(); expect(component.saveUncertain()).toBe(true);
+    expect(component.primaryLabel()).toBe('Retry replacement');
+    // Completion may arrive after the server committed but before its response is recovered.
+    completion.next([{ schemaVersion: 1, workoutId: original.id, planId: null, provider: 'garmin', matchMethod: 'provider_marker',
+      eventId: 'event', activityId: null, sourceSessionIndex: null, activityStartAtMs: null, scheduledLocalDate: original.localDate,
+      workoutRevisionAtLink: 4, timing: 'on_date', linkedAtMs: 1, updatedAtMs: 1 }]);
+    fixture.detectChanges();
+    expect(component.replacementCurrent()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Close this review and reopen it');
+    const retry = [...fixture.nativeElement.querySelectorAll('button')].find(button => button.textContent.includes('Retry replacement'));
+    expect(retry?.disabled).toBe(false);
+    await component.primaryAction(); fixture.detectChanges();
+    expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
+    expect(mutate.mock.calls[0][0]).toMatchObject({ requireUncompletedWorkout: true, expectedRevisions: expect.arrayContaining([
+      { scope: 'state', id: 'current', revision: 7 }, { scope: 'workout', id: original.id, revision: 3 }]),
+      operation: { kind: 'update-workout', workoutId: original.id, planId: null, localDate: original.localDate } });
+    expect(mutateWithDelivery).not.toHaveBeenCalled();
+    expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
+    expect(component.savedWorkoutId()).toBe(original.id);
+    expect(component.savedWorkout()?.title).toBe('Replacement strength');
+    expect(component.savedDetails().title).toBe('Replacement strength');
+    // The state listener may advance before the workout listener supplies the replacement.
+    schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8, currentWorkoutCount: 1 } });
+    expect(component.savedWorkout()?.revision).toBe(4);
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 4, title: 'Replacement strength' }] });
+    expect(component.savedWorkout()?.title).toBe('Replacement strength');
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 5, title: 'Later edit' }] });
+    expect(component.savedWorkout()?.title).toBe('Later edit');
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 6, lifecycle: 'deleted' }] });
+    expect(component.savedWorkout()).toBeNull(); expect(component.savedSyncAvailable()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Workout replaced');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'regenerated-saved');
+  });
+  it('blocks a changed replacement and keeps the original when AI recommends rest', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA), original = { schemaVersion: 1 as const, id: 'existing-workout', planId: null,
+      localDate: '2026-10-28', title: 'Original strength', structure: response('original').draft!.structure,
+      lifecycle: 'planned' as const, revision: 3, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(data, { initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining),
+      replacement: { id: original.id, revision: 3, title: original.title } });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    generate.mockImplementation(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null }));
+    await component.generate(); expect(component.primaryLabel()).toBe('Keep current workout');
+    await component.primaryAction(); expect(close).toHaveBeenCalled(); expect(setCalendarRestDay).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+    schedule.next({ ...schedule.value, workouts: [{ ...original, revision: 4 }] });
+    expect(component.replacementCurrent()).toBe(false); expect(component.approvalValid()).toBe(false);
+    generate.mockClear(); await component.generate(); expect(generate).not.toHaveBeenCalled();
+  });
+  it.each(['completed', 'unavailable'] as const)('stops replacement approval when completion becomes %s during review', async status => {
+    const completion = new Subject<TrainingWorkoutCompletionV1[]>();
+    vi.mocked(TestBed.inject(TrainingPlansService).watchWorkoutCompletionsForWorkouts).mockReturnValue(completion);
+    const original = { schemaVersion: 1 as const, id: 'existing', planId: null, localDate: '2026-10-28', title: 'Original',
+      structure: response('original').draft!.structure, lifecycle: 'planned' as const, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.next({ ...schedule.value, workouts: [original] });
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { replacement: { id: original.id, revision: 1, title: original.title },
+      initialControls: defaultDayWorkoutControls(original.localDate, 'UTC', ActivityTypes.StrengthTraining) });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Checking the current workout');
+    expect(fixture.nativeElement.textContent).not.toContain('was completed, or could not be checked');
+    expect(component.replacementCurrent()).toBe(false); await component.generate(); expect(generate).not.toHaveBeenCalled();
+    completion.next([]); await component.generate(); expect(component.approvalValid()).toBe(true);
+    if (status === 'unavailable') completion.error(new Error('Unavailable'));
+    else completion.next([{ schemaVersion: 1, workoutId: original.id, planId: null, provider: 'garmin', matchMethod: 'provider_marker',
+      eventId: 'event', activityId: null, sourceSessionIndex: null, activityStartAtMs: null, scheduledLocalDate: original.localDate,
+      workoutRevisionAtLink: original.revision, timing: 'on_date', linkedAtMs: 1, updatedAtMs: 1 }]);
+    fixture.detectChanges();
+    expect(component.approvalValid()).toBe(false); expect(component.replacementCurrent()).toBe(false);
+    await component.add(); expect(mutate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('was completed, or could not be checked');
+    const regenerate = [...fixture.nativeElement.querySelectorAll('button')].find(button => button.textContent.includes('Generate again'));
+    expect(regenerate?.disabled).toBe(true);
+    fixture.destroy(); expect(completion.observed).toBe(false);
+  });
+  it('uses persistent daily regeneration without claiming an included allowance', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    const regenerateSuggestion = vi.fn(async request => response(request.requestId));
+    Object.assign(data, { regenerateSuggestion, dailyDelivery: { enabled: true, providers: ['garmin'] }, initialControls: defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining) });
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent), component = fixture.componentInstance;
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(regenerateSuggestion).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(component.primaryLabel()).toBe('Add & send'); component.setSkipSendingToday(true);
+    expect(component.primaryLabel()).toBe('Add workout'); expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
+    expect(fixture.nativeElement.textContent).not.toContain('Assistant allowance unchanged');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'regenerated-review');
+  });
   it('explains a standalone calendar rest day and keeps the rest result without another generation', async () => {
     TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => of({ schemaVersion: 1, localDate: '2026-10-28', isRestDay: true, revision: 1 });
     const fixture = await render(); const component = fixture.componentInstance;
@@ -650,11 +785,11 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.more.set(true); fixture.detectChanges();
     const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox input')] as HTMLInputElement[];
-    expect(inputs).toHaveLength(11);
+    expect(inputs).toHaveLength(12);
     expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
-    expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true, goalsContext: true });
     component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
     const choice = (label: string) => [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox')]
       .find((element: HTMLElement) => element.textContent?.trim() === label)!.querySelector('input') as HTMLInputElement;
@@ -666,6 +801,7 @@ describe('DayWorkoutDialogComponent', () => {
     expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
     component.showSettings.set(true); fixture.detectChanges(); choice('Training plans & workouts').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
+    expect(choice('Goals').disabled).toBe(true);
     expect(choice('Reuse planned weights').disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
   });
   it('shows every data choice selected initially and disables derived readiness when a source is turned off', async () => {
@@ -723,7 +859,7 @@ describe('DayWorkoutDialogComponent', () => {
     for (const signal of ['Freshness', 'training load', 'HRV', 'Sleep', 'Overnight heart rate', 'Readiness', 'Feeling / RPE']) {
       expect(personalization.textContent).toContain(signal);
     }
-    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true, goalsContext: true });
     expect(element.querySelector('input[type="date"]')).toBeNull();
     expect(element.querySelector('.review-destination')!.textContent).toContain('Oct 28, 2026');
     expect(element.querySelector('mat-dialog-actions')!.textContent).toContain('Generate workout');
@@ -936,4 +1072,21 @@ describe('DayWorkoutDialogComponent', () => {
     expect(component.result()).toBeNull(); expect(close).toHaveBeenCalledOnce();
     expect(generate.mock.calls[1][2]()).toBe(false);
   });
+  it('offers Garmin averaging only for power choices and clears it on incompatible selections', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    component.set('sport', ActivityTypes.Running); component.more.set(true); fixture.detectChanges();
+    const find = () => fixture.debugElement.queryAll(By.css('mat-select')).map(element => element.componentInstance)
+      .find(select => select.options.some((option: { viewValue: string }) => option.viewValue === '30 seconds'));
+    expect(find().value).toBe(0); haptics.selection.mockClear();
+    find().selectionChange.emit({ value: 10 }); fixture.detectChanges();
+    expect(component.controls().garminPowerAveragingSeconds).toBe(10); expect(haptics.selection).toHaveBeenCalledOnce();
+    component.setAveraging(10); component.setAveraging(5); expect(haptics.selection).toHaveBeenCalledOnce();
+    component.set('target', 'heart-rate'); fixture.detectChanges();
+    expect(component.controls()).not.toHaveProperty('garminPowerAveragingSeconds'); expect(find()).toBeUndefined();
+    component.set('target', 'garmin-power-zone'); component.setAveraging(30); fixture.detectChanges();
+    expect(component.controls().garminPowerAveragingSeconds).toBe(30);
+    component.set('sport', ActivityTypes.StrengthTraining); fixture.detectChanges();
+    expect(component.controls()).not.toHaveProperty('garminPowerAveragingSeconds'); expect(find()).toBeUndefined();
+  });
+
 });

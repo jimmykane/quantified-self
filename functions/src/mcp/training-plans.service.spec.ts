@@ -1,3 +1,4 @@
+import { parseWorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
@@ -62,6 +63,22 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each(['failed', 'needs_attention', 'reconnect_required', 'connection_repair'])(
+    'retains the existing %s sync projection independently of private notification receipts', async status => {
+      const f = fixture(); f.collections.scheduledWorkouts = { w1: workout(null) };
+      f.collections.trainingDeliverySettings.garmin = { scope: 'workout', scopeId: 'w1', provider: 'garmin', enabled: true,
+        suppressed: false, timeZone: 'UTC', destinationKey: 'private-destination', associationPlanId: null, updatedAtMs: 1 };
+      const id = await trainingDeliverySummaryIdentity('owner', 'garmin', 'private-destination', 'w1');
+      f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: null, provider: 'garmin', status,
+        differsFromQS: true, hasRemoteCopy: false, timeZone: 'UTC', lastAttemptAtMs: 1, lastAcceptedAtMs: null, updatedAtMs: 2 };
+      const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const args = { scope: 'workout', reference: workoutRef };
+      const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+      expect(result.services).toEqual([expect.objectContaining({ syncedWorkouts: 0, outcomes: [{ status, count: 1 }] })]);
+      expect(JSON.stringify(result)).not.toMatch(/private-destination|episode|trainingDueAt|categoryRevision/);
+      Object.assign(f.collections.trainingDeliveryStatuses[id], { notificationReceipt: { episode: 'private-episode', categoryRevision: 3 } });
+      await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+    });
   it('reads bounded standalone rest intent without a plan and excludes removal/storage metadata', async () => {
     const f = fixture(); delete f.collections.trainingPlans.p1;
     f.collections.trainingRestDays['2026-09-15'] = { schemaVersion: 1, localDate: '2026-09-15', isRestDay: true, revision: 1 };
@@ -402,6 +419,40 @@ describe('Training plan MCP reads', () => {
         code: issue.code, field: issue.path, message: issue.message })) };
     }));
     expect(JSON.stringify(f.structures.w1)).toBe(before);
+  });
+
+
+  it('reads frozen shared FTP targets without fetching current thresholds or exposing private provenance', async () => {
+    const f = fixture();
+    const target = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'functional-threshold-power', watts: 280 } };
+    f.structures.w1 = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'time', seconds: 600 }, targets: [target] }] };
+    f.collections.trainingLoadPolicies = { running: { functionalThresholdPower: 300, revision: 9, effectiveAt: 'private-effective' } };
+    f.collections.config = { settings: { workoutPower: { profiles: [{ source: 'private-override' }] } } };
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_planned_workout_v4'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(result.workout.structure.nodes[0]).toMatchObject({ targets: [target] });
+      expect(JSON.stringify(result)).not.toMatch(/private-|training-ftp|effectiveAt|powerReference|workoutPower|300/);
+      await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
+    }
+  });
+
+  it.each(['functional-threshold-power', 'critical-power'] as const)('reads generated %s snapshots without exposing private power settings', async kind => {
+    const f = fixture();
+    const profile = parseWorkoutPowerProfileV1({ sport: ActivityTypes.Running, provider: 'suunto', source: 'Private source label',
+      reference: { kind, watts: 250 }, referenceDate: '2026-11-01', zoneUpperBoundsWatts: [150, 200] });
+    const target = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: profile.reference };
+    f.structures.w1 = { version: 1, sport: profile.sport, nodes: [{ kind: 'step', id: 'power', purpose: 'work',
+      ending: { kind: 'time', seconds: 600 }, targets: [target] }] };
+    f.collections.config = { settings: { workoutPower: { version: 1, revision: 1, profiles: [profile] } } };
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(result.workout.structure.nodes[0]).toMatchObject({ targets: [target] });
+      expect(JSON.stringify(result)).not.toMatch(/Private source label|suunto|zoneUpperBoundsWatts|referenceDate|workoutPower/);
+    }
   });
 
   it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
@@ -835,7 +886,7 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_training_sync_status', args)).rejects.toMatchObject({ code: 'invalid_request' });
     await expect(f.run('get_planned_workout_completion', { workoutRef })).rejects.toMatchObject({ code: 'invalid_request' });
   });
-  it.each(['delivered', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
+  it.each(['delivered', 'pending', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
       suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-account', associationPlanId: null, updatedAtMs: 1 };
@@ -1310,4 +1361,54 @@ describe('complete early Lap reads', () => {
     await expect(f.run('get_saved_workout_v2', { savedWorkoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
   });
 
+});
+
+
+describe('Garmin power zone safe full reads', () => {
+  it('returns exact symbolic scheduled and saved targets only on additive tools', async () => {
+    const f = fixture();
+    const native = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: [{ kind: 'step', id: 'zone', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+        targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] }] };
+    f.structures.w1 = native;
+    const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const current = TRAINING_READ_OUTPUTS.get_planned_workout_v4.parse(await f.run('get_planned_workout_v4', { workoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(current.workout.structure))).toEqual(native);
+    expect(JSON.stringify(current.workout.displaySteps)).toContain('Garmin power zone 2');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const)
+      await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v4');
+    await expect(f.run('get_planned_workout_v4', { workoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+    await expect(f.run('get_planned_workout_v4', { workoutRef: ref }, undefined, 'foreign')).rejects.toThrow();
+    f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Zone', status: 'active',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+    f.structures.library = native;
+    const savedRef = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout_v3.parse(await f.run('get_saved_workout_v3', { savedWorkoutRef: savedRef })).savedWorkout.structure).toEqual(native);
+    for (const tool of ['get_saved_workout', 'get_saved_workout_v2'] as const)
+      await expect(f.run(tool, { savedWorkoutRef: savedRef })).rejects.toThrow('get_saved_workout_v3');
+  });
+});
+
+
+describe('Garmin averaging safe complete reads', () => {
+  it.each([3, 10, 30] as const)('returns %i seconds and fails legacy readers without stripping it', seconds => {
+    return (async () => {
+      const f = fixture();
+      const structure = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
+        ending: { kind: 'time', seconds: 60 }, targets: [{ kind: 'power', mode: 'absolute', minimumWatts: 150, maximumWatts: 200, garminPowerAveragingSeconds: seconds }] }] };
+      f.structures.w1 = structure;
+      const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+      const read = TRAINING_READ_OUTPUTS.get_planned_workout_v4.parse(await f.run('get_planned_workout_v4', { workoutRef: ref }));
+      expect(read.workout.structure).toEqual(structure);
+      expect(JSON.stringify(read.workout.displaySteps)).toContain(`Garmin ${seconds}-second average`);
+      for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const)
+        await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v4');
+      f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Power', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+      f.structures.library = structure;
+      const savedRef = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+      expect(TRAINING_READ_OUTPUTS.get_saved_workout_v3.parse(await f.run('get_saved_workout_v3', { savedWorkoutRef: savedRef })).savedWorkout.structure).toEqual(structure);
+      for (const tool of ['get_saved_workout', 'get_saved_workout_v2'] as const)
+        await expect(f.run(tool, { savedWorkoutRef: savedRef })).rejects.toThrow('get_saved_workout_v3');
+    })();
+  });
 });

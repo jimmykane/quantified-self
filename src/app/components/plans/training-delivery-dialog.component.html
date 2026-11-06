@@ -96,11 +96,8 @@
           @if (preview.result.workoutCompatibility === 'unsupported' && (draft.action === 'send' || draft.action === 'resume')) {
             <p role="alert">{{ draftLabel() }} cannot receive this workout. Review the reasons below, then edit the workout before trying again. This action will not send an update; an earlier copy may remain unchanged.</p>
           } @else if (preview.result.warningCount) {
-            @if (mappingApprovalCount()) {
-              <p>{{ mappingApprovalCount() }} {{ mappingApprovalCount() === 1 ? 'workout needs' : 'workouts need' }} review of mapping differences before delivery. Unsupported workouts cannot be sent.</p>
-            } @else {
-              <p>Provider limitations are explained below. No separate mapping approval is needed for these limitations. Unsupported workouts cannot be sent.</p>
-            }
+            <p>{{ preview.result.warningCount }} {{ preview.result.warningCount === 1 ? 'workout has' : 'workouts have' }} provider adjustments.</p>
+            <p>Provider adjustments are explained below and apply automatically with sync. No separate mapping approval is needed. Unsupported workouts cannot be sent.</p>
           }
         }
         @if (preview.result.issues.length) {
@@ -152,6 +149,7 @@
           }
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>
+            <p class="delivery-caption">Supported provider adjustments apply automatically to new workouts and edits while sync is enabled. Later workouts sync when their dates enter the scheduling window.</p>
             @if (data.scope === 'plan') {
               <p class="delivery-caption">Upcoming workouts are sent individually. New workouts and edits sync while this plan is active.</p>
               @if (scopeRecord() && scopeRecord()?.lifecycle !== 'active') { <p class="delivery-caption">{{ row.setting?.enabled ? 'This plan is inactive. Future copies are withdrawn; syncing resumes only after activation.' : 'This plan is inactive. Activate it and enable plan sync to send workouts.' }}</p> }
@@ -201,9 +199,6 @@
                 }
                 @if (row.canFreshGuide && row.setupAvailable && canSend()) {
                   <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'fresh-guide')">Create another Guide</button>
-                }
-                @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
-                  <button mat-flat-button appHapticTap type="button" [attr.aria-label]="'Review workout changes for ' + row.label" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review</button>
                 }
               }
               @if (row.wahooReconnect) {

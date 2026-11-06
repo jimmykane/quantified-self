@@ -172,6 +172,7 @@ function assistantAccessGeneration(data: admin.firestore.DocumentData, conversat
     data.timelineNoteChangesEnabled === true,
     data.measurementChangesEnabled === true,
     data.reflectionChangesEnabled === true,
+    data.trainingThresholdsEnabled === true,
   ]);
 }
 
@@ -193,6 +194,7 @@ function assertAssistantConversationData(
   const requiresNotes = requiredScopes.includes(TIMELINE_NOTES_WRITE_SCOPE);
   const requiresReflections = requiredScopes.includes('workout-reflections:read');
   const requiresMeasurements = requiredScopes.includes('measurements:write');
+  const requiresThresholds = requiredScopes.includes('training-thresholds:read');
   if (!conversationId || conversationId.length > 120
     || input.connectionId !== expectedConnectionId
     || !data || data.conversationId !== conversationId || expiresAtMs <= nowMs
@@ -200,6 +202,7 @@ function assertAssistantConversationData(
     || (requiresNotes && (data.timelineNotesEnabled !== true || data.timelineNoteChangesEnabled !== true))
     || (requiresReflections && data.reflectionChangesEnabled !== true)
     || (requiresMeasurements && data.measurementChangesEnabled !== true)
+    || (requiresThresholds && data.trainingThresholdsEnabled !== true)
     || (input.assistantProposalRef !== undefined
       && (data.pendingContentProposal?.proposalRef !== input.assistantProposalRef
         || !Number.isSafeInteger(data.pendingContentProposal?.expiresAtMs)
@@ -234,29 +237,36 @@ function assertConnectionData(
   return accessGeneration(data);
 }
 
-export async function assertConnectionAuthorityInTransaction(
+export async function readConnectionAuthorityInTransaction(
   deps: Pick<McpContentWriteDependencies, 'db' | 'now'>,
   transaction: admin.firestore.Transaction,
   input: McpContentWriteInput,
   requiredScopes: readonly string[],
   expectedProposalKind?: AssistantContentProposalKind,
-): Promise<void> {
+): Promise<string> {
   if (input.assistantConversationId) {
     const [conversation] = await transaction.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'trainingThresholdsEnabled', 'pendingContentProposal'] },
     );
-    assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
+    return assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now(), expectedProposalKind);
-    return;
   }
   validateExternalConnectionId(input.connectionId);
   const [connection] = await transaction.getAll(
     deps.db.collection('users').doc(input.uid).collection('mcpConnections').doc(input.connectionId),
     { fieldMask: ['scopes', 'status', 'revokedAtMs', 'grantId', 'createdAtMs'] },
   );
-  assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, input.grantId);
+  return assertConnectionData(connection.exists ? connection.data() : undefined, requiredScopes, input.grantId);
+}
+
+/** Existing domain preconditions deliberately return no data. */
+export async function assertConnectionAuthorityInTransaction(
+  deps: Pick<McpContentWriteDependencies, 'db' | 'now'>, transaction: admin.firestore.Transaction,
+  input: McpContentWriteInput, requiredScopes: readonly string[], expectedProposalKind?: AssistantContentProposalKind,
+): Promise<void> {
+  await readConnectionAuthorityInTransaction(deps, transaction, input, requiredScopes, expectedProposalKind);
 }
 
 export async function readAccessGeneration(
@@ -271,7 +281,7 @@ export async function readAccessGeneration(
     const [conversation] = await deps.db.getAll(
       deps.db.collection('users').doc(input.uid).collection('assistantConversations').doc('active'),
       { fieldMask: ['conversationId', 'expireAt', 'activityTagChangesEnabled', 'timelineNotesEnabled',
-        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'pendingContentProposal'] },
+        'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'trainingThresholdsEnabled', 'pendingContentProposal'] },
     );
     return assertAssistantConversationData(input, conversation.exists ? conversation.data() : undefined,
       requiredScopes, deps.now());

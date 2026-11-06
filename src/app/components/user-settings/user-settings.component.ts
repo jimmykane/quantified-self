@@ -67,7 +67,7 @@ import {
   normalizeAppFormatLocalePreference,
 } from '../../shared/adapters/app-locale';
 
-type SettingsSectionId = 'notifications' | 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account' | 'data-management';
+type SettingsSectionId = 'notifications' | 'workout-power' | 'training' | 'privacy' | 'dashboard' | 'map' | 'charts' | 'units' | 'account' | 'data-management';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -105,6 +105,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     'units',
     'dashboard',
     'training',
+    'workout-power',
     'charts',
     'map',
     'notifications',
@@ -131,6 +132,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       description: 'Dated sport preferences for fitness and fatigue',
       icon: 'monitor_heart',
     },
+    { id: 'workout-power', label: 'Workout power', description: 'Sport and source references for generated workouts', icon: 'bolt' },
     {
       id: 'charts',
       label: 'Charts',
@@ -143,7 +145,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       description: 'Route rendering defaults',
       icon: 'map',
     },
-    { id: 'notifications', label: 'Notifications', description: 'Device permissions and test notifications', icon: 'notifications' },
+    { id: 'notifications', label: 'Notifications', description: 'Categories, device permissions and test notifications', icon: 'notifications' },
     {
       id: 'privacy',
       label: 'Privacy & emails',
@@ -164,8 +166,8 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     },
   ];
   public readonly settingsGroups = [
-    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 5) },
-    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(5) },
+    { id: 'preferences', label: 'Preferences', sections: this.settingsSectionOptions.slice(0, 6) },
+    { id: 'privacy-account', label: 'Privacy & account', sections: this.settingsSectionOptions.slice(6) },
   ];
   public readonly brandTextMaxLength = 60;
 

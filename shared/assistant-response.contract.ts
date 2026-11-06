@@ -1,3 +1,5 @@
+import { parseTrainingGoalReview } from './training-goal-review';
+import { isTrainingThresholdReview } from './training-thresholds';
 import { parseTrainingCalendarRestDayReview } from './training-rest-days';
 import { validateReflectionFields } from './workout-reflection';
 import { isAssistantWorkoutReviews } from './assistant-workout-review';
@@ -125,7 +127,7 @@ function isFiniteNumber(value: unknown): value is number {
 export function isAssistantTrainingProposal(value: unknown): value is AssistantTrainingProposalPreview {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['proposalRef', 'permissionMode', 'expiresAtMs', 'scheduleRevision', 'summary',
-      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview', 'restDayReview', 'calendarRestDayReview'])
+      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview', 'restDayReview', 'calendarRestDayReview', 'goalReview'])
     || !isBoundedString(value.proposalRef, 1, 2048)
     || !['schedule', 'delivery', 'combined'].includes(`${value.permissionMode}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
@@ -157,6 +159,13 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
     || value.changes.some(change => isRecord(change) && change.kind === 'garmin-workout-replacement');
   if (!changesValid || !providersValid) return false;
   const changeIndices = new Set(value.changes.map(change => change.index));
+  const goals = value.changes.some(change => isRecord(change) && change.kind === 'set-training-goal');
+  if (goals || value.goalReview !== undefined) {
+    if (!goals || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0
+      || value.providerPreviews.length !== 0 || value.workoutReviews !== undefined || value.phaseReview !== undefined
+      || value.restDayReview !== undefined || value.calendarRestDayReview !== undefined) return false;
+    try { parseTrainingGoalReview(value.goalReview); } catch { return false; }
+  }
   if (value.workoutReviews !== undefined && (!isAssistantWorkoutReviews(value.workoutReviews)
     || value.workoutReviews.some(review => !changeIndices.has(review.index)))) return false;
   const phases = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-phases');
@@ -213,16 +222,20 @@ function hasTimelineNoteFields(value: Record<string, unknown>): boolean {
 
 export function isAssistantContentProposal(value: unknown, requireContentReview = true): value is AssistantContentProposalPreview {
   if (!isRecord(value)
-    || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments', 'measurementReview', 'reflectionReview'])
+    || !hasOnlyKeys(value, ['proposalRef', 'kind', 'expiresAtMs', 'summary', 'requiresConfirmation', 'arguments', 'measurementReview', 'reflectionReview', 'thresholdReview'])
     || !isBoundedString(value.proposalRef, 1, 120)
     || !['update_event_tags', 'create_timeline_note', 'update_timeline_note', 'delete_timeline_note',
-      'create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement', 'save_workout_reflection', 'delete_workout_reflection']
+      'create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement', 'save_workout_reflection', 'delete_workout_reflection', 'apply_training_threshold_change']
       .includes(`${value.kind}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
     || !isBoundedString(value.summary, 1, 500)
     || value.requiresConfirmation !== true
     || !isRecord(value.arguments)) return false;
   const args = value.arguments;
+  if (value.kind === 'apply_training_threshold_change') return hasOnlyKeys(args, ['proposalRef'])
+    && isBoundedString(args.proposalRef, 1, 2048) && isTrainingThresholdReview(value.thresholdReview)
+    && value.measurementReview === undefined && value.reflectionReview === undefined && getUtf8ByteLength(value) <= 8 * 1024;
+  if (value.thresholdReview !== undefined) return false;
   if (String(value.kind).endsWith('_manual_measurement')) {
     if (value.reflectionReview !== undefined) return false;
     if (requireContentReview && value.measurementReview === undefined) return false;
@@ -538,7 +551,7 @@ export function validateAssistantChatResponse(
     return { ok: false, reason: 'response_not_object' };
   }
   if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled',
-    'activityTagChangesEnabled', 'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'trainingPlansEnabled',
+    'activityTagChangesEnabled', 'timelineNoteChangesEnabled', 'measurementChangesEnabled', 'reflectionChangesEnabled', 'trainingThresholdsEnabled', 'trainingPlansEnabled',
     'trainingPlanChangesEnabled', 'trainingDeliveryEnabled', 'pendingTrainingProposal', 'pendingContentProposal'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
@@ -562,6 +575,7 @@ export function validateAssistantChatResponse(
     return { ok: false, reason: 'invalid_timeline_note_changes_access' };
   }
   if (value.reflectionChangesEnabled !== undefined && typeof value.reflectionChangesEnabled !== 'boolean') return { ok: false, reason: 'invalid_reflection_access' };
+  if (value.trainingThresholdsEnabled !== undefined && typeof value.trainingThresholdsEnabled !== 'boolean') return { ok: false, reason: 'invalid_threshold_access' };
   if (value.measurementChangesEnabled !== undefined && typeof value.measurementChangesEnabled !== 'boolean') {
     return { ok: false, reason: 'invalid_measurement_changes_setting' };
   }

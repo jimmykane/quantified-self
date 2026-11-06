@@ -5,12 +5,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { AppAnalyticsService, ToolCompareEntrySource } from '../../services/app.analytics.service';
 
+
 interface ToolCard {
   title: string;
   description: string;
   icon: string;
   route: string;
-  status: 'available' | 'planned';
+  status: 'Available' | 'Available in your account';
+  actionLabel: string;
 }
 
 @Component({
@@ -24,27 +26,31 @@ interface ToolCard {
 export class ToolsHubPageComponent {
   private analyticsService = inject(AppAnalyticsService);
 
+
   readonly tools: ToolCard[] = [
     {
       title: 'File comparison',
       description: 'Compare FIT, GPX, TCX, JSON, and SML recordings as one saved benchmark event.',
       icon: 'compare_arrows',
       route: '/tools/compare',
-      status: 'available',
+      status: 'Available',
+      actionLabel: 'Open',
     },
     {
       title: 'File analysis',
-      description: 'Inspect a single activity file and keep the source data in your archive.',
+      description: 'Upload an activity from Dashboard, then open its details to review maps, charts and statistics in your archive.',
       icon: 'query_stats',
-      route: '/features/fit-gpx-tcx-file-analyzer',
-      status: 'planned',
+      route: '/dashboard',
+      status: 'Available in your account',
+      actionLabel: 'Open Dashboard',
     },
     {
       title: 'Device benchmarks',
-      description: 'Open saved benchmark reports for review, coaching, and QA workflows.',
+      description: 'Open Saved File Comparisons to review existing benchmark reports or generate a report from a saved comparison.',
       icon: 'analytics',
-      route: '/features/workout-data-comparison',
-      status: 'planned',
+      route: '/tools/compare/saved',
+      status: 'Available in your account',
+      actionLabel: 'Open Saved Comparisons',
     },
   ];
 

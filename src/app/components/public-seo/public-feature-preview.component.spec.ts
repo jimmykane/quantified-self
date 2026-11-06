@@ -14,22 +14,42 @@ import { DashboardHealthService } from '../../services/dashboard-health.service'
 import { HealthOverviewPreviewComponent } from './health-overview-preview.component';
 import { TrainingExplorerPreviewComponent } from './training-explorer-preview.component';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
+import { HomeSignalChartsPreviewComponent } from '../home/home-signal-charts-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 
 describe('PublicFeaturePreviewComponent', () => {
   let fixture: ComponentFixture<PublicFeaturePreviewComponent>;
   let wait: MockInstance<typeof chartViewportQueue.wait>;
+  const warmCharts = vi.fn();
 
   beforeEach(async () => {
     wait = vi.spyOn(chartViewportQueue, 'wait');
+    warmCharts.mockReset().mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
       deferBlockBehavior: DeferBlockBehavior.Manual,
       imports: [PublicFeaturePreviewComponent, MatIconTestingModule, NoopAnimationsModule],
+      providers: [{ provide: EChartsLoaderService, useValue: { load: warmCharts } }],
     }).compileComponents();
   });
 
   afterEach(() => wait.mockRestore());
+
+  it('starts the hero and warms its chart library without waiting for viewport entry', async () => {
+    renderPlaceholder('training-hero');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.previewReady()).toBe(true);
+    expect(warmCharts).toHaveBeenCalledOnce();
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hero eligible to render if speculative library warming fails', async () => {
+    warmCharts.mockRejectedValueOnce(new Error('Temporary chunk failure'));
+    renderPlaceholder('training-hero');
+    await fixture.whenStable();
+    expect(fixture.componentInstance.previewReady()).toBe(true);
+    expect(warmCharts).toHaveBeenCalledOnce();
+  });
 
   it('prepares an opted-in example before viewport entry through the shared chart queue', async () => {
     let approach: (ready: boolean) => void;
@@ -74,17 +94,19 @@ describe('PublicFeaturePreviewComponent', () => {
     renderPlaceholder('training-signals');
     await fixture.whenStable();
     expect(wait).not.toHaveBeenCalled();
+    expect(warmCharts).not.toHaveBeenCalled();
   });
 
-  it('preserves server placeholders without queuing browser work', async () => {
+  it.each(['training-signals', 'training-hero'])('preserves the %s server placeholder without loading browser charts', async previewKey => {
     TestBed.overrideProvider(PLATFORM_ID, { useValue: 'server' });
     fixture = TestBed.createComponent(PublicFeaturePreviewComponent);
-    fixture.componentRef.setInput('previewKey', 'training-signals');
+    fixture.componentRef.setInput('previewKey', previewKey);
     fixture.componentRef.setInput('prepareAhead', true);
     fixture.detectChanges();
     await fixture.whenStable();
     expect(wait).not.toHaveBeenCalled();
     expect(fixture.componentInstance.previewReady()).toBe(false);
+    expect(warmCharts).not.toHaveBeenCalled();
   });
 
   function renderPlaceholder(previewKey: PublicFeaturePreviewKey): HTMLElement {
@@ -102,6 +124,7 @@ describe('PublicFeaturePreviewComponent', () => {
     ['health-weight', 'health'],
     ['training-snapshot', 'training'],
     ['training-signals', 'signals'],
+    ['training-hero', 'hero'],
     ['training-readiness', 'readiness'],
     ['training-explorer', 'explorer'],
     ['training-plans', 'training-plans'],
@@ -130,6 +153,32 @@ describe('PublicFeaturePreviewComponent', () => {
     const blocks = await fixture.getDeferBlocks();
     await blocks[0].render(DeferBlockState.Complete);
     expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
+  });
+
+  it('hydrates the hero chart inside its persistent layout reservation', async () => {
+    TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });
+    TestBed.overrideProvider(EChartsLoaderService, { useValue: {
+      load: warmCharts,
+      init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn() }),
+      setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+      subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
+    } });
+    const element = renderPlaceholder('training-hero');
+    const reservation = element.querySelector('.preview-content--hero') as HTMLElement;
+    expect(reservation).toBeTruthy();
+    expect(element.classList.contains('preview--hero')).toBe(true);
+    expect(reservation.querySelector('.preview-placeholder--hero')).toBeTruthy();
+    const [block] = await fixture.getDeferBlocks();
+    await block.render(DeferBlockState.Complete);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const preview = fixture.debugElement.query(By.directive(HomeSignalChartsPreviewComponent));
+    expect(preview.componentInstance.hero()).toBe(true);
+    expect(preview.nativeElement.closest('.preview-content--hero')).toBe(reservation);
+    expect(element.querySelector('.preview-content--hero')).toBe(reservation);
+    expect(reservation.querySelector('.preview-placeholder--hero')).toBeNull();
+    expect(reservation.querySelectorAll('app-form-chart')).toHaveLength(1);
+    expect(reservation.querySelectorAll('.hero-summary mat-card')).toHaveLength(2);
   });
   it('hydrates the current Health overview as a static example inside the snippet exclusion', async () => {
     const watch = vi.fn(), selection = vi.fn();

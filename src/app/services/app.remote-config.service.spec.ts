@@ -90,6 +90,15 @@ describe('AppRemoteConfigService', () => {
         vi.clearAllMocks();
     });
 
+    it('defaults the separate history-import notification switch off', () => {
+        expect(service.webPushActivitySyncEnabled()).toBe(false);
+        expect(getString).toHaveBeenCalledWith(mockRemoteConfig, 'web_push_activity_sync_enabled');
+        expect(service.webPushHistoryEnabled()).toBe(false);
+        expect(service.webPushDeliveryEnabled()).toBe(false);
+        expect(getString).toHaveBeenCalledWith(mockRemoteConfig, 'web_push_activity_delivery_enabled');
+        expect(getString).toHaveBeenCalledWith(mockRemoteConfig, 'web_push_history_import_enabled');
+    });
+
     it('should be created', () => {
         expect(service).toBeTruthy();
     });

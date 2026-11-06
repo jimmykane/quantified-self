@@ -1,9 +1,81 @@
+import { buildPlanAssistantRequest } from '../../../shared/training-plan-generation';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { TRAINING_PLAN_NEXT_STEPS_GUIDANCE, TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE, TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE, TRAINING_STRENGTH_READ_GUIDANCE, TRAINING_STRENGTH_WRITE_GUIDANCE } from '../shared/training-authoring-guidance';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-workout';
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it('prepares a server-validated threshold review without applying it', async () => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'get_training_thresholds', title: 'Read thresholds', description: 'Read settings', inputSchema: { type: 'object' } },
+      { name: 'preview_training_threshold_change', title: 'Preview thresholds', description: 'Prepare only', inputSchema: { type: 'object' } });
+    const before = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const after = { ...before, functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' } };
+    callTool.mockImplementation(async name => ({ structuredContent: name === 'get_training_thresholds'
+      ? { asOf: '2026-11-04T12:00:00Z', policies: [] }
+      : { proposalRef: 'sealed-threshold-proposal', expiresAtMs: Date.parse('2026-11-04T12:15:00Z'),
+        requiresConfirmation: true, appliesTo: 'future-workouts', review: { family: 'cycling', familyLabel: 'Cycling', before, after } } }));
+    const access = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-11-04T12:00:00Z'), generateAnswer: async input => {
+        await input.tools.find(tool => tool.name === 'get_training_thresholds')!.execute({ family: 'cycling' });
+        await input.tools.find(tool => tool.name === 'preview_training_threshold_change')!.execute({ policyRef: 'sealed-policy',
+          mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { functionalThresholdPower: 220 } });
+        return { answer: 'Review the threshold change in Quantified Self before Apply.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Set my cycling FTP to 220 watts.',
+      timeZone: 'UTC', history: [], conversationId: 'threshold-chat', trainingThresholdsEnabled: true, assertContentWriteAccess: access });
+    expect(result.pendingContentProposal).toMatchObject({ kind: 'apply_training_threshold_change',
+      arguments: { proposalRef: 'sealed-threshold-proposal' }, thresholdReview: { before, after } });
+    expect(result.pendingContentProposal?.proposalRef).not.toBe('sealed-threshold-proposal');
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(callTool.mock.calls.some(([name]) => name === 'apply_training_threshold_change')).toBe(false);
+    expect(access).toHaveBeenCalledTimes(4);
+  });
+  it.each([false, true])('enforces shared FTP permission even if a session advertises the read: %s', async enabled => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'get_training_thresholds', title: 'Read thresholds', description: 'Read settings', inputSchema: { type: 'object' } });
+    const createMcpSession = vi.fn().mockResolvedValue(session), access = vi.fn().mockResolvedValue(undefined);
+    callTool.mockResolvedValue({ structuredContent: { asOf: '2026-11-04T12:00:00Z', policies: [] } });
+    const runtime = createAssistantRuntime({ createMcpSession, generateAnswer: async input => {
+      const thresholds = input.tools.find(tool => tool.name === 'get_training_thresholds');
+      expect(thresholds).toBeDefined();
+      if (enabled) await thresholds!.execute({ family: 'cycling' });
+      else await expect(thresholds!.execute({ family: 'cycling' })).rejects.toThrow('mcp_tool_failed');
+      return { answer: enabled ? 'Review a workout with frozen FTP watts.' : 'Enable threshold access or supply an explicit FTP.',
+        visualRequest: { chart: null, map: null } };
+    } });
+    const response = runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a Cycling workout at 80 percent of my shared FTP, considering my recent sleep.',
+      timeZone: 'UTC', history: [], conversationId: 'ftp-authoring', trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true, trainingThresholdsEnabled: enabled, assertContentWriteAccess: access });
+    if (enabled) await response;
+    else await expect(response).rejects.toThrow('not grounded in current account data');
+    expect(createMcpSession.mock.calls[0].at(-1)).toBe(enabled);
+    expect(access).toHaveBeenCalledTimes(enabled ? 2 : 0); // Before and after the permitted read.
+    expect(callTool.mock.calls.filter(([name]) => name === 'get_training_thresholds')).toHaveLength(enabled ? 1 : 0);
+    expect(callTool.mock.calls.some(([name]) => name === 'apply_training_threshold_change')).toBe(false);
+  });
+  it.each([[], ['Spring marathon'], ['Strength consistency', 'Autumn race']].map(goalNames => ({ goalNames })))('routes the Plans setup request to plan review with goal focus $goalNames', ({ goalNames }) => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null, days: null,
+      minutes: null, goalNames, timelineNotesEnabled: true, instructions: '' }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+    expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
+  });
+  it.each([
+    { goalNames: [], instructions: 'Add a rest day on Sunday.' },
+    { goalNames: [], instructions: 'Create a Base phase followed by a taper phase.' },
+    { goalNames: ['Complete my race goal'], instructions: '' },
+    { goalNames: ['Build a Base phase'], instructions: '' },
+    { goalNames: [], instructions: 'Use workouts from my library.' },
+  ])('keeps new-plan setup on the plan tool with $goalNames / $instructions', options => {
+    const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null,
+      days: null, minutes: null, timelineNotesEnabled: true, ...options }, '2026-11-04');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_changes');
+  });
+  it.each(['Create a plan phase', "Create a plan's phases"] )('retains focused phase creation for %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
+  });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('offers complete strength editing for %s without changing provider or lifecycle routes', sport => {
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my ${sport} workout.`)).toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Edit the sets in my "${sport}" workout.`)).toBe('preview_strength_workout_change');
@@ -17,14 +89,14 @@ describe('Training phase preview routing', () => {
   });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('keeps incidental %s notes on the requested Running editor', sport => {
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with a note about ${sport}.`)).toBe('preview_create_planned_workout');
-    expect(selectAssistantTrainingPreviewTool(`Update the pace target in my Running workout; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_change');
-    expect(selectAssistantTrainingPreviewTool(`Update the pace targets across my Running workouts; keep the note about ${sport}.`)).toBe('preview_planned_workout_v3_changes');
+    expect(selectAssistantTrainingPreviewTool(`Update the pace target in my Running workout; keep the note about ${sport}.`)).toBe('preview_planned_workout_v4_change');
+    expect(selectAssistantTrainingPreviewTool(`Update the pace targets across my Running workouts; keep the note about ${sport}.`)).toBe('preview_planned_workout_v4_changes');
   });
   it.each(STRENGTH_WORKOUT_SPORT_ALIASES_V1)('ignores quoted and excluded %s workouts when choosing the Running editor', sport => {
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note "Repeat my ${sport} workout afterwards".`)).toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note \n : \n "Repeat my ${sport} workout afterwards".`)).toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with the note to repeat my ${sport} workout afterwards.`)).toBe('preview_create_planned_workout');
-    expect(selectAssistantTrainingPreviewTool(`Update my Running workout; keep the note about my ${sport} workout.`)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool(`Update my Running workout; keep the note about my ${sport} workout.`)).toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool(`Do not edit my ${sport} workout. Create a Running workout.`)).toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout, but do not change my ${sport} workout.`)).toBe('preview_create_planned_workout');
     for (const negation of ["doesn't", 'doesn’t', 'does not']) {
@@ -54,7 +126,7 @@ describe('Training phase preview routing', () => {
     expect(selectAssistantTrainingPreviewTool(`Add a note to my "${sport}" workout: "Save my workout to the library".`))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool(`Add a note to my saved ${sport} workout in the library: "Create a new phase".`))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
   });
   it('does not infer delivery consent from a quoted workout note', () => {
     const prompt = 'Create a Running workout with the note "and send it to Wahoo".';
@@ -64,9 +136,9 @@ describe('Training phase preview routing', () => {
   });
   it('keeps removing a quoted note on the recipe editor instead of deleting the workout', () => {
     expect(selectAssistantTrainingPreviewTool('Remove the note "Save my workout to the library" from my Running workout.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Delete the note: "Create a phase" from my Running workout.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
   });
   it('retains explicit actions after an unquoted note qualifier', () => {
     for (const separator of [', then', ', and', ', but']) {
@@ -75,7 +147,7 @@ describe('Training phase preview routing', () => {
       expect(selectAssistantTrainingPreviewTool(prompt), separator).toBe('preview_create_planned_workout');
     }
     expect(selectAssistantTrainingPreviewTool('Create a Running workout with a note about my Kettlebell workout, and save it in my library.'))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
   });
   it.each(["today's", 'today’s', "my coach's"])('treats %s as unquoted note prose rather than a quote opener', qualifier => {
     expect(selectAssistantTrainingPreviewTool(`Create a Running workout with a note about ${qualifier} Kettlebell workout.`))
@@ -94,7 +166,7 @@ describe('Training phase preview routing', () => {
     'Add "Create a replacement Garmin workout" to the notes of my Running workout.',
     'Add "Save it to my library" as the note for my Running workout.',
   ])('recognizes quoted note payloads without changing the requested editor: %s', prompt => {
-    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v4_change');
     expect(requestsAssistantTrainingDelivery(prompt)).toBe(false);
     expect(requestsAssistantTrainingDelivery(`${prompt} Then send it to Wahoo.`)).toBe(true);
   });
@@ -123,25 +195,25 @@ describe('Training phase preview routing', () => {
     'Add a 20 minute warm-up to every quality run.',
     'Create three planned workouts with early Lap.',
   ])('selects full-recipe bulk review for %s', prompt => {
-    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_changes');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v4_changes');
   });
   it('keeps numeric HR clarification replies on the complete bulk editor', () => {
     const history = [{ role: 'user' as const, text: 'Adjust the HR zones for all quality runs in my plan.' },
       { role: 'assistant' as const, text: 'Which HR ranges should I use for steady, tempo and VO2 targets?' }];
     expect(selectAssistantTrainingPreviewTool('Steady 142–150 bpm; tempo 152–160 bpm; VO2 164–172 bpm.', history))
-      .toBe('preview_planned_workout_v3_changes');
+      .toBe('preview_planned_workout_v4_changes');
     for (const prompt of ['Cancel. Keep 148–156 bpm.', 'Send the 142–150 bpm workout to Suunto.',
       'Create a standalone run at 142–150 bpm.', 'What does 142–150 bpm mean?',
       'Adjust my standalone workout to 142–150 bpm.']) {
-      expect(selectAssistantTrainingPreviewTool(prompt, history)).not.toBe('preview_planned_workout_v3_changes');
+      expect(selectAssistantTrainingPreviewTool(prompt, history)).not.toBe('preview_planned_workout_v4_changes');
     }
     expect(selectAssistantTrainingPreviewTool('142–150 bpm', [...history,
       { role: 'user' as const, text: 'Show my readiness instead.' }, { role: 'assistant' as const, text: 'What HR range would you like to compare?' }]))
-      .not.toBe('preview_planned_workout_v3_changes');
+      .not.toBe('preview_planned_workout_v4_changes');
     expect(selectAssistantTrainingPreviewTool('142–150 bpm', [
       { role: 'user', text: 'Adjust the HR target of my workout.' },
       { role: 'assistant', text: 'What new HR range should I use?' },
-    ])).toBe('preview_planned_workout_v3_change');
+    ])).toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Delete my HR target workout.')).toBe('preview_training_deletion');
   });
   it.each(['Sync all workouts to Suunto.', 'Move two workouts to next week.',
@@ -154,7 +226,7 @@ describe('Training phase preview routing', () => {
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
   });
-  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan'])('routes an explicit rest-day edit: %s', prompt => {
+  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan', 'Add a plan rest day', "Add a plan’s rest day"])('routes an explicit rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_rest_days');
   });
   it.each(['Add a rest day on Sunday', 'Change my rest days', 'Make Sunday a rest day',
@@ -181,7 +253,7 @@ describe('Training phase preview routing', () => {
     ['Add a workout during my Base phase', 'preview_create_planned_workout'],
     ['Delete my workout during the Taper phase', 'preview_training_deletion'],
     ['Edit my strength workout during the Build phase', 'preview_strength_workout_change'],
-    ['Change recovery steps in my workout during the Build phase', 'preview_planned_workout_v3_change'],
+    ['Change recovery steps in my workout during the Build phase', 'preview_planned_workout_v4_change'],
     ['Rename my plan containing a Base phase', 'preview_training_changes'],
     ['Remove this training plan and all phases', 'preview_training_deletion'],
   ])('preserves the requested object when a phase supplies context: %s', (prompt, tool) => {
@@ -335,12 +407,12 @@ describe('app-owned complete workout review', () => {
   it.each(['change recovery to 75 seconds', 'set all recovery steps to 75 sec', 'remove the heart-rate target from step 2',
     'delete the recovery step from my workout', 'insert a recovery step into the workout', 'reorder the repeat steps', 'add a note to step 3'])(
     'routes prescription edit "%s" through the complete v3 preview', prompt => {
-    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Delete my workout tomorrow')).toBe('preview_training_deletion');
     });
   it.each([false, true])('keeps review data out of model tool output and rejects unrelated recovery edits (tampered=%s)', async tampered => {
     const { session, callTool } = createSession();
-    session.tools.push({ name: 'preview_planned_workout_v3_change', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
+    session.tools.push({ name: 'preview_planned_workout_v4_change', title: 'Preview', description: 'Prepare only', inputSchema: { type: 'object' } });
     const before = { title: 'Current workout', localDate: '2026-10-07', lifecycle: 'planned' as const, destination: 'Standalone',
       structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [{ kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
         ending: { kind: 'time' as const, seconds: 60 }, targets: [], note: 'Keep this' }] } };
@@ -352,11 +424,11 @@ describe('app-owned complete workout review', () => {
     const preview = { proposalRef: 'bound-preview', expiresAtMs: Date.parse('2026-10-06T12:15:00Z'), permissionMode: 'schedule', scheduleRevision: 1,
       requiresConfirmation: true, summary: 'Review recovery edit.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery to 75 seconds.' }], providerPreviews: [] };
     const original = callTool.getMockImplementation()!;
-    callTool.mockImplementation(async (name, args) => name === 'preview_planned_workout_v3_change' ? { structuredContent: preview } : original(name, args));
+    callTool.mockImplementation(async (name, args) => name === 'preview_planned_workout_v4_change' ? { structuredContent: preview } : original(name, args));
     const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session), now: () => new Date('2026-10-06T12:00:00Z'),
       generateAnswer: async input => {
         await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
-        const result = await input.tools.find(tool => tool.name === 'preview_planned_workout_v3_change')!.execute({});
+        const result = await input.tools.find(tool => tool.name === 'preview_planned_workout_v4_change')!.execute({});
         expect(result).not.toHaveProperty('workoutReviews');
         if (tampered) expect(result).toHaveProperty('assistantToolError');
         else expect(result).toMatchObject({ changes: preview.changes, requiresConfirmation: true, scheduleRevision: 1 });
@@ -473,7 +545,7 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Delete my strength workout.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Delete my old plans and workouts.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Remove this planned session and older copies.')).toBe('preview_training_deletion');
-    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_v2_change');
+    expect(selectAssistantTrainingPreviewTool('Delete a saved workout from the library.')).toBe('preview_saved_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Delete this workout and create a new one.')).toBe('preview_training_changes');
     const history = [{ role: 'user' as const, text: 'Delete my planned workout.' },
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
@@ -505,14 +577,14 @@ describe('Training preview model-tool selection', () => {
       'Remove early Lap from my workout.', 'Remove the early Lap option from this session.',
       'Remove the option to allow early Lap from my workout.',
       'Delete early Lap permission from my workout.'])
-      expect(selectAssistantTrainingPreviewTool(prompt), prompt).toBe('preview_planned_workout_v3_change');
+      expect(selectAssistantTrainingPreviewTool(prompt), prompt).toBe('preview_planned_workout_v4_change');
     const deletionHistory = [{ role: 'user' as const, text: 'Delete my planned workout.' },
       { role: 'assistant' as const, text: 'Also remove older, uncompleted copies from your connected services?' }];
     expect(selectAssistantTrainingPreviewTool('Remove early Lap from my workout.', deletionHistory))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Remove my early Lap workout.')).toBe('preview_training_deletion');
     expect(selectAssistantTrainingPreviewTool('Remove the workout named Early Lap.')).toBe('preview_training_deletion');
-    expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v3_change');
+    expect(selectAssistantTrainingPreviewTool('Read my early Lap workout.')).not.toBe('preview_planned_workout_v4_change');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Enable it only on explicit athlete request');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Preserve all unchanged fields');
   });
@@ -552,39 +624,39 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Stop sync for my 25 m pool swim.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Edit my workout and send the update to Garmin.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Add a pool swim with a 25 m pool length.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Create a swim session in a 50-meter pool.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Schedule a pool workout in a 33.3 m pool.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Make a 25-yard swimming workout.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Update my pool swim and preserve its 25 m pool length.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Edit my pool swim workout for tomorrow.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Change my swimming workout date.'))
-      .toBe('preview_planned_workout_v3_change');
+      .toBe('preview_planned_workout_v4_change');
     expect(selectAssistantTrainingPreviewTool('Create a strength workout with four sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Edit my strength workout sets.'))
       .toBe('preview_strength_workout_change');
     expect(selectAssistantTrainingPreviewTool('Save this planned workout to my workout library.'))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Save this workout to my library.'))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Create a workout tomorrow, but do not save it in my library.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan without using the saved workout library.'))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool("Don't change the current plan, but save this workout to my library."))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Place my saved workout on October 4 and 11 in this plan.'))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
     expect(selectAssistantTrainingPreviewTool('Archive the saved recipe, but do not change scheduled workouts.'))
-      .toBe('preview_saved_workout_v2_change');
+      .toBe('preview_saved_workout_v3_change');
   });
 
   it.each(["doesn't", 'doesn’t', 'does not'])('keeps a single workout preview when plan context %s request duplication', negation => {
@@ -665,6 +737,35 @@ describe('Training preview model-tool selection', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never describe a partial subtotal as the complete duration');
   });
 
+  it('routes explicit goal edits to the focused app-owned review, without workout or Apply tools', async () => {
+    for (const prompt of ['Add a goal to run three days per week.', 'Pause my marathon goal.', 'Change my goal priority to high.', 'Mark my milestone completed.']) {
+      expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_goal_change');
+    }
+    expect(selectAssistantTrainingPreviewTool('Create a Running workout for my marathon goal.')).not.toBe('preview_training_goal_change');
+    expect(selectAssistantTrainingPreviewTool('Do not change my goal. Create a Running workout.')).not.toBe('preview_training_goal_change');
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'preview_training_goal_change', title: 'Goal change', description: 'Preview goal', inputSchema: { type: 'object' as const } });
+    const after = { name: 'Marathon', kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
+      sportScope: 'all', sport: null, objective: 'Finish', planName: null, weeklyTarget: null };
+    const preview = { proposalRef: 'opaque-goal', expiresAtMs: Date.parse('2026-11-03T12:15Z'), permissionMode: 'schedule',
+      scheduleRevision: 0, requiresConfirmation: true, summary: 'Create goal.',
+      changes: [{ index: 0, kind: 'set-training-goal', summary: 'Create goal.' }], providerPreviews: [], goalReview: { before: null, after } };
+    callTool.mockResolvedValue({ structuredContent: preview });
+    const reviews = vi.fn(); session.getTrainingWorkoutReviews = reviews;
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-11-03T12:00Z'), generateAnswer: async input => {
+        expect(input.tools.some(tool => tool.name.startsWith('apply_'))).toBe(false);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_goal_change']);
+        const { planName: _plan, ...goal } = after;
+        await input.tools.find(tool => tool.name === 'preview_training_goal_change')!.execute({ goalRef: null, expectedRevision: 0, goal: { ...goal, planRef: null } });
+        return { answer: 'Review and apply your goal in QS.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Add a marathon goal for November 8.',
+      timeZone: 'UTC', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.goalReview).toEqual(preview.goalReview); expect(reviews).not.toHaveBeenCalled();
+  });
+
   it('prepares an independent calendar rest review with no model Apply tool', async () => {
     const { session, callTool } = createSession();
     session.tools.push(...(['preview_training_calendar_rest_day', 'preview_training_rest_days'] as const)
@@ -718,7 +819,7 @@ describe('Training preview model-tool selection', () => {
     'selects only the complete bulk editor, with no lossy missing-catalog fallback (available=$available, reply=$reply)', async ({ available, reply }) => {
     const { session } = createSession();
     session.tools.push({ name: 'preview_training_changes', title: 'Legacy preview', description: 'Legacy recipes', inputSchema: { type: 'object' } });
-    if (available) session.tools.push({ name: 'preview_planned_workout_v3_changes', title: 'Complete bulk preview', description: 'Full recipes', inputSchema: { type: 'object' } });
+    if (available) session.tools.push({ name: 'preview_planned_workout_v4_changes', title: 'Complete bulk preview', description: 'Full recipes', inputSchema: { type: 'object' } });
     let previews: string[] = [];
     const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async input => {
@@ -731,12 +832,34 @@ describe('Training preview model-tool selection', () => {
     await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: reply ? 'Steady 142–150 bpm; tempo 152–160 bpm.' : request,
       timeZone: 'Europe/Helsinki', history: reply ? [{ role: 'user', text: request },
         { role: 'assistant', text: 'Which new HR ranges should I use?' }] : [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
-    expect(previews).toEqual(available ? ['preview_planned_workout_v3_changes'] : []);
+    expect(previews).toEqual(available ? ['preview_planned_workout_v4_changes'] : []);
+  });
+
+  it.each([false, true].flatMap(available => [
+    { available, tool: 'preview_planned_workout_v4_change', prompt: 'Edit my Running workout to Garmin power zone 2.' },
+    { available, tool: 'preview_saved_workout_v3_change', prompt: 'Update my saved workout library recipe to Garmin power zone 2.' },
+  ] as const))('requires the complete single-recipe capability without a legacy fallback ($tool, available=$available)', async ({ available, tool, prompt }) => {
+    const { session } = createSession();
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v3_change',
+      'preview_saved_workout_v2_change'] as const).map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    if (available) session.tools.push({ name: tool, title: tool, description: 'Complete recipe', inputSchema: { type: 'object' } });
+    let previews: string[] = [];
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async input => {
+        previews = input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name);
+        expect(input.tools.map(tool => tool.name)).not.toContain('apply_training_changes');
+        await input.tools.find(tool => tool.name === 'get_daily_report')!.execute({});
+        return { answer: available ? 'Read the complete recipe before preparing a review.' : 'The complete recipe capability needs a release/catalog refresh.',
+          visualRequest: { chart: null, map: null } };
+      } });
+    await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt, history: [],
+      timeZone: 'Europe/Helsinki', trainingPlansEnabled: true, trainingPlanChangesEnabled: true });
+    expect(previews).toEqual(available ? [tool] : []);
   });
 
   it.each([false, true])('never substitutes a generic editor for missing complete strength capability (available=%s)', async available => {
     const { session } = createSession();
-    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v3_change'] as const)
+    session.tools.push(...(['preview_create_planned_workout', 'preview_training_changes', 'preview_planned_workout_v4_change'] as const)
       .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
     if (available) session.tools.push({ name: 'preview_strength_workout_change', title: 'Strength preview',
       description: 'Complete exercises', inputSchema: { type: 'object' } });
@@ -897,7 +1020,7 @@ describe('Training preview model-tool selection', () => {
     ['Create a Running workout with the note "and send it to Wahoo".', 'preview_create_planned_workout'],
   ] as const)('preserves the original prompt and quoted notes when narrowing editor selection: %s', async (prompt, expected) => {
     const { session } = createSession();
-    session.tools.push(...(['preview_create_planned_workout', 'preview_strength_workout_change', 'preview_saved_workout_v2_change',
+    session.tools.push(...(['preview_create_planned_workout', 'preview_strength_workout_change', 'preview_saved_workout_v3_change',
       'preview_training_plan_phases', 'preview_garmin_workout_replacement'] as const)
       .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
     const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
@@ -915,7 +1038,7 @@ describe('Training preview model-tool selection', () => {
 
   it('offers only recipe editing when removing early Lap after a deletion clarification', async () => {
     const { session } = createSession();
-    session.tools.push(...(['preview_planned_workout_v3_change', 'preview_training_deletion'] as const).map(name => ({
+    session.tools.push(...(['preview_planned_workout_v4_change', 'preview_training_deletion'] as const).map(name => ({
       name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
     })));
     let previews: string[] = [];
@@ -933,7 +1056,7 @@ describe('Training preview model-tool selection', () => {
         { role: 'assistant', text: 'Also remove older, uncompleted copies from your connected services?' }],
       trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
       assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined) });
-    expect(previews).toEqual(['preview_planned_workout_v3_change']);
+    expect(previews).toEqual(['preview_planned_workout_v4_change']);
   });
 
   it.each([
@@ -1735,6 +1858,9 @@ describe('Assistant runtime', () => {
 
   it('treats prompts and account-controlled tool text as untrusted data', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE);
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('independent training-thresholds:read');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('effective since is not a measurement/test date');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('Keep copied/saved targets unchanged');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE);
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PLAN_NEXT_STEPS_GUIDANCE);
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_STRENGTH_READ_GUIDANCE);
@@ -1750,7 +1876,7 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('copy-workout change in preview_training_changes');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Never infer a Send action or plan-sync opt-in');
-    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v3 for full non-strength instructions');
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('get_planned_workout_v4 for full non-strength instructions');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('Use a focused full-recipe preview only when advertised');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'do not silently limit the trend to a recent year',
@@ -2509,7 +2635,7 @@ describe('Assistant runtime', () => {
     expect(systems[0]).not.toMatch(/\bpreview_[a-z_]+\b/);
     expect(systems[1].match(/\bpreview_[a-z_]+\b/g) ?? [])
       .toEqual(unlocked ? expect.arrayContaining([preview.name]) : []);
-    expect(systems.join(' ')).not.toContain('preview_saved_workout_v2_change');
+    expect(systems.join(' ')).not.toContain('preview_saved_workout_v3_change');
     expect(systems.join(' ')).not.toContain('preview_garmin_workout_replacement');
     expect(systems[1]).toContain('Remaining model-selected tool calls: 5 of 6');
     expect(systems[1].includes('Read the current Training schedule first.')).toBe(!unlocked);
@@ -3447,7 +3573,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://beta.quantified-self.io',
       'coordinate_free',
-      false, false, false, false, undefined, false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false, false, false, undefined, false);
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
       toolName: 'get_daily_report',
@@ -3837,7 +3963,7 @@ describe('Assistant runtime', () => {
       'user-1',
       'https://quantified-self.io',
       'precise_activity',
-      false, false, false, false, undefined, false, false, false, false, undefined);
+      false, false, false, false, undefined, false, false, false, false, undefined, false);
   });
 
   it('preserves an explicit model-selected timezone', async () => {
@@ -4294,4 +4420,13 @@ describe('Assistant runtime', () => {
       history: [],
     })).rejects.toThrow('protected tool reference');
   });
+});
+
+
+it('routes an explicitly requested Garmin power zone to the full recipe preview without granting delivery', () => {
+  for (const prompt of ['Create a Running workout using Garmin power zone 2.', 'Add a cycling session in Garmin power zones.']) {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_planned_workout_v4_change');
+  }
+  expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('watts');
+  expect(selectAssistantTrainingPreviewTool('Read my Garmin power zones.')).not.toBe('preview_planned_workout_v4_change');
 });
