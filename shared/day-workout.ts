@@ -1,4 +1,4 @@
-import type { WorkoutPowerProfileV1 } from './workout-power-settings';
+import type { WorkoutPowerReferenceV1 } from './workout-power-settings';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { GARMIN_POWER_AVERAGING_SECONDS, type GarminPowerAveragingSeconds, MANUAL_WORKOUT_EDITOR_SPORTS_V1, isGarminPowerZoneSportV1, type WorkoutStructureV1 } from './planned-workout';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, isStrengthWorkoutSportV1, type StrengthWorkoutDraftV1 } from './strength-workout';
@@ -60,7 +60,7 @@ export interface DayWorkoutDraft {
 }
 export interface GenerateDayWorkoutResponse {
   /** Immutable first-party review snapshot; never a canonical workout field or public MCP grant. */
-  powerReference?: WorkoutPowerProfileV1;
+  powerReference?: WorkoutPowerReferenceV1;
   requestId: string;
   observedAt: string;
   kind: 'workout' | 'rest';

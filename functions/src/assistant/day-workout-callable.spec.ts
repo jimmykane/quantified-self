@@ -42,10 +42,12 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
-  it('returns the original confirmed source snapshot and replays it without rereading changed settings', async () => {
+  it.each(['override', 'shared'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
     const deps = dependencies();
-    const powerReference = { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
-      reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    const powerReference = origin === 'shared' ? { kind: 'training-ftp' as const, sport: request.controls.sport, family: 'running' as const,
+      revision: 3, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 280 } }
+      : { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
+        reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
     vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [],
       powerReference, references: [{ kind: 'power', mode: 'relative', minimumPercent: 100, maximumPercent: 100, reference: powerReference.reference }] });
     vi.mocked(deps.generate).mockResolvedValue({ kind: 'workout', title: 'Power run', rationale: 'Use the confirmed reference.',

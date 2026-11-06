@@ -1,18 +1,35 @@
-<p>Choose the power source you will use for each sport. Enter its FTP or critical power and, optionally, your zone boundaries. Values are manually confirmed; they are not fetched from the service.</p>
-<p>New generated workouts use this sport’s saved source. Saved workouts, today’s prepared suggestion and Training load calculations keep their existing values. Sending to another service does not convert power between sources.</p>
+<p>Running and Cycling use the shared dated FTP from Training thresholds by default. Edit it once in Settings or Health → Fitness.</p>
+<p>New generated workouts use that FTP unless you save an explicit source-specific FTP or critical power override. Existing workouts and prepared suggestions keep their saved targets. Garmin-native zones use Garmin’s settings.</p>
 @if (busy() && !head()) { <p role="status">Loading power settings…</p> }
 @if (message()) { <p [attr.role]="failed() ? 'alert' : 'status'">{{ message() }}</p> }
 @if (!head() && !busy()) { <button mat-button type="button" (click)="load(true)">Reload power settings</button> }
 @if (head()) {
   <app-activity-filter-picker label="Sport" allLabel="Choose sport" searchLabel="Search sports" [multiple]="false"
     [options]="sports" [selectedValues]="[sport()]" [disabled]="busy() || form.dirty" (selectionChange)="selectSport($event)" />
+  @if (sharedFamily()) {
+    <section aria-label="Shared FTP">
+      <h3>Shared FTP</h3>
+      @if (sharedBusy()) { <p role="status">Loading shared FTP…</p> }
+      @else if (sharedError()) { <p role="alert">Shared FTP could not be verified. Reload power settings to try again.</p> }
+      @else if (sharedFtp()) { <p>{{ sharedSummary() }}</p> }
+      @else { <p>No shared FTP is available for this sport. Set it in Training thresholds to use power targets by default.</p> }
+      <button mat-button type="button" [disabled]="busy() || sharedEditorBusy()" (click)="editSharedFtp()">{{ sharedEditorBusy() ? 'Training thresholds open…' : 'Edit shared FTP' }}</button>
+      @if (selectedProfile()) { <p>Your explicit override below takes precedence for this sport.</p> }
+      @else { <p>Using shared FTP when available. No separate power reference is required.</p> }
+    </section>
+  } @else { <p>This sport has no shared FTP default. Add an explicit power reference only if you have one for this source.</p> }
+  @if (!editingOverride()) {
+    <button mat-button type="button" [disabled]="busy()" (click)="beginOverride()" aria-controls="power-override-fields" [attr.aria-expanded]="false">Add a source-specific override</button>
+  }
+  @if (editingOverride()) {
+  <p>Overrides are manually confirmed; they are not fetched from the service. They apply to generation only and do not change Training load calibration.</p>
   @if (form.dirty) { <p>Save or discard your changes before switching sport.</p> }
   @if (selectedProfile(); as profile) {
-    <p>{{ summary(profile) }}</p>
+    <p>Explicit override · {{ summary(profile) }}</p>
     @if (zones(profile).length) { <ul>@for (zone of zones(profile); track $index) { <li>{{ zone }}</li> }</ul> }
   }
-  <fieldset [formGroup]="form" [disabled]="busy()" class="power-fields">
-    <legend>Power reference for {{ sport() }}</legend>
+  <fieldset id="power-override-fields" [formGroup]="form" [disabled]="busy()" class="power-fields">
+    <legend>Explicit power override for {{ sport() }}</legend>
     <mat-form-field appearance="outline"><mat-label>Service / ecosystem</mat-label><mat-select formControlName="provider" (selectionChange)="selection()">
       @for (provider of providers; track provider) { <mat-option [value]="provider">{{ providerLabels[provider] }}</mat-option> }
     </mat-select></mat-form-field>
@@ -28,9 +45,10 @@
   </fieldset>
   @if (form.dirty && draftError(); as error) { <p role="alert">{{ error }}</p> }
   <div class="power-actions">
-    <button mat-flat-button type="button" [disabled]="busy() || !form.dirty || !valid()" (click)="save()">Save power reference</button>
-    @if (form.dirty) { <button mat-button type="button" [disabled]="busy()" (click)="discard()">Discard changes</button> }
-    @if (selectedProfile()) { <button mat-button type="button" [disabled]="busy() || form.dirty" (click)="save(true)">Remove reference</button> }
+    <button mat-flat-button type="button" [disabled]="busy() || !form.dirty || !valid()" (click)="save()">Save power override</button>
+    @if (form.dirty || !selectedProfile()) { <button mat-button type="button" [disabled]="busy()" (click)="discard()">Discard changes</button> }
+    @if (selectedProfile()) { <button mat-button type="button" [disabled]="busy() || form.dirty" (click)="save(true)">{{ sharedFamily() ? 'Use shared FTP' : 'Remove override' }}</button> }
     @if (failed()) { <button mat-button type="button" [disabled]="busy()" (click)="load(true)">Reload power settings</button> }
   </div>
+  }
 }

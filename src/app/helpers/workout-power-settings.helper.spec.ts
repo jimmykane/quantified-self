@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes, SpeedUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { sharedWorkoutFtpReference } from '@shared/workout-power-settings';
 import { workoutPowerSummary, workoutPowerZones, parsePowerZoneInput } from './workout-power-settings.helper';
 const profile = { sport: ActivityTypes.Running, provider: 'suunto' as const, source: 'Watch power', reference: { kind: 'critical-power' as const, watts: 250 },
   referenceDate: '2026-11-01', zoneUpperBoundsWatts: [150, 200] };
@@ -12,6 +13,13 @@ describe('workout power presentation', () => {
     expect(workoutPowerZones({ ...profile, zoneUpperBoundsWatts: [] })).toEqual([]);
     expect(workoutPowerSummary({ ...profile, reference: { kind: 'functional-threshold-power', watts: 200 } })).toContain('FTP 200 watt');
   });
+  it.each([undefined, { speedUnits: [SpeedUnits.MilesPerHour] } as Partial<UserUnitSettingsInterface>])(
+    'displays a shared FTP snapshot without invented source metadata or zone boundaries for units %j', units => {
+      const snapshot = sharedWorkoutFtpReference(ActivityTypes.Cycling, { method: 'AUTOMATIC', included: true,
+        functionalThresholdPower: 280, revision: 3, effectiveAt: Date.parse('2026-11-01T12:00:00Z') }, Date.now())!;
+      expect(workoutPowerSummary(snapshot, units as UserUnitSettingsInterface)).toBe('Cycling · Shared Cycling FTP 280 watt · Effective since 2026-11-01T12:00:00.000Z');
+      expect(workoutPowerZones(snapshot)).toEqual([]);
+    });
   it('parses explicit ordered boundary input without coercing blank tokens', () => {
     expect(parsePowerZoneInput('150, 200.5, 250')).toEqual([150, 200.5, 250]);
     expect(parsePowerZoneInput('  ')).toEqual([]);

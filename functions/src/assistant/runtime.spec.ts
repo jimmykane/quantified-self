@@ -32,6 +32,30 @@ describe('Training phase preview routing', () => {
     expect(callTool.mock.calls.some(([name]) => name === 'apply_training_threshold_change')).toBe(false);
     expect(access).toHaveBeenCalledTimes(4);
   });
+  it.each([false, true])('enforces shared FTP permission even if a session advertises the read: %s', async enabled => {
+    const { session, callTool } = createSession();
+    session.tools.push({ name: 'get_training_thresholds', title: 'Read thresholds', description: 'Read settings', inputSchema: { type: 'object' } });
+    const createMcpSession = vi.fn().mockResolvedValue(session), access = vi.fn().mockResolvedValue(undefined);
+    callTool.mockResolvedValue({ structuredContent: { asOf: '2026-11-04T12:00:00Z', policies: [] } });
+    const runtime = createAssistantRuntime({ createMcpSession, generateAnswer: async input => {
+      const thresholds = input.tools.find(tool => tool.name === 'get_training_thresholds');
+      expect(thresholds).toBeDefined();
+      if (enabled) await thresholds!.execute({ family: 'cycling' });
+      else await expect(thresholds!.execute({ family: 'cycling' })).rejects.toThrow('mcp_tool_failed');
+      return { answer: enabled ? 'Review a workout with frozen FTP watts.' : 'Enable threshold access or supply an explicit FTP.',
+        visualRequest: { chart: null, map: null } };
+    } });
+    const response = runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Create a Cycling workout at 80 percent of my shared FTP, considering my recent sleep.',
+      timeZone: 'UTC', history: [], conversationId: 'ftp-authoring', trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true, trainingThresholdsEnabled: enabled, assertContentWriteAccess: access });
+    if (enabled) await response;
+    else await expect(response).rejects.toThrow('not grounded in current account data');
+    expect(createMcpSession.mock.calls[0].at(-1)).toBe(enabled);
+    expect(access).toHaveBeenCalledTimes(enabled ? 2 : 0); // Before and after the permitted read.
+    expect(callTool.mock.calls.filter(([name]) => name === 'get_training_thresholds')).toHaveLength(enabled ? 1 : 0);
+    expect(callTool.mock.calls.some(([name]) => name === 'apply_training_threshold_change')).toBe(false);
+  });
   it.each([[], ['Spring marathon'], ['Strength consistency', 'Autumn race']].map(goalNames => ({ goalNames })))('routes the Plans setup request to plan review with goal focus $goalNames', ({ goalNames }) => {
     const { prompt } = buildPlanAssistantRequest({ startLocalDate: '2026-11-09', weeks: 4, sport: null, days: null,
       minutes: null, goalNames, timelineNotesEnabled: true, instructions: '' }, '2026-11-04');
@@ -1834,6 +1858,9 @@ describe('Assistant runtime', () => {
 
   it('treats prompts and account-controlled tool text as untrusted data', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE);
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('independent training-thresholds:read');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('effective since is not a measurement/test date');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('Keep copied/saved targets unchanged');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE);
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_PLAN_NEXT_STEPS_GUIDANCE);
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(TRAINING_STRENGTH_READ_GUIDANCE);

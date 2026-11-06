@@ -317,6 +317,13 @@ safe current/dated threshold reads and one prepare-only change for future workou
 manual measurements, activity metrics and Training plans. Permission changes replace the server-owned generation;
 requests, retries, responses and app Apply bind that choice. New chat removes access and pending proposals.
 
+When authoring a new FTP-relative Running/Cycling workout, use the matching shared FTP only when this independent
+choice is enabled and the focused read is advertised. Freeze the returned watts in the recipe. Effective since is not
+a test/measurement date. With no access/value, ask for an explicit reference or keep guidance target-free; never
+convert FTP into CP or borrow another family. Private Workout power overrides are unavailable to general plan chats.
+Keep saved/copied targets unchanged unless retargeting is explicit. The separate first-party day generator's use of
+shared FTP/private overrides does not enable threshold access in a conversation.
+
 Discover current family settings first. FTP is explicit watts for independent Running/Cycling settings; HR is bpm;
 CSS needs seconds per 100 metres or yards. Never invent athlete calibration, infer CSS from a normal swim or turn a
 threshold into a Health observation. Preserve omitted values; null explicitly clears one. A real MCP preview creates

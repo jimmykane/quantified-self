@@ -27,7 +27,8 @@ describe('help.content', () => {
 
   it('explains source-aware planning references and immutable generated prescriptions', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
-    for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references',
+    for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references', 'Enter it once', '**Effective since**',
+      'An exact-sport override takes precedence over shared FTP', 'never converts FTP into critical power', 'separate **Training thresholds**',
       'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
       'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
   });

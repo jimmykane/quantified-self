@@ -135,23 +135,31 @@ describe('DayWorkoutDialogComponent', () => {
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
 
-  it('reviews the generation-time power source rather than current settings', async () => {
+  it.each(['override', 'shared'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
     const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     const component = fixture.componentInstance;
     const draft = response('source-review');
-    draft.powerReference = { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
-      reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
+    draft.powerReference = origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
+      revision: 2, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 280 } }
+      : { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
+        reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
     component.controls.set(defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.Running));
     draft.draft = { title: 'Easy power run', structure: { version: 1, sport: ActivityTypes.Running,
       nodes: [{ kind: 'step', id: 'run', purpose: 'work', ending: { kind: 'time', seconds: 600 },
         targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: draft.powerReference.reference }] }] } };
     draft.previousLoads = []; draft.usedContext = ['Manually confirmed power reference for the selected sport']; draft.missingContext = [];
     component.result.set(draft); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Suunto · Watch running power · Critical power 250 watt');
-    expect(fixture.nativeElement.textContent).toContain('Reference date 2026-10-25');
-    expect(fixture.nativeElement.textContent).toContain('Z2: 150 watt to below 200 watt');
+    if (origin === 'shared') {
+      expect(fixture.nativeElement.textContent).toContain('Shared Running FTP 280 watt');
+      expect(fixture.nativeElement.textContent).toContain('Effective since 2026-10-25T12:00:00.000Z');
+      expect(fixture.nativeElement.textContent).not.toContain('Reference date');
+    } else {
+      expect(fixture.nativeElement.textContent).toContain('Suunto · Watch running power · Critical power 250 watt');
+      expect(fixture.nativeElement.textContent).toContain('Reference date 2026-10-25');
+      expect(fixture.nativeElement.textContent).toContain('Z2: 150 watt to below 200 watt');
+    }
     expect(fixture.nativeElement.textContent).toContain('Saved target values stay fixed');
-    exportDailySuggestionDialogQa(fixture.nativeElement, 'power-source-review');
+    exportDailySuggestionDialogQa(fixture.nativeElement, `power-${origin}-review`);
   });
   it('reviews a replacement, saves the same workout with revision guards and preserves provider preferences', async () => {
     const completion = new BehaviorSubject<TrainingWorkoutCompletionV1[]>([]);

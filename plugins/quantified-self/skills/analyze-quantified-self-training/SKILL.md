@@ -390,6 +390,18 @@ through full-recipe reads and previews. Omission retains the default; add or rem
 intent and disclose the change. The choice is for Garmin workout execution and unsupported destinations must not
 silently drop it. It does not change watt/FTP/zone values, configure every watch data screen, or prove watch receipt.
 
+## Shared FTP for new workout targets
+
+When authoring a new FTP-relative Running/Cycling workout, discover the existing focused threshold read only if
+advertised and independently permitted. Freeze the matching family's saved watts into the recipe reference;
+**effective since** is not a measurement/test date. An explicit user-supplied source-specific FTP/CP can override
+that default for the requested source/sport. Private Workout power overrides are not automatically available here.
+Never borrow the other family's FTP, convert FTP to CP or invent a value. Without access or a valid reference,
+ask for one or keep guidance target-free. Copied/saved prescriptions retain their frozen targets unless the user
+explicitly requests retargeting. Updating shared FTP does not rewrite existing workouts or prepared suggestions.
+The app's separate day generator uses this shared default and its private explicit overrides automatically;
+that behavior grants no threshold access to an external client or general Assistant plan chat.
+
 ## Training threshold settings
 
 For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.

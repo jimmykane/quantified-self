@@ -91,7 +91,7 @@
       </div>
       @if (controls().target === 'garmin-power-zone') {
         <p class="hint">Uses the zones configured for this sport on Garmin, without entering FTP in QS. Watts are unknown here; running needs a compatible native Running Power device. This does not enable sending.</p>
-      } @else if (!strength()) { <p class="hint">Power targets use the saved source for this sport in Settings → Workout power. Other targets need saved athlete references. Strict timing includes all steps.</p> }
+      } @else if (!strength()) { <p class="hint">Power targets use shared Running/Cycling FTP unless an explicit source override is saved in Settings → Workout power. Other targets need saved athlete references. Strict timing includes all steps.</p> }
     </div>
   </fieldset>
   @if (data.mode !== 'preferences') {

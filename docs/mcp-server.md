@@ -10,6 +10,15 @@ calibration a workout used. No method, inclusion, raw policy, Health measurement
 Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
 reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
 
+For newly authored FTP-relative Running/Cycling recipes, shared authoring guidance uses the matching family's
+current saved FTP only with advertised threshold reads and independent `training-thresholds:read` permission.
+Freeze watts in the existing recipe reference. Effective since is not a measurement/test date; do not infer FTP,
+convert FTP to CP, borrow another family or retarget copied/saved recipes implicitly. Missing access/value requires
+an explicit reference or target-free guidance. Private Workout power source overrides and generation provenance are
+not exposed to general plan chats. Existing planned-workout reads retain frozen targets without current-policy reads.
+The first-party manual/daily generator uses this same shared policy by default, with exact-sport private overrides;
+it does not widen MCP grants. This instruction change updates the compatible pending digest, not registered schemas.
+
 `preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
 `policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an
 ambiguous pace string. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The

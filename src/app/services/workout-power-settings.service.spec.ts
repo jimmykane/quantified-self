@@ -31,6 +31,43 @@ describe('private workout power settings persistence', () => {
     vi.mocked(getDoc).mockRejectedValue(Error('offline'));
     await expect(service.load('owner')).rejects.toThrow('offline');
   });
+  it('reads the same dated FTP policy used by Training with a frozen effective date and revision', async () => {
+    const effectiveAt = Date.parse('2026-11-01T12:00:00Z');
+    vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ method: 'AUTOMATIC', included: true,
+      functionalThresholdPower: 280, revision: 3, effectiveAt }) } as never);
+    expect(await service.loadSharedFtp('owner', ActivityTypes.Running)).toEqual({ kind: 'training-ftp', sport: ActivityTypes.Running,
+      family: 'running', revision: 3, effectiveAtMs: effectiveAt, reference: { kind: 'functional-threshold-power', watts: 280 } });
+    expect(getDoc).toHaveBeenCalledExactlyOnceWith({ path: 'users/owner/trainingLoadPolicies/running' });
+    expect(set).not.toHaveBeenCalled();
+  });
+  it('distinguishes missing, invalid and unreadable defaults without borrowing another sport', async () => {
+    expect(await service.loadSharedFtp('owner', ActivityTypes.Running)).toBeNull();
+    vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ functionalThresholdPower: 280 }) } as never);
+    await expect(service.loadSharedFtp('owner', ActivityTypes.Cycling)).rejects.toThrow('could not be verified');
+    vi.mocked(getDoc).mockRejectedValueOnce(Error('offline'));
+    await expect(service.loadSharedFtp('owner', ActivityTypes.Running)).rejects.toThrow('offline');
+    vi.mocked(getDoc).mockClear(); expect(await service.loadSharedFtp('owner', ActivityTypes.Rowing)).toBeNull();
+    expect(getDoc).not.toHaveBeenCalled();
+  });
+  it('rejects a late shared FTP response after account change', async () => {
+    vi.mocked(getDoc).mockImplementationOnce(async () => { auth.currentUser = null; return { data: () => ({}) } as never; });
+    await expect(service.loadSharedFtp('owner', ActivityTypes.Running)).rejects.toThrow('account changed');
+    await expect(service.loadSharedFtp('foreign', ActivityTypes.Running)).rejects.toThrow('account changed');
+  });
+  it('times out a pending shared read without returning a late reference', async () => {
+    vi.useFakeTimers();
+    try {
+      let finish!: (value: unknown) => void;
+      vi.mocked(getDoc).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }) as never);
+      const pending = service.loadSharedFtp('owner', ActivityTypes.Running), settled = vi.fn();
+      pending.then(settled, () => undefined);
+      const failure = expect(pending).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(30001); await failure;
+      finish({ data: () => ({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 280,
+        revision: 2, effectiveAt: Date.parse('2026-11-01T12:00Z') }) });
+      await Promise.resolve(); await Promise.resolve(); expect(settled).not.toHaveBeenCalled(); expect(set).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it('narrowly merges planning-only settings and recovers an exact uncertain-save retry', async () => {
     const saved = await service.save('owner', empty, [profile]);
     expect(set).toHaveBeenCalledExactlyOnceWith({ path: 'users/owner/config/settings' }, { workoutPower: saved }, { merge: true });

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "2dfd82e48550eb4090982f5366da1d3d4475edf6024d12676a768ede54eeec04",
+  "candidateSha256": "b14a9b69b70b8c99c8ab94d326480d6cbd7b534cb947f9f54cc6e7262a5b6d06",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain pending Sports Lib/Training, Calendar goals and independent dated threshold tools. Complete scheduled v4/saved v3 recipes preserve Garmin power zones and 3/10/30-second averaging, with legacy guards and before/after disclosures. Preserve independent grants, authored-change approval, initial Send/Enable consent and supported-adjustment warnings. Registered baseline/history stay frozen; backend release, app rescan and plugin refresh remain separate.",
+  "summary": "Retain pending Sports Lib/Training, Calendar goals and independent dated threshold tools. Complete recipe reads preserve Garmin zones and 3/10/30-second averaging. Author new FTP-relative workouts from the matching shared FTP only with independent threshold permission; freeze targets and preserve explicit source overrides. Keep grants, approval and provider consent unchanged. Registered baseline/history stay frozen; backend release, app rescan and validated plugin refresh remain separate.",
   "rescanRequired": true
 }

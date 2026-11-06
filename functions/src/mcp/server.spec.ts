@@ -1459,11 +1459,15 @@ describe('MCP HTTP scope enforcement', () => {
       await client.connect(clientTransport);
       const instructions = client.getInstructions() || '';
       expect(instructions.includes(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE)).toBe(writable);
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('independent training-thresholds:read');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('effective since is not a measurement/test date');
+    expect(TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE).toContain('Keep copied/saved targets unchanged');
       expect(instructions.includes(TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE)).toBe(writable);
       expect(instructions.includes(TRAINING_PLAN_NEXT_STEPS_GUIDANCE)).toBe(writable);
       const names = (await client.listTools()).tools.map(tool => tool.name);
       expect(names.includes('apply_training_changes')).toBe(writable);
       expect(names).toContain('get_planned_workout_v3');
+      expect(names).not.toContain('get_training_thresholds'); // Planning grants never imply threshold access.
     } finally {
       await client.close();
       await server.close();

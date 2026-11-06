@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
-import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1 } from '../../../shared/workout-power-settings';
+import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1, sharedWorkoutFtpReference, parseWorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
 import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-power';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import type { DayWorkoutContext } from './day-workout-context';
@@ -117,4 +117,94 @@ describe('private power settings codec', () => {
     { zoneUpperBoundsWatts: [200, 100] }, { zoneUpperBoundsWatts: [100, 100] }, { zoneUpperBoundsWatts: [0] },
     { zoneUpperBoundsWatts: [NaN] }, { reference: { kind: 'critical-power', watts: Infinity } }, { privateToken: 'no' }])(
     'rejects malformed profiles: %j', extra => expect(() => parseWorkoutPowerProfileV1({ ...profile, ...extra })).toThrow());
+});
+
+
+describe('shared dated FTP for generation', () => {
+  const policy = { method: 'AUTOMATIC', included: true, functionalThresholdPower: 280, revision: 3,
+    effectiveAt: now.getTime() - 1000 };
+  function sharedDatabase(saved: unknown = { version: 1, revision: 0, profiles: [] }, current: unknown = policy) {
+    const historyGet = vi.fn().mockResolvedValue({ docs: [{ data: () => policy }] });
+    const limit = vi.fn(() => ({ get: historyGet }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const where = vi.fn(() => ({ orderBy }));
+    const collection = vi.fn(() => ({ where }));
+    const policyGet = vi.fn().mockResolvedValue({ data: () => current });
+    const settingsGet = vi.fn().mockResolvedValue({ get: () => saved });
+    const doc = vi.fn((path: string) => path.endsWith('/config/settings') ? { get: settingsGet }
+      : { get: policyGet, collection });
+    return { db: { doc } as unknown as FirebaseFirestore.Firestore, doc, policyGet, settingsGet, historyGet, collection, where, orderBy, limit };
+  }
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.TrailRunning, ActivityTypes.MountainBiking])(
+    'uses the matching family FTP for %s without optional Training context or inferred source identity', async sport => {
+      const { db, doc } = sharedDatabase();
+      const result = await withWorkoutPowerContext('owner', { ...controls, sport, trainingContext: false }, now, base(), db);
+      const family = sport === ActivityTypes.Cycling || sport === ActivityTypes.MountainBiking ? 'cycling' : 'running';
+      expect(doc.mock.calls.map(([path]) => path)).toEqual(['users/owner/config/settings', `users/owner/trainingLoadPolicies/${family}`]);
+      expect(result.powerReference).toEqual({ kind: 'training-ftp', sport, family, revision: 3,
+        effectiveAtMs: policy.effectiveAt, reference: { kind: 'functional-threshold-power', watts: 280 } });
+      expect(result.references).toEqual([{ kind: 'power', mode: 'relative', minimumPercent: 100, maximumPercent: 100,
+        reference: { kind: 'functional-threshold-power', watts: 280 } }]);
+      expect(result.powerReference).not.toHaveProperty('provider'); expect(result.powerReference).not.toHaveProperty('source');
+    });
+  it('freezes a matching reference in generated targets and review provenance across later FTP edits', async () => {
+    const database = sharedDatabase();
+    const before = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+    const target = { ...before.references[0], minimumPercent: 60, maximumPercent: 80 };
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Power', rationale: 'Shared FTP', structure: {
+      version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [target] }] } }, controls, [], before.references);
+    expect(dayWorkoutPowerReferenceUsed(suggestion, before.powerReference)).toEqual(before.powerReference);
+    database.policyGet.mockResolvedValueOnce({ data: () => ({ ...policy, functionalThresholdPower: 300, revision: 4 }) });
+    const next = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+    expect(next.powerReference?.reference.watts).toBe(300);
+    expect(before.powerReference?.reference.watts).toBe(280);
+    expect(suggestion.draft?.structure.nodes[0]).toMatchObject({ targets: [{ reference: { watts: 280 } }] });
+    expect(JSON.stringify(suggestion.draft)).not.toContain('effectiveAtMs');
+  });
+  it.each(['critical-power', 'functional-threshold-power'] as const)('preserves an explicit %s source override', async kind => {
+    const saved = { version: 1, revision: 2, profiles: [{ ...profile, reference: { kind, watts: 250 } }] };
+    const database = sharedDatabase(saved);
+    const result = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+    expect(result.powerReference).toEqual(saved.profiles[0]); expect(database.policyGet).not.toHaveBeenCalled();
+  });
+  it('does not silently switch to shared FTP when an explicit override cannot be verified', async () => {
+    for (const extra of [{ referenceDate: '2999-01-01' }, { reference: { kind: 'critical-power', watts: 0 } }]) {
+      const database = sharedDatabase({ version: 1, revision: 2, profiles: [{ ...profile, ...extra }] });
+      const result = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+      expect(result.powerReference).toBeUndefined(); expect(result.references).toEqual([]);
+      expect(database.policyGet).not.toHaveBeenCalled();
+    }
+  });
+  it('resolves the prior dated revision if a concurrent save happened after generation began', async () => {
+    const database = sharedDatabase(undefined, { ...policy, effectiveAt: now.getTime() + 1, revision: 4, functionalThresholdPower: 300 });
+    const result = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+    expect(result.powerReference).toMatchObject({ revision: 3, reference: { watts: 280 } });
+    expect(database.collection).toHaveBeenCalledExactlyOnceWith('revisions');
+    expect(database.where).toHaveBeenCalledWith('effectiveAt', '<=', expect.objectContaining({ toMillis: expect.any(Function) }));
+    expect(database.orderBy).toHaveBeenCalledWith('effectiveAt', 'desc'); expect(database.limit).toHaveBeenCalledWith(1);
+  });
+  it('uses a valid FTP even when the separate load inclusion setting is disabled', async () => {
+    const database = sharedDatabase(undefined, { ...policy, included: false });
+    expect((await withWorkoutPowerContext('owner', controls, now, base(), database.db)).powerReference?.reference.watts).toBe(280);
+  });
+  it.each([undefined, { ...policy, functionalThresholdPower: undefined }, { ...policy, functionalThresholdPower: 0 },
+    { ...policy, functionalThresholdPower: Infinity }, { ...policy, functionalThresholdPower: 4000 },
+    { ...policy, revision: 0 }, { ...policy, effectiveAt: undefined }, { ...policy, effectiveAt: 'invalid' }])(
+    'withholds missing or invalid shared FTP without reviving older cleared values: %j', async current => {
+      const database = sharedDatabase(); database.policyGet.mockResolvedValueOnce({ data: () => current });
+      const result = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+      expect(result.powerReference).toBeUndefined(); expect(result.references).toEqual([]); expect(database.historyGet).not.toHaveBeenCalled();
+    });
+  it('fails closed on a shared policy read error', async () => {
+    const database = sharedDatabase(); database.policyGet.mockRejectedValueOnce(Error('offline'));
+    const result = await withWorkoutPowerContext('owner', controls, now, base(), database.db);
+    expect(result.powerReference).toBeUndefined(); expect(result.references).toEqual([]);
+    expect(result.missingContext.join(' ')).toContain('could not be verified');
+  });
+  it('validates private shared snapshots without accepting source metadata or a different reference kind', () => {
+    const snapshot = sharedWorkoutFtpReference(controls.sport, policy, now.getTime())!;
+    expect(parseWorkoutPowerReferenceV1(snapshot)).toEqual(snapshot);
+    for (const extra of [{ source: 'private' }, { family: 'cycling' }, { kind: 'other' }, { effectiveAtMs: NaN },
+      { reference: { kind: 'critical-power', watts: 280 } }]) expect(() => parseWorkoutPowerReferenceV1({ ...snapshot, ...extra })).toThrow();
+  });
 });

@@ -959,56 +959,65 @@ schema migration is needed. For local development, the Functions emulator must l
 Use the initial build and ongoing `build:watch` workflow in README and `.agent/workflows/start-emulators.md`.
 This local build workflow changes no MCP contract or authorization policy.
 
-#### Source-aware power references for workout generation
+#### Shared FTP and explicit power overrides for workout generation
 
-Private owner settings at `users/{uid}/config/settings.workoutPower` hold version 1, an optimistic revision,
-and at most 20 exact-sport profiles. Each sport has one chosen service/ecosystem, a manually confirmed device/power-source
-label, FTP or critical-power watts, a reference date and optional increasing watt zone boundaries. `shared/workout-power-settings.ts`
-is the bounded allowlist shared by Settings and generation. Source labels trim surrounding spaces and allow at most
-80 characters; the original input rejects ASCII controls U+0000–U+001F and U+007F, including leading/trailing whitespace
-controls, while preserving printable Unicode. An explicit character-code scan keeps that validation compatible with
-the shared-source lint rules. Boundaries are exclusive upper bounds; Z1 starts at zero and
-the final zone is open-ended. There is no provider fetch, auto-calibration, source conversion, live zone-linked target,
-watch smoothing change, or dependency on recorded-metric/TSS/durability settings.
+Running and Cycling generation defaults to the existing dated Training FTP at
+`users/{uid}/trainingLoadPolicies/{running|cycling}`. Settings → Training load defaults and
+Health → Fitness edit the same policy, including its immutable `/revisions/{id}` history. Workout power shows
+that shared value, labelled **Effective since** (a setting's effective instant, not a measurement/test date), with
+an action opening the existing threshold editor. There is no second normal FTP entry. Exact supported sports
+resolve through the canonical Running/Cycling family catalog; other families have no inferred FTP default.
+No provider FTP fetch, auto-calibration, source conversion, live zone link or watch smoothing change is introduced.
 
-Settings → Workout power is an independent lazy section with its own Save. Fresh Lite reads distinguish an absent branch
-from offline/invalid data. An owner/session-fenced SDK transaction compares the complete canonical previous head, supports
-an exact already-committed retry, increments revision and narrowly merges only `workoutPower`; unrelated settings remain
-untouched. Generic full-profile/settings saves strip `workoutPower` to avoid replaying a stale revision outside this writer.
-Current `/config/settings` owner/account-deletion rules apply unchanged. User-authored planning references do
-not gain server authority: generation revalidates the entire branch, exact sport and non-future reference date. Malformed
-or unreadable settings never become a zero-revision write or an inferred threshold. Dirty drafts survive failed saves;
-explicit reload is available for conflicts. Sign-out/account changes suppress late UI outcomes.
+Private `users/{uid}/config/settings.workoutPower` remains the explicit advanced override, preserving every existing
+profile without migration or deletion. Version 1 holds an optimistic revision and at most 20 exact-sport profiles:
+chosen service/ecosystem, manually confirmed source label, FTP or critical-power watts, reference date and optional
+increasing watt zone boundaries. An exact-sport override wins over shared FTP; CP is never converted from FTP.
+Adding/editing overrides does not change the Training policy or recorded-load calculations. Returning to the default
+requires explicitly choosing **Use shared FTP** to remove the override; changing shared FTP alone leaves it in force.
 
-Both manual day generation and included Pro daily suggestions resolve power after the final sport selection, separately
-from optional Training-plan context. Only supported sports with `auto`/`power` targets read settings. Every path, including unsupported sports and explicit
-non-power preferences, removes unverified power references from both validation and model reference lists. Nearby recipes cannot identify a current
-source, so their power references are withheld; other reference kinds retain existing behavior. A confirmed matching
-profile supplies the sole allowed power reference and optional authored zone guidance to the model. The existing strict
-validator accepts only relative targets matching its exact reference kind and watts. Missing, future-dated, malformed or
-unavailable settings yield effort guidance without inferred power targets, never another sport/device reference.
+`shared/workout-power-settings.ts` strictly validates profiles and separately projects a bounded shared snapshot.
+Source labels trim surrounding spaces, allow at most 80 characters and reject ASCII controls U+0000–U+001F/U+007F
+before trimming while preserving printable Unicode. Zone upper bounds are exclusive; Z1 starts at zero and the
+last zone is open-ended. Shared FTP never fabricates zone boundaries or a provider/source label. Planning reference
+watts must be positive, finite and at most 3000; unusable saved values produce no inferred reference.
 
-Only workouts containing an actual relative power target with the matching sport/reference store a `powerReference`
-review snapshot; effort-only and other-target workouts do not attribute an unused source. This snapshot is immutable. Original
-request replay and daily-ready caches retain that snapshot after settings edits. Profile changes do not regenerate or
-charge again, rewrite existing prescriptions or retarget already saved workouts. Canonical v1 recipes continue to store
-only percentage ranges and the reference kind/watts; private provider/device/date/zone metadata is not persisted in the
-recipe. Existing Garmin/Suunto mapping warnings and fixed-watt export remain unchanged. Source ecosystem and delivery
-provider are independent; sending must not silently select a different threshold.
+Fresh owner/session-fenced Lite reads distinguish absent data from offline/invalid data. The override writer keeps
+its existing SDK transaction, complete canonical previous-head comparison, exact already-committed retry, revision
+increment and narrow `workoutPower` merge. Generic profile saves strip that branch. Existing owner/deletion Rules
+remain unchanged. Dirty drafts survive failed saves and shared-editor refreshes; account changes suppress late outcomes.
 
-MCP impact: no public tool, schema, scope, consent, instruction digest or bundled plugin change. Existing planned-workout
-reads already expose the exact canonical relative target snapshot, covered for FTP and CP by read-back tests in this change.
-Private profile settings and first-party result provenance remain outside public MCP and general Assistant plan-chat
-context. No new mutation or settings-access authority is inferred from Training read/write consent. The profile branch
-is under the existing recursively deleted user root. No migration, reparse, derived schema bump or deployment is needed
-for stored data. Feature runtime changes require the normal separately authorized frontend/Functions deployment.
+Manual day generation and new Pro daily suggestions resolve power after final sport selection, independently of optional
+Training-plan context. Only supported sports with Auto/Power targets read power settings. Nearby power references are
+removed from both validation and model input on every path, including unsupported sports and non-power preferences.
+Read and validate overrides first: an invalid, unreadable or future-dated override branch blocks fallback rather than
+silently changing source. With no exact-sport override, read the matching policy head once. If a concurrent save made
+that head effective after generation began, query one immutable revision with `effectiveAt <= generation time`, ordered
+newest first. Absent/cleared FTP does not resurrect an older value. Policy inclusion controls recorded load, not whether
+its valid FTP can guide a new prescription. No provider calls, writes or optional context grant are added to generation.
 
-Verification covers codec bounds/unknown keys, missing/unreadable/future/wrong-sport references, strict generation
-validation, manual and routine-selected daily result replay, owner/session changes, concurrent settings and exact retry,
-canonical display, real Material template bindings, haptics, help and MCP read-back. Pure display specs run in helpers-node;
-Angular service/component specs have concrete environment reasons. Browser layout checks use synthetic data only. Zone-boundary hints use Material dynamic subscript sizing so wrapped
-phone hints reserve their full height before the Save/Remove actions.
+The sole accepted relative power target must match the selected reference kind/watts. Only a workout actually using
+it receives private result provenance: the legacy override snapshot, or `kind: training-ftp`, exact sport/family,
+policy revision, effectiveAtMs and FTP watts. Request replay and daily-ready caches retain that immutable snapshot.
+Changing FTP does not regenerate an existing suggestion, reset allowance, rewrite saved recipes or retarget copied
+workouts. Canonical recipes retain only percentage ranges and frozen reference kind/watts; source/date/revision
+provenance stays outside the recipe. Garmin-native zones still use device settings, and explicit Garmin averaging
+remains separate. Sending never selects another threshold.
 
+MCP/Assistant impact: existing full-recipe reads expose frozen targets without fetching today's policy or private
+provenance. No new tool, schema, scope, consent or mutation is introduced. Shared authoring instructions and the bundled
+Training/cross-domain skills direct new FTP-relative Running/Cycling authoring to existing `get_training_thresholds`
+only when advertised under independent `training-thresholds:read`; the built-in Assistant's separate threshold choice
+still starts off. Missing permission/value requires an explicit reference or target-free guidance. Private source
+overrides are not automatically available to general plan chats. Existing targets change only on explicit retargeting.
+Instruction metadata requires the pending compatible contract digest, separate backend release, registered-app rescan
+and validated plugin refresh; registered schemas/history stay frozen. Those rollout actions require separate approval.
+
+Verification covers family/default/override precedence, CP separation, invalid/future/concurrent policies, frozen manual
+and daily replay, threshold permission boundaries, private-provenance exclusion, owner/session/timeout fences,
+canonical display, real Material bindings, default/advanced interactions, haptics and Help. Pure display tests remain
+in helpers-node; injected service/component tests remain Angular. No migration, reparse, derived schema bump, new
+Rules/index, credential or production data operation is required.
 
 ### Remembered Plans view
 
@@ -5370,7 +5379,7 @@ profile bands retain null watt bounds, and distance-based duration is unknown wi
 No standard percentage system, athlete FTP, target watts, adherence or Training load is estimated from the zone number.
 
 Calendar generation and daily preferences offer explicit **Garmin power zones** for these two sports. Auto and Power
-retain their source-aware snapshot behavior; selecting a connected service does not select native zones. The private
+retain frozen shared-FTP/explicit-override snapshots; selecting a connected service does not select native zones. The private
 model schema permits only native-zone targets and time/distance/manual endings for the explicit preference, without
 relative/absolute targets, pool length or early-Lap flags. Retry guidance explicitly retains a zone without requiring
 an athlete reference. Validation requires at least one primary native
@@ -7461,7 +7470,9 @@ per sport family, and Swimming CSS as `mm:ss` per 100 metres or 100 yards. Healt
 restricted to thresholds; it preserves method and inclusion. These are calibration settings, not Health observations:
 there is one policy head/history, no duplicate measurement or inferred threshold. Empty input removes that fallback
 from the next revision. Values must be positive and finite; existing sport eligibility is unchanged. FTP settings for
-Running and Cycling are independent. CSS is stored as metres/second; unchanged unit round trips preserve full precision.
+Running and Cycling are independent. These same saved values now default new manual/daily FTP-relative workout
+generation unless an exact-sport explicit power override exists. Existing saved targets stay frozen; the policy
+effective instant is not a measurement date. CSS is stored as metres/second; unchanged unit round trips preserve full precision.
 Display rounds CSS to the nearest second after conversion without changing calculations.
 
 The shared editor can offer an optional **Use** FTP suggestion for Running or Cycling from the existing
