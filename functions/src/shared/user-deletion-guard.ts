@@ -1,4 +1,20 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+
+const FIRESTORE_ERROR_CODES = [
+    'ok', 'cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found',
+    'already-exists', 'permission-denied', 'resource-exhausted', 'failed-precondition',
+    'aborted', 'out-of-range', 'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated',
+];
+
+function firestoreReadErrorCode(error: unknown): string {
+    const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
+    if (typeof code === 'number' && Number.isInteger(code)) return FIRESTORE_ERROR_CODES[code] ?? 'unknown';
+    if (typeof code !== 'string' || code.length > 64) return 'unknown';
+    const normalized = code.toLowerCase().replace(/^firestore\//, '').replace(/_/g, '-');
+    if (/^\d{1,2}$/.test(normalized)) return FIRESTORE_ERROR_CODES[Number(normalized)] ?? 'unknown';
+    return FIRESTORE_ERROR_CODES.includes(normalized) ? normalized : 'unknown';
+}
 
 export const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 
@@ -19,6 +35,13 @@ export class UserDeletionGuardReadError extends Error {
         public readonly originalError: unknown,
     ) {
         super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        // The wrapper preserves the original error for callers, but logs only a
+        // fixed native status: never UID, phase, message, stack, details or metadata.
+        try {
+            logger.warn('[UserDeletionGuard] Firestore guard read failed', {
+                firestoreCode: firestoreReadErrorCode(originalError),
+            });
+        } catch { /* Diagnostics must not replace the retryable guard error. */ }
     }
 }
 

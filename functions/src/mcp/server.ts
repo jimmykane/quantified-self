@@ -3334,13 +3334,24 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
   }
 
   let readProtocolVersion = (): string | undefined => undefined;
+  let transportErrorReported = false;
   const transport = createMcpTransportHandler(
     () => {
       const server = createMcpServer(auth, baseUrl, defaultDataService);
       readProtocolVersion = () => server.server.getNegotiatedProtocolVersion();
       return server;
     },
-    error => logMcpTransportRejection(error, request),
+    error => {
+      transportErrorReported = true;
+      logMcpTransportRejection(error, request);
+    },
+    diagnostic => {
+      // Some SDK 400 responses do not invoke onerror. Avoid duplicating those that do.
+      if (!transportErrorReported) logger.warn('[MCP] Streamable HTTP request rejected', {
+        ...diagnostic,
+        clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+      });
+    },
   );
   try {
     await toNodeHandler(transport, {
