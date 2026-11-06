@@ -980,12 +980,18 @@ requires explicitly choosing **Use shared FTP** to remove the override; changing
 Source labels trim surrounding spaces, allow at most 80 characters and reject ASCII controls U+0000–U+001F/U+007F
 before trimming while preserving printable Unicode. Zone upper bounds are exclusive; Z1 starts at zero and the
 last zone is open-ended. Shared FTP never fabricates zone boundaries or a provider/source label. Planning reference
-watts must be positive, finite and at most 3000; unusable saved values produce no inferred reference.
+watts must be positive, finite and at most 3000; unusable saved values produce no inferred reference. Native policy timestamps, including the
+browser SDK's fractional-millisecond values, normalize down to integer epoch milliseconds, matching the Admin SDK
+and private replay contract. A valid Firestore timestamp must not become an unavailable FTP setting merely because
+it has microsecond precision.
 
 Fresh owner/session-fenced Lite reads distinguish absent data from offline/invalid data. The override writer keeps
 its existing SDK transaction, complete canonical previous-head comparison, exact already-committed retry, revision
 increment and narrow `workoutPower` merge. Generic profile saves strip that branch. Existing owner/deletion Rules
-remain unchanged. Dirty drafts survive failed saves and shared-editor refreshes; account changes suppress late outcomes.
+remain unchanged. Dirty drafts survive failed saves and shared-editor refreshes; account changes suppress late outcomes. A failed shared FTP read offers
+**Retry shared FTP**, which repeats only that read and preserves the override draft. Initialization/background reads
+remain silent; an explicit retry has one selection haptic, reports a current failure and ignores duplicate pending
+retries or late account/sport results.
 
 Manual day generation and new Pro daily suggestions resolve power after final sport selection, independently of optional
 Training-plan context. Only supported sports with Auto/Power targets read power settings. Nearby power references are
@@ -998,7 +1004,9 @@ its valid FTP can guide a new prescription. No provider calls, writes or optiona
 
 The sole accepted relative power target must match the selected reference kind/watts. Only a workout actually using
 it receives private result provenance: the legacy override snapshot, or `kind: training-ftp`, exact sport/family,
-policy revision, effectiveAtMs and FTP watts. Request replay and daily-ready caches retain that immutable snapshot.
+policy revision, numeric effectiveAtMs and FTP watts. The private review codec rejects date strings, Date objects
+and timestamp-like objects in that numeric snapshot field; policy heads still accept their native Firestore timestamp.
+Request replay and daily-ready caches retain that immutable snapshot.
 Changing FTP does not regenerate an existing suggestion, reset allowance, rewrite saved recipes or retarget copied
 workouts. Canonical recipes retain only percentage ranges and frozen reference kind/watts; source/date/revision
 provenance stays outside the recipe. Garmin-native zones still use device settings, and explicit Garmin averaging
@@ -1012,6 +1020,10 @@ still starts off. Missing permission/value requires an explicit reference or tar
 overrides are not automatically available to general plan chats. Existing targets change only on explicit retargeting.
 Instruction metadata requires the pending compatible contract digest, separate backend release, registered-app rescan
 and validated plugin refresh; registered schemas/history stay frozen. Those rollout actions require separate approval.
+
+Review impact: these retry and private-codec fixes do not change public MCP recipes, projections, instructions,
+schemas, grants, confirmation or provider behavior. Existing full-recipe read-back coverage remains applicable;
+no MCP coverage is deferred.
 
 Verification covers family/default/override precedence, CP separation, invalid/future/concurrent policies, frozen manual
 and daily replay, threshold permission boundaries, private-provenance exclusion, owner/session/timeout fences,

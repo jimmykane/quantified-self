@@ -82,7 +82,9 @@ export function sharedWorkoutFtpReference(sport: WorkoutPowerProfileV1['sport'],
   const family = workoutFtpFamily(sport);
   if (!family || !WORKOUT_POWER_SPORTS.includes(sport) || !value || typeof value !== 'object' || Array.isArray(value)) return null;
   const policy = value as TrainingLoadPolicy & { revision?: number; effectiveAt?: unknown };
-  const effectiveAtMs = trainingLoadTimeMs(policy.effectiveAt), watts = policy.functionalThresholdPower;
+  const effectiveAt = trainingLoadTimeMs(policy.effectiveAt), watts = policy.functionalThresholdPower;
+  // Browser Timestamp preserves microseconds; align with Admin SDK and replay snapshots at millisecond precision.
+  const effectiveAtMs = Number.isFinite(effectiveAt) ? Math.floor(effectiveAt) : Number.NaN;
   if (!Number.isSafeInteger(asOfMs) || asOfMs < 0 || !validTrainingLoadPolicy(family, policy) || !Number.isSafeInteger(policy.revision) || Number(policy.revision) < 1
     || !Number.isSafeInteger(effectiveAtMs) || effectiveAtMs < 0 || effectiveAtMs > 8_640_000_000_000_000 || effectiveAtMs > asOfMs
     || typeof watts !== 'number' || !Number.isFinite(watts) || watts <= 0 || watts > 3000) return null;
@@ -92,6 +94,7 @@ export function sharedWorkoutFtpReference(sport: WorkoutPowerProfileV1['sport'],
 export function parseWorkoutPowerReferenceV1(value: unknown): WorkoutPowerReferenceV1 {
   if (!value || typeof value !== 'object' || !('kind' in value)) return parseWorkoutPowerProfileV1(value);
   const p = record(value, ['kind', 'sport', 'family', 'revision', 'effectiveAtMs', 'reference']);
+  if (!Number.isSafeInteger(p.effectiveAtMs)) throw Error('Invalid shared FTP reference.');
   const reference = record(p.reference, ['kind', 'watts']);
   const result = sharedWorkoutFtpReference(p.sport as WorkoutPowerProfileV1['sport'], {
     method: 'AUTOMATIC', included: true, functionalThresholdPower: reference.watts,

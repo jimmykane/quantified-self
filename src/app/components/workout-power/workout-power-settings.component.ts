@@ -71,15 +71,18 @@ export class WorkoutPowerSettingsComponent implements OnChanges, OnDestroy {
     if (this.busy() || !this.form.dirty && (!this.editingOverride() || !!this.selectedProfile())) return;
     this.reset(); this.message.set(''); this.selection();
   }
-  async refreshSharedFtp(): Promise<void> {
+  async refreshSharedFtp(feedback = false): Promise<void> {
+    if (feedback && (this.busy() || this.sharedBusy())) return;
+    if (feedback) this.selection();
     const token = ++this.sharedGeneration, generation = this.generation, uid = this.uid;
     const current = () => token === this.sharedGeneration && generation === this.generation && uid === this.uid;
-    this.sharedFtp.set(null); this.sharedError.set(false); this.sharedBusy.set(true);
+    this.sharedFtp.set(null); if (!feedback) this.sharedError.set(false); this.sharedBusy.set(true);
     try {
       const reference = await this.service.loadSharedFtp(uid, this.sport());
-      if (current()) this.sharedFtp.set(reference);
-    } catch { if (current()) this.sharedError.set(true); }
-    finally { if (current()) this.sharedBusy.set(false); }
+      if (current()) { this.sharedFtp.set(reference); this.sharedError.set(false); }
+    } catch {
+      if (current()) { this.sharedError.set(true); if (feedback) this.haptics.error(); }
+    } finally { if (current()) this.sharedBusy.set(false); }
   }
   async editSharedFtp(): Promise<void> {
     if (this.busy() || this.sharedEditorBusy() || !this.sharedFamily()) return;

@@ -31,12 +31,13 @@ describe('private workout power settings persistence', () => {
     vi.mocked(getDoc).mockRejectedValue(Error('offline'));
     await expect(service.load('owner')).rejects.toThrow('offline');
   });
-  it('reads the same dated FTP policy used by Training with a frozen effective date and revision', async () => {
-    const effectiveAt = Date.parse('2026-11-01T12:00:00Z');
+  it.each([false, true])('reads dated FTP with a frozen millisecond snapshot (native client timestamp: %s)', async nativeTimestamp => {
+    const effectiveAtMs = Date.parse('2026-11-01T12:00:00Z');
+    const effectiveAt = nativeTimestamp ? { toMillis: () => effectiveAtMs + 0.456 } : effectiveAtMs;
     vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ method: 'AUTOMATIC', included: true,
       functionalThresholdPower: 280, revision: 3, effectiveAt }) } as never);
     expect(await service.loadSharedFtp('owner', ActivityTypes.Running)).toEqual({ kind: 'training-ftp', sport: ActivityTypes.Running,
-      family: 'running', revision: 3, effectiveAtMs: effectiveAt, reference: { kind: 'functional-threshold-power', watts: 280 } });
+      family: 'running', revision: 3, effectiveAtMs, reference: { kind: 'functional-threshold-power', watts: 280 } });
     expect(getDoc).toHaveBeenCalledExactlyOnceWith({ path: 'users/owner/trainingLoadPolicies/running' });
     expect(set).not.toHaveBeenCalled();
   });

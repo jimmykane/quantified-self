@@ -113,6 +113,38 @@ describe('Workout power settings', () => {
     component.form.patchValue({ watts: 240 }); component.form.markAsDirty(); await component.save();
     expect(save).toHaveBeenCalled();
   });
+  it('offers a shared-only retry that preserves a dirty override through failures and recovery', async () => {
+    loadSharedFtp.mockRejectedValueOnce(Error('offline'));
+    const fixture = TestBed.createComponent(WorkoutPowerSettingsComponent); fixture.componentRef.setInput('uid', 'owner');
+    fixture.componentInstance.sport.set(ActivityTypes.Running); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.busy()).toBe(false)); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    const current = fixture.componentInstance;
+    current.form.patchValue({ watts: 240 }); current.form.markAsDirty(); fixture.detectChanges();
+    const retry = () => [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) =>
+      button.textContent.includes('Retry shared FTP')) as HTMLButtonElement;
+    expect(retry()).toBeDefined(); expect(error).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    exportPowerSettingsQa(fixture.nativeElement, 'power-shared-error');
+    let reject!: (error: Error) => void;
+    loadSharedFtp.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+    retry().click(); fixture.detectChanges();
+    expect(current.sharedBusy()).toBe(true); expect(fixture.nativeElement.textContent).toContain('Loading shared FTP');
+    expect(retry().disabled).toBe(true); expect(retry().getAttribute('aria-busy')).toBe('true');
+    exportPowerSettingsQa(fixture.nativeElement, 'power-shared-retrying');
+    await current.refreshSharedFtp(true);
+    expect(loadSharedFtp).toHaveBeenCalledTimes(2); expect(selection).toHaveBeenCalledOnce();
+    reject(Error('still offline')); await vi.waitFor(() => expect(current.sharedBusy()).toBe(false)); fixture.detectChanges();
+    expect(current.sharedError()).toBe(true);
+    expect(error).toHaveBeenCalledOnce(); expect(retry()).toBeDefined();
+    const shared = sharedWorkoutFtpReference(ActivityTypes.Running, { method: 'AUTOMATIC', included: true,
+      functionalThresholdPower: 280, revision: 2, effectiveAt: Date.parse('2026-11-01T12:00Z') }, Date.now())!;
+    loadSharedFtp.mockResolvedValueOnce(shared); retry().click();
+    await vi.waitFor(() => expect(current.sharedFtp()).toEqual(shared)); fixture.detectChanges();
+    expect(current.form.controls.watts.value).toBe(240); expect(current.form.dirty).toBe(true);
+    expect(current.sharedError()).toBe(false); expect(current.form.enabled).toBe(true);
+    expect(load).toHaveBeenCalledOnce(); expect(save).not.toHaveBeenCalled();
+    expect(selection).toHaveBeenCalledTimes(2); expect(error).toHaveBeenCalledOnce(); expect(success).not.toHaveBeenCalled();
+  });
   it('ignores a stale shared FTP response after the selected sport changes', async () => {
     await component.load(); let finish!: (value: unknown) => void;
     loadSharedFtp.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));

@@ -10,9 +10,12 @@
     <section aria-label="Shared FTP">
       <h3>Shared FTP</h3>
       @if (sharedBusy()) { <p role="status">Loading shared FTP…</p> }
-      @else if (sharedError()) { <p role="alert">Shared FTP could not be verified. Reload power settings to try again.</p> }
+      @else if (sharedError()) { <p role="alert">Shared FTP could not be verified.</p> }
       @else if (sharedFtp()) { <p>{{ sharedSummary() }}</p> }
       @else { <p>No shared FTP is available for this sport. Set it in Training thresholds to use power targets by default.</p> }
+      @if (sharedError()) {
+        <button mat-button type="button" [disabled]="busy() || sharedBusy()" [attr.aria-busy]="sharedBusy() || null" (click)="refreshSharedFtp(true)">Retry shared FTP</button>
+      }
       <button mat-button type="button" [disabled]="busy() || sharedEditorBusy()" (click)="editSharedFtp()">{{ sharedEditorBusy() ? 'Training thresholds open…' : 'Edit shared FTP' }}</button>
       @if (selectedProfile()) { <p>Your explicit override below takes precedence for this sport.</p> }
       @else { <p>Using shared FTP when available. No separate power reference is required.</p> }
