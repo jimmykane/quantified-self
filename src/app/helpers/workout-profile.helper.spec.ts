@@ -151,3 +151,12 @@ describe('workout profile presentation', () => {
     expect(model.occurrences[0].note).toBe('<script>untrusted</script>');
   });
 });
+
+
+it('keeps Garmin zone watts unknown in the profile while preserving its instruction', () => {
+  const structure = recipe([{ ...step('zone'), targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }]);
+  const model = buildWorkoutProfile(structure);
+  expect(model.occurrences[0].targets[0]).toMatchObject({ metric: 'power', minimum: null, maximum: null,
+    text: 'Garmin power zone 2 · Watts depend on Garmin settings' });
+  expect(structure.nodes[0]).toMatchObject({ targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] });
+});

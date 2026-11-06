@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, input, output } from '@angular/core';
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1, MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
-  WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
+  isGarminPowerZoneSportV1, WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP, type WorkoutTargetKindV1 } from '@shared/planned-workout';
 import {
   WORKOUT_EDITOR_REFERENCE_OPTIONS, changeManualEditorTargetPresentation, createManualWorkoutEditorTarget,
   manualEditorTargetHasSavedReference, manualEditorTargetPreview, workoutEditorTargetUnit, type ManualWorkoutEditorTarget,
@@ -37,6 +37,8 @@ export class WorkoutTargetsEditorComponent {
       .map(value => ({ value: (value === 'pace' ? 'speed' : value) as WorkoutTargetKindV1,
         label: value === 'pace' || value === 'speed' ? `${labels[value]} / ${labels[value === 'pace' ? 'speed' : 'pace']}` : labels[value] }));
   });
+  readonly supportsGarminZone = computed(() => isGarminPowerZoneSportV1(this.sport()));
+  readonly zones = [1, 2, 3, 4, 5, 6, 7];
   readonly canAdd = computed(() => this.targets().length < WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP);
   readonly rows = computed(() => this.targets().map(target => {
     const unit = workoutEditorTargetUnit(target, this.sport(), this.unitSettings());
@@ -80,9 +82,12 @@ export class WorkoutTargetsEditorComponent {
       changed = this.newTarget(value as WorkoutTargetKindV1);
     } else if (field === 'presentation' && (value === 'pace' || value === 'speed')) {
       changed = changeManualEditorTargetPresentation(target, value, this.sport(), this.unitSettings());
+    } else if (field === 'mode' && value === 'garmin-zone' && target.kind === 'power' && this.supportsGarminZone()) {
+      changed = { ...target, mode: 'garmin-zone', rangeMode: 'single', minimum: null, maximum: null,
+        referenceValue: null, source: undefined, speedSource: undefined };
     } else if (field === 'mode' && (value === 'absolute' || value === 'relative')) {
       changed = { ...target, mode: value, minimum: null, maximum: null, referenceValue: null, source: undefined, speedSource: undefined };
-    } else if (field === 'rangeMode' && (value === 'single' || value === 'range')) {
+    } else if (field === 'rangeMode' && target.mode !== 'garmin-zone' && (value === 'single' || value === 'range')) {
       changed = { ...target, rangeMode: value, maximum: value === 'single' ? target.minimum : target.maximum };
     } else if (field === 'referenceKind') {
       const option = WORKOUT_EDITOR_REFERENCE_OPTIONS[target.kind].find(option => option.value === value);
@@ -90,6 +95,11 @@ export class WorkoutTargetsEditorComponent {
       changed = { ...target, referenceKind: option.value, referenceValue: null };
     } else return;
     this.haptics.selection(); this.replace(index, changed);
+  }
+  zone(index: number, value: number): void {
+    const target = this.targets()[index];
+    if (this.disabled() || target?.mode !== 'garmin-zone' || !this.zones.includes(value) || target.minimum === value) return;
+    this.haptics.selection(); this.number(index, 'minimum', value);
   }
   number(index: number, field: 'minimum' | 'maximum' | 'referenceValue', value: number | null): void {
     const target = this.targets()[index];

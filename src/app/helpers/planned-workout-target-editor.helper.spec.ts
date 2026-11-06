@@ -261,3 +261,18 @@ describe('ordered manual workout targets', () => {
     expect(manualEditorTargetPreview(workoutTargetToManualEditor(targets[10], ActivityTypes.Running), ActivityTypes.Running)).toContain('unavailable');
   });
 });
+
+
+describe('Garmin zone editing', () => {
+  it('round-trips every single zone and never fabricates watts or a reference', () => {
+    for (let zone = 1; zone <= 7; zone++) {
+      const canonical = { kind: 'power', mode: 'garmin-zone', zone } as const;
+      const editor = workoutTargetToManualEditor(canonical, ActivityTypes.Running);
+      expect(editor).toMatchObject({ mode: 'garmin-zone', rangeMode: 'single', minimum: zone, referenceValue: null });
+      expect(manualEditorTargetToWorkout(copyManualWorkoutEditorTarget(editor), ActivityTypes.Running)).toEqual(canonical);
+      expect(manualEditorTargetPreview(editor, ActivityTypes.Running)).toBe(`Garmin power zone ${zone}`);
+      expect(() => manualEditorTargetToWorkout({ ...editor, rangeMode: 'range' }, ActivityTypes.Running)).toThrow();
+      expect(() => manualEditorTargetToWorkout(editor, ActivityTypes.Swimming)).toThrow();
+    }
+  });
+});

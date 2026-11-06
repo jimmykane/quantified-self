@@ -792,7 +792,8 @@ App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` re
 The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects
 unsupported editor endings, and enforces strict time across all timed steps and repeat passes. Targets require
 an exact, unambiguous saved athlete reference; absent references lead to effort guidance rather than invented
-thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
+thresholds. Explicit Garmin power zones are the separate symbolic exception described under
+[Garmin zone targets](#single-garmin-power-zone-targets); they require no QS FTP and do not disclose target watts. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
 repetition endings, rests and unknown canonical duration remain unchanged.
 
 For generated rep-based strength, `dayWorkoutReviewTiming` leads both the review and the ready Today row with the
@@ -5305,6 +5306,61 @@ before a frontend that depends on them. Garmin/Wahoo/Suunto delivery and exact-c
 #654 and outstanding operational work #655. This guide is not deployment or provider-enablement authorization.
 
 ### Garmin workout/calendar adapter (#647)
+
+#### Single Garmin power-zone targets
+
+A canonical `WorkoutTargetV1` can explicitly be `{kind:'power', mode:'garmin-zone', zone:2}`. `zone` is one
+integer from 1 through 7, with no reference, watt bounds, percentages or zone span. The first slice supports exact
+Running and Cycling only; folded subtypes are not inferred. This deliberately differs from absolute watts and
+relative targets with frozen FTP/CP snapshots. Existing recipes, serialized artifacts and mapping digests retain their
+previous values; only new recipes with this discriminant use the additive mapping.
+
+In the manual target editor choose Power → Garmin power zone, then one Zone. Numeric bounds and reference controls
+are absent. Keep it first in target order: Garmin secondary-zone delivery is outside this slice. The usual cycling
+secondary-target device warning still applies to any second target of another kind. Changing to an unsupported
+sport leaves an invalid draft for explicit correction instead of converting or discarding its target. Copies,
+repeats, saved-library placement and history preserve the symbolic target. Display reads say **Garmin power zone 2**;
+profile bands retain null watt bounds, and distance-based duration is unknown without a separately authored speed.
+No standard percentage system, athlete FTP, target watts, adherence or Training load is estimated from the zone number.
+
+Calendar generation and daily preferences offer explicit **Garmin power zones** for these two sports. Auto and Power
+retain their source-aware snapshot behavior; selecting a connected service does not select native zones. The private
+model schema permits only native-zone targets and time/distance/manual endings for the explicit preference, without
+relative/absolute targets, pool length or early-Lap flags. Retry guidance explicitly retains a zone without requiring
+an athlete reference. Validation requires at least one primary native
+zone in a workout and rejects other target modes, invalid zones and sport changes; warmup/rest/cooldown can be targetless.
+The power-context loader performs no QS power-settings read and clears manual source attribution on this path. Daily
+routine sport selection must retain a sport supporting the selected target. Normal rest advice, quota, review, Add,
+owner/revision fencing and explicit default-off provider consent remain unchanged.
+
+The Garmin Training API V2 1.0 partner contract (26 May 2025), PDF page 12, describes power zones 1–7 via `targetValue`,
+using previously defined zones. The primary export is `targetType:'POWER', targetValue:2`, with null low/high/type
+modifiers. It does not send or configure FTP or zones. Running requires a device with native Running Power support;
+QS cannot verify the athlete's Garmin zones or device. The time at which Garmin resolves settings, and the effect of
+changing settings after synchronization, remain unverified. Do not claim dynamic updates or watch receipt. Zone spans,
+secondary zones, percentage-of-device-FTP and power smoothing are unsupported. Suunto, Wahoo and COROS fail compatibility
+before provider HTTP rather than freezing unknown watts or hiding the instruction in notes.
+
+MCP uses additive `get_planned_workout_v4`, `get_saved_workout_v3`, `preview_planned_workout_v4_change`,
+`preview_planned_workout_v4_changes` (1–25) and `preview_saved_workout_v3_change`. All retain existing independent
+planning read/write grants and preview/native-approval/idempotent-Apply boundaries. Old recipe schemas remain frozen;
+old detail reads and full replacements fail with latest-tool guidance instead of losing zones. Preview discloses
+the distinct before/after zone numbers used, unknown watts and explicit removal; this compact set is not a substitute
+for the full recipe's per-step assignments. Assistant remains prepare-only: scheduled changes show complete app-owned
+before/after recipes, while saved-library proposals use their existing compact review and full-recipe read-back.
+When the selected current scheduled or saved-recipe preview is absent from the Assistant catalog, no alternative
+preview is exposed to the model. Legacy creation/editing tools cannot substitute for a missing complete-recipe editor.
+Private power profiles and provider credentials remain excluded. Shared instructions and bundled Training/cross-domain
+skills distinguish symbolic zones from fixed prescriptions. Backend release and registered-client refresh/rescan are
+separate approved operations; no baseline/history promotion is performed by implementation.
+
+Monitoring decision: **covered/unchanged** after reviewing `tools/training-monitoring/definitions.mjs` and the existing
+Training Delivery monitoring contract. These are the same Garmin assessment, ledger, worker, dispatcher and committed
+outcome filters, with unchanged schedules, leases, retries, uncertain-create recovery and deletion/Stop guards. No new
+queue, scope, secret, Function, index, Rules or telemetry resource is introduced. Synthetic mapper/transaction tests
+are not Garmin acceptance or device proof. Separately release compatible backend consumers before the frontend and
+refresh MCP clients; do not roll back consumers while native-zone recipes exist without a reviewed data policy.
+No provider send, production rollout, requeue or stored-target conversion is part of this implementation.
 
 #### Exercise-aware strength mapping (#782)
 

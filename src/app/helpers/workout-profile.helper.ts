@@ -73,7 +73,7 @@ export interface WorkoutProfileModel {
 
 /** Only resolves authored, frozen target snapshots. No athlete lookup, timing, intensity or zone estimation. */
 export function workoutProfileAbsoluteTarget(target: WorkoutTargetV1): WorkoutTargetV1 {
-  if (target.mode === 'absolute') return target;
+  if (target.mode !== 'relative') return target;
   const lower = target.minimumPercent / 100;
   const upper = target.maximumPercent / 100;
   switch (target.kind) {
@@ -113,6 +113,8 @@ export function workoutProfileSpeedUnitFactor(units?: UserUnitSettingsInterface 
 
 function bandForTarget(target: WorkoutTargetV1, structure: WorkoutStructureV1,
   units?: UserUnitSettingsInterface | null, locale?: string): WorkoutProfileBand {
+  if (target.mode === 'garmin-zone') return { metric: 'power', minimum: null, maximum: null,
+    text: `${formatWorkoutTargetV1(target, units, locale, structure.sport)} · Watts depend on Garmin settings`, relative: false };
   const absolute = workoutProfileAbsoluteTarget(target);
   if (absolute.mode !== 'absolute') throw new Error('Target snapshot could not be resolved.');
   const text = formatWorkoutTargetV1(target, units, locale, structure.sport);

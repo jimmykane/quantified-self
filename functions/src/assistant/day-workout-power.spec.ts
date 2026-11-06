@@ -81,7 +81,7 @@ describe('source-aware generation power references', () => {
     expect(() => validateDayWorkoutSuggestion(suggestion, selected, [], result.references)).toThrow();
   });
   it('does not read power settings for strength, no-target or heart-rate requests', async () => {
-    for (const selection of [...['none', 'heart-rate', 'speed'].map(target => ({ ...controls, target })),
+    for (const selection of [...['none', 'heart-rate', 'speed', 'garmin-power-zone'].map(target => ({ ...controls, target })),
       ...[ActivityTypes.Walking, ActivityTypes.Swimming, ActivityTypes.Hiking].map(sport => ({ ...controls, sport }))]) {
       const { db, doc } = database(); const context = base();
       const result = await withWorkoutPowerContext('owner', selection as typeof controls, now, context, db);

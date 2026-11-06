@@ -172,4 +172,19 @@ describe('WorkoutTargetsEditorComponent', () => {
     child.add(); child.remove(0); child.move(0, 1); child.select(0, 'mode', 'relative'); child.number(0, 'minimum', 100);
     expect(host.targets()).toBe(original); expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('offers a single native power zone without watt/reference fields and gives one haptic per selection', async () => {
+    const { child, host, fixture, settle } = await render();
+    host.targets.set([createManualWorkoutEditorTarget('power')]); await settle();
+    child.select(0, 'mode', 'garmin-zone'); await settle();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.textContent).toContain('QS does not know their watts');
+    expect(fixture.nativeElement.querySelectorAll('input[type="number"]').length).toBe(0);
+    child.zone(0, 2); await settle(); child.zone(0, 2);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(manualEditorTargetToWorkout(host.targets()[0], host.sport, host.units)).toEqual({ kind: 'power', mode: 'garmin-zone', zone: 2 });
+    child.select(0, 'rangeMode', 'range'); await settle();
+    expect(host.targets()[0].rangeMode).toBe('single');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
 });

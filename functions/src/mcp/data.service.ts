@@ -6641,13 +6641,25 @@ export function createMcpDataService(
       const { previewPlannedWorkoutV3Change } = await import('./training-plans-write.service');
       return previewPlannedWorkoutV3Change(input);
     },
+    async previewPlannedWorkoutV4Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV4Change } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV4Change(input);
+    },
     async previewPlannedWorkoutV3Changes(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewPlannedWorkoutV3Changes } = await import('./training-plans-write.service');
       return previewPlannedWorkoutV3Changes(input);
     },
+    async previewPlannedWorkoutV4Changes(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV4Changes } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV4Changes(input);
+    },
     async previewSavedWorkoutV2Change(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
       return previewSavedWorkoutChange(input, undefined, 'v2');
+    },
+    async previewSavedWorkoutV3Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input, undefined, 'v3');
     },
     async previewSavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewSavedWorkoutChange } = await import('./workout-library-write.service');

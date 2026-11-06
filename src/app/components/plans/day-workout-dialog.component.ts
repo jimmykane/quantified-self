@@ -198,7 +198,7 @@ export class DayWorkoutDialogComponent {
   readonly approvalValid = computed(() => this.valid() && this.replacementCurrent() && this.deliveryValid());
   readonly labels: Record<string, string> = {
     suggest: 'Suggest for me', recovery: 'Recovery / easy',
-    none: 'No targets', speed: 'Pace / speed',
+    none: 'No targets', speed: 'Pace / speed', 'garmin-power-zone': 'Garmin power zones',
     strict: 'Finish within this time',
   };
   private choice(key: ChoiceKey, label: string, values: readonly string[]): Choice {

@@ -1329,3 +1329,29 @@ describe('complete early Lap reads', () => {
   });
 
 });
+
+
+describe('Garmin power zone safe full reads', () => {
+  it('returns exact symbolic scheduled and saved targets only on additive tools', async () => {
+    const f = fixture();
+    const native = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: [{ kind: 'step', id: 'zone', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+        targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] }] };
+    f.structures.w1 = native;
+    const ref = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    const current = TRAINING_READ_OUTPUTS.get_planned_workout_v4.parse(await f.run('get_planned_workout_v4', { workoutRef: ref }));
+    expect(JSON.parse(JSON.stringify(current.workout.structure))).toEqual(native);
+    expect(JSON.stringify(current.workout.displaySteps)).toContain('Garmin power zone 2');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const)
+      await expect(f.run(tool, { workoutRef: ref })).rejects.toThrow('get_planned_workout_v4');
+    await expect(f.run('get_planned_workout_v4', { workoutRef: ref }, ['metrics:read'])).rejects.toThrow('permission');
+    await expect(f.run('get_planned_workout_v4', { workoutRef: ref }, undefined, 'foreign')).rejects.toThrow();
+    f.collections.workoutLibrary = { library: { schemaVersion: 1, id: 'library', title: 'Zone', status: 'active',
+      revision: 1, createdAtMs: 1, updatedAtMs: 1 } };
+    f.structures.library = native;
+    const savedRef = f.codec.encode({ kind: 'saved-workout', id: 'library', createdAtMs: 1 }, 'owner', 'connection');
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout_v3.parse(await f.run('get_saved_workout_v3', { savedWorkoutRef: savedRef })).savedWorkout.structure).toEqual(native);
+    for (const tool of ['get_saved_workout', 'get_saved_workout_v2'] as const)
+      await expect(f.run(tool, { savedWorkoutRef: savedRef })).rejects.toThrow('get_saved_workout_v3');
+  });
+});

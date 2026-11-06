@@ -170,7 +170,7 @@ function endingToCoros(ending: WorkoutEndingV1): Exclude<CorosLengthV1, { Unit: 
     }
 }
 
-function absoluteRange(target: Exclude<WorkoutTargetV1, { mode: 'relative' }>): {
+function absoluteRange(target: Extract<WorkoutTargetV1, { mode: 'absolute' }>): {
     minimum: number;
     maximum: number;
 } {
@@ -186,7 +186,7 @@ function absoluteRange(target: Exclude<WorkoutTargetV1, { mode: 'relative' }>): 
     }
 }
 
-function frozenRelativeRange(target: Exclude<WorkoutTargetV1, { mode: 'absolute' }>): {
+function frozenRelativeRange(target: Extract<WorkoutTargetV1, { mode: 'relative' }>): {
     minimum: number;
     maximum: number;
 } {
@@ -244,6 +244,7 @@ function targetToCoros(target: WorkoutTargetV1 | undefined): {
         return { Ftp: 0, ThresholdHr: 0, ThresholdSpeed: 0, IntensityTarget: [] };
     }
 
+    if (target.mode === 'garmin-zone') throw new Error('Garmin power zones cannot be converted to watts.');
     if (target.mode === 'absolute') {
         const range = absoluteRange(target);
         const units = {

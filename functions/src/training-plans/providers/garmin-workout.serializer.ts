@@ -27,7 +27,7 @@ export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADEN
 
 interface GarminTargetFieldsV1 {
     targetType: GarminWorkoutTargetTypeV1 | null;
-    targetValue: null;
+    targetValue: number | null;
     targetValueLow: number | null;
     targetValueHigh: number | null;
     targetValueType: null;
@@ -167,6 +167,7 @@ function absoluteTargetRange(target: WorkoutTargetV1): {
     low: number;
     high: number;
 } {
+    if (target.mode === 'garmin-zone') throw new Error('A Garmin zone is not an absolute watt range.');
     const scale = (value: number, percent: number): number => value * percent / 100;
     if (target.mode === 'absolute') {
         switch (target.kind) {
@@ -223,6 +224,10 @@ function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: bool
             targetValueType: null,
         };
     }
+    if (target.mode === 'garmin-zone') return {
+        targetType: 'POWER', targetValue: target.zone,
+        targetValueLow: null, targetValueHigh: null, targetValueType: null,
+    };
     const range = absoluteTargetRange(target);
     return {
         targetType: range.type,

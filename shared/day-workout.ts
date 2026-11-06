@@ -1,6 +1,6 @@
 import type { WorkoutPowerProfileV1 } from './workout-power-settings';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, type WorkoutStructureV1 } from './planned-workout';
+import { MANUAL_WORKOUT_EDITOR_SPORTS_V1, isGarminPowerZoneSportV1, type WorkoutStructureV1 } from './planned-workout';
 import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, isStrengthWorkoutSportV1, type StrengthWorkoutDraftV1 } from './strength-workout';
 import { normalizeTrainingLocalDate } from './training-plans';
 
@@ -10,7 +10,7 @@ export const DAY_WORKOUT_SPORTS = [...MANUAL_WORKOUT_EDITOR_SPORTS_V1,
 export const DAY_WORKOUT_EQUIPMENT = ['bodyweight', 'dumbbells', 'barbell', 'kettlebell', 'bands', 'machines'] as const;
 export type DayWorkoutEquipment = typeof DAY_WORKOUT_EQUIPMENT[number];
 export type DayWorkoutPurpose = 'suggest' | 'recovery' | 'endurance' | 'intervals' | 'general-strength' | 'muscle-building' | 'muscular-endurance';
-export type DayWorkoutTarget = 'auto' | 'heart-rate' | 'power' | 'speed' | 'none';
+export type DayWorkoutTarget = 'auto' | 'heart-rate' | 'power' | 'garmin-power-zone' | 'speed' | 'none';
 export const DAY_WORKOUT_SIGNAL_OPTIONS = [
   { key: 'freshnessContext', label: 'Freshness & training load' },
   { key: 'hrvContext', label: 'HRV' },
@@ -85,7 +85,8 @@ export function dayWorkoutPurposes(sport: ActivityTypes): DayWorkoutPurpose[] {
 }
 export function dayWorkoutTargets(sport: ActivityTypes): DayWorkoutTarget[] {
   if (isStrengthWorkoutSportV1(sport)) return ['none'];
-  return ['auto', 'heart-rate', ...(/swim|walk|hik|trek/i.test(sport) ? [] : ['power'] as const), 'speed', 'none'];
+  return ['auto', 'heart-rate', ...(/swim|walk|hik|trek/i.test(sport) ? [] : ['power'] as const),
+    ...(isGarminPowerZoneSportV1(sport) ? ['garmin-power-zone'] as const : []), 'speed', 'none'];
 }
 export function defaultDayWorkoutControls(localDate: string, timeZone: string, sport: ActivityTypes = ActivityTypes.Running): DayWorkoutControls {
   return { localDate, timeZone, sport, minutes: 30, purpose: 'suggest', timing: 'approximate',

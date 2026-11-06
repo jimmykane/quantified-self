@@ -138,7 +138,7 @@ function normalizedNativeReferenceValue(reference: { key: WahooReferenceHeaderKe
     return reference.key === 'threshold_speed' ? reference.value : Math.round(reference.value);
 }
 
-function freezeRelativeTarget(target: Exclude<WorkoutTargetV1, { mode: 'absolute' }>): WahooPlanTargetV1 {
+function freezeRelativeTarget(target: Extract<WorkoutTargetV1, { mode: 'relative' }>): WahooPlanTargetV1 {
     const scale = (value: number, percent: number): number => value * percent / 100;
     switch (target.kind) {
         case 'heart-rate':
@@ -169,6 +169,7 @@ function freezeRelativeTarget(target: Exclude<WorkoutTargetV1, { mode: 'absolute
 }
 
 function targetToWahoo(target: WorkoutTargetV1, context: WahooMappingContext): WahooPlanTargetV1 {
+    if (target.mode === 'garmin-zone') throw new Error('Garmin power zones cannot be converted to watts.');
     if (target.mode === 'absolute') {
         switch (target.kind) {
             case 'heart-rate':

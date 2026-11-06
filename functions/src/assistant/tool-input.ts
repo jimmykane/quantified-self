@@ -125,7 +125,7 @@ function normalizeAssistantTrainingPreviewInput(
       structure: normalizeAssistantWorkoutStructure(input.structure),
     };
   }
-  if (['preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(toolName)
+  if (['preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change', 'preview_planned_workout_v4_change', 'preview_saved_workout_v3_change'].includes(toolName)
     && input.change && typeof input.change === 'object' && !Array.isArray(input.change)) {
     const change = input.change as Record<string, unknown>;
     return {
@@ -136,7 +136,7 @@ function normalizeAssistantTrainingPreviewInput(
       },
     };
   }
-  if ((toolName === 'preview_training_changes' || toolName === 'preview_planned_workout_v3_changes') && Array.isArray(input.changes)) {
+  if ((toolName === 'preview_training_changes' || toolName === 'preview_planned_workout_v3_changes' || toolName === 'preview_planned_workout_v4_changes') && Array.isArray(input.changes)) {
     return {
       ...input,
       changes: input.changes.map((value) => {

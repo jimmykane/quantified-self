@@ -103,3 +103,30 @@ describe('day workout contract and prescription validation', () => {
     expect(validateDayWorkoutSuggestion(value, options, history).draft?.strength?.exercises[0].sets[0].externalLoadKg).toBe(0);
   });
 });
+
+
+describe('explicit Garmin zone generation', () => {
+  const zone = { kind: 'power', mode: 'garmin-zone', zone: 2 };
+  const suggestion = () => ({ ...endurance(), structure: { version: 1, sport: ActivityTypes.Running,
+    nodes: [{ ...step(), targets: [zone] }] } });
+  it('accepts symbolic zones without any FTP evidence and preserves them through repeats', () => {
+    const result = validateDayWorkoutSuggestion(suggestion(), { ...controls, target: 'garmin-power-zone' });
+    expect(result.draft?.structure.nodes[0]).toMatchObject({ targets: [zone] });
+    const repeated = suggestion(); repeated.structure.nodes = [{ kind: 'repeat', id: 'repeat', count: 2,
+      steps: repeated.structure.nodes } as never];
+    expect(validateDayWorkoutSuggestion(repeated, { ...controls, target: 'garmin-power-zone' }).draft?.structure.nodes[0]).toMatchObject({ count: 2 });
+  });
+  it('requires explicit selection, one zone and a supported exact sport', () => {
+    for (const target of ['auto', 'power', 'heart-rate', 'none'] as const) expect(() => validateDayWorkoutSuggestion(suggestion(), { ...controls, target })).toThrow();
+    expect(() => validateDayWorkoutSuggestion(endurance(), { ...controls, target: 'garmin-power-zone' })).toThrow(/Include a Garmin/);
+    expect(() => parseGenerateDayWorkoutRequest({ requestId: 'native-zone', controls: { ...controls, target: 'garmin-power-zone', sport: ActivityTypes.TrailRunning } }, new Date('2026-10-28T12:00Z'))).toThrow();
+    expect(() => validateDayWorkoutSuggestion({ ...suggestion(), structure: { ...suggestion().structure, nodes: [{ ...step(), targets: [{ ...zone, zone: 8 }] }] } }, { ...controls, target: 'garmin-power-zone' })).toThrow();
+  });
+});
+
+
+it.each([false, true])('does not introduce an unrequested early-Lap setting (%s) while generating a native zone', allowEarlyLap => {
+  const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step(),
+    ending: { kind: 'time', seconds: 600, allowEarlyLap }, targets: [{ kind: 'power', mode: 'garmin-zone', zone: 2 }] }] } };
+  expect(() => validateDayWorkoutSuggestion(row, { ...controls, target: 'garmin-power-zone' })).toThrow('early Lap');
+});
