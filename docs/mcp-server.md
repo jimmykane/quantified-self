@@ -11,7 +11,9 @@ Current all-family reads use a single bounded collection query and synthesize de
 reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
 
 For newly authored FTP-relative Running/Cycling recipes, shared authoring guidance uses the matching family's
-current saved FTP only with advertised threshold reads and independent `training-thresholds:read` permission.
+current saved FTP only with advertised threshold reads and independent `training-thresholds:read` permission. Common
+planning guidance describes that capability without naming a tool hidden by the current grant. Threshold-specific
+instructions and catalogs remain conditional on the independent permission.
 Freeze watts in the existing recipe reference. Effective since is not a measurement/test date; do not infer FTP,
 convert FTP to CP, borrow another family or retarget copied/saved recipes implicitly. Missing access/value requires
 an explicit reference or target-free guidance. Private Workout power source overrides and generation provenance are

@@ -1019,7 +1019,8 @@ MCP/Assistant impact: existing full-recipe reads expose frozen targets without f
 provenance. No new tool, schema, scope, consent or mutation is introduced. Shared authoring instructions and the bundled
 Training/cross-domain skills direct new FTP-relative Running/Cycling authoring to existing `get_training_thresholds`
 only when advertised under independent `training-thresholds:read`; the built-in Assistant's separate threshold choice
-still starts off. Missing permission/value requires an explicit reference or target-free guidance. Private source
+still starts off. Common planning instructions discover the threshold-read capability without naming a hidden tool;
+permission-specific instructions/catalogs provide actual available names. Missing permission/value requires an explicit reference or target-free guidance. Private source
 overrides are not automatically available to general plan chats. Existing targets change only on explicit retargeting.
 Instruction metadata requires the pending compatible contract digest, separate backend release, registered-app rescan
 and validated plugin refresh; registered schemas/history stay frozen. Those rollout actions require separate approval.
