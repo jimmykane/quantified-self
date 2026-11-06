@@ -2965,6 +2965,10 @@ workout and active-plan lifecycle, deletion/restore locks, destination consent/s
 connection epoch/generation, saved delivery-zone date, category revision and exact device generation/site. Only
 metadata is read from the workout and ledger; there is no provider I/O or prescription read. Stale/malformed sources
 fail closed. Edits, Stop, pauses, reconnects, category changes and device removal can cancel queued alerts.
+The exact workout completion leaf is checked at admission, claim and per-device preparation, across all providers;
+its existence suppresses the alert even while another destination still reports a sync failure. Only the completion
+leaf's presence is used; no recording data is read and no completion is inferred. Cosmetic plan edits do not cancel a current workout issue:
+the provider ledger acknowledges workout/settings changes, not the plan title's unrelated update timestamp.
 
 `users/{uid}/pushState/trainingSync` owns a two-minute first-event batch of at most 25 references and ten destinations,
 an indexed `trainingDueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
@@ -2982,6 +2986,8 @@ payload contains no workout names, metrics, provider IDs or errors. It opens `/t
 destination site. The existing history control opens Workout sync history once after owner/schedule readiness,
 without preview, permission, provider mutation or hydration haptics. Transport uses low urgency, ten-minute TTL,
 a stable tag and `renotify: false`.
+The automatic redirect to a remembered Standalone view preserves incoming query parameters, including the attention
+notification, so it can open the same history after that redirect without changing the saved view preference.
 
 The new unconditional `web_push_training_sync_enabled` parameter defaults false. Shared `web_push_enabled` and the
 matching VAPID key remain required; only the sender binds the existing secret. Under separate approval, deploy Rules

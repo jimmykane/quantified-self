@@ -798,7 +798,7 @@ export class PlansWorkspaceComponent {
       this.selectWorkoutScope(null, requested.localDate ?? todayLocalDate());
       this.scheduleDateSelection.set(null);
       const restored = { ...requested, standalone: true };
-      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true });
+      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true, queryParamsHandling: 'preserve' });
       return;
     }
     const plan = this.planOptions().find(candidate => candidate.id === requested.planId);
@@ -831,12 +831,13 @@ export class PlansWorkspaceComponent {
   private navigateWorkspace(
     commands: string[],
     requested: TrainingPlansRouteState,
-    options: { replaceUrl?: boolean; editorReturn?: boolean } = {},
+    options: { replaceUrl?: boolean; editorReturn?: boolean; queryParamsHandling?: 'preserve' } = {},
   ): void {
     const sequence = ++this.navigationSequence;
     this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
     const navigation: NavigationExtras = {
       queryParams: requested.localDate ? { date: requested.localDate } : undefined,
+      ...(options.queryParamsHandling ? { queryParamsHandling: options.queryParamsHandling } : {}),
       replaceUrl: options.replaceUrl,
       ...(options.editorReturn ? { state: { trainingPlansEditorReturn: { uid: this.currentUser()?.uid, url: this.router.url } } } : {}),
     };

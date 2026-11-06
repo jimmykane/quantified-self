@@ -43,7 +43,10 @@ export async function currentTrainingEntry(db: Firestore, tx: Transaction, uid: 
     || !Number.isSafeInteger(ledger.settingsRevision) || typeof ledger.destinationKey !== 'string' || !ledger.destinationKey) return null;
   const scope = status.planId ? 'plan' : 'workout', scopeId = status.planId ?? status.workoutId;
   const [workouts, settingDoc, overrideDoc, scopeDoc, stateDoc, metaDoc, planDoc, locks] = await Promise.all([
-    tx.getAll(db.doc(`${root}/scheduledWorkouts/${status.workoutId}`), { fieldMask: ['id', 'planId', 'localDate', 'lifecycle', 'updatedAtMs'] }),
+    // Completion belongs to the QS workout, including when another provider supplied the link.
+    // Its existence suppresses an alert; no recording data or completion inference is needed.
+    tx.getAll(db.doc(`${root}/scheduledWorkouts/${status.workoutId}`), db.doc(`${root}/trainingWorkoutCompletions/${status.workoutId}`),
+      { fieldMask: ['id', 'planId', 'localDate', 'lifecycle', 'updatedAtMs'] }),
     tx.get(db.doc(`${root}/trainingDeliverySettings/${deliverySettingsId(scope, scopeId, status.provider)}`)),
     tx.get(db.doc(`${root}/trainingDeliverySettings/${deliverySettingsId('workout', status.workoutId, status.provider)}`)),
     tx.get(db.doc(`${root}/trainingDeliveryScopes/${status.workoutId}`)),
@@ -68,10 +71,10 @@ export async function currentTrainingEntry(db: Firestore, tx: Transaction, uid: 
     || setting.connectionEpoch !== (stateDoc.data()?.connectionEpochs?.[status.provider] ?? 0)
     || scope === 'workout' && (!currentOverride || currentOverride !== override)
     || currentOverride?.suppressed || ledger.settingsRevision !== Math.max(setting.revision, currentOverride?.revision ?? 0)
-    || !workout || workout.id !== status.workoutId || workout.planId !== status.planId || workout.lifecycle !== 'planned'
+    || !workout || workouts[1].exists || workout.id !== status.workoutId || workout.planId !== status.planId || workout.lifecycle !== 'planned'
     || !Number.isSafeInteger(workout.updatedAtMs) || workout.updatedAtMs > status.updatedAtMs || setting.updatedAtMs > status.updatedAtMs
     || (currentOverride?.updatedAtMs ?? 0) > status.updatedAtMs
-    || status.planId && (!plan || plan.lifecycle !== 'active' || plan.updatedAtMs > status.updatedAtMs)
+    || status.planId && (!plan || plan.lifecycle !== 'active')
     || !locks.empty || !stateDoc.exists || !meta || !['connected', 'reconnect_required'].includes(meta.connectionState)
     || typeof meta.connectionStateGeneration !== 'string' || !meta.connectionStateGeneration
     || typeof meta.providerUserId !== 'string' || !meta.providerUserId) return null;

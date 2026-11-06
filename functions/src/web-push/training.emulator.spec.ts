@@ -59,6 +59,29 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
   it('notifies standalone workouts too', async () => {
     const h = await setup(); await h.observe(await h.seed('standalone', 'failed', null)); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
   });
+  it('keeps a current sync problem eligible after an unrelated plan title edit', async () => {
+    const h = await setup(), candidate = await h.seed(); await h.observe(candidate);
+    h.advance(); await db.doc(`${h.root}/trainingPlans/plan`).update({ name: 'Renamed plan', updatedAtMs: h.deps.now() });
+    await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it.each(['before admission', 'before claim', 'before transport'])('suppresses another provider’s completed workout %s', async stage => {
+    const h = await setup(), candidate = await h.seed();
+    const complete = () => db.doc(`${h.root}/trainingWorkoutCompletions/workout`).set({ schemaVersion: 1,
+      workoutId: 'workout', planId: 'plan', provider: 'suunto', matchMethod: 'provider_marker',
+      eventId: 'private-recording', activityId: null, sourceSessionIndex: null, activityStartAtMs: now,
+      scheduledLocalDate: '2026-11-07', workoutRevisionAtLink: 1, timing: 'early', linkedAtMs: now, updatedAtMs: now });
+    if (stage === 'before admission') await complete();
+    await h.observe(candidate);
+    if (stage === 'before claim') await complete();
+    if (stage === 'before transport') {
+      const original = db.runTransaction.bind(db);
+      vi.spyOn(db, 'runTransaction').mockImplementationOnce(async callback => {
+        const result = await original(callback); await complete(); return result;
+      });
+    }
+    h.advance(); await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
+    if (stage === 'before admission') expect((await h.state.get()).exists).toBe(false);
+  });
   it('treats connection failure across new workouts as one unresolved incident, with surviving alternatives', async () => {
     const h = await setup(); await h.observe(await h.seed('first', 'reconnect_required'));
     await h.observe(await h.seed('second', 'reconnect_required'));

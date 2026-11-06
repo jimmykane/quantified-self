@@ -41,6 +41,7 @@ import {
 } from '../../services/training-plans.service';
 import { PlansWorkspaceComponent } from './plans-workspace.component';
 import { TrainingDeliveryDialogComponent } from './training-delivery-dialog.component';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import { createManualWorkoutEditorStep, manualWorkoutEditorToStructure, workoutStructureToManualEditor,
@@ -1118,13 +1119,14 @@ describe('PlansWorkspaceComponent', () => {
     itemId?: string;
     planId?: string;
     date?: string;
+    sync?: string;
   }, emit = false): void {
     route.snapshot.paramMap = convertToParamMap({
       ...(options.workoutId ? { workoutId: options.workoutId } : {}),
       ...(options.itemId ? { itemId: options.itemId } : {}),
       ...(options.planId ? { planId: options.planId } : {}),
     });
-    route.snapshot.queryParamMap = convertToParamMap(options.date ? { date: options.date } : {});
+    route.snapshot.queryParamMap = convertToParamMap({ ...(options.date ? { date: options.date } : {}), ...(options.sync ? { sync: options.sync } : {}) });
     route.snapshot.data = {
       trainingPlansMode: options.mode ?? 'browse',
       trainingPlansScope: options.scope ?? 'plans',
@@ -2747,6 +2749,20 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.view()).toBe('plans');
     expect(fixture.componentInstance.selectedPlanId()).toBe('active-plan');
     expect(savePreferences).not.toHaveBeenCalled();
+  });
+  it('preserves an attention notification through the remembered Standalone redirect and opens history once', async () => {
+    TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: dialogOpen } }] } });
+    dialogOpen.mockReturnValue({ close: vi.fn() });
+    const savedUser = { ...user, settings: { ...user.settings, appSettings: { trainingWorkspace: { plansView: 'standalone' } } } };
+    userSignal.set(savedUser); userSubject.next(savedUser); setRouteState({ sync: 'attention' });
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/training/plans/standalone'], expect.objectContaining({ replaceUrl: true, queryParamsHandling: 'preserve' }));
+    expect(route.snapshot.queryParamMap.get('sync')).toBe('attention');
+    expect(dialogOpen).toHaveBeenCalledExactlyOnceWith(TrainingDeliveryDialogComponent, expect.objectContaining({
+      data: { scope: 'history', id: 'current', title: 'Plans and standalone workouts' },
+    }));
+    expect(savePreferences).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   it('remembers explicit tab changes only, keeping initialization and unchanged choices silent', async () => {
@@ -4399,7 +4415,8 @@ describe('PlansWorkspaceComponent', () => {
       } else if (root === '/training/plans/new') {
         setRouteState({ mode: 'create', date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
       } else if (root === '/training/plans/standalone') {
-        setRouteState({ scope: 'standalone' }, true);
+        const preserved = extras?.queryParamsHandling === 'preserve' ? route.snapshot.queryParamMap : null;
+        setRouteState({ scope: 'standalone', date: preserved?.get('date') ?? undefined, sync: preserved?.get('sync') ?? undefined }, true);
       } else if (root === '/training/plans/plan') {
         setRouteState({ planId: `${commands[1] ?? ''}`, date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
       } else {
