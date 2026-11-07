@@ -421,6 +421,34 @@ describe('UploadActivitiesComponent', () => {
     expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
   });
 
+  it('continues a 100-file batch after a timeout without retrying the uncertain file', async () => {
+    component.user = { uid: 'u1' } as any;
+    userServiceMock.hasProAccessSignal.mockReturnValue(true);
+    mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);
+    const timeout = new UploadError(
+      'Upload timed out. Processing may still finish. Check your activities before uploading this file again.',
+      408, 'upload_timeout',
+    );
+    fitUploadServiceMock.uploadActivityFile
+      .mockResolvedValueOnce({ eventId: 'event-1' })
+      .mockResolvedValueOnce({ eventId: 'event-2' })
+      .mockRejectedValueOnce(timeout);
+    const completed = vi.fn();
+    component.activityUploadComplete.subscribe(completed);
+    const files = Array.from({ length: 100 }, (_, index) => new File(['fit'], `activity-${index}.fit`));
+
+    await component.getFiles({ stopPropagation: vi.fn(), preventDefault: vi.fn(), target: { files, value: 'selected' } });
+
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledTimes(100);
+    expect(fitUploadServiceMock.uploadActivityFile.mock.calls.map(([, , name]) => name)).toEqual(files.map(file => file.name));
+    expect(processingServiceMock.completeJob).toHaveBeenCalledTimes(99);
+    expect(processingServiceMock.failJob).toHaveBeenCalledExactlyOnceWith('job-id', timeout.message);
+    expect(snackBarMock.open).toHaveBeenCalledWith('Processed 100 files: 99 successful, 1 failed', 'OK', { duration: 5000 });
+    expect(component.isUploading).toBe(false);
+    expect(completed).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.warning).toHaveBeenCalledOnce();
+  });
+
   it('should report server upload failures', async () => {
     component.user = { uid: 'u1' } as any;
     const uploadError = new UploadError('Upload service is unavailable.', 500, 'server_error');

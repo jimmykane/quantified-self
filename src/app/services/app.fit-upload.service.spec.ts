@@ -53,6 +53,8 @@ describe('AppFitUploadService', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
   });
@@ -72,7 +74,7 @@ describe('AppFitUploadService', () => {
     const payload = new Uint8Array([1, 2, 3]).buffer;
     const result = await service.uploadActivityFile(payload, 'gpx.gz', 'run.gpx');
 
-    expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
+    expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith();
     expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:5001/quantified-self-io/europe-west2/uploadActivity',
@@ -90,6 +92,51 @@ describe('AppFitUploadService', () => {
     expect(headers.get('X-Original-Filename')).toBe('run.gpx');
     expect(headers.get('X-Original-Filename-Encoded')).toBe('run.gpx');
     expect(result.eventId).toBe('event-1');
+  });
+
+  it.each(['fetch', 'response', 'auth', 'app-check', 'no-abort-controller'])(
+    'bounds a stalled %s stage and prevents late upload work', async stage => {
+      vi.useFakeTimers();
+      if (stage === 'no-abort-controller') vi.stubGlobal('AbortController', undefined);
+      let resume!: (value: unknown) => void;
+      const stalled = new Promise(resolve => { resume = resolve; });
+      const json = vi.fn().mockResolvedValue({ eventId: 'event-1' });
+      fetchMock.mockResolvedValue({ ok: true, status: 200, json });
+      if (stage === 'auth') authMock.currentUser.getIdToken.mockReturnValue(stalled);
+      else if (stage === 'app-check') vi.mocked(appCheckReadinessMock.getToken).mockReturnValue(stalled as Promise<string>);
+      else if (stage === 'response') json.mockReturnValue(stalled);
+      else fetchMock.mockReturnValue(stalled);
+
+      let error: unknown;
+      const upload = service.uploadFitFile(new Uint8Array([1]).buffer).catch(reason => { error = reason; });
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 - 1);
+      expect(error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(error).toMatchObject({ status: 408, code: 'upload_timeout' });
+      expect((error as Error).message).toContain('Check your activities before uploading this file again');
+
+      if (stage !== 'auth' && stage !== 'app-check' && stage !== 'no-abort-controller') {
+        expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+      }
+      resume(stage === 'auth' ? 'late-id-token' : stage === 'app-check' ? 'late-app-check-token' : { eventId: 'late-event' });
+      await vi.advanceTimersByTimeAsync(0);
+      await upload;
+      if (stage === 'auth') expect(appCheckReadinessMock.getToken).not.toHaveBeenCalled();
+      if (stage === 'auth' || stage === 'app-check') expect(fetchMock).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['success', 'failure'])('clears the deadline after %s without retrying', async outcome => {
+    vi.useFakeTimers();
+    if (outcome === 'success') fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ eventId: 'event-1' }) });
+    else fetchMock.mockRejectedValue(new Error('Network unavailable'));
+
+    const upload = service.uploadFitFile(new Uint8Array([1]).buffer);
+    if (outcome === 'success') await expect(upload).resolves.toMatchObject({ eventId: 'event-1' });
+    else await expect(upload).rejects.toThrow('Network unavailable');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('should normalize extension casing and omit blank original filename', async () => {

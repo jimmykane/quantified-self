@@ -1380,6 +1380,7 @@ When sending routes, provider sport profiles can be broader than your saved QS s
 
 ## Common upload issues
 
+- Manual activity uploads run one file at a time. If a file takes more than five minutes, its upload attempt times out and the batch continues with the remaining files. Processing may still finish on the server. Check your activities before uploading that file again; timed-out files are not automatically resent.
 - The route picker in **Connections** accepts GPX routes/tracks and FIT courses, not recorded workout FITs. Use activity upload for recorded workouts. QS does not send completed activities to Garmin.
 - A route/course is not a recorded workout. When activity upload detects one, **Upload as route** appears after active upload batches finish and opens **Routes**; select the original file there. The rejected file is not automatically uploaded or converted.
 - Your session may have expired. Sign in again and retry.

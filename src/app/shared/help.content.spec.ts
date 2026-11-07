@@ -109,6 +109,13 @@ describe('help.content', () => {
     expect(copy).toContain('QS does not send completed activities to Garmin');
   });
 
+  it('explains bounded bulk uploads and checking uncertain results before resending', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    for (const phrase of ['one file at a time', 'more than five minutes', 'batch continues with the remaining files',
+      'Processing may still finish on the server', 'Check your activities before uploading that file again',
+      'timed-out files are not automatically resent']) expect(copy).toContain(phrase);
+  });
+
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(help).toContain('suggestion row sits inside the Today card, below its metrics');
