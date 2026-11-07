@@ -1,3 +1,4 @@
+import { DeferredLoadErrorComponent } from '../components/shared/deferred-load-error/deferred-load-error.component';
 import { WorkoutPowerSettingsComponent } from '../components/workout-power/workout-power-settings.component';
 import { PushNotificationSettingsComponent } from '../components/push-notification-settings/push-notification-settings.component';
 import { TrainingLoadSettingsComponent } from '../components/training-load/training-load-settings.component';
@@ -15,6 +16,7 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
 @NgModule({
     imports: [
         CommonModule,
+        DeferredLoadErrorComponent,
         PushNotificationSettingsComponent,
         TrainingLoadSettingsComponent,
         WorkoutPowerSettingsComponent,

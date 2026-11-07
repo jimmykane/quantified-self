@@ -17,6 +17,8 @@ import { PublicFeaturePreviewComponent } from './public-feature-preview.componen
 import { HomeSignalChartsPreviewComponent } from '../home/home-signal-charts-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
+import { AppWindowService } from '../../services/app.window.service';
+import { DeferredLoadErrorComponent } from '../shared/deferred-load-error/deferred-load-error.component';
 
 describe('PublicFeaturePreviewComponent', () => {
   let fixture: ComponentFixture<PublicFeaturePreviewComponent>;
@@ -154,6 +156,24 @@ describe('PublicFeaturePreviewComponent', () => {
     await blocks[0].render(DeferBlockState.Complete);
     expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
   });
+
+  it.each(['health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'training-snapshot',
+    'training-signals', 'training-hero', 'training-readiness', 'training-explorer', 'training-plans', 'daily-workout',
+    'dashboard', 'workout-analysis', 'activity-map', 'reviewer-benchmark', 'assistant-example', 'mcp-flow', 'provider-flow'] as const)(
+    'renders recoverable %s failures without loading account data or reloading automatically', async previewKey => {
+      const captureMessage = vi.fn(), reload = vi.fn(), selection = vi.fn();
+      TestBed.overrideProvider(LoggerService, { useValue: { captureMessage } });
+      TestBed.overrideProvider(AppWindowService, { useValue: { windowRef: { location: { reload } } } });
+      TestBed.overrideProvider(AppHapticsService, { useValue: { selection } });
+      const element = renderPlaceholder(previewKey), [block] = await fixture.getDeferBlocks();
+      await block.render(DeferBlockState.Error); fixture.detectChanges();
+      expect(fixture.debugElement.query(By.directive(DeferredLoadErrorComponent))).toBeTruthy();
+      expect(element.querySelector('div[data-nosnippet]')?.textContent).toContain("Preview couldn't load");
+      expect(element.querySelector('button')?.textContent).toContain('Reload page');
+      expect(captureMessage).toHaveBeenCalledOnce();
+      expect(captureMessage.mock.calls[0][1].tags.area).toBe(previewKey);
+      expect(reload).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    });
 
   it('hydrates the hero chart inside its persistent layout reservation', async () => {
     TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });

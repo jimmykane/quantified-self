@@ -1,3 +1,4 @@
+import { DeferredLoadErrorComponent } from '../shared/deferred-load-error/deferred-load-error.component';
 import { isPlatformBrowser } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, PLATFORM_ID, afterNextRender, inject, input, signal } from '@angular/core';
 import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
@@ -24,6 +25,7 @@ import { DailyWorkoutPreviewComponent } from './daily-workout-preview.component'
   selector: 'app-public-feature-preview',
   standalone: true,
   imports: [
+    DeferredLoadErrorComponent,
     HealthPreviewComponent,
     HealthOverviewPreviewComponent,
     HealthNoteComparisonPreviewComponent,

@@ -115,6 +115,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'training') {
               <app-training-load-settings [uid]="user.uid"></app-training-load-settings>
+            } @error {
+              <app-deferred-load-error area="training-settings" />
             }
           </div>
         </ng-template>
@@ -123,6 +125,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'workout-power') {
               <app-workout-power-settings [uid]="user.uid"></app-workout-power-settings>
+            } @error {
+              <app-deferred-load-error area="power-settings" />
             }
           </div>
         </ng-template>
@@ -513,6 +517,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'notifications') {
               <app-push-notification-settings />
+            } @error {
+              <app-deferred-load-error area="notification-settings" />
             }
           </div>
         </ng-template>

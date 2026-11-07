@@ -1,7 +1,8 @@
 import { ActivityTypesMultiSelectComponent } from '../activity-types-multi-select/activity-types-multi-select.component';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
+import { DeferredLoadErrorComponent } from '../shared/deferred-load-error/deferred-load-error.component';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { UserSettingsComponent } from './user-settings.component';
 import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
@@ -149,7 +150,7 @@ describe('UserSettingsComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
-            imports: [ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
+            imports: [DeferredLoadErrorComponent, ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
                 UserSettingsComponent,
                 { provide: AppAuthService, useValue: { user$: of(null) } },
@@ -167,7 +168,7 @@ describe('UserSettingsComponent', () => {
                         }))
                     }
                 },
-                { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
+                { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: AppHapticsService, useValue: hapticsServiceMock },
                 { provide: AppLocaleService, useValue: localeServiceMock },
@@ -212,6 +213,22 @@ describe('UserSettingsComponent', () => {
         expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
         expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
     });
+    it.each([['training', 0, 'training-settings'], ['workout-power', 1, 'power-settings'], ['notifications', 2, 'notification-settings']] as const)(
+        'keeps staged settings and reports the failed %s area without changing account data', async (section, index, area) => {
+            TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Manual });
+            await renderSettings();
+            const name = component.userSettingsFormGroup.get('displayName'); name.setValue('Unsaved name'); name.markAsDirty();
+            component.activeSection = section; fixture.detectChanges();
+            const blocks = await fixture.getDeferBlocks();
+            await blocks[index].render(DeferBlockState.Error); fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector(`#settings-${section}-content app-deferred-load-error button`)).toBeTruthy();
+            expect(name.value).toBe('Unsaved name'); expect(name.dirty).toBe(true);
+            expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+            expect(TestBed.inject(LoggerService).captureMessage).toHaveBeenCalledWith('Deferred content failed to load', expect.objectContaining({
+                tags: { operation: 'deferred-load', area },
+            }));
+            expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+        });
 
     it('hides Save while pristine and ignores an implicit submit', async () => {
         await renderSettings();

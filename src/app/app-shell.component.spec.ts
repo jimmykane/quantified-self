@@ -1,5 +1,6 @@
 import { ActivitySendService } from './services/activity-send.service';
-import { ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
+import { DeferredLoadErrorComponent } from './components/shared/deferred-load-error/deferred-load-error.component';
 import { Component, OnDestroy, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -136,6 +137,7 @@ describe('AppShellComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [AppShellComponent, NavigationContentsFixture],
             imports: [
+                DeferredLoadErrorComponent,
                 MatSidenavModule,
                 MatTabsModule,
                 MatTooltipModule,
@@ -764,6 +766,18 @@ describe('AppShellComponent', () => {
         resumeIdle();
         expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
         expect(navigationLifecycle.created).not.toHaveBeenCalled();
+    });
+    it('renders explicit navigation recovery when the deferred view fails', async () => {
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Manual });
+        const capture = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => undefined);
+        renderShellFixture();
+        const [block] = await fixture.getDeferBlocks();
+        await block.render(DeferBlockState.Error); fixture.detectChanges();
+        expect(fixture.debugElement.query(By.directive(DeferredLoadErrorComponent))).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('mat-sidenav').textContent).toContain("Navigation couldn't load");
+        expect(capture).toHaveBeenCalledWith('Deferred content failed to load', expect.objectContaining({
+            tags: { operation: 'deferred-load', area: 'navigation' },
+        }));
     });
 
     it('constructs navigation on first open and retains the same contents through close/reopen', async () => {

@@ -17,6 +17,11 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
+    const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',
+      'does not reload automatically for this message', 'button becomes available again']) expect(troubleshooting).toContain(phrase);
+  });
   it('explains explicit Garmin averaging and the independent Suunto display limits', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Garmin power averaging:**', '**Default**, **3 seconds**, **10 seconds** or **30 seconds**',

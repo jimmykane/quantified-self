@@ -57,6 +57,8 @@
       [autoFocus]="false">
       @defer (on idle; when sidenav.opened) {
       <app-sidenav></app-sidenav>
+      } @error {
+      <app-deferred-load-error area="navigation" />
       }
     </mat-sidenav>
     }

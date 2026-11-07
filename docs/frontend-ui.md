@@ -29,6 +29,53 @@ away during preparation. Record whether the actual example is prepared below the
 whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
 snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
 
+## Deferred content recovery
+
+Every `@defer` in the app's external templates has an eager `@error` block containing
+`DeferredLoadErrorComponent`. This includes navigation, the three deferred Settings sections, dashboard maps and
+every public feature preview. Keep the original defer triggers, lazy dependencies, SSR placeholders and public
+`data-nosnippet` wrappers. The fallback itself must be available before the failed deferred dependency loads.
+See [Angular's deferred-view error states](https://angular.dev/guide/templates/defer#handling-deferred-loading-errors-with-error).
+
+The fallback uses a fixed area label, a polite status message and an explicit **Reload page** Material button.
+It warns that unsaved changes may be lost; rendering never reloads, clears storage, signs out or performs a write.
+The clicked button owns one selection haptic and prevents double dispatch. A five-second UI reset permits another
+explicit attempt if the browser cancels navigation; it never initiates a reload itself. Teardown cancels that timer.
+If navigation throws, the fallback stays usable and points to the browser's reload control.
+
+`DeferredLoadDiagnosticsService` reports one fixed-label warning per allowlisted area per app instance, including
+the specific public preview key. It adds no exception text, URL, account content or persisted tracking state.
+Invalid area values are neither displayed nor sent. Server rendering does not report browser failures.
+This is shared rendering/recovery only: Training records, MCP tools/projections/approval, consent and provider
+actions are unchanged. Settings drafts remain in memory until the user explicitly reloads.
+
+`npm run test:workflows` includes a compiler-AST guard for external HTML templates, including hidden/nested files
+and nested defer blocks. New deferred views need the same eager fallback and a rendered error-state test.
+Focused tests exercise the actual parent error blocks, cancellation, telemetry failure, SSR and haptic ownership.
+Browser verification must cover phone/desktop widths, both themes and a short map container with scrolling.
+The optimized production build with recovery/build tags exceeded the preceding total-script cap by 3.33 kB.
+Matching beta/production `allScript` error caps move from 14.20 to 14.21 MB for this addition; the 1474 kB initial cap
+and warning budgets remain unchanged. This is bundle accounting, not a runtime speed measurement.
+
+## Frontend build identification
+
+`npm run build`, `build-beta` and `build-production` use `tools/angular-build.mjs` after the existing public-snapshot
+generation. The wrapper passes Angular/esbuild compile-time constants without generating or rewriting source files.
+Sentry keeps `release: environment.appVersion` and the current version-based sourcemap upload. Separate initial-scope
+tags identify `build_commit`, `build_run` (`GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`, or `local`) and `build_dirty`.
+Both error and transaction events inherit these tags; signing out changes user identity independently.
+The strict App Check diagnostic scrubber retains only these validated build fields alongside its existing allowlist;
+it continues dropping arbitrary tags and private payloads. In-memory SDK transport tests cover the outgoing envelope.
+Search by version plus commit/run when multiple deployments reuse a package version. Tags do not replace sourcemaps
+or identify a failing request's cause.
+
+GitHub builds verify that the actual checkout matches `GITHUB_SHA`; missing/mismatched metadata fails the build
+instead of attributing it to another commit. Local builds mark tracked or untracked changes as dirty; archives without
+Git use an unknown commit. Beta's intentional manifest edit can also set the dirty tag. Only validated public SHA/run
+identifiers and a boolean enter tags; branch names, repository paths, secrets and arbitrary environment values do not.
+Direct `ng build`/`ng serve` without these constants report unknown metadata rather than reusing stale generated data.
+Use the npm build entry points for deployable artifacts. Build/tool regression tests run in the existing workflow guard.
+
 ## Font and icon caching across releases
 
 Bundled Fontsource fonts and the Material Symbols icon font are emitted under `/media/` with content-hashed

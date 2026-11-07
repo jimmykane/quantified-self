@@ -58,6 +58,17 @@ describe('appCheckBeforeSend', () => {
     expect(clean.fingerprint).toEqual(['app-check-outcome', 'unknown', 'verification', 'appCheck/unknown']);
     expect(JSON.stringify(clean)).not.toContain('secret-');
   });
+  it.each(['App Check verification failed', 'App Check verification outcome'])(
+    'preserves only validated public build tags on %s', message => {
+      const safe = appCheckBeforeSend(diagnostic({ message, tags: { build_commit: 'a'.repeat(40), build_run: '123.2',
+        build_dirty: 'true', privateTag: 'private workout', build_path: 'private path' } }))!;
+      expect(safe.tags).toMatchObject({ build_commit: 'a'.repeat(40), build_run: '123.2', build_dirty: 'true' });
+      expect(JSON.stringify(safe)).not.toContain('private');
+      const invalid = appCheckBeforeSend(diagnostic({ message, tags: { build_commit: 'a'.repeat(40) + '\n',
+        build_run: 'private run', build_dirty: 'private flag' } }))!;
+      expect(invalid.tags).not.toHaveProperty('build_commit'); expect(invalid.tags).not.toHaveProperty('build_run');
+      expect(invalid.tags).not.toHaveProperty('build_dirty');
+    });
 
   it('preserves absent hints separately from an explicitly unknown first-token comparison', () => {
     const clean = appCheckBeforeSend(diagnostic())!;
@@ -110,6 +121,7 @@ describe('appCheckBeforeSend', () => {
     const scope = new Scope();
     scope.setClient(client);
     scope.setUser({ id: 'account-fixture', email: 'fixture@example.invalid' });
+    scope.setTags({ build_commit: 'a'.repeat(40), build_run: '123.2', build_dirty: 'false', privateBuildTag: 'secret-build-tag' });
     scope.setContext('appCheck', diagnostic().contexts?.['appCheck'] ?? {});
     scope.setExtra('workout', 'secret-workout');
     scope.setContext('workout', { name: 'secret-workout-name' });
@@ -131,11 +143,13 @@ describe('appCheckBeforeSend', () => {
       expect(outgoing.request?.url).toBe('https://quantified-self.io/event/event-fixture');
       expect(outgoing.breadcrumbs?.[0].data).toEqual({ from: '/dashboard', to: '/event/event-fixture' });
       expect(outgoing.contexts?.['appCheck']?.['code']).toBe('appCheck/recaptcha-error');
+      expect(outgoing.tags).toMatchObject({ build_commit: 'a'.repeat(40), build_run: '123.2', build_dirty: 'false' });
       expect(JSON.stringify(envelopes)).not.toContain('secret-');
       expect(scope.getUser()).toEqual({ id: 'account-fixture', email: 'fixture@example.invalid' });
       expect(scope.getScopeData().extra['workout']).toBe('secret-workout');
       expect(scope.getScopeData().breadcrumbs[0].data?.['from']).toBe('/dashboard?token=secret-token');
       expect(scope.getScopeData().attachments).toHaveLength(1);
+      expect(scope.getScopeData().tags['privateBuildTag']).toBe('secret-build-tag');
 
       scope.captureEvent({ message: 'Unrelated error' });
       await client.flush(1000);
