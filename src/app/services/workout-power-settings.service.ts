@@ -2,7 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, doc, runTransaction } from 'app/firebase/firestore';
 import { firstValueFrom, from, timeout, finalize } from 'rxjs';
-import { parseWorkoutPowerSettingsV1, sharedWorkoutFtpReference, workoutFtpFamily, type SharedWorkoutFtpReferenceV1, type WorkoutPowerProfileV1, type WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
+import { parseWorkoutPowerSettingsV1, sharedWorkoutFtpReference, importedWorkoutFtpReference, workoutFtpFamily, type SharedWorkoutFtpReferenceV1, type ImportedWorkoutFtpReferenceV1, type WorkoutPowerProfileV1, type WorkoutPowerReferenceV1, type WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
+import { dayWorkoutLocalDate } from '@shared/day-workout';
 import { AppUserService } from './app.user.service';
 
 @Injectable({ providedIn: 'root' })
@@ -44,6 +45,37 @@ export class WorkoutPowerSettingsService {
       if (policy?.['functionalThresholdPower'] !== undefined && !reference) throw Error('The shared FTP could not be verified.');
       return reference;
     })()).pipe(timeout(30000), finalize(() => { active = false; })));
+  }
+  private async loadImportedFtp(uid: string, sport: WorkoutPowerProfileV1['sport']): Promise<ImportedWorkoutFtpReferenceV1 | null> {
+    const session = this.auth.currentUser;
+    let active = true;
+    const assertCurrent = () => { if (!active || !this.current(uid, session)) throw Error('The signed-in account changed.'); };
+    return firstValueFrom(from((async () => {
+      assertCurrent();
+      if (!workoutFtpFamily(sport)) return null;
+      const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
+      assertCurrent();
+      const snapshot = await getDoc(doc(getFirestore(this.db.app), 'users', uid, 'derivedMetrics', 'training_capacity'));
+      assertCurrent();
+      return importedWorkoutFtpReference(sport, snapshot.data(), Date.now());
+    })()).pipe(timeout(30000), finalize(() => { active = false; })));
+  }
+  /** Advisory check for generation options; the server still resolves the reference at generation time. */
+  async loadReference(uid: string, sport: WorkoutPowerProfileV1['sport'], timeZone: string, allowImported = true): Promise<WorkoutPowerReferenceV1 | null> {
+    const session = this.auth.currentUser;
+    const settings = await this.load(uid);
+    if (!this.current(uid, session)) throw Error('The signed-in account changed.');
+    const override = settings.profiles.find(profile => profile.sport === sport);
+    if (override) {
+      if (override.referenceDate > dayWorkoutLocalDate(new Date(), timeZone)) throw Error('The power override is future dated.');
+      return override;
+    }
+    const shared = await this.loadSharedFtp(uid, sport);
+    if (!this.current(uid, session)) throw Error('The signed-in account changed.');
+    if (shared || !allowImported) return shared;
+    const imported = await this.loadImportedFtp(uid, sport);
+    if (!this.current(uid, session)) throw Error('The signed-in account changed.');
+    return imported;
   }
   async save(uid: string, previous: WorkoutPowerSettingsV1, profiles: WorkoutPowerSettingsV1['profiles']): Promise<WorkoutPowerSettingsV1> {
     const before = parseWorkoutPowerSettingsV1(previous);

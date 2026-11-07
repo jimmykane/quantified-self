@@ -352,9 +352,10 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Notification help also covers grouped Training sync attention alerts (2026-11-06).
     // Notification clicks use browser app routing and require a matching beta/production installation (2026-11-06).
-    // Calendar help explains future-day health visibility and the goal preparation period (2026-11-07).
+    // Help covers future-day health, goal dates and the explicit Power reference check (2026-11-07).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
   });
 
@@ -489,6 +490,7 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
     // Approved corrections preserve manual Health permissions and link existing account tools.
@@ -572,6 +574,7 @@ describe('Firebase Hosting configuration', () => {
     // Training sync help covers automatic supported provider adjustments and future-window edits.
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
+    // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');

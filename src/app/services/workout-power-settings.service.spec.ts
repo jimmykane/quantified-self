@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { Auth } from 'app/firebase/auth';
 import { Firestore, runTransaction } from 'app/firebase/firestore';
 import { getDoc } from 'firebase/firestore/lite';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '@shared/derived-metrics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { WorkoutPowerSettingsService } from './workout-power-settings.service';
 import { AppUserService } from './app.user.service';
@@ -49,6 +50,74 @@ describe('private workout power settings persistence', () => {
     await expect(service.loadSharedFtp('owner', ActivityTypes.Running)).rejects.toThrow('offline');
     vi.mocked(getDoc).mockClear(); expect(await service.loadSharedFtp('owner', ActivityTypes.Rowing)).toBeNull();
     expect(getDoc).not.toHaveBeenCalled();
+  });
+  describe('generation option checks', () => {
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-02T12:00Z')); });
+    afterEach(() => vi.useRealTimers());
+    it('uses the exact-sport override without reading shared FTP even with imported references disabled', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens', false)).toEqual(profile);
+      expect(getDoc).toHaveBeenCalledOnce(); expect(set).not.toHaveBeenCalled();
+    });
+    it('uses matching shared FTP with imported references disabled rather than another sport’s override', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never)
+        .mockResolvedValueOnce({ data: () => ({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 240,
+          revision: 2, effectiveAt: Date.parse('2026-11-01T12:00Z') }) } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens', false)).toMatchObject({ kind: 'training-ftp', sport: ActivityTypes.Cycling,
+        reference: { kind: 'functional-threshold-power', watts: 240 } });
+      expect(vi.mocked(getDoc).mock.calls.map(([ref]) => (ref as unknown as { path: string }).path))
+        .toEqual(['users/owner/config/settings', 'users/owner/trainingLoadPolicies/cycling']);
+      expect(set).not.toHaveBeenCalled();
+    });
+    it('reports missing references without writing or inferring a value', async () => {
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toBeNull();
+      expect(getDoc).toHaveBeenCalledTimes(3); expect(set).not.toHaveBeenCalled();
+    });
+    it('does not read imported capacity when Recent activities is off', async () => {
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens', false)).toBeNull();
+      expect(getDoc).toHaveBeenCalledTimes(2);
+      expect(getDoc).not.toHaveBeenCalledWith({ path: 'users/owner/derivedMetrics/training_capacity' });
+      expect(set).not.toHaveBeenCalled();
+    });
+    const capacity = { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, metricKind: 'training_capacity',
+      payload: { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-11-01'), disciplines: [{ discipline: 'cycling', ftpSetting: {
+        kind: 'ftp-setting', value: 205, sourceKey: 'garmin enduro 3', provenance: 'imported-activity-stat',
+        firstSeenAtMs: Date.parse('2026-11-01T10:00Z'), lastSeenAtMs: Date.parse('2026-11-01T10:00Z'), observationCount: 1 } }] } };
+    it('uses the same imported fallback as generation without saving it or requiring a summary from today', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockResolvedValueOnce({ data: () => capacity } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toMatchObject({ kind: 'imported-ftp',
+        family: 'cycling', source: 'garmin enduro 3', reference: { kind: 'functional-threshold-power', watts: 205 } });
+      expect(getDoc).toHaveBeenLastCalledWith({ path: 'users/owner/derivedMetrics/training_capacity' });
+      expect(getDoc).toHaveBeenCalledTimes(3); expect(set).not.toHaveBeenCalled();
+    });
+    it('does not bypass invalid shared FTP to use an imported value', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockResolvedValueOnce({ data: () => ({ functionalThresholdPower: 0 }) } as never);
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow('could not be verified');
+      expect(getDoc).toHaveBeenCalledTimes(2); expect(set).not.toHaveBeenCalled();
+    });
+    it.each(['offline', 'owner-changed'])('discards an imported fallback when %s', async failure => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockImplementationOnce(async () => {
+          if (failure === 'offline') throw Error('offline');
+          auth.currentUser = { uid: 'other' }; return { data: () => capacity } as never;
+        });
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow();
+      expect(set).not.toHaveBeenCalled();
+    });
+    it.each(['future', 'invalid', 'unreadable'] as const)('does not bypass a %s override branch with shared FTP', async failure => {
+      if (failure === 'unreadable') vi.mocked(getDoc).mockRejectedValueOnce(Error('offline'));
+      else vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: failure === 'invalid' ? null
+        : { version: 1, revision: 1, profiles: [{ ...profile, referenceDate: '2026-11-03' }] } }) } as never);
+      await expect(service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens')).rejects.toThrow();
+      expect(getDoc).toHaveBeenCalledOnce(); expect(set).not.toHaveBeenCalled();
+    });
+    it('rejects a replaced session between the settings and FTP reads', async () => {
+      vi.mocked(getDoc).mockImplementationOnce(async () => { auth.currentUser = { uid: 'owner' }; return { data: () => ({}) } as never; });
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow('account changed');
+      expect(getDoc).toHaveBeenCalledOnce();
+    });
   });
   it('rejects a late shared FTP response after account change', async () => {
     vi.mocked(getDoc).mockImplementationOnce(async () => { auth.currentUser = null; return { data: () => ({}) } as never; });

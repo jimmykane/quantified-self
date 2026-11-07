@@ -1009,6 +1009,19 @@ Initial profile loading releases the form as soon as the override head is verifi
 under its own loading/error state; a slow or unavailable shared read must not delay editing or saving a verified
 override. Its late result updates only the shared reference, never the draft or the saved override revision.
 
+The generation/preferences dialog labels relative power **Power (FTP / CP)** and checks the selected sport through
+`WorkoutPowerSettingsService.loadReference`, reusing the owner/session-fenced override and shared FTP reads. Explicit
+overrides take precedence; malformed, unreadable or future-dated overrides never silently fall back. The advisory
+loading/available/missing/error status sits outside More options. Missing references disclose effort-only fallback;
+unreadable references remain unknown. Routine preferences explicitly limit the check to the fallback sport. Power settings
+opens in a separate tab to preserve draft choices; Check again is an explicit, deduplicated retry. A Garmin power zones
+shortcut uses the existing target setter without enabling sending. Auto, other targets, Today and cached reviews add no
+reads; changing unrelated controls or focusing the tab never repeats this check. Sport/account changes retire stale
+results. The backend remains authoritative at generation time. A cached power-requested workout with no power targets
+gets a visible review notice based on its actual prescription, without rereading settings or changing that prescription.
+MCP impact: presentation and existing private read reuse only; no tool, recipe, consent, provider, schema, Rules or index
+change. No Functions deployment or plugin refresh is required for this UI check.
+
 Manual day generation and new Pro daily suggestions resolve power after final sport selection, independently of optional
 Training-plan context. Only supported sports with Auto/Power targets read power settings. Nearby power references are
 removed from both validation and model input on every path, including unsupported sports and non-power preferences.
@@ -1047,6 +1060,44 @@ and daily replay, threshold permission boundaries, private-provenance exclusion,
 canonical display, real Material bindings, default/advanced interactions, haptics and Help. Pure display tests remain
 in helpers-node; injected service/component tests remain Angular. No migration, reparse, derived schema bump, new
 Rules/index, credential or production data operation is required.
+
+##### Recent imported FTP fallback
+
+Generation and its explicit Power preflight now resolve exact-sport override → saved family FTP → recent imported
+family FTP. The last option reads `users/{uid}/derivedMetrics/training_capacity` once only when the prior references
+are absent and **Recent activities** is enabled. An explicit activity-context opt-out skips the capacity read in both
+backend generation and frontend preflight; saved FTP and explicit overrides remain independent. The preflight scope
+includes that opt-out, discards late results after it changes, and does not reread on unrelated option changes.
+Existing invalid/unreadable overrides or FTP values block fallback. This adds no activity query, provider
+request, rebuild, listener, settings write or dashboard/focus read. Missing/cleared FTP never revives older policy
+history; it may use a recent imported observation. Other targets and unsupported sports remain read-free.
+
+`importedWorkoutFtpReference` is the shared frontend/backend validator. It requires a ready current-schema capacity
+snapshot, UTC nonfuture day, one unambiguous matching Running/Cycling family and a positive finite FTP no greater than
+3000. The existing builder excludes session-derived 95%-of-20-minute-power estimates; the resolver only accepts its
+`ftp-setting` / `imported-activity-stat` observation. It checks positive count, ordered first/last times, source-label
+bounds and an observation within the snapshot day limit and the inclusive 90-day window at generation time. Snapshot
+calendar age alone does not reject a recent observation: yesterday's ready summary can supply FTP today. Pending,
+failed, incompatible, malformed, future, duplicate-family or stale data supplies no reference. No new derived kind,
+schema version, backfill or reparse is required. This generation fallback does not change the separate Training
+settings **Use** suggestion or any recorded-load calculation.
+
+Only an actual matching relative-power prescription retains a strict private `kind: imported-ftp` snapshot: sport,
+family, nullable source label, numeric `lastSeenAtMs` and canonical FTP watts. No synthetic provider or zone bounds are
+added. The prompt treats the label as untrusted and the time as an observation, not a threshold measurement. The
+preflight and review use Sports Lib units, the owner's app locale and the dialog's generation timezone for
+**Imported FTP · source · Last seen**. Cross-midnight timestamps must not silently use the browser's timezone.
+Cached daily suggestions/request replays keep the frozen snapshot even when it later ages out or the source changes.
+Changing a summary or settings does not rewrite cached suggestions, saved workouts, allowance or sending preferences.
+
+MCP impact review: the imported fallback and its opt-out/timezone review fixes change no public tool, schema, scope,
+instruction, mutation or recipe. Generated recipes already
+expose frozen percentage/watt references through the existing full-recipe reads; their regression coverage now includes
+private imported-provenance exclusion. No source/device/date field is automatically exposed by MCP. General Assistant
+plan chats and MCP authoring retain their existing independently consented threshold/derived-data reads; this does not
+grant them new access or silently apply the app generation fallback. No plugin rebuild, registered-app rescan, Rules or
+index change is needed. Backend rollout affects `generateDayWorkout` (both manual and daily generation); frontend
+rollout supplies the matching advisory UI. Deployments remain separately authorized.
 
 ### Remembered Plans view
 

@@ -24,6 +24,7 @@ import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../services/training-plans.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { DayWorkoutDialogComponent } from './day-workout-dialog.component';
+import { WorkoutPowerSettingsService } from '../../services/workout-power-settings.service';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -76,6 +77,7 @@ describe('DayWorkoutDialogComponent', () => {
   let close: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let loadQuotaStatus: ReturnType<typeof vi.fn>;
+  let loadPowerReference: ReturnType<typeof vi.fn>;
   let connections: BehaviorSubject<ActivityServiceConnectionState>;
   let profile: BehaviorSubject<DialogProfile | null>;
   let mutateWithDelivery: ReturnType<typeof vi.fn>;
@@ -92,6 +94,7 @@ describe('DayWorkoutDialogComponent', () => {
     connections = new BehaviorSubject({ [ServiceNames.GarminAPI]: true, [ServiceNames.SuuntoApp]: true,
       [ServiceNames.COROSAPI]: false, [ServiceNames.WahooAPI]: false });
     loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
+    loadPowerReference = vi.fn().mockResolvedValue(null);
     setCalendarRestDay = vi.fn(async (_uid, localDate, _isRestDay, revision) => ({ schemaVersion: 1, localDate, isRestDay: true, revision: revision + 1 }));
     mutate = vi.fn().mockImplementation(async (request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> => {
       if (request.operation.kind !== 'create-workout') throw new Error('Expected workout creation.');
@@ -119,6 +122,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
+      { provide: WorkoutPowerSettingsService, useValue: { loadReference: loadPowerReference } },
       { provide: TrainingPlansService, useValue: { watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])), watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate, mutateWithDelivery,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { preview: vi.fn(), mutate: vi.fn(), watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
@@ -135,11 +139,148 @@ describe('DayWorkoutDialogComponent', () => {
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
 
-  it.each(['override', 'shared'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
+  it('checks explicit Power in daily preferences, warns outside More options, and preserves the choices while rechecking', async () => {
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power', garminPowerAveragingSeconds: 3 };
+    const savePreferences = vi.fn().mockResolvedValue(undefined);
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.Cycling,
+      mode: 'preferences', initialControls: controls, followRoutine: true, savePreferences });
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(loadPowerReference).toHaveBeenCalledExactlyOnceWith('owner', ActivityTypes.Cycling, 'Europe/Athens', true);
+    expect(component.more()).toBe(false);
+    const notice: HTMLElement = fixture.nativeElement.querySelector('.power-notice');
+    expect(notice.closest('[hidden]')).toBeNull();
+    expect(notice.textContent).toContain('Power reference needed for Cycling');
+    expect(notice.textContent).toContain('without watt targets');
+    expect(notice.textContent).toContain('fallback sport');
+    const link = notice.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('/settings?section=workout-power');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled(); expect(savePreferences).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'power-missing-preferences');
+    component.set('minutes', 45, false); fixture.detectChanges(); await fixture.whenStable();
+    expect(loadPowerReference).toHaveBeenCalledOnce();
+    loadPowerReference.mockResolvedValueOnce({ reference: { kind: 'functional-threshold-power', watts: 240 } });
+    [...notice.querySelectorAll('button')].find(button => button.textContent.includes('Check again'))!.click();
+    component.recheckPower(); // A second click before the view updates cannot duplicate the read.
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenCalledTimes(2); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(notice.textContent).toContain('A saved power reference is available for Cycling');
+    expect(notice.textContent).not.toContain('Power reference needed');
+    expect(component.controls()).toMatchObject({ target: 'power', minutes: 45, garminPowerAveragingSeconds: 3 });
+    expect(generate).not.toHaveBeenCalled(); expect(savePreferences).not.toHaveBeenCalled();
+  });
+  it('shows imported FTP provenance in preferences without changing saved choices or generating', async () => {
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power' };
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { mode: 'preferences', initialControls: controls });
+    loadPowerReference.mockResolvedValueOnce({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling',
+      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T23:30Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
+    const fixture = await render(), component = fixture.componentInstance;
+    const notice = fixture.nativeElement.querySelector('.power-notice') as HTMLElement;
+    expect(notice.textContent).toContain('Imported FTP 205 watt · Garmin Enduro 3 · Last seen');
+    expect(notice.textContent).toMatch(/Last seen (Oct 26, 2026|26 Oct 2026)/);
+    expect(notice.textContent).toContain('not a new FTP test');
+    expect(notice.textContent).not.toContain('A saved power reference');
+    expect(notice.textContent).not.toContain('Power reference needed');
+    expect(component.controls()).toMatchObject({ target: 'power', sport: ActivityTypes.Cycling });
+    expect(loadPowerReference).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'power-imported-preferences');
+  });
+  it('retires an imported power check after activity opt-out and does not recheck unrelated choices', async () => {
+    const fixture = await render(), component = fixture.componentInstance;
+    let finish!: (value: unknown) => void;
+    loadPowerReference.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.set('sport', ActivityTypes.Cycling); component.set('target', 'power'); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenLastCalledWith('owner', ActivityTypes.Cycling, component.timeZone, true);
+    component.set('activityContext', false); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenLastCalledWith('owner', ActivityTypes.Cycling, component.timeZone, false);
+    finish({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling', source: 'Bike computer',
+      lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(component.powerStatus()).toBe('missing'); expect(component.powerImportedSummary()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Imported FTP is turned off with Recent activities');
+    component.set('minutes', 45); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenCalledTimes(2);
+    expect(generate).not.toHaveBeenCalled();
+  });
+  it('offers device zones explicitly without enabling delivery or performing another reference read', async () => {
+    const fixture = await render(), component = fixture.componentInstance;
+    component.set('sport', ActivityTypes.Cycling); component.set('target', 'power');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); haptics.selection.mockClear();
+    const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.power-notice button')]
+      .find(button => button.textContent.includes('Use Garmin power zones'))!;
+    button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.controls().target).toBe('garmin-power-zone');
+    expect(component.dailyDelivery().enabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('.power-notice')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('without a QS FTP');
+    expect(loadPowerReference).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('distinguishes unreadable power settings from a missing reference and offers an explicit retry', async () => {
+    loadPowerReference.mockRejectedValueOnce(Error('offline'));
+    const fixture = await render(), component = fixture.componentInstance;
+    component.set('sport', ActivityTypes.Rowing); component.set('target', 'power');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Power reference could not be checked');
+    expect(fixture.nativeElement.textContent).not.toContain('No saved FTP');
+    expect(fixture.nativeElement.textContent).not.toContain('Use Garmin power zones');
+    component.recheckPower(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.powerStatus()).toBe('missing'); expect(loadPowerReference).toHaveBeenCalledTimes(2);
+  });
+  it('ignores a late power check after the sport or owner changes and keeps other target choices read-free', async () => {
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(loadPowerReference).not.toHaveBeenCalled();
+    let finish!: (value: unknown) => void;
+    loadPowerReference.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.set('sport', ActivityTypes.Cycling); fixture.detectChanges(); await fixture.whenStable();
+    expect(loadPowerReference).not.toHaveBeenCalled(); // Auto does not add a check.
+    component.set('target', 'power'); fixture.detectChanges();
+    expect(component.powerStatus()).toBe('loading');
+    component.set('sport', ActivityTypes.Running); component.set('target', 'power');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.powerStatus()).toBe('missing');
+    finish({ reference: { kind: 'functional-threshold-power', watts: 240 } });
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Power reference needed for Running');
+    profile.next({ uid: 'other', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.power-notice')).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'power', 'rest'] as const)('reviews a cached %s result without fresh power reads or changing its prescription', async kind => {
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power' };
+    const initialResult: GenerateDayWorkoutResponse = { requestId: 'daily-suggestion:2026-10-28', observedAt: '2026-10-28T07:00Z',
+      kind: kind === 'rest' ? 'rest' : 'workout', rationale: 'Keep it easy.', previousLoads: [], usedContext: [],
+      missingContext: kind === 'missing' ? ['Power targets: no verified shared FTP or explicit override for this sport.'] : [],
+      draft: kind === 'rest' ? null : { title: 'Easy cycling', structure: { version: 1, sport: ActivityTypes.Cycling,
+        nodes: [{ kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 },
+          targets: kind === 'power' ? [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 70,
+            reference: { kind: 'functional-threshold-power', watts: 240 } }] : [] }] } } };
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.Cycling,
+      initialControls: controls, initialResult });
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.missingPowerTargets()).toBe(kind === 'missing');
+    expect(fixture.nativeElement.textContent.includes('This suggestion has no power targets')).toBe(kind === 'missing');
+    if (kind === 'missing') {
+      expect(fixture.nativeElement.querySelector('.power-notice').closest('[hidden]')).toBeNull();
+      exportDailySuggestionDialogQa(fixture.nativeElement, 'power-missing-review');
+    }
+    expect(loadPowerReference).not.toHaveBeenCalled(); expect(generate).not.toHaveBeenCalled();
+    expect(component.result()).toEqual(initialResult);
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...initialResult, requestId: request.requestId }));
+    const pending = component.generate(); fixture.detectChanges();
+    await pending; fixture.detectChanges(); await fixture.whenStable();
+    expect(loadPowerReference).not.toHaveBeenCalled(); // Generation already checks references on the server.
+  });
+
+  it.each(['override', 'shared', 'imported'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
     const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     const component = fixture.componentInstance;
     const draft = response('source-review');
-    draft.powerReference = origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
+    draft.powerReference = origin === 'imported' ? { kind: 'imported-ftp', sport: ActivityTypes.Running, family: 'running',
+      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } }
+      : origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
       revision: 2, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 280 } }
       : { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
         reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
@@ -149,7 +290,14 @@ describe('DayWorkoutDialogComponent', () => {
         targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: draft.powerReference.reference }] }] } };
     draft.previousLoads = []; draft.usedContext = ['Manually confirmed power reference for the selected sport']; draft.missingContext = [];
     component.result.set(draft); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    if (origin === 'shared') {
+    if (origin === 'imported') {
+      expect(fixture.nativeElement.textContent).toContain('Imported FTP 205 watt · Garmin Enduro 3 · Last seen');
+      expect(fixture.nativeElement.textContent).toContain('not a new FTP test');
+      expect(fixture.nativeElement.textContent).not.toContain('Manually confirmed source');
+      expect(fixture.nativeElement.textContent).not.toContain('Effective since');
+      expect(fixture.nativeElement.textContent).not.toContain('Reference date');
+      expect(loadPowerReference).not.toHaveBeenCalled();
+    } else if (origin === 'shared') {
       expect(fixture.nativeElement.textContent).toContain('Shared Running FTP 280 watt');
       expect(fixture.nativeElement.textContent).toContain('Effective since 2026-10-25T12:00:00.000Z');
       expect(fixture.nativeElement.textContent).not.toContain('Reference date');

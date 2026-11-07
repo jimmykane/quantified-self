@@ -11,6 +11,8 @@ mat-checkbox { display: block; margin-block: 8px; }
 .personalization-heading p { flex: 1 1 0; min-width: 0; }
 .section-title { margin-block: 12px 4px; font: var(--mat-sys-title-small); }
 .review p { margin-block: 8px; }
+.power-notice p { margin-block: 8px; }
+.power-notice .review-actions { column-gap: 4px; }
 .review app-summary-disclosure { margin-top: 12px; }
 .sets { list-style: none; margin: 0; }
 .review-actions { margin-top: 8px; }

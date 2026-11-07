@@ -3,6 +3,7 @@ import { normalizeTrainingLocalDate } from './training-plans';
 import { resolveTrainingDisciplineFromActivityType } from './training-disciplines';
 import { validTrainingLoadPolicy, type TrainingLoadPolicy } from './training-load-policy';
 import { trainingLoadTimeMs } from './training-load-source';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from './derived-metrics';
 
 /** Private, manually confirmed planning references. Never used for recorded metrics or load calculations. */
 export const WORKOUT_POWER_PROVIDERS = ['garmin', 'suunto', 'coros', 'wahoo', 'other'] as const;
@@ -71,7 +72,17 @@ export interface SharedWorkoutFtpReferenceV1 {
   effectiveAtMs: number;
   reference: { kind: 'functional-threshold-power'; watts: number };
 }
-export type WorkoutPowerReferenceV1 = WorkoutPowerProfileV1 | SharedWorkoutFtpReferenceV1;
+/** Private imported observation, frozen for this prescription; never a newly measured or manually saved FTP. */
+export interface ImportedWorkoutFtpReferenceV1 {
+  kind: 'imported-ftp';
+  sport: WorkoutPowerProfileV1['sport'];
+  family: 'running' | 'cycling';
+  source: string | null;
+  lastSeenAtMs: number;
+  reference: { kind: 'functional-threshold-power'; watts: number };
+}
+export type WorkoutPowerReferenceV1 = WorkoutPowerProfileV1 | SharedWorkoutFtpReferenceV1 | ImportedWorkoutFtpReferenceV1;
+export const WORKOUT_IMPORTED_FTP_MAX_AGE_MS = 90 * 86400000;
 export function workoutFtpFamily(sport: unknown): 'running' | 'cycling' | null {
   const family = resolveTrainingDisciplineFromActivityType(sport);
   return family === 'running' || family === 'cycling' ? family : null;
@@ -93,6 +104,7 @@ export function sharedWorkoutFtpReference(sport: WorkoutPowerProfileV1['sport'],
 }
 export function parseWorkoutPowerReferenceV1(value: unknown): WorkoutPowerReferenceV1 {
   if (!value || typeof value !== 'object' || !('kind' in value)) return parseWorkoutPowerProfileV1(value);
+  if (value.kind === 'imported-ftp') return parseImportedWorkoutFtpReference(value);
   const p = record(value, ['kind', 'sport', 'family', 'revision', 'effectiveAtMs', 'reference']);
   if (!Number.isSafeInteger(p.effectiveAtMs)) throw Error('Invalid shared FTP reference.');
   const reference = record(p.reference, ['kind', 'watts']);
@@ -103,4 +115,45 @@ export function parseWorkoutPowerReferenceV1(value: unknown): WorkoutPowerRefere
   if (!result || p.kind !== 'training-ftp' || reference.kind !== 'functional-threshold-power' || result.family !== p.family)
     throw Error('Invalid shared FTP reference.');
   return result;
+}
+
+function parseImportedWorkoutFtpReference(value: unknown): ImportedWorkoutFtpReferenceV1 {
+  const p = record(value, ['kind', 'sport', 'family', 'source', 'lastSeenAtMs', 'reference']);
+  const reference = record(p.reference, ['kind', 'watts']);
+  const sport = p.sport as WorkoutPowerProfileV1['sport'];
+  if (p.kind !== 'imported-ftp' || !WORKOUT_POWER_SPORTS.includes(sport)
+    || !workoutFtpFamily(sport) || workoutFtpFamily(sport) !== p.family
+    || !Number.isSafeInteger(p.lastSeenAtMs) || Number(p.lastSeenAtMs) < 0 || Number(p.lastSeenAtMs) > 8_640_000_000_000_000
+    || p.source !== null && (typeof p.source !== 'string' || !p.source.trim() || p.source.length > 80 || hasASCIIControlCharacter(p.source))
+    || reference.kind !== 'functional-threshold-power' || typeof reference.watts !== 'number'
+    || !Number.isFinite(reference.watts) || reference.watts <= 0 || reference.watts > 3000) throw Error('Invalid imported FTP reference.');
+  return { kind: 'imported-ftp', sport, family: p.family as 'running' | 'cycling', source: p.source === null ? null : (p.source as string).trim(),
+    lastSeenAtMs: p.lastSeenAtMs as number, reference: { kind: 'functional-threshold-power', watts: reference.watts } };
+}
+
+/** A bounded ready snapshot read, not a history scan, rebuild, threshold estimate or settings write. */
+export function importedWorkoutFtpReference(sport: WorkoutPowerProfileV1['sport'], snapshot: unknown,
+  asOfMs: number): ImportedWorkoutFtpReferenceV1 | null {
+  const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+  const data = object(snapshot), family = workoutFtpFamily(sport), payload = object(data?.payload);
+  if (!family || !WORKOUT_POWER_SPORTS.includes(sport) || !Number.isSafeInteger(asOfMs) || asOfMs < 0
+    || data?.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+    || data.metricKind !== DERIVED_METRIC_KINDS.TrainingCapacity || payload?.dayBoundary !== 'UTC'
+    || !Number.isSafeInteger(payload.asOfDayMs) || Number(payload.asOfDayMs) < 0
+    || Number(payload.asOfDayMs) % 86400000 !== 0 || Number(payload.asOfDayMs) > asOfMs
+    || !Array.isArray(payload.disciplines) || payload.disciplines.length > 2) return null;
+  const matching = payload.disciplines.map(object).filter(item => item?.discipline === family);
+  if (matching.length !== 1) return null;
+  const ftp = object(matching[0]?.ftpSetting);
+  if (!ftp || ftp.kind !== 'ftp-setting' || ftp.provenance !== 'imported-activity-stat'
+    || !Number.isSafeInteger(ftp.firstSeenAtMs) || Number(ftp.firstSeenAtMs) < 0
+    || !Number.isSafeInteger(ftp.lastSeenAtMs) || Number(ftp.firstSeenAtMs) > Number(ftp.lastSeenAtMs)
+    || Number(ftp.lastSeenAtMs) > asOfMs || Number(ftp.lastSeenAtMs) >= Number(payload.asOfDayMs) + 86400000
+    || Number(ftp.lastSeenAtMs) < asOfMs - WORKOUT_IMPORTED_FTP_MAX_AGE_MS
+    || !Number.isSafeInteger(ftp.observationCount) || Number(ftp.observationCount) < 1) return null;
+  try {
+    return parseImportedWorkoutFtpReference({ kind: 'imported-ftp', sport, family, source: ftp.sourceKey,
+      lastSeenAtMs: ftp.lastSeenAtMs, reference: { kind: 'functional-threshold-power', watts: ftp.value } });
+  } catch { return null; }
 }

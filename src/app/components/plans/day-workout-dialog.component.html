@@ -41,6 +41,46 @@
     <p class="hint">A successful generation replaces today’s suggestion. Review before adding it to Calendar.</p>
   }
   @if (showDailyDelivery()) { <ng-container [ngTemplateOutlet]="dailyDeliveryOptions" /> }
+  @if (powerSport() || missingPowerTargets()) {
+    <section class="power-notice" aria-label="Power targets">
+      <div role="status" aria-live="polite">
+        @if (missingPowerTargets()) {
+          <h3 class="section-title">This suggestion has no power targets</h3>
+          <p>Power was selected. Check Context for the reason; set up a reference or change targets before generating again. Existing suggestions do not update automatically.</p>
+        } @else if (powerStatus() === 'loading') { <p>Checking power reference for {{ powerSport() }}…</p> }
+        @else if (powerStatus() === 'available') {
+          @if (powerImportedSummary()) { <p>{{ powerImportedSummary() }}</p><p class="hint">Observed in activity data; not a new FTP test. Saved settings take priority.</p> }
+          @else { <p>A saved power reference is available for {{ powerSport() }}.</p> }
+        }
+        @else if (powerStatus() === 'missing') {
+          <h3 class="section-title">Power reference needed for {{ powerSport() }}</h3>
+          <p>No usable power reference is available. Suggestions will use effort notes without watt targets.</p>
+          @if (!importedPowerAllowed()) { <p class="hint">Imported FTP is turned off with Recent activities.</p> }
+        } @else {
+          <h3 class="section-title">Power reference could not be checked</h3>
+          <p>Power targets are not guaranteed. Retry the check or review your power settings.</p>
+        }
+      </div>
+      @if (powerSport() && data.mode === 'preferences' && followRoutine()) {
+        <p class="hint">This check is for the fallback sport. A sport chosen from your routine needs its own matching power reference.</p>
+      }
+      @if (missingPowerTargets() || powerStatus() !== 'loading') {
+        <div class="review-actions">
+          <a mat-button appHapticTap href="/settings?section=workout-power" target="_blank" rel="noopener"
+            aria-label="Power settings (opens in a new tab)" [disabled]="!!busy() || saveUncertain()"><mat-icon>open_in_new</mat-icon>Power settings</a>
+          @if (powerSport()) {
+            <button mat-button type="button" [disabled]="!!busy() || saveUncertain()" (click)="recheckPower()">Check again</button>
+            @if (powerStatus() !== 'available' && garminZonesAvailable()) {
+              <button mat-button type="button" [disabled]="!!busy() || saveUncertain()" (click)="set('target', 'garmin-power-zone')">Use Garmin power zones</button>
+            }
+          }
+        </div>
+      }
+    </section>
+  }
+  @if (!strength() && controls().target === 'garmin-power-zone') {
+    <p class="hint" role="status">Uses this sport’s zones on Garmin without a QS FTP. Watts depend on Garmin settings; running needs a compatible native Running Power device. This does not enable sending.</p>
+  }
   <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
     <div class="controls-grid">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
@@ -89,9 +129,7 @@
           <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
         }
       </div>
-      @if (controls().target === 'garmin-power-zone') {
-        <p class="hint">Uses the zones configured for this sport on Garmin, without entering FTP in QS. Watts are unknown here; running needs a compatible native Running Power device. This does not enable sending.</p>
-      } @else if (!strength()) { <p class="hint">Power targets use shared Running/Cycling FTP unless an explicit source override is saved in Settings → Workout power. Other targets need saved athlete references. Strict timing includes all steps.</p> }
+      @if (!strength()) { <p class="hint">Power (FTP / CP) needs a saved reference; Garmin power zones use device settings. Power averaging does not provide a reference. Other targets need saved athlete references. Strict timing includes all steps.</p> }
     </div>
   </fieldset>
   @if (data.mode !== 'preferences') {
@@ -116,7 +154,7 @@
       @if (powerReview(); as power) {
         <h4 class="section-title">Power reference</h4><p>{{ power.summary }}</p>
         @if (power.zones.length) { <ul>@for (zone of power.zones; track $index) { <li>{{ zone }}</li> }</ul> }
-        <p class="hint">Manually confirmed source at generation time. Sending does not convert between devices or services. Saved target values stay fixed.</p>
+        <p class="hint">{{ power.notice }} Sending does not convert between devices or services. Saved target values stay fixed.</p>
       }
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.timingDetails) { <p class="hint">{{ review.timingDetails }}</p> }

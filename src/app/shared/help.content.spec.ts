@@ -30,7 +30,12 @@ describe('help.content', () => {
     for (const phrase of ['**Settings → Workout power**', 'one confirmed source per sport', 'manually entered references', 'Enter it once', '**Effective since**',
       'An exact-sport override takes precedence over shared FTP', 'never converts FTP into critical power', 'separate **Training thresholds**',
       'including when daily routine selection changes the sport', 'no inferred power target', 'rather than live zone links',
-      'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive']) expect(help).toContain(phrase);
+      'does not rewrite saved workouts', 'Power source settings do not select watch averaging', 'Assistant plan chats do not automatically receive',
+      '**Imported FTP**', '**Last seen**', 'Imported fallback never saves or changes your FTP settings',
+      'Invalid or unreadable saved references are not bypassed with imported data',
+      'Turning off **Recent activities** also turns off imported FTP; saved FTP and explicit overrides remain available']) expect(help).toContain(phrase);
+    for (const phrase of ['**Power (FTP / CP)**', 'outside **More options**', 'opens a separate tab', 'fallback sport only',
+      'This check does not generate a workout or use AI allowance', 'changing settings never updates that cached suggestion automatically']) expect(help).toContain(phrase);
   });
   it('explains one dated threshold setting and independent reviewed MCP/Assistant changes', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');

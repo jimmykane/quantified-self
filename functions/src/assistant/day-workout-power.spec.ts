@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
-import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1, sharedWorkoutFtpReference, parseWorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
+import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1, sharedWorkoutFtpReference, importedWorkoutFtpReference, WORKOUT_IMPORTED_FTP_MAX_AGE_MS, parseWorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
 import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-power';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import type { DayWorkoutContext } from './day-workout-context';
@@ -206,5 +207,106 @@ describe('shared dated FTP for generation', () => {
     expect(parseWorkoutPowerReferenceV1(snapshot)).toEqual(snapshot);
     for (const extra of [{ source: 'private' }, { family: 'cycling' }, { kind: 'other' }, { effectiveAtMs: NaN },
       { reference: { kind: 'critical-power', watts: 280 } }]) expect(() => parseWorkoutPowerReferenceV1({ ...snapshot, ...extra })).toThrow();
+  });
+});
+
+
+describe('recent imported FTP fallback', () => {
+  const seen = now.getTime() - 2 * 86400000;
+  const ftp = { kind: 'ftp-setting', value: 205, sourceKey: 'garmin enduro 3', provenance: 'imported-activity-stat',
+    firstSeenAtMs: seen, lastSeenAtMs: seen, observationCount: 2 };
+  const capacity = (patch: Record<string, unknown> = {}, snapshotPatch: Record<string, unknown> = {}) => ({
+    status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, metricKind: 'training_capacity',
+    payload: { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-11-03'), disciplines: [{ discipline: 'cycling', ftpSetting: { ...ftp, ...patch } }] },
+    ...snapshotPatch,
+  });
+  const cycling = { ...controls, sport: ActivityTypes.Cycling, target: 'power' as const };
+  function importedDatabase(policy?: unknown, settings?: unknown, snapshot: unknown = capacity()) {
+    const capacityGet = vi.fn(async () => ({ data: () => snapshot }));
+    const policyGet = vi.fn(async () => ({ data: () => policy }));
+    const doc = vi.fn((path: string) => {
+      if (path === 'users/owner/config/settings') return { get: async () => ({ get: () => settings }) };
+      if (path === 'users/owner/trainingLoadPolicies/cycling') return { get: policyGet };
+      if (path === 'users/owner/derivedMetrics/training_capacity') return { get: capacityGet };
+      throw Error('Unexpected read');
+    });
+    return { db: { doc } as unknown as FirebaseFirestore.Firestore, doc, capacityGet, policyGet };
+  }
+  it('reuses yesterday’s ready summary and validates the exact imported reference in the prescription', async () => {
+    const db = importedDatabase();
+    const context = await withWorkoutPowerContext('owner', cycling, now, base(), db.db);
+    expect(db.doc.mock.calls.map(([path]) => path)).toEqual(['users/owner/config/settings',
+      'users/owner/trainingLoadPolicies/cycling', 'users/owner/derivedMetrics/training_capacity']);
+    expect(db.capacityGet).toHaveBeenCalledOnce();
+    expect(context.powerReference).toEqual({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling',
+      source: ftp.sourceKey, lastSeenAtMs: seen, reference: { kind: 'functional-threshold-power', watts: 205 } });
+    expect(context.evidence.powerReference).toEqual(context.powerReference);
+    const draft = { kind: 'workout', title: 'Ride', rationale: 'Use recent imported FTP.', structure: { version: 1,
+      sport: cycling.sport, nodes: [{ kind: 'step', id: 'ride', purpose: 'work', ending: { kind: 'time', seconds: 600 },
+        targets: [{ ...context.references[0], minimumPercent: 60, maximumPercent: 80 }] }] } };
+    const validated = validateDayWorkoutSuggestion(draft, cycling, [], context.references);
+    expect(dayWorkoutPowerReferenceUsed(validated, context.powerReference)).toEqual(context.powerReference);
+    expect(JSON.stringify(validated.draft)).not.toMatch(/garmin|lastSeenAtMs|imported-ftp/);
+    expect(() => validateDayWorkoutSuggestion({ ...draft, structure: { ...draft.structure, nodes: [{ ...draft.structure.nodes[0], targets: [legacy] }] } }, cycling, [], context.references)).toThrow();
+    const frozen = JSON.stringify(context.powerReference);
+    db.capacityGet.mockResolvedValueOnce({ data: () => capacity({ value: 230 }) });
+    expect((await withWorkoutPowerContext('owner', cycling, now, base(), db.db)).powerReference?.reference.watts).toBe(230);
+    expect(JSON.stringify(context.powerReference)).toBe(frozen);
+  });
+  it.each(['auto', 'power'] as const)('respects Recent activities being off with %s targets without reading capacity', async target => {
+    const db = importedDatabase();
+    const result = await withWorkoutPowerContext('owner', { ...cycling, target, activityContext: false }, now, base(), db.db);
+    expect(result.powerReference).toBeUndefined(); expect(result.references).toEqual([]);
+    expect(db.capacityGet).not.toHaveBeenCalled();
+    expect(result.missingContext.join(' ')).toContain('Imported FTP is turned off with Recent activities');
+  });
+  it('preserves explicit and shared references even with Recent activities off and never reads capacity unnecessarily', async () => {
+    for (const override of [false, true]) {
+      const db = importedDatabase({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 280,
+        revision: 2, effectiveAt: seen }, override ? { version: 1, revision: 1, profiles: [{ ...profile, sport: cycling.sport }] } : undefined);
+      expect((await withWorkoutPowerContext('owner', { ...cycling, activityContext: false }, now, base(), db.db)).powerReference?.reference.watts).toBe(override ? 250 : 280);
+      expect(db.capacityGet).not.toHaveBeenCalled();
+    }
+  });
+  it.each([0, null, Infinity, 4000])('never bypasses invalid saved FTP %j with an imported value', async watts => {
+    const db = importedDatabase({ method: 'AUTOMATIC', included: true, functionalThresholdPower: watts, revision: 2, effectiveAt: seen });
+    expect((await withWorkoutPowerContext('owner', cycling, now, base(), db.db)).powerReference).toBeUndefined();
+    expect(db.capacityGet).not.toHaveBeenCalled();
+  });
+  it('fails closed on an unavailable capacity read without failing generation', async () => {
+    const db = importedDatabase(); db.capacityGet.mockRejectedValueOnce(Error('offline'));
+    const context = await withWorkoutPowerContext('owner', cycling, now, base(), db.db);
+    expect(context.references).toEqual([]); expect(context.powerReference).toBeUndefined();
+    expect(context.missingContext.join(' ')).toContain('could not be verified');
+  });
+  it('accepts the 90-day boundary, rejects older observations and never borrows another family', () => {
+    const boundary = now.getTime() - WORKOUT_IMPORTED_FTP_MAX_AGE_MS;
+    expect(importedWorkoutFtpReference(cycling.sport, capacity({ firstSeenAtMs: boundary, lastSeenAtMs: boundary }), now.getTime())).not.toBeNull();
+    expect(importedWorkoutFtpReference(cycling.sport, capacity({ firstSeenAtMs: boundary - 1, lastSeenAtMs: boundary - 1 }), now.getTime())).toBeNull();
+    expect(importedWorkoutFtpReference(ActivityTypes.Running, capacity(), now.getTime())).toBeNull();
+    expect(importedWorkoutFtpReference(ActivityTypes.Rowing, capacity(), now.getTime())).toBeNull();
+    expect(importedWorkoutFtpReference(ActivityTypes.MountainBiking, capacity(), now.getTime())).toMatchObject({ family: 'cycling' });
+  });
+  it.each([{ value: 0 }, { value: 3001 }, { value: Infinity }, { value: '205' }, { kind: 'vo2-max' },
+    { provenance: 'session-estimate' }, { firstSeenAtMs: seen + 1 }, { lastSeenAtMs: now.getTime() + 1 },
+    { lastSeenAtMs: now.getTime() - 1 }, { lastSeenAtMs: '2026-11-02' }, { observationCount: 0 },
+    { sourceKey: 'private\nlabel' }, { sourceKey: 'a'.repeat(81) }])('rejects malformed, future or inconsistent observation %j', patch => {
+      expect(importedWorkoutFtpReference(cycling.sport, capacity(patch), now.getTime())).toBeNull();
+    });
+  it.each([{ status: 'pending' }, { status: 'error' }, { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1 },
+    { metricKind: 'power_curve' }, { payload: null },
+    { payload: { dayBoundary: 'UTC', asOfDayMs: now.getTime() + 86400000, disciplines: [{ discipline: 'cycling', ftpSetting: ftp }] } },
+    { payload: { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-11-03'), disciplines: Array(2).fill({ discipline: 'cycling', ftpSetting: ftp }) } }])(
+    'rejects unready, incompatible or ambiguous snapshots %j', patch => {
+      expect(importedWorkoutFtpReference(cycling.sport, capacity({}, patch), now.getTime())).toBeNull();
+    });
+  it('replays a strict imported snapshot without rechecking freshness or inventing zones/providers', () => {
+    const reference = importedWorkoutFtpReference(cycling.sport, capacity(), now.getTime())!;
+    expect(parseWorkoutPowerReferenceV1(JSON.parse(JSON.stringify(reference)))).toEqual(reference);
+    expect(importedWorkoutFtpReference(cycling.sport, capacity({ sourceKey: null }), now.getTime())).toMatchObject({ source: null });
+    for (const patch of [{ family: 'running' }, { reference: { kind: 'critical-power', watts: 205 } },
+      { lastSeenAtMs: '2026-11-02' }, { zoneUpperBoundsWatts: [100] }, { provider: 'garmin' }]) {
+      expect(() => parseWorkoutPowerReferenceV1({ ...reference, ...patch })).toThrow();
+    }
   });
 });
