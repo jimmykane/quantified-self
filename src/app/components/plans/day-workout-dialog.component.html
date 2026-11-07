@@ -48,10 +48,13 @@
           <h3 class="section-title">This suggestion has no power targets</h3>
           <p>Power was selected. Check Context for the reason; set up a reference or change targets before generating again. Existing suggestions do not update automatically.</p>
         } @else if (powerStatus() === 'loading') { <p>Checking power reference for {{ powerSport() }}…</p> }
-        @else if (powerStatus() === 'available') { <p>A saved power reference is available for {{ powerSport() }}.</p> }
+        @else if (powerStatus() === 'available') {
+          @if (powerImportedSummary()) { <p>{{ powerImportedSummary() }}</p><p class="hint">Observed in activity data; not a new FTP test. Saved settings take priority.</p> }
+          @else { <p>A saved power reference is available for {{ powerSport() }}.</p> }
+        }
         @else if (powerStatus() === 'missing') {
           <h3 class="section-title">Power reference needed for {{ powerSport() }}</h3>
-          <p>No saved FTP or power override is available. Suggestions will use effort notes without watt targets.</p>
+          <p>No saved FTP, power override or recent imported FTP is available. Suggestions will use effort notes without watt targets.</p>
         } @else {
           <h3 class="section-title">Power reference could not be checked</h3>
           <p>Power targets are not guaranteed. Retry the check or review your power settings.</p>
@@ -150,7 +153,7 @@
       @if (powerReview(); as power) {
         <h4 class="section-title">Power reference</h4><p>{{ power.summary }}</p>
         @if (power.zones.length) { <ul>@for (zone of power.zones; track $index) { <li>{{ zone }}</li> }</ul> }
-        <p class="hint">Manually confirmed source at generation time. Sending does not convert between devices or services. Saved target values stay fixed.</p>
+        <p class="hint">{{ power.notice }} Sending does not convert between devices or services. Saved target values stay fixed.</p>
       }
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.timingDetails) { <p class="hint">{{ review.timingDetails }}</p> }

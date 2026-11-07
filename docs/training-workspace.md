@@ -1061,6 +1061,39 @@ canonical display, real Material bindings, default/advanced interactions, haptic
 in helpers-node; injected service/component tests remain Angular. No migration, reparse, derived schema bump, new
 Rules/index, credential or production data operation is required.
 
+##### Recent imported FTP fallback
+
+Generation and its explicit Power preflight now resolve exact-sport override → saved family FTP → recent imported
+family FTP. The last option reads `users/{uid}/derivedMetrics/training_capacity` once only when the prior references
+are absent. Existing invalid/unreadable overrides or FTP values block fallback. This adds no activity query, provider
+request, rebuild, listener, settings write or dashboard/focus read. Missing/cleared FTP never revives older policy
+history; it may use a recent imported observation. Other targets and unsupported sports remain read-free.
+
+`importedWorkoutFtpReference` is the shared frontend/backend validator. It requires a ready current-schema capacity
+snapshot, UTC nonfuture day, one unambiguous matching Running/Cycling family and a positive finite FTP no greater than
+3000. The existing builder excludes session-derived 95%-of-20-minute-power estimates; the resolver only accepts its
+`ftp-setting` / `imported-activity-stat` observation. It checks positive count, ordered first/last times, source-label
+bounds and an observation within the snapshot day limit and the inclusive 90-day window at generation time. Snapshot
+calendar age alone does not reject a recent observation: yesterday's ready summary can supply FTP today. Pending,
+failed, incompatible, malformed, future, duplicate-family or stale data supplies no reference. No new derived kind,
+schema version, backfill or reparse is required. This generation fallback does not change the separate Training
+settings **Use** suggestion or any recorded-load calculation.
+
+Only an actual matching relative-power prescription retains a strict private `kind: imported-ftp` snapshot: sport,
+family, nullable source label, numeric `lastSeenAtMs` and canonical FTP watts. No synthetic provider or zone bounds are
+added. The prompt treats the label as untrusted and the time as an observation, not a threshold measurement. The
+preflight and review use Sports Lib units and the owner's app locale for **Imported FTP · source · Last seen**.
+Cached daily suggestions/request replays keep the frozen snapshot even when it later ages out or the source changes.
+Changing a summary or settings does not rewrite cached suggestions, saved workouts, allowance or sending preferences.
+
+MCP impact review: no public tool, schema, scope, instruction, mutation or recipe change. Generated recipes already
+expose frozen percentage/watt references through the existing full-recipe reads; their regression coverage now includes
+private imported-provenance exclusion. No source/device/date field is automatically exposed by MCP. General Assistant
+plan chats and MCP authoring retain their existing independently consented threshold/derived-data reads; this does not
+grant them new access or silently apply the app generation fallback. No plugin rebuild, registered-app rescan, Rules or
+index change is needed. Backend rollout affects `generateDayWorkout` (both manual and daily generation); frontend
+rollout supplies the matching advisory UI. Deployments remain separately authorized.
+
 ### Remembered Plans view
 
 The Plans/Standalone selector saves the last explicit choice in the owner settings document at

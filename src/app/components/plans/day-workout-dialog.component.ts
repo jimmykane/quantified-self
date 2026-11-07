@@ -164,11 +164,16 @@ export class DayWorkoutDialogComponent {
   });
   private readonly powerCheck = toSignal(toObservable(this.powerScope).pipe(switchMap(scope => scope
     ? defer(() => this.powerSettings.loadReference(this.data.ownerUid, scope.sport, this.timeZone)).pipe(
-      map(reference => ({ ...scope, status: reference ? 'available' as const : 'missing' as const })),
-      startWith({ ...scope, status: 'loading' as const }),
-      catchError(() => of({ ...scope, status: 'error' as const }))) : of(null))), { initialValue: null });
+      map(reference => ({ ...scope, reference, status: reference ? 'available' as const : 'missing' as const })),
+      startWith({ ...scope, reference: null, status: 'loading' as const }),
+      catchError(() => of({ ...scope, reference: null, status: 'error' as const }))) : of(null))), { initialValue: null });
   readonly powerStatus = computed(() => this.powerSport() && this.powerCheck()?.sport === this.powerSport() && this.powerCheck()?.retry === this.powerRetry()
     ? this.powerCheck()!.status : 'loading');
+  readonly powerImportedSummary = computed(() => {
+    const reference = this.powerStatus() === 'available' ? this.powerCheck()?.reference : null;
+    return reference && 'kind' in reference && reference.kind === 'imported-ftp'
+      ? workoutPowerSummary(reference, this.user()?.settings?.unitSettings) : null;
+  });
   readonly missingPowerTargets = computed(() => this.controls().target === 'power' && !!this.result()?.draft
     && !this.result()!.draft!.structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
       .some(step => step.targets.some(target => target.kind === 'power'))));
@@ -197,6 +202,8 @@ export class DayWorkoutDialogComponent {
   readonly powerReview = computed(() => {
     const profile = this.result()?.powerReference;
     return profile ? { summary: workoutPowerSummary(profile, this.user()?.settings?.unitSettings),
+      notice: 'kind' in profile && profile.kind === 'imported-ftp'
+        ? 'Observed in activity data; not a new FTP test.' : 'Saved reference at generation time.',
       zones: workoutPowerZones(profile, this.user()?.settings?.unitSettings) } : null;
   });
   readonly contextDetails = computed(() => [...(this.result()?.usedContext ?? []), ...(this.result()?.missingContext ?? [])]);

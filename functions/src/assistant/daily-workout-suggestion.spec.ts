@@ -61,9 +61,11 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
-  it.each(['override', 'shared'] as const)('resolves %s power after routine sport selection and retains it after settings change', async origin => {
+  it.each(['override', 'shared', 'imported'] as const)('resolves %s power after routine sport selection and retains it after settings change', async origin => {
     const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
-    const powerReference = origin === 'shared' ? { kind: 'training-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
+    const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
+      source: 'Imported device', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 205 } }
+      : origin === 'shared' ? { kind: 'training-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
       revision: 3, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 280 } }
       : { sport: ActivityTypes.Cycling, provider: 'garmin' as const, source: 'Bike power meter',
         reference: { kind: 'functional-threshold-power' as const, watts: 240 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };

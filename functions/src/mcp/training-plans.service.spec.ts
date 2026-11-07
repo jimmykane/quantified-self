@@ -422,19 +422,21 @@ describe('Training plan MCP reads', () => {
   });
 
 
-  it('reads frozen shared FTP targets without fetching current thresholds or exposing private provenance', async () => {
+  it('reads frozen shared/imported FTP targets without fetching current thresholds or exposing private provenance', async () => {
     const f = fixture();
     const target = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
       reference: { kind: 'functional-threshold-power', watts: 280 } };
     f.structures.w1 = { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'work', purpose: 'work',
       ending: { kind: 'time', seconds: 600 }, targets: [target] }] };
     f.collections.trainingLoadPolicies = { running: { functionalThresholdPower: 300, revision: 9, effectiveAt: 'private-effective' } };
+    f.collections.derivedMetrics = { training_capacity: { payload: { disciplines: [{ discipline: 'running',
+      ftpSetting: { value: 310, sourceKey: 'private-device', lastSeenAtMs: 123 } }] } } };
     f.collections.config = { settings: { workoutPower: { profiles: [{ source: 'private-override' }] } } };
     const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
     for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_planned_workout_v4'] as const) {
       const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
       expect(result.workout.structure.nodes[0]).toMatchObject({ targets: [target] });
-      expect(JSON.stringify(result)).not.toMatch(/private-|training-ftp|effectiveAt|powerReference|workoutPower|300/);
+      expect(JSON.stringify(result)).not.toMatch(/private-|training-ftp|imported-ftp|lastSeenAtMs|sourceKey|effectiveAt|powerReference|workoutPower|300|310/);
       await expect(f.run(tool, { workoutRef }, [])).rejects.toThrow();
     }
   });

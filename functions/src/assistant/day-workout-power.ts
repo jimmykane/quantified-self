@@ -2,12 +2,12 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { trainingLoadTimeMs } from '../../../shared/training-load-source';
 import { dayWorkoutLocalDate, type DayWorkoutControls } from '../../../shared/day-workout';
-import { WORKOUT_POWER_SPORTS, parseWorkoutPowerSettingsV1, sharedWorkoutFtpReference, workoutFtpFamily, type WorkoutPowerProfileV1, type WorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
+import { WORKOUT_POWER_SPORTS, parseWorkoutPowerSettingsV1, sharedWorkoutFtpReference, importedWorkoutFtpReference, workoutFtpFamily, type WorkoutPowerProfileV1, type WorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
 import type { WorkoutTargetV1 } from '../../../shared/planned-workout';
 import type { ValidatedDaySuggestion } from './day-workout-validation';
 import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
 
-/** Resolve an explicit override or the shared dated FTP after the final sport selection. No provider calls or writes. */
+/** Resolve an explicit override, shared dated FTP or recent imported FTP after the final sport selection. No provider calls or writes. */
 export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutControls, now: Date,
   context: DayWorkoutContext, db: FirebaseFirestore.Firestore = admin.firestore()): Promise<DayWorkoutContext> {
   // Strip unverified power references on every path, including unsupported sports and explicit non-power preferences.
@@ -18,7 +18,7 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
   delete result.powerReference;
   if (!['auto', 'power'].includes(controls.target) || !WORKOUT_POWER_SPORTS.includes(controls.sport as WorkoutPowerProfileV1['sport'])) return result;
   let profile: WorkoutPowerReferenceV1 | undefined;
-  let missing = 'Power targets: no verified shared FTP or explicit override for this sport. Review Settings → Workout power.';
+  let missing = 'Power targets: no verified shared FTP, explicit override or recent imported FTP for this sport. Review Settings → Workout power.';
   try {
     const settings = await db.doc(`users/${uid}/config/settings`).get();
     profile = parseWorkoutPowerSettingsV1(settings.get('workoutPower')).profiles.find(item => item.sport === controls.sport);
@@ -37,6 +37,11 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
           .orderBy('effectiveAt', 'desc').limit(1).get()).docs[0]?.data();
       }
       profile = sharedWorkoutFtpReference(controls.sport, policy, now.getTime()) ?? undefined;
+      if (!profile && policy?.functionalThresholdPower !== undefined) throw Error('The shared FTP could not be verified.');
+      if (!profile) {
+        const capacity = await db.doc(`users/${uid}/derivedMetrics/training_capacity`).get();
+        profile = importedWorkoutFtpReference(controls.sport, capacity.data(), now.getTime()) ?? undefined;
+      }
     }
   } catch {
     profile = undefined;
@@ -49,7 +54,7 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
   }
   if (JSON.stringify(evidence).length > DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) throw Error('Power context exceeds the generation limit.');
   return { ...result,
-    usedContext: [...context.usedContext, ...(profile ? ['kind' in profile ? 'Shared dated FTP for the selected sport' : 'Explicit power-source override for the selected sport'] : [])],
+    usedContext: [...context.usedContext, ...(profile ? ['kind' in profile ? profile.kind === 'imported-ftp' ? 'Recent imported FTP for the selected sport (last observed in activity data, not a new FTP test)' : 'Shared dated FTP for the selected sport' : 'Explicit power-source override for the selected sport'] : [])],
     missingContext: [...context.missingContext, ...(profile ? [] : [missing])] };
 }
 

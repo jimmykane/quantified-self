@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { Auth } from 'app/firebase/auth';
 import { Firestore, runTransaction } from 'app/firebase/firestore';
 import { getDoc } from 'firebase/firestore/lite';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '@shared/derived-metrics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { WorkoutPowerSettingsService } from './workout-power-settings.service';
 import { AppUserService } from './app.user.service';
@@ -70,7 +71,34 @@ describe('private workout power settings persistence', () => {
     });
     it('reports missing references without writing or inferring a value', async () => {
       expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toBeNull();
+      expect(getDoc).toHaveBeenCalledTimes(3); expect(set).not.toHaveBeenCalled();
+    });
+    const capacity = { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, metricKind: 'training_capacity',
+      payload: { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-11-01'), disciplines: [{ discipline: 'cycling', ftpSetting: {
+        kind: 'ftp-setting', value: 205, sourceKey: 'garmin enduro 3', provenance: 'imported-activity-stat',
+        firstSeenAtMs: Date.parse('2026-11-01T10:00Z'), lastSeenAtMs: Date.parse('2026-11-01T10:00Z'), observationCount: 1 } }] } };
+    it('uses the same imported fallback as generation without saving it or requiring a summary from today', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockResolvedValueOnce({ data: () => capacity } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toMatchObject({ kind: 'imported-ftp',
+        family: 'cycling', source: 'garmin enduro 3', reference: { kind: 'functional-threshold-power', watts: 205 } });
+      expect(getDoc).toHaveBeenLastCalledWith({ path: 'users/owner/derivedMetrics/training_capacity' });
+      expect(getDoc).toHaveBeenCalledTimes(3); expect(set).not.toHaveBeenCalled();
+    });
+    it('does not bypass invalid shared FTP to use an imported value', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockResolvedValueOnce({ data: () => ({ functionalThresholdPower: 0 }) } as never);
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow('could not be verified');
       expect(getDoc).toHaveBeenCalledTimes(2); expect(set).not.toHaveBeenCalled();
+    });
+    it.each(['offline', 'owner-changed'])('discards an imported fallback when %s', async failure => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({}) } as never).mockResolvedValueOnce({ data: () => ({}) } as never)
+        .mockImplementationOnce(async () => {
+          if (failure === 'offline') throw Error('offline');
+          auth.currentUser = { uid: 'other' }; return { data: () => capacity } as never;
+        });
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow();
+      expect(set).not.toHaveBeenCalled();
     });
     it.each(['future', 'invalid', 'unreadable'] as const)('does not bypass a %s override branch with shared FTP', async failure => {
       if (failure === 'unreadable') vi.mocked(getDoc).mockRejectedValueOnce(Error('offline'));

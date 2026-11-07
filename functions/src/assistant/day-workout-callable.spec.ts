@@ -42,9 +42,11 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
-  it.each(['override', 'shared'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
+  it.each(['override', 'shared', 'imported'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
     const deps = dependencies();
-    const powerReference = origin === 'shared' ? { kind: 'training-ftp' as const, sport: request.controls.sport, family: 'running' as const,
+    const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: request.controls.sport, family: 'running' as const,
+      source: 'Imported device', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 205 } }
+      : origin === 'shared' ? { kind: 'training-ftp' as const, sport: request.controls.sport, family: 'running' as const,
       revision: 3, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 280 } }
       : { sport: request.controls.sport, provider: 'suunto' as const, source: 'Watch power',
         reference: { kind: 'critical-power' as const, watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };

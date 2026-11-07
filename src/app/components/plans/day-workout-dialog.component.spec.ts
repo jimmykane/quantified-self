@@ -170,6 +170,22 @@ describe('DayWorkoutDialogComponent', () => {
     expect(component.controls()).toMatchObject({ target: 'power', minutes: 45, garminPowerAveragingSeconds: 3 });
     expect(generate).not.toHaveBeenCalled(); expect(savePreferences).not.toHaveBeenCalled();
   });
+  it('shows imported FTP provenance in preferences without changing saved choices or generating', async () => {
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power' };
+    Object.assign(TestBed.inject(MAT_DIALOG_DATA), { mode: 'preferences', initialControls: controls });
+    loadPowerReference.mockResolvedValueOnce({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling',
+      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
+    const fixture = await render(), component = fixture.componentInstance;
+    const notice = fixture.nativeElement.querySelector('.power-notice') as HTMLElement;
+    expect(notice.textContent).toContain('Imported FTP 205 watt · Garmin Enduro 3 · Last seen');
+    expect(notice.textContent).toContain('not a new FTP test');
+    expect(notice.textContent).not.toContain('A saved power reference');
+    expect(notice.textContent).not.toContain('Power reference needed');
+    expect(component.controls()).toMatchObject({ target: 'power', sport: ActivityTypes.Cycling });
+    expect(loadPowerReference).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'power-imported-preferences');
+  });
   it('offers device zones explicitly without enabling delivery or performing another reference read', async () => {
     const fixture = await render(), component = fixture.componentInstance;
     component.set('sport', ActivityTypes.Cycling); component.set('target', 'power');
@@ -240,11 +256,13 @@ describe('DayWorkoutDialogComponent', () => {
     expect(loadPowerReference).not.toHaveBeenCalled(); // Generation already checks references on the server.
   });
 
-  it.each(['override', 'shared'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
+  it.each(['override', 'shared', 'imported'] as const)('reviews the generation-time %s reference rather than current settings', async origin => {
     const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     const component = fixture.componentInstance;
     const draft = response('source-review');
-    draft.powerReference = origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
+    draft.powerReference = origin === 'imported' ? { kind: 'imported-ftp', sport: ActivityTypes.Running, family: 'running',
+      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } }
+      : origin === 'shared' ? { kind: 'training-ftp', sport: ActivityTypes.Running, family: 'running',
       revision: 2, effectiveAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 280 } }
       : { sport: ActivityTypes.Running, provider: 'suunto', source: 'Watch running power',
         reference: { kind: 'critical-power', watts: 250 }, referenceDate: '2026-10-25', zoneUpperBoundsWatts: [150, 200] };
@@ -254,7 +272,14 @@ describe('DayWorkoutDialogComponent', () => {
         targets: [{ kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80, reference: draft.powerReference.reference }] }] } };
     draft.previousLoads = []; draft.usedContext = ['Manually confirmed power reference for the selected sport']; draft.missingContext = [];
     component.result.set(draft); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    if (origin === 'shared') {
+    if (origin === 'imported') {
+      expect(fixture.nativeElement.textContent).toContain('Imported FTP 205 watt · Garmin Enduro 3 · Last seen');
+      expect(fixture.nativeElement.textContent).toContain('not a new FTP test');
+      expect(fixture.nativeElement.textContent).not.toContain('Manually confirmed source');
+      expect(fixture.nativeElement.textContent).not.toContain('Effective since');
+      expect(fixture.nativeElement.textContent).not.toContain('Reference date');
+      expect(loadPowerReference).not.toHaveBeenCalled();
+    } else if (origin === 'shared') {
       expect(fixture.nativeElement.textContent).toContain('Shared Running FTP 280 watt');
       expect(fixture.nativeElement.textContent).toContain('Effective since 2026-10-25T12:00:00.000Z');
       expect(fixture.nativeElement.textContent).not.toContain('Reference date');

@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, SpeedUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { parseWorkoutPowerReferenceV1, sharedWorkoutFtpReference } from '@shared/workout-power-settings';
 import { workoutPowerSummary, workoutPowerZones, parsePowerZoneInput } from './workout-power-settings.helper';
+import { getAppLocale } from '../shared/adapters/app-locale';
+vi.mock('../shared/adapters/app-locale', () => ({ getAppLocale: vi.fn(() => 'en-GB') }));
 const profile = { sport: ActivityTypes.Running, provider: 'suunto' as const, source: 'Watch power', reference: { kind: 'critical-power' as const, watts: 250 },
   referenceDate: '2026-11-01', zoneUpperBoundsWatts: [150, 200] };
 describe('workout power presentation', () => {
@@ -40,6 +42,18 @@ describe('workout power presentation', () => {
       expect(workoutPowerSummary(snapshot, units as UserUnitSettingsInterface)).toBe('Cycling · Shared Cycling FTP 280 watt · Effective since 2026-11-01T12:00:00.000Z');
       expect(workoutPowerZones(snapshot)).toEqual([]);
     });
+  it.each([['en-GB', '2 Nov 2026'], ['en-US', 'Nov 2, 2026']])('formats imported FTP with the saved %s locale', (locale, date) => {
+    vi.mocked(getAppLocale).mockReturnValue(locale);
+    try {
+      const reference = { kind: 'imported-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
+        source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-11-02T12:00Z'), reference: { kind: 'functional-threshold-power' as const, watts: 205 } };
+      for (const units of [undefined, { speedUnits: [SpeedUnits.MilesPerHour] } as UserUnitSettingsInterface]) {
+        expect(workoutPowerSummary(reference, units)).toBe(`Cycling · Imported FTP 205 watt · Garmin Enduro 3 · Last seen ${date}`);
+        expect(workoutPowerZones(reference, units)).toEqual([]);
+      }
+      expect(workoutPowerSummary({ ...reference, source: null })).toContain('Imported workout data');
+    } finally { vi.mocked(getAppLocale).mockReturnValue('en-GB'); }
+  });
   it('parses explicit ordered boundary input without coercing blank tokens', () => {
     expect(parsePowerZoneInput('150, 200.5, 250')).toEqual([150, 200.5, 250]);
     expect(parsePowerZoneInput('  ')).toEqual([]);
