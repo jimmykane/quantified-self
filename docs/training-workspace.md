@@ -1214,14 +1214,24 @@ exists only while a current authenticated day listener remains live; teardown/er
 revision index separately retains a monotonic floor to reject delayed acknowledgements and older reconnect snapshots.
 The shared daily listener follows the existing Today date/foreground checks across saved-zone midnight and same-UID
 session replacement, even if the user profile object has not changed. A failed root listener is reattached on an explicit
-request; passive cache reads never restart failed subscriptions. Context changes during the initial read reject before
-any generation request. This adds no clock, polling, model call or change to the daily charge receipt.
+request; passive cache reads never restart failed subscriptions. Before the first verified day value, a transient
+`aborted`, `deadline-exceeded`, `internal` or `unavailable` read failure gets one shared retry after 500 ms. Each attempt
+keeps the 15-second first-value deadline; its typed failure reports `deadline-exceeded` rather than `unknown`.
+The retry retains server-confirmed reads and the acknowledged revision floor, supplies no assumed absence, and stops
+when the last subscriber leaves or the authenticated session changes. Once day evidence has been published, a listener
+failure immediately retires cache authority instead of hiding it behind a retry. Permission, malformed-data and other
+non-transient errors still fail immediately. Retired date/session failures cannot be attributed to a new daily context.
+Context changes during the initial read reject before any generation request. This adds no recurring timer, polling
+or model call and does not change the daily charge receipt.
 A recreated Today view joins an in-flight generation or dismissal instead of issuing a competing status read.
 Preparation waits for an older status check; an explicit available-data choice waits for a preceding sleep check,
 while automatic preparation can share an already authorized available-data generation. The existing pending map
 serializes these action combinations without a separate queue or polling. Epoch changes, including rest and dismissal,
 reject queued work before dispatch. This prevents a late `preparing`/`waiting` receipt from replacing a finished result
 and preserves the existing daily allowance. Public MCP inputs/outputs, scopes, Rules and stored records are unchanged.
+MCP impact review for initial rest-read recovery: none. Only the first-party exact-date subscription and its fixed-label
+failure diagnostics change; server rest-day reads, strict preview/Apply contracts, consent and provider actions remain
+unchanged. Existing Help guidance on unavailable schedule evidence and explicit **Check again** still applies.
 
 Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
 or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context

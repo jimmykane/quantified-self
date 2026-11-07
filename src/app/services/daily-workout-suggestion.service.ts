@@ -83,13 +83,16 @@ export class DailyWorkoutSuggestionService {
     const context = { uid, localDate, authUser, subscription: new Subscription() };
     this.restRead = context;
     context.subscription.add(this.plans.watchCalendarRestDay(uid, localDate).subscribe({ next: record => untracked(() => {
-      if (this.restRead !== context || !this.eligible(uid) || this.preferences().controls.localDate !== localDate) return;
+      if (this.restRead !== context || this.auth.currentUser !== authUser || !this.eligible(uid)
+        || this.preferences().controls.localDate !== localDate) return;
       this.acceptRestDayRevision(uid, localDate, record?.revision ?? 0);
       if (record?.isRestDay && this.cache?.status?.state !== 'dismissed') this.remember(uid, { localDate, state: 'rest-day' });
     }), error: error => untracked(() => {
       context.subscription.unsubscribe();
-      if (this.restRead === context) this.reportFailure(uid, 'calendar-rest', error);
-      if (this.restRead === context && this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
+      if (this.restRead !== context || this.auth.currentUser !== authUser
+        || this.preferences().controls.localDate !== localDate) return;
+      this.reportFailure(uid, 'calendar-rest', error);
+      if (this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
         && (this.cache.status || this.cache.pending.size)) { this.invalidate(); this.persist(); }
     }) }));
   }
