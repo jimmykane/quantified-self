@@ -145,7 +145,7 @@ describe('DayWorkoutDialogComponent', () => {
     Object.assign(TestBed.inject(MAT_DIALOG_DATA), { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.Cycling,
       mode: 'preferences', initialControls: controls, followRoutine: true, savePreferences });
     const fixture = await render(), component = fixture.componentInstance;
-    expect(loadPowerReference).toHaveBeenCalledExactlyOnceWith('owner', ActivityTypes.Cycling, 'Europe/Athens');
+    expect(loadPowerReference).toHaveBeenCalledExactlyOnceWith('owner', ActivityTypes.Cycling, 'Europe/Athens', true);
     expect(component.more()).toBe(false);
     const notice: HTMLElement = fixture.nativeElement.querySelector('.power-notice');
     expect(notice.closest('[hidden]')).toBeNull();
@@ -174,10 +174,11 @@ describe('DayWorkoutDialogComponent', () => {
     const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power' };
     Object.assign(TestBed.inject(MAT_DIALOG_DATA), { mode: 'preferences', initialControls: controls });
     loadPowerReference.mockResolvedValueOnce({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling',
-      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
+      source: 'garmin enduro 3', lastSeenAtMs: Date.parse('2026-10-25T23:30Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
     const fixture = await render(), component = fixture.componentInstance;
     const notice = fixture.nativeElement.querySelector('.power-notice') as HTMLElement;
     expect(notice.textContent).toContain('Imported FTP 205 watt · Garmin Enduro 3 · Last seen');
+    expect(notice.textContent).toMatch(/Last seen (Oct 26, 2026|26 Oct 2026)/);
     expect(notice.textContent).toContain('not a new FTP test');
     expect(notice.textContent).not.toContain('A saved power reference');
     expect(notice.textContent).not.toContain('Power reference needed');
@@ -185,6 +186,23 @@ describe('DayWorkoutDialogComponent', () => {
     expect(loadPowerReference).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
     exportDailySuggestionDialogQa(fixture.nativeElement, 'power-imported-preferences');
+  });
+  it('retires an imported power check after activity opt-out and does not recheck unrelated choices', async () => {
+    const fixture = await render(), component = fixture.componentInstance;
+    let finish!: (value: unknown) => void;
+    loadPowerReference.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.set('sport', ActivityTypes.Cycling); component.set('target', 'power'); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenLastCalledWith('owner', ActivityTypes.Cycling, component.timeZone, true);
+    component.set('activityContext', false); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenLastCalledWith('owner', ActivityTypes.Cycling, component.timeZone, false);
+    finish({ kind: 'imported-ftp', sport: ActivityTypes.Cycling, family: 'cycling', source: 'Bike computer',
+      lastSeenAtMs: Date.parse('2026-10-25T12:00Z'), reference: { kind: 'functional-threshold-power', watts: 205 } });
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(component.powerStatus()).toBe('missing'); expect(component.powerImportedSummary()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Imported FTP is turned off with Recent activities');
+    component.set('minutes', 45); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(loadPowerReference).toHaveBeenCalledTimes(2);
+    expect(generate).not.toHaveBeenCalled();
   });
   it('offers device zones explicitly without enabling delivery or performing another reference read', async () => {
     const fixture = await render(), component = fixture.componentInstance;

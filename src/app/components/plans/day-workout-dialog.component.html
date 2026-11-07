@@ -54,7 +54,8 @@
         }
         @else if (powerStatus() === 'missing') {
           <h3 class="section-title">Power reference needed for {{ powerSport() }}</h3>
-          <p>No saved FTP, power override or recent imported FTP is available. Suggestions will use effort notes without watt targets.</p>
+          <p>No usable power reference is available. Suggestions will use effort notes without watt targets.</p>
+          @if (!importedPowerAllowed()) { <p class="hint">Imported FTP is turned off with Recent activities.</p> }
         } @else {
           <h3 class="section-title">Power reference could not be checked</h3>
           <p>Power targets are not guaranteed. Retry the check or review your power settings.</p>

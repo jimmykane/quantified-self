@@ -157,22 +157,24 @@ export class DayWorkoutDialogComponent {
   // Check only explicit Power options in this dialog. Today and cached reviews add no reads.
   readonly powerSport = computed(() => this.controls().target === 'power' && !this.strength() && !this.result() && this.busy() !== 'generate'
     && !this.savedWorkoutId() && this.user()?.uid === this.data.ownerUid ? this.controls().sport : null);
+  readonly importedPowerAllowed = computed(() => this.controls().activityContext !== false);
   private readonly powerRetry = signal(0);
   private readonly powerScope = computed(() => {
     const sport = this.powerSport();
-    return sport ? { sport, retry: this.powerRetry() } : null;
+    return sport ? { sport, retry: this.powerRetry(), allowImported: this.importedPowerAllowed() } : null;
   });
   private readonly powerCheck = toSignal(toObservable(this.powerScope).pipe(switchMap(scope => scope
-    ? defer(() => this.powerSettings.loadReference(this.data.ownerUid, scope.sport, this.timeZone)).pipe(
+    ? defer(() => this.powerSettings.loadReference(this.data.ownerUid, scope.sport, this.timeZone, scope.allowImported)).pipe(
       map(reference => ({ ...scope, reference, status: reference ? 'available' as const : 'missing' as const })),
       startWith({ ...scope, reference: null, status: 'loading' as const }),
       catchError(() => of({ ...scope, reference: null, status: 'error' as const }))) : of(null))), { initialValue: null });
   readonly powerStatus = computed(() => this.powerSport() && this.powerCheck()?.sport === this.powerSport() && this.powerCheck()?.retry === this.powerRetry()
+    && this.powerCheck()?.allowImported === this.importedPowerAllowed()
     ? this.powerCheck()!.status : 'loading');
   readonly powerImportedSummary = computed(() => {
     const reference = this.powerStatus() === 'available' ? this.powerCheck()?.reference : null;
     return reference && 'kind' in reference && reference.kind === 'imported-ftp'
-      ? workoutPowerSummary(reference, this.user()?.settings?.unitSettings) : null;
+      ? workoutPowerSummary(reference, this.user()?.settings?.unitSettings, this.timeZone) : null;
   });
   readonly missingPowerTargets = computed(() => this.controls().target === 'power' && !!this.result()?.draft
     && !this.result()!.draft!.structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
@@ -201,7 +203,7 @@ export class DayWorkoutDialogComponent {
     return draft ? dayWorkoutReview(draft, this.user()?.settings?.unitSettings, this.result()?.previousLoads) : null; });
   readonly powerReview = computed(() => {
     const profile = this.result()?.powerReference;
-    return profile ? { summary: workoutPowerSummary(profile, this.user()?.settings?.unitSettings),
+    return profile ? { summary: workoutPowerSummary(profile, this.user()?.settings?.unitSettings, this.timeZone),
       notice: 'kind' in profile && profile.kind === 'imported-ftp'
         ? 'Observed in activity data; not a new FTP test.' : 'Saved reference at generation time.',
       zones: workoutPowerZones(profile, this.user()?.settings?.unitSettings) } : null;

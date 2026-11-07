@@ -54,16 +54,16 @@ describe('private workout power settings persistence', () => {
   describe('generation option checks', () => {
     beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-02T12:00Z')); });
     afterEach(() => vi.useRealTimers());
-    it('uses the exact-sport override without reading shared FTP', async () => {
+    it('uses the exact-sport override without reading shared FTP even with imported references disabled', async () => {
       vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never);
-      expect(await service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens')).toEqual(profile);
+      expect(await service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens', false)).toEqual(profile);
       expect(getDoc).toHaveBeenCalledOnce(); expect(set).not.toHaveBeenCalled();
     });
-    it('falls back to matching shared FTP rather than another sport’s override', async () => {
+    it('uses matching shared FTP with imported references disabled rather than another sport’s override', async () => {
       vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never)
         .mockResolvedValueOnce({ data: () => ({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 240,
           revision: 2, effectiveAt: Date.parse('2026-11-01T12:00Z') }) } as never);
-      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toMatchObject({ kind: 'training-ftp', sport: ActivityTypes.Cycling,
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens', false)).toMatchObject({ kind: 'training-ftp', sport: ActivityTypes.Cycling,
         reference: { kind: 'functional-threshold-power', watts: 240 } });
       expect(vi.mocked(getDoc).mock.calls.map(([ref]) => (ref as unknown as { path: string }).path))
         .toEqual(['users/owner/config/settings', 'users/owner/trainingLoadPolicies/cycling']);
@@ -72,6 +72,12 @@ describe('private workout power settings persistence', () => {
     it('reports missing references without writing or inferring a value', async () => {
       expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toBeNull();
       expect(getDoc).toHaveBeenCalledTimes(3); expect(set).not.toHaveBeenCalled();
+    });
+    it('does not read imported capacity when Recent activities is off', async () => {
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens', false)).toBeNull();
+      expect(getDoc).toHaveBeenCalledTimes(2);
+      expect(getDoc).not.toHaveBeenCalledWith({ path: 'users/owner/derivedMetrics/training_capacity' });
+      expect(set).not.toHaveBeenCalled();
     });
     const capacity = { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, metricKind: 'training_capacity',
       payload: { dayBoundary: 'UTC', asOfDayMs: Date.parse('2026-11-01'), disciplines: [{ discipline: 'cycling', ftpSetting: {

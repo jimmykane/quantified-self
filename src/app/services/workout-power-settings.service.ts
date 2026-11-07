@@ -61,7 +61,7 @@ export class WorkoutPowerSettingsService {
     })()).pipe(timeout(30000), finalize(() => { active = false; })));
   }
   /** Advisory check for generation options; the server still resolves the reference at generation time. */
-  async loadReference(uid: string, sport: WorkoutPowerProfileV1['sport'], timeZone: string): Promise<WorkoutPowerReferenceV1 | null> {
+  async loadReference(uid: string, sport: WorkoutPowerProfileV1['sport'], timeZone: string, allowImported = true): Promise<WorkoutPowerReferenceV1 | null> {
     const session = this.auth.currentUser;
     const settings = await this.load(uid);
     if (!this.current(uid, session)) throw Error('The signed-in account changed.');
@@ -72,7 +72,7 @@ export class WorkoutPowerSettingsService {
     }
     const shared = await this.loadSharedFtp(uid, sport);
     if (!this.current(uid, session)) throw Error('The signed-in account changed.');
-    if (shared) return shared;
+    if (shared || !allowImported) return shared;
     const imported = await this.loadImportedFtp(uid, sport);
     if (!this.current(uid, session)) throw Error('The signed-in account changed.');
     return imported;

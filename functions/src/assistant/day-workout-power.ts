@@ -18,7 +18,9 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
   delete result.powerReference;
   if (!['auto', 'power'].includes(controls.target) || !WORKOUT_POWER_SPORTS.includes(controls.sport as WorkoutPowerProfileV1['sport'])) return result;
   let profile: WorkoutPowerReferenceV1 | undefined;
-  let missing = 'Power targets: no verified shared FTP, explicit override or recent imported FTP for this sport. Review Settings → Workout power.';
+  let missing = controls.activityContext === false
+    ? 'Power targets: no verified shared FTP or explicit override for this sport. Imported FTP is turned off with Recent activities.'
+    : 'Power targets: no verified shared FTP, explicit override or recent imported FTP for this sport. Review Settings → Workout power.';
   try {
     const settings = await db.doc(`users/${uid}/config/settings`).get();
     profile = parseWorkoutPowerSettingsV1(settings.get('workoutPower')).profiles.find(item => item.sport === controls.sport);
@@ -38,7 +40,7 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
       }
       profile = sharedWorkoutFtpReference(controls.sport, policy, now.getTime()) ?? undefined;
       if (!profile && policy?.functionalThresholdPower !== undefined) throw Error('The shared FTP could not be verified.');
-      if (!profile) {
+      if (!profile && controls.activityContext !== false) {
         const capacity = await db.doc(`users/${uid}/derivedMetrics/training_capacity`).get();
         profile = importedWorkoutFtpReference(controls.sport, capacity.data(), now.getTime()) ?? undefined;
       }

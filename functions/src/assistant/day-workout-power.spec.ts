@@ -253,11 +253,18 @@ describe('recent imported FTP fallback', () => {
     expect((await withWorkoutPowerContext('owner', cycling, now, base(), db.db)).powerReference?.reference.watts).toBe(230);
     expect(JSON.stringify(context.powerReference)).toBe(frozen);
   });
-  it('preserves explicit and shared references and never reads capacity unnecessarily', async () => {
+  it.each(['auto', 'power'] as const)('respects Recent activities being off with %s targets without reading capacity', async target => {
+    const db = importedDatabase();
+    const result = await withWorkoutPowerContext('owner', { ...cycling, target, activityContext: false }, now, base(), db.db);
+    expect(result.powerReference).toBeUndefined(); expect(result.references).toEqual([]);
+    expect(db.capacityGet).not.toHaveBeenCalled();
+    expect(result.missingContext.join(' ')).toContain('Imported FTP is turned off with Recent activities');
+  });
+  it('preserves explicit and shared references even with Recent activities off and never reads capacity unnecessarily', async () => {
     for (const override of [false, true]) {
       const db = importedDatabase({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 280,
         revision: 2, effectiveAt: seen }, override ? { version: 1, revision: 1, profiles: [{ ...profile, sport: cycling.sport }] } : undefined);
-      expect((await withWorkoutPowerContext('owner', cycling, now, base(), db.db)).powerReference?.reference.watts).toBe(override ? 250 : 280);
+      expect((await withWorkoutPowerContext('owner', { ...cycling, activityContext: false }, now, base(), db.db)).powerReference?.reference.watts).toBe(override ? 250 : 280);
       expect(db.capacityGet).not.toHaveBeenCalled();
     }
   });

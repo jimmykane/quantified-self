@@ -1065,7 +1065,10 @@ Rules/index, credential or production data operation is required.
 
 Generation and its explicit Power preflight now resolve exact-sport override → saved family FTP → recent imported
 family FTP. The last option reads `users/{uid}/derivedMetrics/training_capacity` once only when the prior references
-are absent. Existing invalid/unreadable overrides or FTP values block fallback. This adds no activity query, provider
+are absent and **Recent activities** is enabled. An explicit activity-context opt-out skips the capacity read in both
+backend generation and frontend preflight; saved FTP and explicit overrides remain independent. The preflight scope
+includes that opt-out, discards late results after it changes, and does not reread on unrelated option changes.
+Existing invalid/unreadable overrides or FTP values block fallback. This adds no activity query, provider
 request, rebuild, listener, settings write or dashboard/focus read. Missing/cleared FTP never revives older policy
 history; it may use a recent imported observation. Other targets and unsupported sports remain read-free.
 
@@ -1082,11 +1085,13 @@ settings **Use** suggestion or any recorded-load calculation.
 Only an actual matching relative-power prescription retains a strict private `kind: imported-ftp` snapshot: sport,
 family, nullable source label, numeric `lastSeenAtMs` and canonical FTP watts. No synthetic provider or zone bounds are
 added. The prompt treats the label as untrusted and the time as an observation, not a threshold measurement. The
-preflight and review use Sports Lib units and the owner's app locale for **Imported FTP · source · Last seen**.
+preflight and review use Sports Lib units, the owner's app locale and the dialog's generation timezone for
+**Imported FTP · source · Last seen**. Cross-midnight timestamps must not silently use the browser's timezone.
 Cached daily suggestions/request replays keep the frozen snapshot even when it later ages out or the source changes.
 Changing a summary or settings does not rewrite cached suggestions, saved workouts, allowance or sending preferences.
 
-MCP impact review: no public tool, schema, scope, instruction, mutation or recipe change. Generated recipes already
+MCP impact review: the imported fallback and its opt-out/timezone review fixes change no public tool, schema, scope,
+instruction, mutation or recipe. Generated recipes already
 expose frozen percentage/watt references through the existing full-recipe reads; their regression coverage now includes
 private imported-provenance exclusion. No source/device/date field is automatically exposed by MCP. General Assistant
 plan chats and MCP authoring retain their existing independently consented threshold/derived-data reads; this does not

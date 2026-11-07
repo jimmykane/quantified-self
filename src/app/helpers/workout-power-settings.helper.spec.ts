@@ -54,6 +54,13 @@ describe('workout power presentation', () => {
       expect(workoutPowerSummary({ ...reference, source: null })).toContain('Imported workout data');
     } finally { vi.mocked(getAppLocale).mockReturnValue('en-GB'); }
   });
+  it.each([['Europe/Athens', '3 Nov 2026'], ['America/Los_Angeles', '2 Nov 2026']])(
+    'uses the workout timezone %s for imported observation dates', (timeZone, date) => {
+      const reference = { kind: 'imported-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,
+        source: 'Bike computer', lastSeenAtMs: Date.parse('2026-11-02T23:30Z'), reference: { kind: 'functional-threshold-power' as const, watts: 205 } };
+      expect(workoutPowerSummary(reference, undefined, timeZone)).toContain(`Last seen ${date}`);
+      expect(reference.lastSeenAtMs).toBe(Date.parse('2026-11-02T23:30Z'));
+    });
   it('parses explicit ordered boundary input without coercing blank tokens', () => {
     expect(parsePowerZoneInput('150, 200.5, 250')).toEqual([150, 200.5, 250]);
     expect(parsePowerZoneInput('  ')).toEqual([]);
