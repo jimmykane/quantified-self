@@ -269,8 +269,16 @@ The first eligible arrival fixes a two-minute batching deadline and snapshots at
 workouts; excess arrivals are suppressed. The minute scheduler normally sends after roughly two to three minutes.
 One workout opens `/user/<uid>/event/<eventId>`; multiple workouts open `/activities`. The payload exposes only a generic
 message/count, no workout names or metrics, using the shared QS icon, declarative `web_push: 8030`, Angular click
-fallback, low urgency, fixed topic/tag `qs-activity-sync`, `renotify: false`, five-second transport timeout and ten-minute
-push TTL (including WNS). A browser may replace a previous visible alert with the same tag.
+fallback, low urgency, fixed topic/tag `qs-activity-sync`, `renotify: true`, five-second transport timeout and ten-minute
+push TTL (including WNS). Each permitted batch requests renewed attention when replacing an older visible activity
+alert with the same tag. This retains one visible activity alert per site while allowing a later batch to alert again;
+browser/OS permissions and presentation still apply. Grouping, duplicate receipts and rate limits govern how many
+batches are sent, independently of browser replacement. Monitoring coverage is **unchanged**: this presentation
+setting changes no sender outcome, schedule, backlog, retry or alert filter and adds no device-display acknowledgement.
+
+After separate deployment approval, this payload-only adjustment ships with
+`npm run firebase -- deploy --only functions:sendActivitySyncNotifications --project quantified-self-io`.
+Already delivered notifications retain their previous payload.
 
 There is at most **one batch attempt per 15 minutes and four per rolling 24 hours per account across providers**.
 These limits are separate from history-completion and self-test budgets. Cooldown/capped arrivals are skipped,

@@ -85,7 +85,7 @@ describe('new activity notifications', () => {
     await Promise.all([h.send(), h.send(), h.send()]); expect(h.deps.send).toHaveBeenCalledOnce();
     const payload = JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]);
     expect(payload).toMatchObject({ web_push: 8030, notification: { body: expect.stringContaining('20 new activities'),
-      tag: 'qs-activity-sync', renotify: false, navigate: origin + '/activities', icon: origin + '/assets/favicons/android-chrome-192x192.png' } });
+      tag: 'qs-activity-sync', renotify: true, navigate: origin + '/activities', icon: origin + '/assets/favicons/android-chrome-192x192.png' } });
     expect(payload.notification.data.onActionClick.default.url).toBe('/activities');
     expect(JSON.stringify(payload)).not.toMatch(/private-canary|account|event1|distance|pace|Suunto/);
     expect(h.state().pending).toBeUndefined(); expect(h.state().attempts).toHaveLength(1);
@@ -177,6 +177,10 @@ describe('new activity notifications', () => {
     }
     expect(h.deps.send).toHaveBeenCalledTimes(4); expect(h.state().attempts).toHaveLength(4);
     h.advance(ACTIVITY_PUSH.dayMs); await h.admit(h.seed('next-day')); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledTimes(5);
+    // Each permitted batch can alert again even when the previous notification is still visible.
+    for (const [, payload] of vi.mocked(h.deps.send).mock.calls) {
+      expect(JSON.parse(payload).notification).toMatchObject({ tag: 'qs-activity-sync', renotify: true });
+    }
   });
   it('bounds batches, duplicate receipts and device fan-out', async () => {
     const h = harness();

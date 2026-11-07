@@ -70,6 +70,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['install it from the same site', 'beta and production are separate installations',
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
+    expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
+    expect(copy).toContain('Your browser and OS control banners, sound and vibration');
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
       'Activity delivery', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);

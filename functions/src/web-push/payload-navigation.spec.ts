@@ -33,6 +33,11 @@ const cases = [
 ];
 
 describe.each(WEB_PUSH_ORIGINS)('notification navigation on %s', origin => {
+  it.each([1, 2])('requests fresh attention for a batch of %i activities while retaining its replacement tag', count => {
+    const entries = Array.from({ length: count }, (_, i) => ({ ...activity, eventID: `event-${i}` }));
+    expect(activityNotificationPayload(origin, 'owner', entries).notification)
+      .toMatchObject({ tag: 'qs-activity-sync', renotify: true });
+  });
   it.each(cases)('delegates $name to browser app/window routing with its exact destination', ({ build, path }) => {
     const payload = build(origin);
     // openWindow lets the browser select an installed app instead of navigating the last-focused tab.

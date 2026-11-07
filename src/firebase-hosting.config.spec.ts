@@ -355,6 +355,7 @@ describe('Firebase Hosting configuration', () => {
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Notification help also covers grouped Training sync attention alerts (2026-11-06).
     // Notification clicks use browser app routing and require a matching beta/production installation (2026-11-06).
+    // New grouped activity alerts can re-alert while retaining the existing grouping and limits (2026-11-07).
     // Help covers future-day health, goal dates and the explicit Power reference check (2026-11-07).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
   });
