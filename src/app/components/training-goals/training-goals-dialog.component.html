@@ -14,13 +14,19 @@
         <h3 class="goal-title">{{ fields().kind === 'ongoing' ? 'When to begin' : 'Training period' }}</h3>
         <p class="goal-meta">{{ periodHint() }}</p>
       </div>
-      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ startDateLabel() }}</mat-label><input matInput type="date" required [disabled]="busy()"
-        [ngModel]="fields().startLocalDate" (ngModelChange)="set('startLocalDate', $event, false)">
-        <mat-hint>{{ fields().kind === 'ongoing' ? 'Weekly tracking begins here too.' : 'When you begin working toward this goal.' }}</mat-hint></mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ startDateLabel() }}</mat-label><input matInput required [disabled]="busy()"
+        [matDatepicker]="startPicker" [ngModel]="startDateInput()" (dateInput)="setDate('startLocalDate', $event.value, startPicker.opened)">
+        <mat-datepicker-toggle matSuffix [for]="startPicker" [aria-label]="'Choose ' + startDateLabel()"></mat-datepicker-toggle>
+        <mat-datepicker #startPicker (opened)="haptics.selection()"></mat-datepicker>
+        <mat-hint>{{ fields().kind === 'ongoing' ? 'Weekly tracking begins here too.' : 'When you begin working toward this goal.' }}</mat-hint>
+        <mat-error>Enter a valid date.</mat-error></mat-form-field>
       @if (fields().kind !== 'ongoing') {
-        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ endDateLabel() }}</mat-label><input matInput type="date" required [disabled]="busy()"
-          [min]="fields().startLocalDate" [ngModel]="fields().targetLocalDate" (ngModelChange)="set('targetLocalDate', $event, false)">
-          <mat-hint>The calendar flag appears on this date.</mat-hint></mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ endDateLabel() }}</mat-label><input matInput required [disabled]="busy()"
+          [matDatepicker]="endPicker" [min]="startDateInput()" [ngModel]="endDateInput()" (dateInput)="setDate('targetLocalDate', $event.value, endPicker.opened)">
+          <mat-datepicker-toggle matSuffix [for]="endPicker" [aria-label]="'Choose ' + endDateLabel()"></mat-datepicker-toggle>
+          <mat-datepicker #endPicker (opened)="haptics.selection()"></mat-datepicker>
+          <mat-hint>The calendar flag appears on this date.</mat-hint>
+          <mat-error>{{ dateRangeError() || 'Enter a valid date.' }}</mat-error></mat-form-field>
       }
       @if (dateRangeError()) { <p class="goal-error wide" role="alert">{{ dateRangeError() }}</p> }
       <app-activity-filter-picker class="wide" label="Sport or family" allLabel="All sports" searchLabel="Search sports and families"

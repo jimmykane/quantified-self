@@ -1,7 +1,12 @@
-import { signal } from '@angular/core';
+import { LOCALE_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { DateAdapter, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatDatepicker } from '@angular/material/datepicker';
+import { By } from '@angular/platform-browser';
+import dayjs from 'dayjs';
+import { registerAppLocale } from '../../shared/adapters/date-locale.config';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { BehaviorSubject, finalize, of } from 'rxjs';
@@ -18,7 +23,8 @@ import { copyFileSync, cpSync, readdirSync, writeFileSync } from 'node:fs';
 const goal: TrainingGoalV1 = { schemaVersion: 1, id: 'one', revision: 1, createdAtMs: 1, updatedAtMs: 1, name: 'Athens marathon',
   kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
   sportScope: 'all', sport: null, objective: 'Finish comfortably', planId: 'old', weeklyTarget: null };
-async function setup(data: Record<string, unknown> = {}) {
+async function setup(data: Record<string, unknown> = {}, locale = 'en-GB') {
+  await registerAppLocale(locale);
   const user = signal<any>({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles, startOfTheWeek: 1 } } });
   const save = vi.fn().mockResolvedValue(goal), close = vi.fn();
   const progressResults = new BehaviorSubject({ status: 'ready', result: { progress: [] } });
@@ -27,6 +33,7 @@ async function setup(data: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({ imports: [TrainingGoalsDialogComponent, NoopAnimationsModule], providers: [
     { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner', ...data } }, { provide: MatDialogRef, useValue: { close } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+    { provide: MAT_DATE_LOCALE, useValue: locale }, { provide: LOCALE_ID, useValue: locale },
     { provide: AppUserService, useValue: { user } }, { provide: AppHapticsService, useValue: haptics },
     { provide: TrainingPlansService, useValue: { watchPlans: () => of([]) } },
     { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [goal] }),
@@ -36,6 +43,59 @@ async function setup(data: Record<string, unknown> = {}) {
   return { fixture, component: fixture.componentInstance, save, close, user, haptics, watchProgress, stopProgress };
 }
 describe('Calendar goal surfaces', () => {
+  it.each([
+    ['en-GB', '01/11/2026', '15/12/2026', '1 Nov 2026'],
+    ['en-US', '11/01/2026', '12/15/2026', 'Nov 1, 2026'],
+    ['de-DE', '01.11.2026', '15.12.2026', '01.11.2026'],
+  ])('uses the app regional format %s for editing and details, preserving stored calendar dates', async (locale, start, typed, detail) => {
+    const browser = locale === 'en-US' ? 'en-GB' : 'en-US';
+    const browserLocale = vi.spyOn(navigator, 'language', 'get').mockReturnValue(browser);
+    const browserLanguages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue([browser]);
+    try {
+      const { fixture, component, save, haptics } = await setup({ goal }, locale);
+      const root = fixture.nativeElement as HTMLElement;
+      expect(root.querySelector('input[type="date"]')).toBeNull();
+      const inputs = root.querySelectorAll<HTMLInputElement>('input.mat-datepicker-input');
+      expect(inputs[0].value).toBe(start);
+      inputs[1].value = typed; inputs[1].dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable();
+      expect(component.fields()).toMatchObject({ startLocalDate: '2026-11-01', targetLocalDate: '2026-12-15' });
+      expect(haptics.selection).not.toHaveBeenCalled();
+      await component.save(); fixture.detectChanges();
+      expect(save).toHaveBeenCalledWith('owner', 'one', expect.objectContaining({ targetLocalDate: '2026-12-15' }), goal);
+      expect(root.textContent).toContain(`Preparation starts ${detail}`);
+    } finally { browserLocale.mockRestore(); browserLanguages.mockRestore(); }
+  });
+  it('blocks invalid, cleared and reversed dates without saving the previous valid date', async () => {
+    const { fixture, component, save, haptics } = await setup({ goal });
+    const input = fixture.nativeElement.querySelectorAll('input.mat-datepicker-input')[1] as HTMLInputElement;
+    input.value = '1'; input.dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable();
+    expect(input.value).toBe('1'); expect(component.parsed()).toBeNull();
+    for (const value of ['31/02/2027', '', '31/10/2026']) {
+      input.value = value; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(component.parsed()).toBeNull(); await component.save();
+      expect(fixture.nativeElement.querySelector('mat-error')?.textContent).toBeTruthy();
+    }
+    expect(save).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    component.busy.set(true); component.setDate('targetLocalDate', dayjs('2027-01-01'), true);
+    expect(component.fields().targetLocalDate).toBe('2026-10-31');
+    fixture.detectChanges(); expect(input.disabled).toBe(true);
+    expect([...fixture.nativeElement.querySelectorAll('mat-datepicker-toggle button')].every((button: HTMLButtonElement) => button.disabled)).toBe(true);
+  });
+  it('uses the saved week start and accepts a picked day with one selection haptic', async () => {
+    const { fixture, component, user, haptics } = await setup({ goal });
+    const adapter = fixture.debugElement.injector.get(DateAdapter);
+    expect(adapter.getFirstDayOfWeek()).toBe(1);
+    user.update(value => ({ ...value, settings: { unitSettings: { startOfTheWeek: 0 } } })); fixture.detectChanges();
+    expect(adapter.getFirstDayOfWeek()).toBe(0);
+    const picker = fixture.debugElement.queryAll(By.directive(MatDatepicker))[0].componentInstance as MatDatepicker<dayjs.Dayjs>;
+    picker.open(); fixture.detectChanges(); await fixture.whenStable();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    picker.select(dayjs('2026-11-02')); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.fields().startLocalDate).toBe('2026-11-02'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    picker.select(dayjs('2026-11-02')); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    picker.close(); fixture.detectChanges(); await fixture.whenStable();
+  });
   it('explains the preparation period and switches goal type through a compact menu', async () => {
     const { fixture, component, haptics } = await setup({ createDate: '2099-12-15' });
     const root = fixture.nativeElement as HTMLElement;
@@ -51,7 +111,7 @@ describe('Calendar goal surfaces', () => {
     component.set('startLocalDate', '2099-12-16', false); fixture.detectChanges();
     expect(root.querySelector('[role="alert"]')?.textContent).toContain('Achieve by must be on or after preparation starts.');
     expect(component.parsed()).toBeNull(); component.set('kind', 'ongoing'); fixture.detectChanges();
-    expect(root.textContent).toContain('No end date.'); expect(root.querySelectorAll('input[type="date"]')).toHaveLength(1);
+    expect(root.textContent).toContain('No end date.'); expect(root.querySelectorAll('input.mat-datepicker-input')).toHaveLength(1);
     expect(root.querySelector('[role="alert"]')).toBeNull();
   });
   it('preserves collapsed plan/status edits and rejects busy or unchanged progress choices', async () => {

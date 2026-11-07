@@ -10470,6 +10470,9 @@ today by default. Shared Material goal surfaces reuse the searchable sport picke
 The goal editor labels dated goals as **Preparation starts** through **Event date** or **Achieve by**, explains that
 active goals guide daily suggestions throughout that period, and places the calendar marker on the final date.
 Ongoing goals use **Starts on**, explain that there is no end date and start weekly tracking from that day.
+Goal date inputs reuse the shared Material/Day.js formats for the account's regional preference, with the owner's
+independent week-start setting in the picker. Typed or picked dates remain ISO calendar labels in stored goals;
+invalid or cleared required dates prevent saving. Existing goal details use the app-locale DatePipe.
 Short option sets reuse `CompactSelectComponent`; sport/family retains its searchable picker. Plan and status stay
 mounted behind a surface-free disclosure for new goals and are shown when editing. Invalid date order is explained
 inline before saving. MCP impact: presentation only; stored start/target dates, goal relevance, strict read/write

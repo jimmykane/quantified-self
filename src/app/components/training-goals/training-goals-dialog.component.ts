@@ -5,6 +5,8 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { catchError, of, switchMap } from 'rxjs';
@@ -21,10 +23,26 @@ import { TrainingGoalsService } from '../../services/training-goals.service';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { TrainingGoalDetailsComponent } from './training-goal-details.component';
 import { CompactSelectComponent, type CompactSelectOption } from '../shared/compact-select/compact-select.component';
+import dayjs, { type Dayjs } from 'dayjs';
+import { DayjsDateAdapter } from '../../shared/adapters/dayjs-date-adapter';
+import { MAT_DAYJS_DATE_FORMATS } from '../../shared/adapters/mat-dayjs-date.module';
+
+class GoalDateAdapter extends DayjsDateAdapter {
+  constructor(locale: string, private readonly users: AppUserService) { super(locale); }
+  override getFirstDayOfWeek(): number {
+    const start = this.users.user()?.settings?.unitSettings?.startOfTheWeek;
+    return Number.isInteger(start) && start >= 0 && start <= 6 ? start : 1;
+  }
+}
 
 @Component({ selector: 'app-training-goals-dialog', standalone: true, imports: [FormsModule, MatDialogModule, MatButtonModule,
-  MatFormFieldModule, MatInputModule, CompactSelectComponent, MatIconModule, MatProgressSpinnerModule, AppChartSharedModule,
+  MatFormFieldModule, MatInputModule, MatDatepickerModule, CompactSelectComponent, MatIconModule, MatProgressSpinnerModule, AppChartSharedModule,
   ActivityFilterPickerComponent, TrainingGoalDetailsComponent], templateUrl: './training-goals-dialog.component.html',
+  providers: [
+    { provide: DateAdapter, useFactory: (locale: string, users: AppUserService) => new GoalDateAdapter(locale, users),
+      deps: [MAT_DATE_LOCALE, AppUserService] },
+    { provide: MAT_DATE_FORMATS, useValue: MAT_DAYJS_DATE_FORMATS },
+  ],
   styleUrl: './training-goals.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingGoalsDialogComponent {
   readonly data = inject<{ uid: string; createDate?: string; goal?: TrainingGoalV1 }>(MAT_DIALOG_DATA);
@@ -56,6 +74,8 @@ export class TrainingGoalsDialogComponent {
       targetLocalDate: this.data.createDate ?? this.today, sportScope: 'all', sport: null, objective: '', planId: null, weeklyTarget: null };
   }
   readonly fields = signal<TrainingGoalFields>(this.initialFields());
+  readonly startDateInput = computed(() => this.fields().startLocalDate ? dayjs(this.fields().startLocalDate) : null);
+  readonly endDateInput = computed(() => this.fields().targetLocalDate ? dayjs(this.fields().targetLocalDate) : null);
   readonly kindOptions: CompactSelectOption<TrainingGoalFields['kind']>[] = [
     { value: 'event', label: 'Event / race' }, { value: 'milestone', label: 'Milestone' }, { value: 'ongoing', label: 'Ongoing goal' },
   ];
@@ -111,6 +131,11 @@ export class TrainingGoalsDialogComponent {
     this.fields.update(fields => ({ ...fields, [key]: value }));
     if (key === 'kind') this.fields.update(fields => ({ ...fields, targetLocalDate: value === 'ongoing' ? null : fields.targetLocalDate ?? fields.startLocalDate }));
     if (haptic) this.haptics.selection();
+  }
+  setDate(key: 'startLocalDate' | 'targetLocalDate', value: Dayjs | null, fromPicker: boolean): void {
+    // Keep calendar labels local; converting through a UTC instant can move the stored day.
+    const date = dayjs.isDayjs(value) && value.isValid() ? value.format('YYYY-MM-DD') : '';
+    this.set(key, date, fromPicker && !!date);
   }
   selectSport(values: string[]): void {
     const choice = values[0] ?? 'all';

@@ -10,6 +10,7 @@ Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
 - `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports
+- `../.agent/rules/date-formatting.md` when changing date/time displays or date-entry controls; keep formatting guidance there.
 - Reuse `ActivityFilterPickerComponent` for searchable sport/tag choices. Use its single-selection mode for one sport,
   and `ActivityTypesMultiSelectComponent` / `ActivityTypesFilterMenuComponent` when sport-family filtering is needed.
   Keep each caller’s supported catalog and validation; do not create another sport-search dialog. See
