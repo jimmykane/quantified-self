@@ -50,6 +50,41 @@ describe('private workout power settings persistence', () => {
     vi.mocked(getDoc).mockClear(); expect(await service.loadSharedFtp('owner', ActivityTypes.Rowing)).toBeNull();
     expect(getDoc).not.toHaveBeenCalled();
   });
+  describe('generation option checks', () => {
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-02T12:00Z')); });
+    afterEach(() => vi.useRealTimers());
+    it('uses the exact-sport override without reading shared FTP', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens')).toEqual(profile);
+      expect(getDoc).toHaveBeenCalledOnce(); expect(set).not.toHaveBeenCalled();
+    });
+    it('falls back to matching shared FTP rather than another sport’s override', async () => {
+      vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: { version: 1, revision: 1, profiles: [profile] } }) } as never)
+        .mockResolvedValueOnce({ data: () => ({ method: 'AUTOMATIC', included: true, functionalThresholdPower: 240,
+          revision: 2, effectiveAt: Date.parse('2026-11-01T12:00Z') }) } as never);
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toMatchObject({ kind: 'training-ftp', sport: ActivityTypes.Cycling,
+        reference: { kind: 'functional-threshold-power', watts: 240 } });
+      expect(vi.mocked(getDoc).mock.calls.map(([ref]) => (ref as unknown as { path: string }).path))
+        .toEqual(['users/owner/config/settings', 'users/owner/trainingLoadPolicies/cycling']);
+      expect(set).not.toHaveBeenCalled();
+    });
+    it('reports missing references without writing or inferring a value', async () => {
+      expect(await service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).toBeNull();
+      expect(getDoc).toHaveBeenCalledTimes(2); expect(set).not.toHaveBeenCalled();
+    });
+    it.each(['future', 'invalid', 'unreadable'] as const)('does not bypass a %s override branch with shared FTP', async failure => {
+      if (failure === 'unreadable') vi.mocked(getDoc).mockRejectedValueOnce(Error('offline'));
+      else vi.mocked(getDoc).mockResolvedValueOnce({ data: () => ({ workoutPower: failure === 'invalid' ? null
+        : { version: 1, revision: 1, profiles: [{ ...profile, referenceDate: '2026-11-03' }] } }) } as never);
+      await expect(service.loadReference('owner', ActivityTypes.Running, 'Europe/Athens')).rejects.toThrow();
+      expect(getDoc).toHaveBeenCalledOnce(); expect(set).not.toHaveBeenCalled();
+    });
+    it('rejects a replaced session between the settings and FTP reads', async () => {
+      vi.mocked(getDoc).mockImplementationOnce(async () => { auth.currentUser = { uid: 'owner' }; return { data: () => ({}) } as never; });
+      await expect(service.loadReference('owner', ActivityTypes.Cycling, 'Europe/Athens')).rejects.toThrow('account changed');
+      expect(getDoc).toHaveBeenCalledOnce();
+    });
+  });
   it('rejects a late shared FTP response after account change', async () => {
     vi.mocked(getDoc).mockImplementationOnce(async () => { auth.currentUser = null; return { data: () => ({}) } as never; });
     await expect(service.loadSharedFtp('owner', ActivityTypes.Running)).rejects.toThrow('account changed');

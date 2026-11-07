@@ -354,7 +354,7 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Notification help also covers grouped Training sync attention alerts (2026-11-06).
     // Notification clicks use browser app routing and require a matching beta/production installation (2026-11-06).
-    // Calendar help explains future-day health visibility and the goal preparation period (2026-11-07).
+    // Help covers future-day health, goal dates and the explicit Power reference check (2026-11-07).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
   });
 

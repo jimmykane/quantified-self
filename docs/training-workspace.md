@@ -1009,6 +1009,19 @@ Initial profile loading releases the form as soon as the override head is verifi
 under its own loading/error state; a slow or unavailable shared read must not delay editing or saving a verified
 override. Its late result updates only the shared reference, never the draft or the saved override revision.
 
+The generation/preferences dialog labels relative power **Power (FTP / CP)** and checks the selected sport through
+`WorkoutPowerSettingsService.loadReference`, reusing the owner/session-fenced override and shared FTP reads. Explicit
+overrides take precedence; malformed, unreadable or future-dated overrides never silently fall back. The advisory
+loading/available/missing/error status sits outside More options. Missing references disclose effort-only fallback;
+unreadable references remain unknown. Routine preferences explicitly limit the check to the fallback sport. Power settings
+opens in a separate tab to preserve draft choices; Check again is an explicit, deduplicated retry. A Garmin power zones
+shortcut uses the existing target setter without enabling sending. Auto, other targets, Today and cached reviews add no
+reads; changing unrelated controls or focusing the tab never repeats this check. Sport/account changes retire stale
+results. The backend remains authoritative at generation time. A cached power-requested workout with no power targets
+gets a visible review notice based on its actual prescription, without rereading settings or changing that prescription.
+MCP impact: presentation and existing private read reuse only; no tool, recipe, consent, provider, schema, Rules or index
+change. No Functions deployment or plugin refresh is required for this UI check.
+
 Manual day generation and new Pro daily suggestions resolve power after final sport selection, independently of optional
 Training-plan context. Only supported sports with Auto/Power targets read power settings. Nearby power references are
 removed from both validation and model input on every path, including unsupported sports and non-power preferences.

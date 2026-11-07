@@ -11,7 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { catchError, distinctUntilChanged, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
+import { catchError, defer, distinctUntilChanged, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
   dayWorkoutPurposes, dayWorkoutTargets, dayWorkoutSupportsGarminPowerAveraging, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
@@ -40,6 +40,7 @@ import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { WorkoutPowerSettingsService } from '../../services/workout-power-settings.service';
 
 export interface DayWorkoutDialogData {
   ownerUid: string; localDate: string; sport: ActivityTypes;
@@ -64,6 +65,7 @@ export class DayWorkoutDialogComponent {
   private readonly users = inject(AppUserService);
   private readonly generation = inject(DayWorkoutService);
   private readonly quotaService = inject(AssistantQuotaService);
+  private readonly powerSettings = inject(WorkoutPowerSettingsService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly delivery = inject(TrainingDeliveryService);
   private readonly destroyRef = inject(DestroyRef);
@@ -152,6 +154,25 @@ export class DayWorkoutDialogComponent {
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
+  // Check only explicit Power options in this dialog. Today and cached reviews add no reads.
+  readonly powerSport = computed(() => this.controls().target === 'power' && !this.strength() && !this.result() && this.busy() !== 'generate'
+    && !this.savedWorkoutId() && this.user()?.uid === this.data.ownerUid ? this.controls().sport : null);
+  private readonly powerRetry = signal(0);
+  private readonly powerScope = computed(() => {
+    const sport = this.powerSport();
+    return sport ? { sport, retry: this.powerRetry() } : null;
+  });
+  private readonly powerCheck = toSignal(toObservable(this.powerScope).pipe(switchMap(scope => scope
+    ? defer(() => this.powerSettings.loadReference(this.data.ownerUid, scope.sport, this.timeZone)).pipe(
+      map(reference => ({ ...scope, status: reference ? 'available' as const : 'missing' as const })),
+      startWith({ ...scope, status: 'loading' as const }),
+      catchError(() => of({ ...scope, status: 'error' as const }))) : of(null))), { initialValue: null });
+  readonly powerStatus = computed(() => this.powerSport() && this.powerCheck()?.sport === this.powerSport() && this.powerCheck()?.retry === this.powerRetry()
+    ? this.powerCheck()!.status : 'loading');
+  readonly missingPowerTargets = computed(() => this.controls().target === 'power' && !!this.result()?.draft
+    && !this.result()!.draft!.structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+      .some(step => step.targets.some(target => target.kind === 'power'))));
+  readonly garminZonesAvailable = computed(() => dayWorkoutTargets(this.controls().sport).includes('garmin-power-zone'));
   // Only Preferences and delivery-enabled daily reviews observe connections; Today adds no listener.
   private readonly deliveryConnections = toSignal(this.users.user$.pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
@@ -199,7 +220,7 @@ export class DayWorkoutDialogComponent {
   readonly approvalValid = computed(() => this.valid() && this.replacementCurrent() && this.deliveryValid());
   readonly labels: Record<string, string> = {
     suggest: 'Suggest for me', recovery: 'Recovery / easy',
-    none: 'No targets', speed: 'Pace / speed', 'garmin-power-zone': 'Garmin power zones',
+    none: 'No targets', speed: 'Pace / speed', power: 'Power (FTP / CP)', 'garmin-power-zone': 'Garmin power zones',
     strict: 'Finish within this time',
   };
   private choice(key: ChoiceKey, label: string, values: readonly string[]): Choice {
@@ -367,6 +388,10 @@ export class DayWorkoutDialogComponent {
   setAveraging(value: number): void {
     if (!this.averagingAvailable() || ![0, 3, 10, 30].includes(value)) return;
     this.set('garminPowerAveragingSeconds', value === 0 ? undefined : value as 3 | 10 | 30);
+  }
+  recheckPower(): void {
+    if (!this.powerSport() || this.powerStatus() === 'loading' || this.busy() || this.saveUncertain()) return;
+    this.powerRetry.update(value => value + 1); this.haptics.selection();
   }
   private watchSync(): void {
     if (this.savedWorkoutId()) { this.syncSubscription?.unsubscribe(); return; }
