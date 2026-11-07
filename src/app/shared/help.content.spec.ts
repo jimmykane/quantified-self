@@ -3191,5 +3191,6 @@ describe('dashboard performance history guidance', () => {
 it('explains Calendar goals, weekly progress, event guidance and explicit goal approval', () => {
   const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')!.content;
   for (const text of ['## Calendar goals', '**Add goal**', '**Training days**', '**Event-day guidance**',
-    'incomplete', 'never regenerates', 'explicit approval']) expect(calendar).toContain(text);
+    '**Preparation starts**', '**Event date**', '**Achieve by**', '**Starts on**', 'no end date',
+    'throughout that period', 'incomplete', 'never regenerates', 'explicit approval']) expect(calendar).toContain(text);
 });

@@ -3,6 +3,10 @@
 Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 
 Frontend-only rules:
+- Prefer `CompactSelectComponent` (`app-compact-select`) for short single-choice option sets, following the compact
+  Connection History menu style. Keep the visible label, current value, checkmarked `menuitemradio` choices and one
+  accepted-change haptic owner. Use the searchable picker below for sport/tag catalogs, and `mat-select` when a real
+  Material form-field control/error state is required. See `docs/frontend-ui.md#compact-choice-menus`.
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
 - `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports

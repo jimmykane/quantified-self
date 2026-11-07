@@ -10467,6 +10467,13 @@ link. Lifecycle is active/paused/completed/archived; restore sets active. Achiev
 never moves goal dates; deletion preserves the goal and displays an unavailable link. Calendar markers use the target
 date, or only the start date for ongoing goals. Creating an event from a future calendar day starts its preparation
 today by default. Shared Material goal surfaces reuse the searchable sport picker and canonical unit formatting.
+The goal editor labels dated goals as **Preparation starts** through **Event date** or **Achieve by**, explains that
+active goals guide daily suggestions throughout that period, and places the calendar marker on the final date.
+Ongoing goals use **Starts on**, explain that there is no end date and start weekly tracking from that day.
+Short option sets reuse `CompactSelectComponent`; sport/family retains its searchable picker. Plan and status stay
+mounted behind a surface-free disclosure for new goals and are shown when editing. Invalid date order is explained
+inline before saving. MCP impact: presentation only; stored start/target dates, goal relevance, strict read/write
+contracts and consent are unchanged. Product Help uses the same preparation/target wording.
 The goal dialog uses the shared plan-only reader for optional links, without subscribing to scheduled workouts.
 Weekly progress is subscribed only in the current-goal list, stops during editing or archive browsing, and follows
 live changes to the saved calendar week start.

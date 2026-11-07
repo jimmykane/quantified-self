@@ -1,6 +1,6 @@
 <p class="goal-title">{{ goal().name }}</p>
 <p class="goal-meta">{{ sportLabel() }} · {{ goal().priority }} priority · {{ goal().lifecycle }}</p>
-<p class="goal-meta">{{ goal().kind === 'event' ? 'Event' : goal().kind === 'milestone' ? 'Milestone' : 'Ongoing' }} · Starts {{ goal().startLocalDate | date:'mediumDate' }}@if (goal().targetLocalDate) { · Target {{ goal().targetLocalDate | date:'mediumDate' }} }</p>
+<p class="goal-meta">{{ goal().kind === 'ongoing' ? 'Starts' : 'Preparation starts' }} {{ goal().startLocalDate | date:'mediumDate' }}@if (goal().targetLocalDate) { · {{ goal().kind === 'event' ? 'Event date' : 'Achieve by' }} {{ goal().targetLocalDate | date:'mediumDate' }} } @else { · No end date }</p>
 @if (goal().planName) { <p class="goal-meta">Plan: {{ goal().planName }}</p> }
 @if (targetText()) { <p class="goal-meta">{{ targetText() }}</p> }
 @if (progressText()) { <p class="goal-progress" role="status">{{ progressText() }}</p> }

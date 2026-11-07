@@ -75,6 +75,10 @@
     "environment": "angular",
     "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
   },
+  "src/app/components/shared/compact-select/compact-select.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Material choice menu with TestBed and real overlays to verify selected states, nullable values, disabled races, Escape/focus return and haptic ownership."
+  },
   "src/app/components/shared/dialog-actions-haptics.spec.ts": {
     "environment": "angular",
     "reason": "Compiles legacy error and browser guidance dialogs with real Material controls in TestBed to verify rendered actions, silent initialization and single-owner haptic feedback."

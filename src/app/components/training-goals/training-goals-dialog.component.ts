@@ -5,7 +5,6 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { catchError, of, switchMap } from 'rxjs';
@@ -21,9 +20,10 @@ import { TrainingPlansService } from '../../services/training-plans.service';
 import { TrainingGoalsService } from '../../services/training-goals.service';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { TrainingGoalDetailsComponent } from './training-goal-details.component';
+import { CompactSelectComponent, type CompactSelectOption } from '../shared/compact-select/compact-select.component';
 
 @Component({ selector: 'app-training-goals-dialog', standalone: true, imports: [FormsModule, MatDialogModule, MatButtonModule,
-  MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatProgressSpinnerModule, AppChartSharedModule,
+  MatFormFieldModule, MatInputModule, CompactSelectComponent, MatIconModule, MatProgressSpinnerModule, AppChartSharedModule,
   ActivityFilterPickerComponent, TrainingGoalDetailsComponent], templateUrl: './training-goals-dialog.component.html',
   styleUrl: './training-goals.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingGoalsDialogComponent {
@@ -43,6 +43,7 @@ export class TrainingGoalsDialogComponent {
   readonly error = signal('');
   readonly notice = signal('');
   readonly editing = signal(!!this.data.createDate || !!this.data.goal);
+  readonly moreOptions = signal(!!this.data.goal);
   private readonly progressWeekStart = computed(() => this.editing() || this.archived() ? null : this.units()?.startOfTheWeek ?? 1);
   readonly progress = toSignal(toObservable(this.progressWeekStart).pipe(switchMap(weekStartsOn => weekStartsOn === null
     ? of({ status: 'ready' as const, result: null }) : this.service.watchProgress(this.data.uid, this.timeZone, weekStartsOn))),
@@ -55,6 +56,26 @@ export class TrainingGoalsDialogComponent {
       targetLocalDate: this.data.createDate ?? this.today, sportScope: 'all', sport: null, objective: '', planId: null, weeklyTarget: null };
   }
   readonly fields = signal<TrainingGoalFields>(this.initialFields());
+  readonly kindOptions: CompactSelectOption<TrainingGoalFields['kind']>[] = [
+    { value: 'event', label: 'Event / race' }, { value: 'milestone', label: 'Milestone' }, { value: 'ongoing', label: 'Ongoing goal' },
+  ];
+  readonly priorityOptions: CompactSelectOption<TrainingGoalFields['priority']>[] = [
+    { value: 'high', label: 'High' }, { value: 'normal', label: 'Normal' }, { value: 'low', label: 'Low' },
+  ];
+  readonly lifecycleOptions: CompactSelectOption<TrainingGoalFields['lifecycle']>[] = [
+    { value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' },
+  ];
+  readonly progressOptions = [
+    { value: 'manual', label: 'Mark achievement myself' }, { value: 'workouts', label: 'Workouts per week' },
+    { value: 'days', label: 'Training days per week' }, { value: 'duration', label: 'Duration per week' }, { value: 'distance', label: 'Distance per week' },
+  ] as const;
+  readonly startDateLabel = computed(() => this.fields().kind === 'ongoing' ? 'Starts on' : 'Preparation starts');
+  readonly endDateLabel = computed(() => this.fields().kind === 'event' ? 'Event date' : 'Achieve by');
+  readonly periodHint = computed(() => this.fields().kind === 'ongoing'
+    ? 'No end date. This goal guides daily suggestions from its start date while active.'
+    : 'Active goals guide daily suggestions from preparation start through the final day.');
+  readonly dateRangeError = computed(() => this.fields().kind !== 'ongoing' && this.fields().targetLocalDate
+    && this.fields().targetLocalDate! < this.fields().startLocalDate ? `${this.endDateLabel()} must be on or after preparation starts.` : '');
   readonly distanceUnit = normalizeDistanceUnits(this.units()?.distanceUnits) === DistanceUnits.Miles ? 'miles' : 'kilometres';
   readonly targetKind = signal<'manual' | 'workouts' | 'days' | 'duration' | 'distance'>(this.data.goal?.weeklyTarget?.kind ?? 'manual');
   readonly targetValue = signal(this.toInputTarget(this.data.goal?.weeklyTarget));
@@ -65,6 +86,11 @@ export class TrainingGoalsDialogComponent {
     ...ActivityTypesHelper.getActivityTypesAsUniqueArray().map(sport => ({ value: `sport:${sport}`, label: sport, activityType: sport }))];
   readonly selectedSports = computed(() => [this.fields().sportScope === 'all' ? 'all' : `${this.fields().sportScope}:${this.fields().sport}`]);
   readonly selectedPlanMissing = computed(() => !!this.fields().planId && !this.plans()?.some(plan => plan.id === this.fields().planId));
+  readonly planOptions = computed<CompactSelectOption[]>(() => [
+    { value: null, label: 'Independent goal' },
+    ...(this.selectedPlanMissing() ? [{ value: this.fields().planId, label: 'Unavailable plan · keep link' }] : []),
+    ...(this.plans() ?? []).map(plan => ({ value: plan.id, label: plan.name })),
+  ]);
   readonly rows = computed(() => this.state().goals.filter(goal => this.archived() ? goal.lifecycle === 'archived' : goal.lifecycle !== 'archived')
     .sort((a, b) => (a.targetLocalDate ?? '9999').localeCompare(b.targetLocalDate ?? '9999') || a.name.localeCompare(b.name))
     .map(goal => ({ goal, details: { ...goal, planName: goal.planId ? this.plans()?.find(plan => plan.id === goal.planId)?.name ?? 'Unavailable plan' : null },
@@ -93,13 +119,17 @@ export class TrainingGoalsDialogComponent {
     this.fields.update(fields => ({ ...fields, sportScope: scope as TrainingGoalFields['sportScope'], sport: scope === 'all' ? null : sport.join(':') }));
     this.haptics.selection();
   }
+  selectProgress(value: typeof this.progressOptions[number]['value']): void {
+    if (this.busy() || this.targetKind() === value) return;
+    this.targetKind.set(value); this.haptics.selection();
+  }
   edit(goal?: TrainingGoalV1): void {
     if (this.busy()) return;
     this.previous.set(goal ?? null); this.goalId = goal?.id ?? crypto.randomUUID();
     this.fields.set(goal ? parseTrainingGoalFields(Object.fromEntries(TRAINING_GOAL_FIELDS.map(key => [key, goal[key]])))
       : { ...this.initialFields(false), name: '', startLocalDate: this.today, targetLocalDate: this.today, kind: 'event', lifecycle: 'active', weeklyTarget: null });
     this.targetKind.set(goal?.weeklyTarget?.kind ?? 'manual'); this.targetValue.set(this.toInputTarget(goal?.weeklyTarget));
-    this.error.set(''); this.editing.set(true);
+    this.error.set(''); this.moreOptions.set(!!goal); this.editing.set(true);
   }
   private toInputTarget(target: TrainingGoalFields['weeklyTarget']): number {
     if (!target) return 3;
