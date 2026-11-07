@@ -1,6 +1,15 @@
+@use '../../../../styles/table-filters' as filters;
+
 :host { display: block; min-width: 0; }
 .history-option-description { margin: 0 0 12px 16px; max-width: 32rem; color: var(--mat-sys-on-surface-variant); }
-.history-range-field { display: block; margin: 8px 0 0 16px; max-width: 20rem; }
+.history-range-control { margin: 4px 0 12px 16px; min-width: 0; }
+.history-range-button { @include filters.text-button; }
+.history-range-button.is-open { background: color-mix(in srgb, var(--mat-sys-primary) 9%, transparent); }
+.history-range-menu-label { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; }
+.history-range-menu-text { white-space: normal; line-height: 1.4; }
+.history-range-menu-label > mat-icon { flex: 0 0 auto; margin: 0; }
+.history-range-menu-item { min-width: 253px; min-height: 44px; font-size: 0.8125rem; }
+.history-range-menu-item.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent); }
 .history-inline { padding-block: 0 16px; }
 .history-inline h3 { font: var(--mat-sys-title-medium); margin-block: 0 12px; }
 .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }

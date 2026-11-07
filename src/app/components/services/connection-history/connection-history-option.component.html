@@ -2,13 +2,28 @@
   Import history from this service
 </mat-checkbox>
 @if (checked()) {
-<mat-form-field appearance="outline" class="history-range-field">
-  <mat-label>History range</mat-label>
-  <mat-select [value]="range()" [disabled]="disabled()" (selectionChange)="changeRange($event.value)">
+<div class="history-range-control">
+  <button mat-button type="button" class="history-range-button" #rangeTrigger="matMenuTrigger"
+    [matMenuTriggerFor]="rangeMenu" [class.is-open]="rangeTrigger.menuOpen" [disabled]="disabled()"
+    [attr.aria-label]="'History range: ' + rangeLabel()" (menuOpened)="onRangeMenuOpened()">
+    <span class="table-filter-button-content">
+      <mat-icon aria-hidden="true">calendar_today</mat-icon>
+      <span>{{ rangeLabel() }}</span>
+      <mat-icon class="table-filter-chevron" aria-hidden="true">{{ rangeTrigger.menuOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</mat-icon>
+    </span>
+  </button>
+  <mat-menu #rangeMenu="matMenu" class="qs-menu-panel">
     @for (option of rangeOptions(); track option.value) {
-    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+    <button mat-menu-item type="button" class="history-range-menu-item" role="menuitemradio"
+      [attr.aria-checked]="option.value === range()" [class.is-selected]="option.value === range()"
+      [disabled]="disabled() || !checked()" (click)="changeRange(option.value)">
+      <span class="history-range-menu-label">
+        <span class="history-range-menu-text">{{ option.label }}</span>
+        @if (option.value === range()) { <mat-icon aria-hidden="true">check</mat-icon> }
+      </span>
+    </button>
     }
-  </mat-select>
-</mat-form-field>
+  </mat-menu>
+</div>
 }
 <p class="history-option-description">{{ description() }}</p>

@@ -4,13 +4,14 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   CONNECTION_HISTORY_DEFAULT_RANGE,
   historyCapabilities,
   historyRangeOptions,
+  historyRangeLabel,
   type ConnectionHistoryRangePreset,
   type ConnectionHistoryStatusProjection,
   type HistoryResource,
@@ -33,7 +34,7 @@ interface HistoryRetryView { runId: string; service: ServiceNames; }
 function resourceLabel(resources: readonly HistoryResource[]): string {
   return resources.map(resource => labels[resource]).join(', ').replace(/, ([^,]*)$/, ', and $1');
 }
-@Component({ selector: 'app-connection-history-option', standalone: true, imports: [MatCheckboxModule, MatFormFieldModule, MatSelectModule],
+@Component({ selector: 'app-connection-history-option', standalone: true, imports: [MatCheckboxModule, MatButtonModule, MatIconModule, MatMenuModule],
   templateUrl: './connection-history-option.component.html', styleUrl: './connection-history.component.scss' })
 export class ConnectionHistoryOptionComponent {
   readonly service = input<ServiceNames>(ServiceNames.GarminAPI);
@@ -45,6 +46,10 @@ export class ConnectionHistoryOptionComponent {
   private readonly haptics = inject(AppHapticsService);
   readonly description = computed(() => `Includes ${resourceLabel([...new Set(historyCapabilities(this.service()).flatMap(capability => capability.resources))])} where supported. Importing happens in the background.${this.service() === ServiceNames.GarminAPI ? ' History availability varies by data type and Garmin account.' : ''}${this.service() === ServiceNames.SuuntoApp ? ' Saved routes include your entire Suunto route library, regardless of the history range.' : ''}`);
   readonly rangeOptions = computed(() => historyRangeOptions(this.service()));
+  readonly rangeLabel = computed(() => historyRangeLabel(this.service(), this.range()));
+  onRangeMenuOpened(): void {
+    if (!this.disabled() && this.checked()) this.haptics.selection();
+  }
   change(checked: boolean): void {
     if (this.disabled() || this.checked() === checked) return;
     this.haptics.selection(); this.checkedChange.emit(checked);
