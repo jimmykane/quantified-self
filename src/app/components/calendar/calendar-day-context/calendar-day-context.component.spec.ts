@@ -43,7 +43,7 @@ const restDayProviders = () => [goalsProvider,
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
-  async function restDaySetup(testGoals?: unknown[], goalSource?: BehaviorSubject<TrainingGoalsState>) {
+  async function restDaySetup(testGoals?: unknown[], goalSource?: BehaviorSubject<TrainingGoalsState>, dateKey = '2026-10-25') {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const schedule = signal<CurrentTrainingScheduleV1>({
       state: { schemaVersion: 1, revision: 7, activePlanId: null, currentWorkoutCount: 0, updatedAtMs: 1 },
@@ -56,23 +56,101 @@ describe('CalendarDayContextComponent', () => {
       return record;
     });
     const open = vi.fn();
+    const healthWatch = vi.fn((_uid: string, _date: string, _now: number, _signal: AbortSignal) => of(emptyEvidence));
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]), testGoals || goalSource ? { provide: TrainingGoalsService, useValue: { ...goalsProvider.useValue,
         isOwner: (uid: string) => viewer()?.uid === uid, watch: () => goalSource ?? of({ status: 'ready', goals: testGoals }) } } : goalsProvider,
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, isOwner: (uid: string) => viewer()?.uid === uid } },
       { provide: TrainingPlansService, useValue: { setCalendarRestDay: write } },
       { provide: MatSnackBar, useValue: { open } },
       { provide: ViewportScroller, useValue: {} }, { provide: AppUserService, useValue: { user: viewer } },
-      { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
+      { provide: CalendarDayHealthService, useValue: { watch: healthWatch } },
       { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
       { provide: LoggerService, useValue: { error: vi.fn() } }, { provide: TrainingWorkoutDuplicateService, useValue: {} },
-      { provide: AppEventColorService, useValue: {} }, { provide: AppHapticsService, useValue: haptics },
+      { provide: AppEventColorService, useValue: { getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn() } },
+      { provide: AppHapticsService, useValue: haptics },
     ] }).compileComponents();
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     const notice = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open').mockImplementation(open);
-    fixture.componentRef.setInput('data', { ...data('2026-10-25'), scheduleSource: schedule });
+    fixture.componentRef.setInput('data', { ...data(dateKey), scheduleSource: schedule });
     fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges(); await fixture.whenStable();
-    return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, write, open: notice };
+    return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, write, healthWatch, open: notice };
   }
+
+  it.each(['sheet', 'full', 'dashboard', 'calendar'])('omits future health reads and placeholders in the %s while preserving planning', async surface => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 10, 7, 23, 30).getTime());
+    try {
+      const dateKey = '2026-11-08';
+      const { fixture, component, schedule, healthWatch } = await restDaySetup([
+        { id: 'event', name: 'Race day', kind: 'event', lifecycle: 'active', priority: 'high', targetLocalDate: dateKey },
+      ], undefined, dateKey);
+      fixture.componentRef.setInput('calmMonth', surface === 'calendar');
+      fixture.componentRef.setInput('dashboardTile', surface === 'dashboard');
+      fixture.componentRef.setInput('compact', surface === 'sheet');
+      fixture.componentRef.setInput('standaloneDayPage', surface === 'full');
+      const plannedStatus = signal<'loading' | 'ready'>('loading');
+      const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel plans', startDate: dateKey,
+        endDate: dateKey, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+      fixture.componentRef.setInput('data', { ...data(dateKey), scheduleSource: schedule, timelineNotes: signal([note]),
+        plannedWorkoutsStatusSource: plannedStatus, plannedWorkouts: [{ workout: {
+          schemaVersion: 1, id: 'workout', planId: null, localDate: dateKey, lifecycle: 'planned', title: 'Easy ride',
+          structure: { version: 1, sport: ActivityTypes.Cycling, nodes: [] }, revision: 1, createdAtMs: 1, updatedAtMs: 1,
+        } }] });
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-loading-metrics')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-loading-stage')).toBeNull();
+      expect(healthWatch).not.toHaveBeenCalled();
+      schedule.update(value => ({ ...value, restDays: [{ schemaVersion: 1, localDate: dateKey, isRestDay: true, revision: 1 }] }));
+      plannedStatus.set('ready'); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(component.healthState().status).toBe('hidden'); expect(component.fullDayReady()).toBe(true);
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).toBeNull();
+      expect(fixture.nativeElement.querySelector('app-health-sleep-stage-summary')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Race day');
+      expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).not.toBeNull();
+      expect(component.plannedRows()[0].workout.title).toBe('Easy ride'); expect(component.noteRows()[0].note.title).toBe('Travel plans');
+      if (surface !== 'sheet') {
+        expect(fixture.nativeElement.textContent).toContain('Easy ride'); expect(fixture.nativeElement.textContent).toContain('Travel plans');
+      }
+      expect(healthWatch).not.toHaveBeenCalled();
+    } finally { now.mockRestore(); }
+  });
+
+  it.each(['2026-11-06', '2026-11-07'])('retains recovery and sleep for a past or current local day: %s', async dateKey => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 10, 7, 0, 15).getTime());
+    try {
+      const { fixture, healthWatch } = await restDaySetup(undefined, undefined, dateKey);
+      expect(healthWatch).toHaveBeenCalledOnce();
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).not.toBeNull();
+      window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+      expect(healthWatch).toHaveBeenCalledOnce();
+      now.mockReturnValue(new Date(2026, 10, 8, 0, 1).getTime());
+      fixture.componentRef.setInput('data', data('2026-11-08')); fixture.detectChanges();
+      expect(healthWatch).toHaveBeenCalledTimes(2);
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).not.toBeNull();
+    } finally { now.mockRestore(); }
+  });
+
+  it('cancels a pending health read when navigating into the future and resumes when that day becomes today', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 10, 7, 23, 30).getTime());
+    try {
+      const { fixture, component, healthWatch } = await restDaySetup();
+      const pending = new Subject<typeof emptyEvidence>(); healthWatch.mockReturnValue(pending.asObservable());
+      fixture.componentRef.setInput('data', data('2026-11-07')); fixture.detectChanges();
+      const request = healthWatch.mock.calls.at(-1)![3]; expect(pending.observed).toBe(true);
+      fixture.componentRef.setInput('data', data('2026-11-08')); fixture.detectChanges();
+      expect(request.aborted).toBe(true); expect(pending.observed).toBe(false);
+      pending.next(emptyEvidence); fixture.detectChanges(); expect(component.healthState().status).toBe('hidden');
+      expect(component.dayStory().items.some(item => item.kind === 'sleep')).toBe(false);
+      healthWatch.mockClear(); window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+      expect(healthWatch).not.toHaveBeenCalled();
+      now.mockReturnValue(new Date(2026, 10, 8, 0, 1).getTime());
+      window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+      expect(healthWatch).toHaveBeenCalledOnce(); expect(component.healthState().status).toBe('loading');
+      pending.next(emptyEvidence); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.calendar-day-context-health')).not.toBeNull();
+      window.dispatchEvent(new Event('focus')); fixture.detectChanges(); expect(healthWatch).toHaveBeenCalledOnce();
+      fixture.destroy(); expect(pending.observed).toBe(false);
+    } finally { now.mockRestore(); }
+  });
 
   it('keeps a goal-only day visible instead of showing the empty-day message', async () => {
     const { fixture, component } = await restDaySetup([{ id: 'event', name: 'Race day', kind: 'event', lifecycle: 'active', priority: 'high', targetLocalDate: '2026-10-25' }]);

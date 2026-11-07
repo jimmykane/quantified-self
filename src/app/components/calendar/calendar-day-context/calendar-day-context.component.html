@@ -47,12 +47,14 @@
   @if (standaloneDayPage() && !fullDayReady()) {
     <div class="calendar-day-context-loading" role="status" aria-label="Loading day details">
       <span class="calendar-day-context-loading-title">Loading day details…</span>
-      <div class="calendar-day-context-loading-metrics" aria-hidden="true">
-        @for (metric of ['Readiness', 'Sleep', 'HRV', 'Recovery left']; track metric) {
-          <div><span>{{ metric }}</span><i></i><i></i></div>
-        }
-      </div>
-      <div class="calendar-day-context-loading-stage" aria-hidden="true"></div>
+      @if (!hideDayHealth()) {
+        <div class="calendar-day-context-loading-metrics" aria-hidden="true">
+          @for (metric of ['Readiness', 'Sleep', 'HRV', 'Recovery left']; track metric) {
+            <div><span>{{ metric }}</span><i></i><i></i></div>
+          }
+        </div>
+        <div class="calendar-day-context-loading-stage" aria-hidden="true"></div>
+      }
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
@@ -95,7 +97,7 @@
       [variant]="dashboardTile() || calmMonth() ? 'compact' : 'summary'"
       title="Day training impact"></app-training-impact>
   }
-  @if (healthState().status !== 'private' && healthState().status !== 'hidden') {
+  @if (!hideDayHealth() && healthState().status !== 'private' && healthState().status !== 'hidden') {
     <section class="calendar-day-context-health" [class.calendar-day-context-health--full]="standaloneDayPage()" aria-label="Recovery and sleep">
       @if (standaloneDayPage()) {
         <div class="calendar-day-context-health-heading">

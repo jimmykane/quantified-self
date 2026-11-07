@@ -1777,6 +1777,7 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, **30 days**, and **Year** views');
     expect(calendarSection?.content).toContain('same sleep-stage breakdown used in Health');
+    expect(calendarSection?.content).toContain('Future dates hide recorded recovery, readiness, HRV and sleep');
     expect(calendarSection?.content).toContain('full-width **Calendar** section');
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');

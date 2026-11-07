@@ -2580,7 +2580,11 @@ link changes the overlay icon to a task check and the day-detail state to **Comp
 duplicate or restyle the completed activity. Selected-day rows use sport icons rather than the compact grid's status
 markers, and the bottom sheet has no decorative rails beside those icons. The sheet shares compact title/metadata and
 recovery typography with selected-day previews on the app's standard overlay surface. Trailing navigation chevrons stay
-vertically centered for multi-line rows. The overlay resolves
+vertically centered for multi-line rows. Future local dates hide recorded recovery, readiness, HRV and sleep in the
+shared day context, including full-day loading placeholders, and skip the health subscription. Selecting a future day
+cancels the previous read. Focus/app resume rechecks the local day without restarting same-day reads. Planning content
+and Training forecasts are unaffected. MCP impact: frontend visibility/read suppression only; no goal, workout, metric,
+scope or data-contract changes. The overlay resolves
 colors from the live plans, so recoloring or moving
 a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
 each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and
