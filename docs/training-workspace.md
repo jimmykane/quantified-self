@@ -2580,7 +2580,11 @@ link changes the overlay icon to a task check and the day-detail state to **Comp
 duplicate or restyle the completed activity. Selected-day rows use sport icons rather than the compact grid's status
 markers, and the bottom sheet has no decorative rails beside those icons. The sheet shares compact title/metadata and
 recovery typography with selected-day previews on the app's standard overlay surface. Trailing navigation chevrons stay
-vertically centered for multi-line rows. The overlay resolves
+vertically centered for multi-line rows. Future local dates hide recorded recovery, readiness, HRV and sleep in the
+shared day context, including full-day loading placeholders, and skip the health subscription. Selecting a future day
+cancels the previous read. Focus/app resume rechecks the local day without restarting same-day reads. Planning content
+and Training forecasts are unaffected. MCP impact: frontend visibility/read suppression only; no goal, workout, metric,
+scope or data-contract changes. The overlay resolves
 colors from the live plans, so recoloring or moving
 a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
 each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and
@@ -6167,6 +6171,12 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 
 #### Pro daily workout suggestion
+
+The ready Today row previews the saved suggestion's rationale in at most two visual lines instead of repeating Pro
+membership copy. Review (or View guidance on event days) shows the complete explanation. Workout, rest and event-day
+suggestions reuse their existing saved rationale; regenerated suggestions retain their label. This presentation adds
+no reads, generation or allowance use. MCP impact: none; data, tools, consent and approval contracts are unchanged.
+The existing Help explanation of review, daily allowance and provider approval remains accurate.
 
 **Explicit regeneration (2026-11-04).** Today offers Regenerate for a ready workout/rest suggestion, and for exactly
 one planned, supported-sport workout. It opens the existing options/review dialog; opening alone never invokes the model.
@@ -10467,6 +10477,16 @@ link. Lifecycle is active/paused/completed/archived; restore sets active. Achiev
 never moves goal dates; deletion preserves the goal and displays an unavailable link. Calendar markers use the target
 date, or only the start date for ongoing goals. Creating an event from a future calendar day starts its preparation
 today by default. Shared Material goal surfaces reuse the searchable sport picker and canonical unit formatting.
+The goal editor labels dated goals as **Preparation starts** through **Event date** or **Achieve by**, explains that
+active goals guide daily suggestions throughout that period, and places the calendar marker on the final date.
+Ongoing goals use **Starts on**, explain that there is no end date and start weekly tracking from that day.
+Goal date inputs reuse the shared Material/Day.js formats for the account's regional preference, with the owner's
+independent week-start setting in the picker. Typed or picked dates remain ISO calendar labels in stored goals;
+invalid or cleared required dates prevent saving. Existing goal details use the app-locale DatePipe.
+Short option sets reuse `CompactSelectComponent`; sport/family retains its searchable picker. Plan and status stay
+mounted behind a surface-free disclosure for new goals and are shown when editing. Invalid date order is explained
+inline before saving. MCP impact: presentation only; stored start/target dates, goal relevance, strict read/write
+contracts and consent are unchanged. Product Help uses the same preparation/target wording.
 The goal dialog uses the shared plan-only reader for optional links, without subscribing to scheduled workouts.
 Weekly progress is subscribed only in the current-goal list, stops during editing or archive browsing, and follows
 live changes to the saved calendar week start.

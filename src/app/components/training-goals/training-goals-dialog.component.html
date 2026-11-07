@@ -4,46 +4,52 @@
   @if (notice() && !editing()) { <p class="goal-meta" role="status">{{ notice() }}</p> }
   @if (editing()) {
     <div class="goal-fields">
-      <mat-form-field class="wide" appearance="outline"><mat-label>Name</mat-label><input matInput maxlength="120" required
+      <mat-form-field class="wide" appearance="outline" subscriptSizing="dynamic"><mat-label>Name</mat-label><input matInput maxlength="120" required
         [disabled]="busy()" [ngModel]="fields().name" (ngModelChange)="set('name', $event, false)"></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Goal type</mat-label><mat-select [disabled]="busy()" [value]="fields().kind" (selectionChange)="set('kind', $event.value)">
-        <mat-option value="event">Event / race</mat-option><mat-option value="milestone">Dated milestone</mat-option><mat-option value="ongoing">Ongoing goal</mat-option>
-      </mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Priority</mat-label><mat-select [disabled]="busy()" [value]="fields().priority" (selectionChange)="set('priority', $event.value)">
-        <mat-option value="high">High</mat-option><mat-option value="normal">Normal</mat-option><mat-option value="low">Low</mat-option>
-      </mat-select></mat-form-field>
+      <div class="goal-choices wide">
+        <app-compact-select label="Goal type" [options]="kindOptions" [value]="fields().kind" [disabled]="busy()" (selectionChange)="set('kind', $event)" />
+        <app-compact-select label="Priority" [options]="priorityOptions" [value]="fields().priority" [disabled]="busy()" (selectionChange)="set('priority', $event)" />
+      </div>
+      <div class="goal-period wide">
+        <h3 class="goal-title">{{ fields().kind === 'ongoing' ? 'When to begin' : 'Training period' }}</h3>
+        <p class="goal-meta">{{ periodHint() }}</p>
+      </div>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ startDateLabel() }}</mat-label><input matInput required [disabled]="busy()"
+        [matDatepicker]="startPicker" [ngModel]="startDateInput()" (dateInput)="setDate('startLocalDate', $event.value, startPicker.opened)">
+        <mat-datepicker-toggle matSuffix [for]="startPicker" [aria-label]="'Choose ' + startDateLabel()"></mat-datepicker-toggle>
+        <mat-datepicker #startPicker (opened)="haptics.selection()"></mat-datepicker>
+        <mat-hint>{{ fields().kind === 'ongoing' ? 'Weekly tracking begins here too.' : 'When you begin working toward this goal.' }}</mat-hint>
+        <mat-error>Enter a valid date.</mat-error></mat-form-field>
+      @if (fields().kind !== 'ongoing') {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ endDateLabel() }}</mat-label><input matInput required [disabled]="busy()"
+          [matDatepicker]="endPicker" [min]="startDateInput()" [ngModel]="endDateInput()" (dateInput)="setDate('targetLocalDate', $event.value, endPicker.opened)">
+          <mat-datepicker-toggle matSuffix [for]="endPicker" [aria-label]="'Choose ' + endDateLabel()"></mat-datepicker-toggle>
+          <mat-datepicker #endPicker (opened)="haptics.selection()"></mat-datepicker>
+          <mat-hint>The calendar flag appears on this date.</mat-hint>
+          <mat-error>{{ dateRangeError() || 'Enter a valid date.' }}</mat-error></mat-form-field>
+      }
+      @if (dateRangeError()) { <p class="goal-error wide" role="alert">{{ dateRangeError() }}</p> }
       <app-activity-filter-picker class="wide" label="Sport or family" allLabel="All sports" searchLabel="Search sports and families"
         [multiple]="false" [options]="sportOptions" [selectedValues]="selectedSports()" [disabled]="busy()" (selectionChange)="selectSport($event)" />
-      <mat-form-field appearance="outline"><mat-label>Start date</mat-label><input matInput type="date" required [disabled]="busy()"
-        [ngModel]="fields().startLocalDate" (ngModelChange)="set('startLocalDate', $event, false)"></mat-form-field>
-      @if (fields().kind !== 'ongoing') {
-        <mat-form-field appearance="outline"><mat-label>Target date</mat-label><input matInput type="date" required [disabled]="busy()"
-          [min]="fields().startLocalDate" [ngModel]="fields().targetLocalDate" (ngModelChange)="set('targetLocalDate', $event, false)"></mat-form-field>
-      }
       @if (fields().kind === 'ongoing') {
-        <mat-form-field appearance="outline"><mat-label>Track progress</mat-label><mat-select [disabled]="busy()" [value]="targetKind()"
-          (selectionChange)="targetKind.set($event.value); haptics.selection()">
-          <mat-option value="manual">Manual achievement</mat-option><mat-option value="workouts">Workouts per week</mat-option>
-          <mat-option value="days">Training days per week</mat-option><mat-option value="duration">Duration per week</mat-option><mat-option value="distance">Distance per week</mat-option>
-        </mat-select></mat-form-field>
+        <app-compact-select label="Track progress" [options]="progressOptions" [value]="targetKind()" [disabled]="busy()" (selectionChange)="selectProgress($event)" />
         @if (targetKind() !== 'manual') {
-          <mat-form-field appearance="outline"><mat-label>{{ targetLabel() }}</mat-label><input matInput type="number" [min]="targetStep()" [max]="targetMax()" [step]="targetStep()" required
+          <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ targetLabel() }}</mat-label><input matInput type="number" [min]="targetStep()" [max]="targetMax()" [step]="targetStep()" required
             [disabled]="busy()" [ngModel]="targetValue()" (ngModelChange)="targetValue.set($event)"><mat-hint>{{ targetKind() === 'days' || targetKind() === 'workouts' ? 'Whole numbers from 1 to ' + targetMax() : 'Enter a positive weekly target' }}</mat-hint></mat-form-field>
         }
         <p class="goal-meta wide">Workouts count separate recordings. Training days count distinct days, even when you record more than one workout. Weekly progress uses your calendar week start and {{ timeZone }}.</p>
       }
-      <mat-form-field class="wide" appearance="outline"><mat-label>Objective or notes</mat-label><textarea matInput rows="3" maxlength="2000"
+      <mat-form-field class="wide" appearance="outline" subscriptSizing="dynamic"><mat-label>Objective or notes (optional)</mat-label><textarea matInput rows="2" maxlength="2000"
         [disabled]="busy()" [ngModel]="fields().objective" (ngModelChange)="set('objective', $event, false)"></textarea>
         <mat-hint>For example: finish my first marathon, or squat 100 kg. Performance achievements are marked manually.</mat-hint></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Linked plan (optional)</mat-label><mat-select [disabled]="busy()" [value]="fields().planId" (selectionChange)="set('planId', $event.value)">
-        <mat-option [value]="null">Independent goal</mat-option>
-        @if (selectedPlanMissing()) { <mat-option [value]="fields().planId">Unavailable plan · keep link</mat-option> }
-        @for (plan of plans() ?? []; track plan.id) { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
-      </mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Status</mat-label><mat-select [disabled]="busy()" [value]="fields().lifecycle" (selectionChange)="set('lifecycle', $event.value)">
-        <mat-option value="active">Active</mat-option><mat-option value="paused">Paused</mat-option><mat-option value="completed">Completed</mat-option><mat-option value="archived">Archived</mat-option>
-      </mat-select></mat-form-field>
-      <p class="goal-meta wide">Goals guide suitable workouts while respecting your recovery, sport preferences, planned sessions and rest days. Events receive guidance on uncovered event days.</p>
+      <div class="wide">
+        <button mat-button appHapticTap type="button" [disabled]="busy()" [attr.aria-expanded]="moreOptions()" aria-controls="goal-plan-status"
+          (click)="moreOptions.set(!moreOptions())">{{ moreOptions() ? 'Hide plan & status' : 'Show plan & status' }}</button>
+        <div id="goal-plan-status" class="goal-extra-fields" [hidden]="!moreOptions()">
+          <app-compact-select label="Linked plan (optional)" [options]="planOptions()" [value]="fields().planId" [disabled]="busy()" (selectionChange)="set('planId', $event)" />
+          <app-compact-select label="Status" [options]="lifecycleOptions" [value]="fields().lifecycle" [disabled]="busy()" (selectionChange)="set('lifecycle', $event)" />
+        </div>
+      </div>
     </div>
   } @else {
     <div class="goal-actions"><button mat-button appHapticTap type="button" (click)="edit()"><mat-icon>add</mat-icon>Add goal</button>

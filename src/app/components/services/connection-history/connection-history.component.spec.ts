@@ -1,5 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import type { ConnectionHistoryRangePreset } from '@shared/connection-history';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -17,6 +20,82 @@ beforeEach(() => { vi.clearAllMocks(); users.user.set({ uid: 'owner' });
   providers: [{ provide: AppHapticsService, useValue: haptics }, { provide: AppUserService, useValue: users },
     { provide: RecordedHistoryStartService, useValue: history }] }); });
 describe('recent history option', () => {
+  async function rangeMenu(service = ServiceNames.GarminAPI) {
+    TestBed.configureTestingModule({ imports: [NoopAnimationsModule] });
+    const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent);
+    fixture.componentRef.setInput('service', service);
+    const changed = vi.fn((value: ConnectionHistoryRangePreset) => fixture.componentRef.setInput('range', value));
+    fixture.componentInstance.rangeChange.subscribe(changed);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.history-range-button')!;
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const choices = () => Array.from(overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    const open = async () => { trigger.click(); await settle(); };
+    return { fixture, trigger, overlay, choices, changed, settle, open };
+  }
+
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])(
+    'opens the %s presets from a compact button without changing the default', async service => {
+      const c = await rangeMenu(service);
+      expect(c.trigger.getAttribute('aria-label')).toBe('History range: 30 days');
+      expect(c.fixture.nativeElement.querySelector('mat-select, mat-form-field')).toBeNull();
+      expect(haptics.selection).not.toHaveBeenCalled();
+      await c.open();
+      expect(c.trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(c.overlay.querySelector('.qs-menu-panel')).not.toBeNull();
+      expect(c.choices().map(choice => choice.querySelector('.history-range-menu-text')?.textContent?.trim()))
+        .toEqual(c.fixture.componentInstance.rangeOptions().map(option => option.label));
+      expect(c.choices().filter(choice => choice.getAttribute('aria-checked') === 'true')).toHaveLength(1);
+      expect(c.choices()[0].getAttribute('aria-checked')).toBe('true');
+      expect(c.choices()[0].querySelector('mat-icon')?.textContent).toBe('check');
+      expect(c.changed).not.toHaveBeenCalled();
+      expect(haptics.selection).toHaveBeenCalledExactlyOnceWith();
+    });
+
+  it('selects a range once, updates the button and restores focus without duplicate feedback', async () => {
+    const c = await rangeMenu();
+    await c.open();
+    c.choices().at(-1)!.click(); await c.settle();
+    expect(c.changed).toHaveBeenCalledExactlyOnceWith('maximum');
+    expect(c.trigger.textContent).toContain('Maximum available (up to 5 years)');
+    expect(c.trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(c.trigger);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    await c.open();
+    expect(c.choices().at(-1)?.getAttribute('aria-checked')).toBe('true');
+    c.choices().at(-1)!.click(); await c.settle();
+    expect(c.changed).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps disabled controls silent and rejects a pending choice after the import is disabled', async () => {
+    const c = await rangeMenu();
+    c.fixture.componentRef.setInput('disabled', true); await c.settle();
+    c.trigger.click(); await c.settle();
+    expect(c.choices()).toHaveLength(0);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    c.fixture.componentRef.setInput('disabled', false); await c.settle(); await c.open();
+    c.fixture.componentRef.setInput('disabled', true); await c.settle();
+    expect(c.choices().every(choice => choice.disabled)).toBe(true);
+    c.choices().at(-1)!.click(); c.fixture.componentInstance.changeRange('maximum');
+    expect(c.changed).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    c.fixture.componentRef.setInput('checked', false); await c.settle();
+    expect(c.fixture.nativeElement.querySelector('.history-range-button')).toBeNull();
+    expect(c.choices()).toHaveLength(0);
+  });
+
+  it('cancels the menu with Escape without changing the range or giving selection feedback', async () => {
+    const c = await rangeMenu(); await c.open();
+    c.overlay.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+    await c.settle();
+    expect(c.trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(c.trigger);
+    expect(c.changed).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('is selected by default, uses supported data types and stays silent on hydration', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryOptionComponent); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('input').checked).toBe(true);
@@ -198,13 +277,19 @@ describe('recent history status', () => {
     steps: [{ id: 'sleep', resources: ['sleep'], status: 'requested', count: 2 },
       { id: 'health', resources: ['health'], status: 'requested', count: 10 }] };
   const flush = async (fixture: ReturnType<typeof TestBed.createComponent<ConnectionHistoryStatusComponent>>) => {
-    for (let i = 0; i < 10; i++) { fixture.detectChanges(); TestBed.flushEffects(); await Promise.resolve(); }
+    fixture.detectChanges(); TestBed.flushEffects();
+    await fixture.whenStable(); fixture.detectChanges();
+  };
+  const waitForStoredHistory = async (fixture: ReturnType<typeof TestBed.createComponent<ConnectionHistoryStatusComponent>>) => {
+    await flush(fixture);
+    // Background reads run untracked; render stability alone does not mean they finished.
+    await vi.waitFor(() => expect(fixture.componentInstance.checkingHistory()).toBe(false));
     fixture.detectChanges();
   };
   it('keeps stored calendar dates in UTC and avoids new reads when only progress counts change in an inline dialog', async () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('inline', true); fixture.componentRef.setInput('status', sleepHealthStatus);
-    await flush(fixture);
+    await waitForStoredHistory(fixture);
     expect(fixture.nativeElement.textContent).toContain('first stored date Sep 12, 2026');
     expect(history.firstSleepDate).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('status', {...sleepHealthStatus, steps: sleepHealthStatus.steps.map(step => ({...step, count: step.count + 1}))});
@@ -215,7 +300,7 @@ describe('recent history status', () => {
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('status', sleepHealthStatus); await flush(fixture);
     expect(history.firstSleepDate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
-    fixture.componentInstance.setExpanded(true); await flush(fixture);
+    fixture.componentInstance.setExpanded(true); await waitForStoredHistory(fixture);
     expect(history.firstSleepDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
     expect(history.firstHealthDate).toHaveBeenCalledExactlyOnceWith('owner', 'GarminAPI', expect.any(AbortSignal));
     const copy = fixture.nativeElement.textContent;
@@ -229,14 +314,14 @@ describe('recent history status', () => {
     fixture.componentRef.setInput('status', { ...sleepHealthStatus, updatedAtMs: 4,
       steps: sleepHealthStatus.steps.map(step => ({ ...step, count: 25 })) }); await flush(fixture);
     expect(history.firstSleepDate).toHaveBeenCalledOnce();
-    fixture.componentInstance.refreshStoredHistory(); fixture.componentInstance.refreshStoredHistory(); await flush(fixture);
+    fixture.componentInstance.refreshStoredHistory(); fixture.componentInstance.refreshStoredHistory(); await waitForStoredHistory(fixture);
     expect(history.firstSleepDate).toHaveBeenCalledTimes(2); expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
   it('distinguishes an unavailable read from no stored records and never applies Garmin limits to Suunto', async () => {
     history.firstSleepDate.mockRejectedValue(new Error('offline')); history.firstHealthDate.mockResolvedValue(null);
     const fixture = TestBed.createComponent(ConnectionHistoryStatusComponent);
     fixture.componentRef.setInput('service', ServiceNames.SuuntoApp); fixture.componentRef.setInput('status', sleepHealthStatus);
-    fixture.componentInstance.setExpanded(true); await flush(fixture);
+    fixture.componentInstance.setExpanded(true); await waitForStoredHistory(fixture);
     expect(fixture.nativeElement.textContent).toContain('stored history could not be checked');
     expect(fixture.nativeElement.textContent).toContain('no records stored yet');
     expect(history.lastReportedGarminSleepCutoff).not.toHaveBeenCalled();

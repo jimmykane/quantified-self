@@ -2,6 +2,8 @@
 .daily-row { padding-block: 8px; border-top: 1px solid var(--mat-sys-outline-variant); }
 p { margin: 0; font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
 small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+// Preview only; Review / View guidance retains the complete saved explanation.
+.suggestion-rationale { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; }
 .delivery-preference { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .actions app-training-delivery-button { flex: 1 1 160px; min-width: 0; max-width: 100%; }

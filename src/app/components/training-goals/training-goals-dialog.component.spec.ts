@@ -1,6 +1,14 @@
-import { signal } from '@angular/core';
+import { LOCALE_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { DateAdapter, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatDatepicker } from '@angular/material/datepicker';
+import { By } from '@angular/platform-browser';
+import dayjs from 'dayjs';
+import { registerAppLocale } from '../../shared/adapters/date-locale.config';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { BehaviorSubject, finalize, of } from 'rxjs';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { TrainingGoalsDialogComponent } from './training-goals-dialog.component';
@@ -11,18 +19,21 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
 import { TrainingGoalsService } from '../../services/training-goals.service';
 import type { TrainingGoalV1 } from '@shared/training-goals';
-import { readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, readdirSync, writeFileSync } from 'node:fs';
 const goal: TrainingGoalV1 = { schemaVersion: 1, id: 'one', revision: 1, createdAtMs: 1, updatedAtMs: 1, name: 'Athens marathon',
   kind: 'event', lifecycle: 'active', priority: 'high', startLocalDate: '2026-11-01', targetLocalDate: '2026-11-08',
   sportScope: 'all', sport: null, objective: 'Finish comfortably', planId: 'old', weeklyTarget: null };
-async function setup(data: Record<string, unknown> = {}) {
+async function setup(data: Record<string, unknown> = {}, locale = 'en-GB') {
+  await registerAppLocale(locale);
   const user = signal<any>({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles, startOfTheWeek: 1 } } });
   const save = vi.fn().mockResolvedValue(goal), close = vi.fn();
   const progressResults = new BehaviorSubject({ status: 'ready', result: { progress: [] } });
   const stopProgress = vi.fn(), watchProgress = vi.fn(() => progressResults.pipe(finalize(stopProgress)));
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-  await TestBed.configureTestingModule({ imports: [TrainingGoalsDialogComponent], providers: [
+  await TestBed.configureTestingModule({ imports: [TrainingGoalsDialogComponent, NoopAnimationsModule], providers: [
     { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner', ...data } }, { provide: MatDialogRef, useValue: { close } },
+    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+    { provide: MAT_DATE_LOCALE, useValue: locale }, { provide: LOCALE_ID, useValue: locale },
     { provide: AppUserService, useValue: { user } }, { provide: AppHapticsService, useValue: haptics },
     { provide: TrainingPlansService, useValue: { watchPlans: () => of([]) } },
     { provide: TrainingGoalsService, useValue: { watch: () => of({ status: 'ready', goals: [goal] }),
@@ -32,6 +43,90 @@ async function setup(data: Record<string, unknown> = {}) {
   return { fixture, component: fixture.componentInstance, save, close, user, haptics, watchProgress, stopProgress };
 }
 describe('Calendar goal surfaces', () => {
+  it.each([
+    ['en-GB', '01/11/2026', '15/12/2026', '1 Nov 2026'],
+    ['en-US', '11/01/2026', '12/15/2026', 'Nov 1, 2026'],
+    ['de-DE', '01.11.2026', '15.12.2026', '01.11.2026'],
+  ])('uses the app regional format %s for editing and details, preserving stored calendar dates', async (locale, start, typed, detail) => {
+    const browser = locale === 'en-US' ? 'en-GB' : 'en-US';
+    const browserLocale = vi.spyOn(navigator, 'language', 'get').mockReturnValue(browser);
+    const browserLanguages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue([browser]);
+    try {
+      const { fixture, component, save, haptics } = await setup({ goal }, locale);
+      const root = fixture.nativeElement as HTMLElement;
+      expect(root.querySelector('input[type="date"]')).toBeNull();
+      const inputs = root.querySelectorAll<HTMLInputElement>('input.mat-datepicker-input');
+      expect(inputs[0].value).toBe(start);
+      inputs[1].value = typed; inputs[1].dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable();
+      expect(component.fields()).toMatchObject({ startLocalDate: '2026-11-01', targetLocalDate: '2026-12-15' });
+      expect(haptics.selection).not.toHaveBeenCalled();
+      await component.save(); fixture.detectChanges();
+      expect(save).toHaveBeenCalledWith('owner', 'one', expect.objectContaining({ targetLocalDate: '2026-12-15' }), goal);
+      expect(root.textContent).toContain(`Preparation starts ${detail}`);
+    } finally { browserLocale.mockRestore(); browserLanguages.mockRestore(); }
+  });
+  it('blocks invalid, cleared and reversed dates without saving the previous valid date', async () => {
+    const { fixture, component, save, haptics } = await setup({ goal });
+    const input = fixture.nativeElement.querySelectorAll('input.mat-datepicker-input')[1] as HTMLInputElement;
+    input.value = '1'; input.dispatchEvent(new Event('input')); fixture.detectChanges(); await fixture.whenStable();
+    expect(input.value).toBe('1'); expect(component.parsed()).toBeNull();
+    for (const value of ['31/02/2027', '', '31/10/2026']) {
+      input.value = value; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(component.parsed()).toBeNull(); await component.save();
+      expect(fixture.nativeElement.querySelector('mat-error')?.textContent).toBeTruthy();
+    }
+    expect(save).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    component.busy.set(true); component.setDate('targetLocalDate', dayjs('2027-01-01'), true);
+    expect(component.fields().targetLocalDate).toBe('2026-10-31');
+    fixture.detectChanges(); expect(input.disabled).toBe(true);
+    expect([...fixture.nativeElement.querySelectorAll('mat-datepicker-toggle button')].every((button: HTMLButtonElement) => button.disabled)).toBe(true);
+  });
+  it('uses the saved week start and accepts a picked day with one selection haptic', async () => {
+    const { fixture, component, user, haptics } = await setup({ goal });
+    const adapter = fixture.debugElement.injector.get(DateAdapter);
+    expect(adapter.getFirstDayOfWeek()).toBe(1);
+    user.update(value => ({ ...value, settings: { unitSettings: { startOfTheWeek: 0 } } })); fixture.detectChanges();
+    expect(adapter.getFirstDayOfWeek()).toBe(0);
+    const picker = fixture.debugElement.queryAll(By.directive(MatDatepicker))[0].componentInstance as MatDatepicker<dayjs.Dayjs>;
+    picker.open(); fixture.detectChanges(); await fixture.whenStable();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    picker.select(dayjs('2026-11-02')); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.fields().startLocalDate).toBe('2026-11-02'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    picker.select(dayjs('2026-11-02')); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    picker.close(); fixture.detectChanges(); await fixture.whenStable();
+  });
+  it('explains the preparation period and switches goal type through a compact menu', async () => {
+    const { fixture, component, haptics } = await setup({ createDate: '2099-12-15' });
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('Preparation starts'); expect(root.textContent).toContain('Event date');
+    expect(root.textContent).toContain('from preparation start through the final day');
+    expect(root.textContent).toContain('The calendar flag appears on this date.'); expect(root.querySelector('mat-select')).toBeNull();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Goal type: Event / race"]')!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    [...overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(button => button.textContent?.includes('Milestone'))!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.fields().kind).toBe('milestone'); expect(root.textContent).toContain('Achieve by'); expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.set('startLocalDate', '2099-12-16', false); fixture.detectChanges();
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Achieve by must be on or after preparation starts.');
+    expect(component.parsed()).toBeNull(); component.set('kind', 'ongoing'); fixture.detectChanges();
+    expect(root.textContent).toContain('No end date.'); expect(root.querySelectorAll('input.mat-datepicker-input')).toHaveLength(1);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+  });
+  it('preserves collapsed plan/status edits and rejects busy or unchanged progress choices', async () => {
+    const { fixture, component, haptics } = await setup({ createDate: '2099-12-15' });
+    const region = fixture.nativeElement.querySelector('#goal-plan-status') as HTMLElement;
+    expect(region.hidden).toBe(true);
+    const disclosure = fixture.nativeElement.querySelector('[aria-controls="goal-plan-status"]') as HTMLButtonElement;
+    disclosure.click(); fixture.detectChanges(); expect(region.hidden).toBe(false);
+    component.set('lifecycle', 'paused'); disclosure.click(); fixture.detectChanges();
+    expect(region.hidden).toBe(true); expect(component.fields().lifecycle).toBe('paused');
+    component.edit(goal); fixture.detectChanges(); expect(region.hidden).toBe(false);
+    haptics.selection.mockClear(); component.selectProgress('manual'); expect(haptics.selection).not.toHaveBeenCalled();
+    component.busy.set(true); component.selectProgress('days'); expect(component.targetKind()).toBe('manual');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('reads progress only while current goals are visible and follows changes to the saved week start', async () => {
     const { fixture, component, user, watchProgress, stopProgress } = await setup({ goal });
     expect(watchProgress).not.toHaveBeenCalled();
@@ -103,11 +198,33 @@ describe('Calendar goal surfaces', () => {
     user.set(null); fixture.detectChanges(); expect(close).toHaveBeenCalledOnce();
   });
   it('exports the actual Material editor for optional responsive visual verification', async () => {
-    if (!process.env.TRAINING_GOALS_QA_DIR) return;
-    const { fixture, component } = await setup({ goal }); component.set('kind', 'ongoing'); component.targetKind.set('days'); fixture.detectChanges();
+    const output = process.env.TRAINING_GOALS_QA_DIR;
+    if (!output) return;
+    const { fixture } = await setup();
+    const dialog = TestBed.inject(MatDialog).open(TrainingGoalsDialogComponent, { data: { uid: 'owner', createDate: '2026-12-20' },
+      width: '640px', maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)', autoFocus: false });
+    const component = dialog.componentInstance;
+    const { compile } = await import('sass');
+    // The test compiler omits external component styles. Compile their source for this optional browser fixture.
+    const componentStyles = [
+      ['src/app/components/training-goals/training-goals.scss', 'app-training-goals-dialog'],
+      ['src/app/components/shared/compact-select/compact-select.component.scss', 'app-compact-select'],
+      ['src/app/components/shared/activity-filter-picker/activity-filter-picker.component.scss', 'app-activity-filter-picker'],
+    ].map(([path, host]) => compile(path).css.replace(/:host\(([^)]+)\)/g, `${host}$1`).replace(/:host/g, host)).join('\n');
     const css = readdirSync('dist/browser').find(file => /^styles.*\.css$/.test(file))!;
-    const styles = [...document.querySelectorAll('style')].map(style => style.textContent).join('\n');
-    const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${process.cwd()}/dist/browser/${css}"><style>${styles}</style></head><body class="app-hydrated"><div class="mat-mdc-dialog-container mdc-dialog" style="margin:8px auto;max-width:640px"><div class="mat-mdc-dialog-surface mdc-dialog__surface">${fixture.nativeElement.outerHTML}</div></div></body></html>`;
-    writeFileSync(`${process.env.TRAINING_GOALS_QA_DIR}/goal-editor.html`, html);
+    copyFileSync(`dist/browser/${css}`, `${output}/styles.css`);
+    cpSync('dist/browser/media', `${output}/media`, { recursive: true });
+    for (const kind of ['event', 'milestone', 'ongoing'] as const) {
+      component.set('kind', kind); component.targetKind.set('days'); dialog.componentRef!.changeDetectorRef.detectChanges();
+      await fixture.whenStable(); dialog.componentRef!.changeDetectorRef.detectChanges();
+      const styles = [...document.querySelectorAll('style')].map(style => style.textContent).join('\n');
+      const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+      overlay.querySelectorAll('input').forEach(input => input.setAttribute('value', input.value));
+      for (const theme of ['light', 'dark']) {
+        const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="styles.css"><style>${styles}\n${componentStyles}</style></head><body class="app-hydrated ${theme === 'dark' ? 'dark-theme' : ''}">${overlay.outerHTML}</body></html>`;
+        writeFileSync(`${output}/goal-${kind}-${theme}.html`, html);
+      }
+    }
+    dialog.close();
   });
 });

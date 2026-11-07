@@ -380,6 +380,18 @@ checks verify control wiring, wrapping, focus and scroll ownership; actual vibra
 These changes affect presentation and local feedback only; event, plan/workout, provider and MCP contracts remain
 unchanged.
 
+## Compact choice menus
+
+Prefer `CompactSelectComponent` (`app-compact-select`) for short single-choice sets such as goal type, priority,
+progress mode, optional plan and status. It reuses the Connection History menu pattern from #1034, the shared
+`styles/_table-filters.scss` text-button mixin and `qs-menu-panel` surface. Supply a visible label, current value,
+allowlisted options and a disabled state; nullable values represent an explicit option such as Independent goal.
+The menu shows the selected checkmark and `menuitemradio`/`aria-checked`, supports keyboard/Escape and focus return,
+wraps long labels and keeps 44px targets. Do not recreate this dropdown with outlined fields or custom popup CSS.
+The component owns menu-opening haptics; the caller validates/commits the accepted change and owns its selection
+haptic. Unchanged, disabled and stale choices emit nothing. Retain `mat-select` where a Material form-field/CVA/error
+state is needed, searchable pickers for long catalogs, and segmented controls for immediately visible alternatives.
+
 ## Searchable sport and tag selection
 
 Reuse `ActivityFilterPickerComponent` (`app-activity-filter-picker`) for sport catalogs and searchable tag choices,
@@ -432,9 +444,9 @@ supported sports; sharing UI must not widen a workout recipe or provider's capab
   owns opening, explicit closing and clear-search feedback. Hydration, typing, disabled and unchanged selections
   must stay silent. Disable the picker while the enclosing workflow is busy or its save outcome is uncertain.
 
-Keep ordinary Material selects for short static choices such as workout purpose or timing, and segmented controls
-for a small set of immediate alternatives. This guideline targets catalogs that benefit from search, icons or
-multiple selection; it does not require migrating unrelated controls in a feature change.
+Use the compact choice menu above for short static choices and segmented controls for immediately visible alternatives.
+This searchable-picker guideline targets catalogs that benefit from search, icons or multiple selection; it does not
+require migrating unrelated controls in a feature change.
 
 Verify search, selected-state retention, single-choice replacement, disabled choices, keyboard opening/Escape,
 focus return and one haptic owner. For nested usage, closing the sport picker must leave the parent dialog open.

@@ -1,7 +1,7 @@
 import { TrainingGoalsDayComponent } from '../../training-goals/training-goals-day.component';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, type OnChanges, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { MatMenu } from '@angular/material/menu';
 import { Router } from '@angular/router';
@@ -64,7 +64,7 @@ interface HealthState {
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CalendarDayContextComponent {
+export class CalendarDayContextComponent implements OnChanges {
   readonly dayWorkouts = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
   private readonly health = inject(CalendarDayHealthService);
@@ -88,6 +88,8 @@ export class CalendarDayContextComponent {
   readonly calmMonth = input(false);
   readonly privateHealthEnabled = input(true);
   readonly hideHealth = input(false);
+  private readonly todayKey = signal(localDateKey(Date.now()));
+  readonly hideDayHealth = computed(() => this.hideHealth() || this.data().day.dateKey > this.todayKey());
   readonly noteSelected = output<TimelineNote>();
   readonly navigationRequested = output<void>();
   readonly dayWorkoutMenu = viewChild<MatMenu>('addDayWorkoutMenu');
@@ -182,7 +184,7 @@ export class CalendarDayContextComponent {
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
   readonly sleepFacts = computed(() => {
     const health = this.healthState();
-    if (!this.standaloneDayPage() || !this.privateHealthEnabled() || this.hideHealth()
+    if (!this.standaloneDayPage() || !this.privateHealthEnabled() || this.hideDayHealth()
       || this.users.user()?.uid !== this.healthOwnerUid()
       || health.status !== 'ready' || health.dateKey !== this.healthDateKey()
       || health.ownerUid !== this.healthOwnerUid()) return null;
@@ -234,12 +236,12 @@ export class CalendarDayContextComponent {
     notes: this.noteRows().map(row => row.note),
     planStatus: this.canPlan() ? this.plannedStatus() : 'ready',
     plans: this.canPlan() ? this.plannedWorkouts() : [],
-    sleepPoint: this.healthState().sleepPoint,
-    health: this.healthState().summary,
+    sleepPoint: this.hideDayHealth() ? null : this.healthState().sleepPoint,
+    health: this.hideDayHealth() ? null : this.healthState().summary,
   }));
 
   private readonly loadHealth = effect((onCleanup) => {
-    if (this.hideHealth()) {
+    if (this.hideDayHealth()) {
       this.healthState.set({ status: 'hidden', dateKey: this.healthDateKey(), ownerUid: this.healthOwnerUid(), summary: null, sleepPoint: null });
       return;
     }
@@ -283,6 +285,19 @@ export class CalendarDayContextComponent {
       subscription.unsubscribe();
     });
   });
+
+  ngOnChanges(): void { this.refreshToday(); }
+
+  @HostListener('window:focus')
+  refreshToday(): void {
+    // A same-day focus must not restart health reads. Use the calendar's local day, not UTC.
+    this.todayKey.set(localDateKey(Date.now()));
+  }
+
+  @HostListener('document:visibilitychange')
+  refreshVisibleToday(): void {
+    if (document.visibilityState === 'visible') this.refreshToday();
+  }
 
   selectNote(note: TimelineNote): void {
     this.noteSelected.emit(note);

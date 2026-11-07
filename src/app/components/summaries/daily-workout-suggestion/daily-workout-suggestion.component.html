@@ -2,7 +2,9 @@
   <section aria-label="Daily workout suggestion" class="daily-row">
     <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false" [mobileActionFullWidth]="!!plannedWorkout() || canRegenerate()">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
-      @if (status()?.state === 'ready') { <small>{{ includedSuggestion() ? 'Included with Pro' : 'Regenerated' }} · {{ status()?.result?.kind === 'event-advice' ? 'guidance only' : 'review before adding' }}</small> }
+      @if (status()?.state === 'ready') {
+        <small class="suggestion-rationale">{{ includedSuggestion() ? '' : 'Regenerated · ' }}{{ status()?.result?.rationale }}</small>
+      }
       @if (status()?.state === 'ready' && status()?.result?.kind === 'workout' && deliveryPreferences().enabled) {
         <div class="delivery-preference"><small>After approval · {{ deliveryLabel() }}</small><button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Change</button></div>
       }

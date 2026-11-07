@@ -506,6 +506,8 @@ describe('compact daily workout in Today', () => {
     const { fixture, request, open, openEventGuidance } = setup(true, ready);
     await vi.advanceTimersByTimeAsync(0); fixture.detectChanges(); request.mockResolvedValue(ready);
     expect(fixture.nativeElement.textContent).toContain('View guidance');
+    expect(fixture.nativeElement.querySelector('.suggestion-rationale').textContent).toBe('Follow your event routine.');
+    expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
     expect(fixture.nativeElement.textContent).not.toContain('Add & send');
     await fixture.componentInstance.review();
     expect(request).toHaveBeenLastCalledWith('owner', 'status', expect.any(Function), undefined, true);
@@ -518,16 +520,24 @@ describe('compact daily workout in Today', () => {
     fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
-    expect(fixture.nativeElement.textContent).toContain('Rest day suggested'); exportQa(fixture.nativeElement, 'daily-rest'); expect(haptics.success).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Rest day suggested');
+    expect(fixture.nativeElement.querySelector('.suggestion-rationale').textContent).toBe('An easy day.');
+    expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
+    exportQa(fixture.nativeElement, 'daily-rest'); expect(haptics.success).not.toHaveBeenCalled();
     const value = fixture.componentInstance.status()!;
-    fixture.componentInstance.status.set({ ...value, result: { ...value.result!, kind: 'workout', draft: {
+    const rationale = 'An easy run fits your usual Friday routine while keeping the effort low after yesterday’s training. Keep a conversational pace and shorten the session if you feel tired.';
+    fixture.componentInstance.status.set({ ...value, result: { ...value.result!, kind: 'workout', rationale, draft: {
       title: 'Easy run', structure: { version: 1, sport: value.controls!.sport, nodes: [{ kind: 'step', id: 'easy', purpose: 'work',
         ending: { kind: 'time', seconds: 1800 }, targets: [], note: 'Comfortable effort' }] },
     } } });
     fixture.detectChanges(); exportQa(fixture.nativeElement, 'daily-ready');
+    expect(fixture.nativeElement.querySelector('.suggestion-rationale').textContent).toBe(rationale);
+    expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
     request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     expect(open).toHaveBeenCalledWith('owner', '2026-10-30', expect.any(String), expect.objectContaining({ initialResult: expect.any(Object), onAdded: expect.any(Function) }));
+    expect(open.mock.calls[0][3].initialResult.rationale).toBe(rationale);
     expect(event).toHaveBeenCalledWith('owner', 'reviewed', 'ready');
     expect(event).not.toHaveBeenCalledWith('owner', 'added', 'ready');
   });
