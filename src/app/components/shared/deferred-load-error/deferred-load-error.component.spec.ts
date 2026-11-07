@@ -40,6 +40,14 @@ describe('deferred-load recovery', () => {
     expect(captureMessage).toHaveBeenCalledTimes(2);
     expect(captureMessage.mock.calls[1][1].tags.area).toBe('health-overview');
   });
+  it('reports a changed area when a failed preview reuses the same recovery component', () => {
+    const fixture = render('health-sleep');
+    fixture.componentRef.setInput('area', 'health-hrv'); fixture.detectChanges();
+    expect(captureMessage.mock.calls.map(([, context]) => context.tags.area)).toEqual(['health-sleep', 'health-hrv']);
+    fixture.componentRef.setInput('area', 'health-sleep'); fixture.detectChanges();
+    expect(captureMessage).toHaveBeenCalledTimes(2);
+    expect(reload).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
   it('keeps controls usable when telemetry fails and never reports arbitrary area strings', () => {
     captureMessage.mockImplementationOnce(() => { throw Error('telemetry unavailable'); });
     expect(render().nativeElement.querySelector('button').disabled).toBe(false);
@@ -65,6 +73,24 @@ describe('deferred-load recovery', () => {
     button.click(); fixture.detectChanges();
     expect(reload).toHaveBeenCalledOnce(); expect(selection).toHaveBeenCalledOnce(); expect(error).toHaveBeenCalledOnce();
     expect(button.disabled).toBe(false); expect(fixture.nativeElement.textContent).toContain('Use your browser\'s reload control');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('still reloads when optional selection feedback throws', async () => {
+    vi.useFakeTimers(); selection.mockImplementationOnce(() => { throw Error('feedback unavailable'); });
+    const fixture = render();
+    expect(() => fixture.componentInstance.reload()).not.toThrow();
+    fixture.detectChanges(); await vi.advanceTimersByTimeAsync(0);
+    expect(reload).toHaveBeenCalledOnce(); expect(selection).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.reloading()).toBe(true); expect(fixture.componentInstance.reloadFailed()).toBe(false);
+    fixture.destroy(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('keeps blocked-navigation recovery usable when optional error feedback also throws', () => {
+    vi.useFakeTimers(); reload.mockImplementationOnce(() => { throw Error('navigation blocked'); });
+    error.mockImplementationOnce(() => { throw Error('feedback unavailable'); });
+    const fixture = render();
+    expect(() => fixture.componentInstance.reload()).not.toThrow(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button').disabled).toBe(false);
+    expect(fixture.componentInstance.reloadFailed()).toBe(true); expect(error).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
   it('does not emit browser telemetry or navigate during server rendering', () => {

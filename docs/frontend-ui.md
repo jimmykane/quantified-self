@@ -45,12 +45,16 @@ If navigation throws, the fallback stays usable and points to the browser's relo
 
 `DeferredLoadDiagnosticsService` reports one fixed-label warning per allowlisted area per app instance, including
 the specific public preview key. It adds no exception text, URL, account content or persisted tracking state.
+Reused error views report changes to their area input, while the shared service still deduplicates each area.
+Optional haptic failures cannot prevent reload or break the blocked-navigation fallback.
 Invalid area values are neither displayed nor sent. Server rendering does not report browser failures.
 This is shared rendering/recovery only: Training records, MCP tools/projections/approval, consent and provider
 actions are unchanged. Settings drafts remain in memory until the user explicitly reloads.
 
 `npm run test:workflows` includes a compiler-AST guard for external HTML templates, including hidden/nested files
-and nested defer blocks. New deferred views need the same eager fallback and a rendered error-state test.
+and nested defer blocks. It also rejects inline deferred template literals in runtime TypeScript, so those views
+cannot bypass the external-template guard; `.spec.ts` fixtures remain exempt. New deferred views need the same eager
+fallback and a rendered error-state test.
 Focused tests exercise the actual parent error blocks, cancellation, telemetry failure, SSR and haptic ownership.
 Browser verification must cover phone/desktop widths, both themes and a short map container with scrolling.
 The optimized production build with recovery/build tags exceeded the preceding total-script cap by 3.33 kB.

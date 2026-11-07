@@ -175,6 +175,19 @@ describe('PublicFeaturePreviewComponent', () => {
       expect(reload).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
     });
 
+  it('identifies a new Health preview while reusing an already failed defer block', async () => {
+    const captureMessage = vi.fn();
+    TestBed.overrideProvider(LoggerService, { useValue: { captureMessage } });
+    TestBed.overrideProvider(AppHapticsService, { useValue: { selection: vi.fn() } });
+    renderPlaceholder('health-sleep');
+    const [block] = await fixture.getDeferBlocks();
+    await block.render(DeferBlockState.Error); fixture.detectChanges();
+    const recovery = fixture.debugElement.query(By.directive(DeferredLoadErrorComponent)).componentInstance;
+    fixture.componentRef.setInput('previewKey', 'health-hrv'); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(DeferredLoadErrorComponent)).componentInstance).toBe(recovery);
+    expect(captureMessage.mock.calls.map(([, context]) => context.tags.area)).toEqual(['health-sleep', 'health-hrv']);
+  });
+
   it('hydrates the hero chart inside its persistent layout reservation', async () => {
     TestBed.overrideProvider(AppThemeService, { useValue: { appTheme: signal(AppThemes.Normal) } });
     TestBed.overrideProvider(EChartsLoaderService, { useValue: {
