@@ -227,15 +227,38 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect((await service.request('owner', 'status', () => true))).toBe(ready);
     expect(call.mock.calls.map(([, request]) => request.action)).toEqual(['prepare', 'status', 'status']);
   });
-  it('reports failed calendar-rest reads separately while invalidating coverage authority', async () => {
+  it.each(['permission-denied', 'deadline-exceeded'])('reports calendar-rest %s separately while invalidating coverage authority', async code => {
     const { service, logger, restDay$ } = setup(); TestBed.flushEffects();
     await service.request('owner', 'prepare', () => true);
-    restDay$.error({ code: 'permission-denied', message: 'private document path' });
+    restDay$.error({ code, message: 'private document path' });
     expect(service.cached('owner')).toBeNull();
     expect(logger.captureMessage).toHaveBeenCalledWith('Daily workout suggestion request failed', expect.objectContaining({
-      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: 'permission-denied' },
+      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: code },
     }));
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private document');
+  });
+  it('never dispatches generation when initial rest-day verification exhausts its read deadline', async () => {
+    const { service, restRevisions, call, logger } = setup(); restRevisions.clear();
+    const evidence = new Subject<TrainingRestDayV1 | null>();
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay').mockReturnValue(evidence);
+    const pending = service.request('owner', 'prepare', () => true);
+    const failure = { code: 'deadline-exceeded', message: 'private document path' };
+    const rejected = expect(pending).rejects.toBe(failure);
+    await Promise.resolve(); evidence.error(failure); await rejected;
+    expect(call).not.toHaveBeenCalled(); expect(service.cached('owner')).toBeNull();
+    expect(watch).toHaveBeenCalledTimes(2); // Root listener and the waiting request share the underlying day stream.
+    expect(logger.captureMessage).toHaveBeenCalledExactlyOnceWith('Daily workout suggestion request failed', expect.objectContaining({
+      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: 'deadline-exceeded' },
+    }));
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private document');
+  });
+  it.each(['session', 'date'] as const)('does not report a retired rest-day read as a failure of the new %s', async change => {
+    const { service, auth, restDay$, logger } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    if (change === 'session') auth.currentUser = { uid: 'owner' };
+    else vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    restDay$.error({ code: 'cancelled' });
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
   it('immediately hides a cached suggestion on calendar rest and reuses the daily result after removal', async () => {
     const { service, setRest, call, result } = setup(); TestBed.flushEffects();

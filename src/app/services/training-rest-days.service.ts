@@ -1,9 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, doc, docData, limit, orderBy, query, runTransaction, where } from 'app/firebase/firestore';
-import { Observable, Subject, defer, finalize, distinctUntilChanged, filter, map, merge, scan, shareReplay, tap, timeout } from 'rxjs';
+import { Observable, Subject, defer, finalize, distinctUntilChanged, filter, map, merge, retry, scan, shareReplay, tap, throwError, timeout, timer } from 'rxjs';
 import { TRAINING_REST_DAYS_COLLECTION, parseTrainingRestDayV1, validateTrainingRestDayRange, type TrainingRestDayV1 } from '@shared/training-rest-days';
 import { normalizeTrainingLocalDate } from '@shared/training-plans';
+
+const INITIAL_READ_TRANSIENT_CODES = new Set(['aborted', 'deadline-exceeded', 'internal', 'unavailable']);
+class RestDayReadTimeoutError extends Error {
+  readonly code = 'deadline-exceeded';
+  constructor() { super('Timed out verifying calendar rest-day state.'); }
+}
 
 @Injectable({ providedIn: 'root' })
 export class TrainingRestDaysService {
@@ -31,22 +37,33 @@ export class TrainingRestDaysService {
     const key = JSON.stringify([uid, localDate]), existing = this.dayStreams.get(key), authUser = this.auth.currentUser;
     if (existing?.authUser === authUser) return existing.stream$;
     const stream$ = defer(() => {
-      const source = {};
-      return merge(
-        docData(doc(this.firestore, 'users', uid, TRAINING_REST_DAYS_COLLECTION, localDate), { waitForServer: true })
-          .pipe(map(value => value === undefined ? null : parseTrainingRestDayV1(value, localDate))),
-        this.acknowledgements.pipe(filter(update => update.uid === uid && update.record.localDate === localDate), map(update => update.record)),
-      ).pipe(filter(record => this.auth.currentUser === authUser
-        && (record?.revision ?? 0) >= (this.observedRevision(uid, localDate) ?? 0)), timeout({ first: 15_000 }),
-        // An older SDK echo cannot undo an acknowledged write. False markers retain revisions.
-        scan((previous, value) => (value?.revision ?? 0) >= (previous?.revision ?? 0) ? value : previous, null as TrainingRestDayV1 | null),
-        distinctUntilChanged((left, right) => left?.revision === right?.revision && left?.isRestDay === right?.isRestDay),
-        tap(record => this.publish(uid, localDate, record?.revision ?? 0, source)),
-        // Keep the monotonic floor for write races, but stop treating disconnected evidence as current.
-        finalize(() => {
-          const value = this.revisions.get(key);
-          if (value?.liveSource === source) delete value.liveSource;
-        }));
+      let verified = false;
+      const current = () => !!authUser && authUser.uid === uid && this.auth.currentUser === authUser;
+      return defer(() => {
+        // Check again after the retry delay, including replacement sessions for the same UID.
+        if (!current()) throw Object.assign(new Error('The signed-in account changed.'), { code: 'cancelled' });
+        const source = {};
+        return merge(
+          docData(doc(this.firestore, 'users', uid, TRAINING_REST_DAYS_COLLECTION, localDate), { waitForServer: true })
+            .pipe(map(value => value === undefined ? null : parseTrainingRestDayV1(value, localDate))),
+          this.acknowledgements.pipe(filter(update => update.uid === uid && update.record.localDate === localDate), map(update => update.record)),
+        ).pipe(filter(record => current() && (record?.revision ?? 0) >= (this.observedRevision(uid, localDate) ?? 0)),
+          timeout({ first: 15_000, with: () => throwError(() => new RestDayReadTimeoutError()) }),
+          // An older SDK echo cannot undo an acknowledged write. False markers retain revisions.
+          scan((previous, value) => (value?.revision ?? 0) >= (previous?.revision ?? 0) ? value : previous, null as TrainingRestDayV1 | null),
+          distinctUntilChanged((left, right) => left?.revision === right?.revision && left?.isRestDay === right?.isRestDay),
+          tap(record => { verified = true; this.publish(uid, localDate, record?.revision ?? 0, source); }),
+          // Keep the monotonic floor for write races, but stop treating disconnected evidence as current.
+          finalize(() => {
+            const value = this.revisions.get(key);
+            if (value?.liveSource === source) delete value.liveSource;
+          }));
+      }).pipe(retry({ count: 1, delay: error => {
+        // Recover only initial reads. A failed live listener must immediately retire cache authority.
+        const code = (error as { code?: unknown } | null)?.code;
+        return !verified && current() && typeof code === 'string' && INITIAL_READ_TRANSIENT_CODES.has(code)
+          ? timer(500) : throwError(() => error);
+      } }));
     }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
     if (this.dayStreams.size >= 64) this.dayStreams.delete(this.dayStreams.keys().next().value!);
     this.dayStreams.set(key, { authUser, stream$ });
