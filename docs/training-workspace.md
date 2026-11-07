@@ -6172,6 +6172,12 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Pro daily workout suggestion
 
+The ready Today row previews the saved suggestion's rationale in at most two visual lines instead of repeating Pro
+membership copy. Review (or View guidance on event days) shows the complete explanation. Workout, rest and event-day
+suggestions reuse their existing saved rationale; regenerated suggestions retain their label. This presentation adds
+no reads, generation or allowance use. MCP impact: none; data, tools, consent and approval contracts are unchanged.
+The existing Help explanation of review, daily allowance and provider approval remains accurate.
+
 **Explicit regeneration (2026-11-04).** Today offers Regenerate for a ready workout/rest suggestion, and for exactly
 one planned, supported-sport workout. It opens the existing options/review dialog; opening alone never invokes the model.
 Event-day guidance, recorded activity and authored rest coverage are unchanged. A ready suggestion uses the new strict
