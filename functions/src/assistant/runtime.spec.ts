@@ -270,6 +270,7 @@ import { retry } from 'genkit/model/middleware';
 import { ActivityTypes, ChartDataCategoryTypes, DataDuration, TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
+  ASSISTANT_CREATE_PLAN_PROMPT,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
   ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
   ASSISTANT_PROMPT_EXAMPLES,
@@ -596,6 +597,8 @@ describe('Training preview model-tool selection', () => {
     expect(selectAssistantTrainingPreviewTool('Suggest whether another workout today is sensible. If it is, propose one standalone workout for today and delivery to Garmin and Suunto, but leave any change for my in-app review.'))
       .toBe('preview_create_planned_workout');
     expect(selectAssistantTrainingPreviewTool('Create a plan with three workouts.'))
+      .toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool(ASSISTANT_CREATE_PLAN_PROMPT))
       .toBe('preview_training_changes');
     expect(selectAssistantTrainingPreviewTool('Create a new training plan with two strength workouts.'))
       .toBe('preview_training_changes');
