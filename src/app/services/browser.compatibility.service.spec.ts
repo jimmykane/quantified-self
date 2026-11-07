@@ -46,6 +46,17 @@ describe('BrowserCompatibilityService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('detects request cancellation without requiring it on older browsers', () => {
+        expect(BrowserCompatibilityService.checkAbortControllerSupport()).toBe(true);
+        vi.stubGlobal('AbortController', undefined);
+        try {
+            expect(BrowserCompatibilityService.checkAbortControllerSupport()).toBe(false);
+            expect(dialog.open).not.toHaveBeenCalled();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('allows layout observation only when the browser supplies ResizeObserver', () => {
         const original = globalThis.ResizeObserver;
         try {

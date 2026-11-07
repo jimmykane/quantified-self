@@ -5,6 +5,22 @@ outbound activity/route delivery, Health/Sleep ingestion or Sports Lib reprocess
 It covers Garmin, Suunto, COROS and Wahoo source queues sharing `processWorkoutTask`.
 COROS's Training delivery availability is unrelated to its existing activity import.
 
+## Manual activity-upload deadline
+
+Manual QS archive uploads use the separate `uploadActivity` HTTP endpoint rather than these provider queues.
+The browser limits each attempt to five minutes, including authentication, App Check, transfer and response reads.
+It aborts the request when supported and continues with later files; late authentication/verification replies cannot
+start an expired upload. Successful/failed requests clear their deadline. Firebase handles normal ID-token caching
+and refresh rather than forcing a refresh for every file. No automatic retry is added: a timeout cannot establish
+whether the server committed the activity, so users must check their activities before resending that file.
+
+Monitoring coverage is **unchanged**: reviewed the #829 queue/worker signals and native HTTP boundary. This frontend
+deadline does not change `uploadActivity`, committed writes, provider ingestion, queues, retry budgets, telemetry,
+dashboard filters or alert policies. A client timeout is not a committed import failure or success. Existing client
+upload error reporting retains the fixed `upload_timeout` code; no account/file data or telemetry labels are added.
+The recovery change requires only a separately approved frontend release; it authorizes no provider replay or cloud
+configuration change. MCP, Training and outbound activity sending are unaffected.
+
 ## Implementation and activation boundary
 
 `QS Activity Imports`, eleven versioned log metrics and six alert policies were activated
