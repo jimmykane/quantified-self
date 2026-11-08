@@ -47,7 +47,8 @@ describe('bounded training sync notification scheduler', () => {
     mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/trainingSync` } })) });
     vi.mocked(sendTrainingNotification).mockImplementation(async uid => { if (uid === 'one') throw new Error('private-canary'); });
     await expect(run()).rejects.toThrow('Training sync notification sweep failed.'); expect(sendTrainingNotification).toHaveBeenCalledTimes(2);
-    expect(mocks.log).toHaveBeenCalledWith('[TrainingSyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+    expect(mocks.log).toHaveBeenCalledWith('[TrainingSyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
+      failureStage: 'account_processing', errorCode: 'unknown' });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/private-canary|TrainingSyncPushSweep/);
   });
 });
