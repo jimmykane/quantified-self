@@ -1,6 +1,7 @@
 <main class="qs-workspace-page field-guide-page" aria-labelledby="field-guide-title">
     <mat-card appearance="outlined" class="field-guide qs-glass-card-panel" [class.field-guide--intro]="stage() === 'intro'"
-        [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
+        [class.field-guide--compact]="isCompareFlow() && stage() === 'privacy'" [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
+        @if (!isCompareFlow() || stage() !== 'privacy') {
         <aside class="field-guide-hero" aria-label="A runner on a mountain trail">
             <img class="hero-image" src="assets/onboarding/field-guide.jpg" alt="" width="1024" height="1536" fetchpriority="high">
             <div class="hero-copy">
@@ -9,6 +10,7 @@
                 <span class="hero-caption">Quantified Self</span>
             </div>
         </aside>
+        }
 
         <div class="field-guide-body">
             <header class="field-guide-header">
@@ -46,9 +48,14 @@
                     <p class="eyebrow">{{ setupProgress() }}</p>
                     @switch (stage()) {
                         @case ('start') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">How would you like to start?</h1>
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">What would you like to do first?</h1>
                             <p class="lead">Choose your first step in QS. After account setup, we’ll take you there.</p>
                             <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
+                                <mat-radio-button value="compare">
+                                    <span class="choice-title">Compare recordings</span>
+                                    <span class="choice-description">Compare two or more recordings of the same workout.</span>
+                                    <span class="choice-detail">Included with Starter</span>
+                                </mat-radio-button>
                                 <mat-radio-button value="connect">
                                     <span class="choice-title">Connect my watch</span>
                                     <span class="choice-description">Bring activities in from Garmin, Suunto, COROS or Wahoo.</span>
@@ -66,20 +73,23 @@
                                 </mat-radio-button>
                             </mat-radio-group>
                             <div class="onboarding-actions">
-                                <button mat-button type="button" (click)="back()">Back</button>
+                                <button mat-button type="button" (click)="showIntro()">Explore QS</button>
                                 <button mat-flat-button type="button" class="qs-mat-primary" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                             </div>
                         }
                         @case ('privacy') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">Review your account preferences.</h1>
-                            <p class="lead">Accept the required policies, then choose whether to enable analytics and marketing.</p>
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Get ready to compare.' : 'Review your account preferences.' }}</h1>
+                            <p class="lead">{{ isCompareFlow() ? 'Compare recordings from the same workout. No watch connection needed.' : 'Accept the required policies, then choose whether to enable analytics and marketing.' }}</p>
+                            @if (isCompareFlow()) {
+                                <p class="setup-note">{{ hasPaidMembership() ? 'Your membership includes file comparison.' : 'File comparison is included with Starter.' }} Uploads and new comparisons use your activity allowance.</p>
+                            }
                             <form [formGroup]="termsFormGroup" class="onboarding-form" (ngSubmit)="onTermsSubmit()">
                                 <div class="policy-list">
                                     @for (policy of policies; track policy.id; let last = $last) {
                                         <section class="policy-item">
-                                            <h2>{{ policy.title }} <span class="policy-requirement">{{ policy.isOptional ? 'Optional' : 'Required' }}</span></h2>
-                                            @if (policy.subtitle) { <p class="policy-subtitle">{{ policy.subtitle }}</p> }
-                                            <mat-checkbox class="qs-checkbox-primary" [required]="!policy.isOptional" [formControlName]="policy.formControlName" (change)="onPolicyCheckboxChange(policy.id, $event.checked)">{{ policy.checkboxLabel }}</mat-checkbox>
+                                            @if (!isCompareFlow()) { <h2>{{ policy.title }} <span class="policy-requirement">{{ policy.isOptional ? 'Optional' : 'Required' }}</span></h2> }
+                                            @if (policy.subtitle && !isCompareFlow()) { <p class="policy-subtitle">{{ policy.subtitle }}</p> }
+                                            <mat-checkbox class="qs-checkbox-primary" [required]="!policy.isOptional" [formControlName]="policy.formControlName" (change)="onPolicyCheckboxChange(policy.id, $event.checked)">{{ policy.checkboxLabel }}@if (isCompareFlow()) { <span class="policy-requirement">{{ policy.isOptional ? 'Optional' : 'Required' }}</span> }</mat-checkbox>
                                             <button mat-button type="button" class="policy-read-more" [attr.aria-expanded]="expandedPolicyId === policy.id" [attr.aria-controls]="'policy-details-' + policy.id" (click)="togglePolicyDetails(policy.id)">{{ expandedPolicyId === policy.id ? 'Hide details' : 'Read more' }}</button>
                                             <div class="policy-details" [id]="'policy-details-' + policy.id" [hidden]="expandedPolicyId !== policy.id">
                                                 @for (item of policy.content; track $index) { <div [innerHTML]="item"></div> }
@@ -92,7 +102,7 @@
                                 <div class="onboarding-actions">
                                     <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
                                     <button mat-flat-button type="submit" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading || !user">
-                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : 'Save and continue' }}</span></span>
+                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Continue to Compare' : 'Continue with Starter to Compare') : 'Save and continue' }}</span></span>
                                     </button>
                                 </div>
                             </form>

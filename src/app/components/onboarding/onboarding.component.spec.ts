@@ -141,6 +141,7 @@ describe('OnboardingComponent', () => {
 
     it.each([0, 1, 2])('can skip intro chapter %s without accepting consent or choosing a plan', async chapter => {
         await setupComponent(true);
+        component.showIntro();
         component.chapterIndex.set(chapter);
         fixture.detectChanges();
         clickButton('Skip the intro');
@@ -153,6 +154,7 @@ describe('OnboardingComponent', () => {
 
     it('takes the full tour forward and back with focus on the new heading', async () => {
         await setupComponent(true);
+        clickButton('Explore QS');
         clickButton('Next');
         expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Track your training');
         await fixture.whenStable();
@@ -172,7 +174,6 @@ describe('OnboardingComponent', () => {
         { choice: 'explore', path: '/dashboard' },
     ] as const)('completes $choice through existing pricing and the $path workspace', async ({ choice, path }) => {
         await setupComponent(true);
-        clickButton('Skip the intro');
         expect((fixture.nativeElement.querySelector('.onboarding-actions button[mat-flat-button]') as HTMLButtonElement).disabled).toBe(true);
         const radio = fixture.nativeElement.querySelector(`mat-radio-button[value="${choice}"] input`) as HTMLInputElement;
         radio.click();
@@ -188,6 +189,122 @@ describe('OnboardingComponent', () => {
         await component.finishOnboarding();
         expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
         expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
+    it.each(['/tools/compare', '/tools/compare/saved'])('opens compact account setup directly for %s and finishes without pricing', async path => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: path });
+        await setupComponent(true);
+        expect(component.stage()).toBe('privacy');
+        expect(component.isCompareFlow()).toBe(true);
+        expect(fixture.nativeElement.querySelector('.field-guide-hero')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.starting-points')).toBeNull();
+        expect(fixture.debugElement.query(By.directive(PricingComponent))).toBeNull();
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+        expect(component.termsFormGroup.get('acceptTrackingPolicy')!.value).toBe(false);
+        expect(component.termsFormGroup.get('acceptMarketingPolicy')!.value).toBe(false);
+        setRequiredPoliciesAccepted();
+        fixture.detectChanges();
+        clickButton('Continue with Starter to Compare');
+        await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledWith([path]));
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
+        expect(mockUserService.setFreeTier).toHaveBeenCalledOnce();
+        expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
+    });
+
+    it('lets a general signup choose Compare and change their starting point before saving', async () => {
+        await setupComponent(true);
+        const radio = fixture.nativeElement.querySelector('mat-radio-button[value="compare"] input') as HTMLInputElement;
+        radio.click();
+        fixture.detectChanges();
+        // The choice does not shift the starting-point layout mid-interaction.
+        expect(fixture.nativeElement.querySelector('.field-guide-hero')).toBeTruthy();
+        clickButton('Continue');
+        expect(component.stage()).toBe('privacy');
+        expect(fixture.nativeElement.querySelector('.field-guide-hero')).toBeNull();
+        clickButton('Back');
+        expect(component.stage()).toBe('start');
+        expect(component.startChoice()).toBe('compare');
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+        component.chooseStart('upload');
+        expect(component.isCompareFlow()).toBe(false);
+        expect(component.completionPath).toBe('/dashboard');
+    });
+
+    it('resumes Compare with saved consent but waits for the explicit Starter action', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ start: 'compare' });
+        await setupComponent();
+        component.user = { ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as any;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        await fixture.whenStable();
+        expect(component.stage()).toBe('privacy');
+        expect(component.termsFormGroup.valid).toBe(true);
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        await component.onTermsSubmit();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
+    });
+
+    it('keeps an existing paid membership when the Compare user accepts missing policies', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+        mockUserService.hasPaidAccess.mockResolvedValue(true);
+        await setupComponent(true);
+        expect(component.hasPaidMembership()).toBe(true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain('Continue to Compare');
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
+    });
+
+    it('keeps the compact form retryable when Starter setup fails', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+        await setupComponent(true);
+        setRequiredPoliciesAccepted();
+        mockUserService.setFreeTier.mockRejectedValueOnce(new Error('offline'));
+        await component.onTermsSubmit();
+        expect(component.stage()).toBe('privacy');
+        expect(component.termsFormGroup.enabled).toBe(true);
+        expect(component.termsFormGroup.valid).toBe(true);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
+        await component.onTermsSubmit();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
+    });
+
+    it('does not allow Compare setup to bypass missing required consent', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
+        await setupComponent();
+        await component.onTermsSubmit();
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('preserves an explicit membership destination over a remembered Compare choice', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ start: 'compare', returnUrl: '/subscriptions?priceId=price_pro_monthly' });
+        await setupComponent();
+        expect(component.isCompareFlow()).toBe(false);
+        expect(component.completionPath).toBe('/subscriptions');
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        expect(component.stage()).toBe('plan');
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+    });
+
+    it('lets a direct Compare visitor go back without saving any account choices', async () => {
+        routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare/saved' });
+        await setupComponent(true);
+        clickButton('Back');
+        await fixture.whenStable();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare/saved']);
+        expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
     });
 
     it('keeps the starting point and consent choices when moving back', async () => {
@@ -250,9 +367,11 @@ describe('OnboardingComponent', () => {
         component.chooseStart('upload');
         component.chooseStart('upload');
         expect(haptics.selection).toHaveBeenCalledOnce();
+        component.showIntro();
+        component.showIntro();
         component.skipIntro();
         component.skipIntro();
-        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
     });
 
     it('shows a recoverable save error, retains form choices and signals failure only after rejection', async () => {
@@ -373,7 +492,7 @@ describe('OnboardingComponent', () => {
         component.user = { ...mockUser, uid: 'another-account' } as any;
         component.ngOnChanges({ user: { firstChange: false } as any });
         expect(component.termsFormGroup.valid).toBe(false);
-        expect(component.stage()).toBe('intro');
+        expect(component.stage()).toBe('start');
         expect(component.termsFormGroup.get('acceptPrivacyPolicy')!.value).toBe(false);
         await fixture.whenStable();
     });
@@ -519,9 +638,9 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptMarketingPolicy')).toBeTruthy();
     });
 
-    it('starts with an optional intro without loading prices or saving consent', async () => {
+    it('starts with the starting-point choice without loading prices or saving consent', async () => {
         await setupComponent(false);
-        expect(component.stage()).toBe('intro');
+        expect(component.stage()).toBe('start');
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
         expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
     });
@@ -840,7 +959,7 @@ describe('OnboardingComponent', () => {
         mockUserService.hasPaidAccess.mockResolvedValue(true);
         const finish = vi.spyOn(component, 'finishOnboarding');
         await (component as any).checkAndAdvance();
-        expect(component.stage()).toBe('intro');
+        expect(component.stage()).toBe('start');
         expect(finish).not.toHaveBeenCalled();
     });
 
@@ -943,7 +1062,7 @@ describe('OnboardingComponent', () => {
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(returningComponent.user, { onboardingCompleted: true });
             expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
             returnFixture.detectChanges();
-            expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(`Continue to ${label}`);
+            expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(path === '/tools/compare' ? 'Continue with Starter to Compare' : `Continue to ${label}`);
             expect(returningComponent.isLoading).toBe(false);
         },
     );

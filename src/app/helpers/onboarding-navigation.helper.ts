@@ -1,11 +1,11 @@
 import { membershipPriceIdFromReturnUrl } from './membership-selection.helper';
 import { serviceSetupFromReturnUrl } from './service-setup-redirect.helper';
 
-export type OnboardingStart = 'connect' | 'upload' | 'explore';
+export type OnboardingStart = 'compare' | 'connect' | 'upload' | 'explore';
 type QueryParams = { get(name: string): string | null };
 
 export function onboardingStart(value: string | null): OnboardingStart | null {
-    return value === 'connect' || value === 'upload' || value === 'explore' ? value : null;
+    return value === 'compare' || value === 'connect' || value === 'upload' || value === 'explore' ? value : null;
 }
 
 export function onboardingReturnTarget(params: QueryParams) {
@@ -16,10 +16,10 @@ export function onboardingReturnTarget(params: QueryParams) {
     // Keep destinations explicit; never accept an external/client OAuth callback here.
     const path = priceId ? '/subscriptions'
         : serviceSetup ? '/services'
-            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions' ? returnUrl
+            : returnUrl === '/tools/compare' || returnUrl === '/tools/compare/saved' || returnUrl === '/subscriptions' ? returnUrl
                 : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
                     ? '/mcp/authorize' : '/dashboard';
-    const label = path === '/tools/compare' ? 'Compare'
+    const label = path === '/tools/compare' || path === '/tools/compare/saved' ? 'Compare'
         : path === '/subscriptions' ? 'Subscriptions'
             : path === '/services' ? 'Connections'
                 : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';

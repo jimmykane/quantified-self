@@ -137,11 +137,12 @@
 
         <mat-card-content>
           @if (needsAccountSetup()) {
-          <p>Complete your account setup before selecting files. You can continue with the free plan.</p>
+          <p>Review your account choices, then return here to add files. File comparison is included with Starter.</p>
           <button mat-stroked-button type="button" (click)="completeAccountSetup()">
             Complete account setup
           </button>
           }
+          <p class="comparison-guidance">Add two or more recordings of the same workout to compare GPS tracks and shared recorded measurements.</p>
           <div class="upload-composer">
             <input
               class="upload-title-input"
@@ -193,6 +194,7 @@
           </div>
 
           @if (selectedFileItems().length > 0) {
+          <p class="comparison-guidance">For benchmark reports, use recordings with timestamps that overlap. Available measurements depend on what your files contain.</p>
           <mat-list class="selected-files" aria-label="Selected comparison files">
             @for (item of selectedFileItems(); track item.index) {
             <mat-list-item>
@@ -1019,6 +1021,11 @@
     } @else {
     <ng-container *ngTemplateOutlet="uploadPanelTemplate"></ng-container>
     <ng-container *ngTemplateOutlet="savedComparisonsPanelTemplate"></ng-container>
+    }
+    @if (comparisonItems().length > 0) {
+    <div class="explore-qs-link">
+      <button mat-button type="button" (click)="exploreQs()">Explore more of QS <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+    </div>
     }
   </section>
   }

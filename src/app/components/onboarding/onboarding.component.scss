@@ -123,3 +123,21 @@ h1:focus { outline: none; }
     .intro-actions .next-action { flex: 0 1 auto; }
     .onboarding-actions:not(.intro-actions) { flex-direction: column-reverse; align-items: stretch; }
 }
+
+// Compare needs a compact account step, without the general product artwork or tour.
+.field-guide--compact {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 760px;
+    min-height: 0;
+}
+.field-guide--compact .guide-content { margin-top: 24px; }
+.field-guide--compact .onboarding-form { margin-top: 24px; }
+.field-guide--compact .policy-list { gap: 12px; }
+.field-guide--compact .policy-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.field-guide--compact .policy-details { grid-column: 1 / -1; }
+.field-guide--compact .policy-requirement { margin-left: 0; display: block; }
+@include bp.xsmall {
+    .field-guide--compact .policy-item { grid-template-columns: minmax(0, 1fr); }
+    .field-guide--compact .policy-read-more { justify-self: start; }
+}
+.field-guide--compact .setup-note { margin-top: 16px; }

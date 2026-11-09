@@ -1171,3 +1171,10 @@ mat-paginator {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
 }
+
+.comparison-guidance {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 16px;
+}
+.explore-qs-link { margin-top: 16px; }

@@ -21,7 +21,7 @@ import { LoggerService } from '../../services/logger.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart } from '../../helpers/onboarding-navigation.helper';
+import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { of } from 'rxjs';
 
 @Component({
@@ -44,21 +44,23 @@ import { of } from 'rxjs';
 })
 export class OnboardingComponent implements OnInit, OnChanges {
     @Input() user!: User;
-    readonly stage = signal<'intro' | 'start' | 'privacy' | 'plan'>('intro');
+    readonly stage = signal<'intro' | 'start' | 'privacy' | 'plan'>('start');
     readonly chapterIndex = signal(0);
     readonly chapters = FIELD_GUIDE_CHAPTERS;
     readonly chapter = computed(() => this.chapters[this.chapterIndex()]);
-    readonly startChoice = signal<'connect' | 'upload' | 'explore' | null>(null);
+    readonly startChoice = signal<OnboardingStart | null>(null);
     readonly errorMessage = signal('');
     readonly stepHeading = viewChild<ElementRef<HTMLElement>>('stepHeading');
     private readonly injector = inject(Injector);
     private readonly haptics = inject(AppHapticsService);
     private completing = false;
     private advancing = false;
+    private hasCheckedInitialSetup = false;
     private formUserId: string | undefined;
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
-    readonly setupProgress = computed(() => this.stage() === 'start' ? '01 / Your starting point'
+    readonly isCompareFlow = computed(() => this.completionTarget().path === '/tools/compare' || this.completionTarget().path === '/tools/compare/saved');
+    readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'One step before your comparison' : this.stage() === 'start' ? '01 / Your starting point'
         : this.stage() === 'privacy' ? '02 / Account preferences' : '03 / Your membership');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
         : this.stage() === 'start' ? 'Choose your first step.'
@@ -81,6 +83,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
         .sort((a, b) => Number(!!a.isOptional) - Number(!!b.isOptional));
     termsFormGroup!: FormGroup;
     isPro = false;
+    readonly hasPaidMembership = signal(false);
 
     protected readonly navigationEffects = inject(ShellNavigationEffectsService);
     private authService = inject(AppAuthService);
@@ -100,7 +103,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     private readonly completionTarget = computed(() => {
         const target = this.returnTarget();
-        return !this.hasReturnDestination() && this.startChoice() === 'connect'
+        if (this.hasReturnDestination()) return target;
+        if (this.startChoice() === 'compare') return { ...target, path: '/tools/compare', label: 'Compare' };
+        return this.startChoice() === 'connect'
             ? { ...target, path: '/services', label: 'Connections' } : target;
     });
 
@@ -109,6 +114,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     ngOnInit() {
         this.startChoice.set(onboardingStart(this.completionQueryParams().get('start')));
+        this.stage.set(this.hasReturnDestination() || this.isCompareFlow() ? 'privacy' : 'start');
         // Log onboarding start
         this.analyticsService.logEvent('tutorial_begin');
 
@@ -132,12 +138,14 @@ export class OnboardingComponent implements OnInit, OnChanges {
         const accountChanged = this.formUserId !== user.uid;
         if (accountChanged) {
             if (this.formUserId) {
-                this.stage.set('intro');
+                this.stage.set(this.hasReturnDestination() || this.isCompareFlow() ? 'privacy' : 'start');
                 this.chapterIndex.set(0);
                 this.errorMessage.set('');
                 this.expandedPolicyId = null;
             }
             this.savedConsent = null;
+            this.hasCheckedInitialSetup = false;
+            this.hasPaidMembership.set(false);
             this.canFinish = false;
             this.formUserId = user.uid;
         }
@@ -210,11 +218,14 @@ export class OnboardingComponent implements OnInit, OnChanges {
             if (this.destroyRef.destroyed || this.user !== user || this.isLoading) return;
             const termsAccepted = this.policies.filter(p => !p.isOptional).every(policy =>
                 (user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true);
+            this.hasPaidMembership.set(isSubscribed);
             this.canFinish = isSubscribed || (user as AppUserInterface).onboardingCompleted === true;
+            const shouldResumeMembership = !this.hasCheckedInitialSetup || this.stage() === 'intro' || this.stage() === 'start';
+            this.hasCheckedInitialSetup = true;
             if (!termsAccepted) return;
             if (this.canFinish) {
                 await this.finishOnboarding();
-            } else if (this.stage() === 'intro') {
+            } else if (!this.isCompareFlow() && shouldResumeMembership) {
                 this.moveTo('plan');
             }
         } catch (error) {
@@ -224,6 +235,13 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.advancing = false;
             if (!this.destroyRef.destroyed && this.user !== user) void this.checkAndAdvance();
         }
+    }
+
+    showIntro() {
+        if (this.isLoading || this.stage() !== 'start') return;
+        this.haptics.selection();
+        this.chapterIndex.set(0);
+        this.moveTo('intro');
     }
 
     nextChapter() {
@@ -250,7 +268,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
         this.moveTo(this.hasReturnDestination() ? 'privacy' : 'start');
     }
 
-    chooseStart(choice: 'connect' | 'upload' | 'explore') {
+    chooseStart(choice: OnboardingStart) {
         if (this.startChoice() === choice) return;
         this.startChoice.set(choice);
         void this.router.navigate([], {
@@ -260,7 +278,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     continueFromStart() {
-        if (!this.startChoice()) return;
+        if (this.isLoading || !this.startChoice()) return;
         this.haptics.selection();
         this.moveTo('privacy');
     }
@@ -268,6 +286,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
     back() {
         if (this.isLoading || this.isPricingLoading) return;
         this.haptics.selection();
+        if (this.stage() === 'privacy' && this.hasReturnDestination() && this.isCompareFlow()) {
+            void this.navigateAfterOnboarding();
+            return;
+        }
         const previous = this.stage() === 'plan' ? 'privacy'
             : this.stage() === 'privacy' && !this.hasReturnDestination() ? 'start' : 'intro';
         this.moveTo(previous);
@@ -330,9 +352,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.analyticsService.logEvent('onboarding_step', { step_index: 1, step_label: 'Legal consent' });
             const isSubscribed = await this.userService.hasPaidAccess();
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-            this.haptics.success();
+            this.hasPaidMembership.set(isSubscribed);
+            if (!this.isCompareFlow()) this.haptics.success();
             this.isLoading = false;
-            if (isSubscribed) {
+            if (isSubscribed || this.isCompareFlow()) {
                 await this.finishOnboarding();
             } else {
                 this.moveTo('plan');
@@ -366,9 +389,8 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 await this.navigateAfterOnboarding();
                 return;
             }
-            // Implicit Free Tier Selection:
-            // If the user clicks continue but hasn't explicitly selected a plan (canFinish is false),
-            // and they don't have paid access, we assume they want the Free Tier.
+            // Reuse Starter setup for either the explicit Compare action or
+            // Continue on pricing. Existing paid membership always takes precedence.
             if (!this.canFinish) {
                 const isPro = await this.userService.hasPaidAccess();
                 if (!this.isCurrentUser(user.uid)) return;
@@ -386,7 +408,8 @@ export class OnboardingComponent implements OnInit, OnChanges {
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
-            await this.navigateAfterOnboarding();
+            const navigated = await this.navigateAfterOnboarding();
+            if (navigated && this.isCompareFlow()) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error completing onboarding:', error);

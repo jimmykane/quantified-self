@@ -73,9 +73,16 @@ describe('help.content', () => {
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 
-  it('explains the skippable Field guide and existing setup handoffs', () => {
+  it('explains intent-first setup, the optional Field guide and existing handoffs', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(content).toContain('**Skip the intro**');
+    expect(content).toContain('**Compare recordings**');
+    expect(content).toContain('**Explore QS**');
+    expect(content).toContain('without the tour, watch setup, or pricing step');
+    expect(content).toContain('**Continue with Starter to Compare**');
+    expect(content).toContain('Existing paid memberships stay unchanged');
+    expect(content).toContain('Saved comparisons links return to the saved list');
+    expect(content).toContain('**Explore more of QS**');
     expect(content).toContain('not required account setup');
     expect(content).toContain('optional and start unchecked');
     expect(content).toContain('do not start a payment, upload, or provider connection');

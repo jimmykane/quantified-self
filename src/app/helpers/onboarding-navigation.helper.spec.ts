@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart, safeOnboardingResumeUrl } from './onboarding-navigation.helper';
 
 describe('onboarding navigation', () => {
-    it.each(['connect', 'upload', 'explore'])('preserves %s across checkout and reload', start => {
+    it.each(['compare', 'connect', 'upload', 'explore'])('preserves %s across checkout and reload', start => {
         const url = onboardingResumeUrl(new URLSearchParams({ start }));
         expect(url).toBe(`/onboarding?start=${start}`);
         expect(safeOnboardingResumeUrl(url)).toBe(url);
@@ -14,6 +14,7 @@ describe('onboarding navigation', () => {
         { returnUrl: '/subscriptions?priceId=price_pro_monthly', path: '/subscriptions', priceId: 'price_pro_monthly' },
         { returnUrl: '/mcp/authorize', request_id: 'request_123', path: '/mcp/authorize', requestId: 'request_123' },
         { returnUrl: '/tools/compare', path: '/tools/compare' },
+        { returnUrl: '/tools/compare/saved', path: '/tools/compare/saved' },
     ])('round trips the existing $path destination', ({ returnUrl, request_id, ...expected }) => {
         const params = new URLSearchParams({ returnUrl, start: 'explore' });
         if (request_id) params.set('request_id', request_id);

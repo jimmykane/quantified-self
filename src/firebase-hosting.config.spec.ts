@@ -321,6 +321,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
+    // Getting Started help covers intent-first setup and the compact Compare path (2026-11-09).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.

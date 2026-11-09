@@ -578,12 +578,14 @@ export const HELP_SECTIONS: HelpSection[] = [
     content: `## Start in three steps
 
 1. Sign in with an email magic link, Google, or GitHub.
-2. Follow the optional **Field guide** introduction, choose a starting point, and accept the required policies.
+2. Choose what you want to do first, then review the required account policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
 
-**Field guide** works on desktop and mobile. **Skip the intro** is available on every introductory chapter; it skips only the tour, not required account setup. Choose **Connect my watch**, **Start with an activity file**, or **Let me look around**. These choices do not start a payment, upload, or provider connection.
+**Field guide** works on desktop and mobile. Choose **Compare recordings**, **Connect my watch**, **Start with an activity file**, or **Let me look around**. **Explore QS** opens the optional introduction from the starting-point screen. **Skip the intro** is available on every introductory chapter; it skips only the tour, not required account setup. These choices do not start a payment, upload, or provider connection.
 
-Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. After saving your choices, the membership step shows current plans and offers. Starter includes manual uploads; provider connections require Pro. You can go back to change your starting point or privacy choices before finishing. Your starting point is kept when you reload or return from checkout. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.
+Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. For general app setup, after saving your choices, the membership step shows current plans and offers. Starter includes manual uploads; provider connections require Pro. You can go back to change your starting point or privacy choices before finishing. Your starting point is kept when you reload or return from checkout. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.
+
+**Just comparing files?** Enter through [Compare](/tools/compare), or choose **Compare recordings** during setup. You go straight to a compact account-preferences screen, without the tour, watch setup, or pricing step. Select **Continue with Starter to Compare** after reviewing the policies. Existing paid memberships stay unchanged. Uploads and new comparisons use your activity allowance. Saved comparisons links return to the saved list. Add two or more recordings of the same workout; benchmark reports need overlapping timestamps, and available measurements depend on the files. Once you have a saved comparison, **Explore more of QS** opens Getting Started help when you want it.
 
 After setup, the watch choice opens **Connections**, where you select a provider and review its permissions. The file choice opens **Dashboard**; choose **Upload** to select your activity file. **Let me look around** also opens Dashboard so you can add data later. Existing checkout, connection, upload, and error-recovery screens handle the next steps.
 
