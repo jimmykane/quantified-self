@@ -93,6 +93,24 @@ describe('Merged toolbar filter rendering', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('keeps week navigation available for Last week with the legacy second-precision end bound', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const fixture = TestBed.createComponent(MergedFilterTestHost);
+      fixture.componentInstance.range = DateRanges.lastWeek;
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const previous = fixture.nativeElement.querySelector('[aria-label="Previous week"]') as HTMLButtonElement;
+      expect(previous).toBeTruthy();
+      expect(haptics.selection).not.toHaveBeenCalled();
+      previous.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.componentInstance.requests).toEqual([expect.objectContaining({
+        dateRange: DateRanges.custom,
+        startDate: new Date(2026, 9, 19), endDate: new Date(2026, 9, 25, 23, 59, 59, 999),
+      })]);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('keeps the merged checkmark aligned when the parent rejects a filter change', async () => {
     const fixture = TestBed.createComponent(MergedFilterTestHost);
     fixture.detectChanges();
@@ -303,6 +321,20 @@ describe('EventSearchComponent', () => {
     component.ngOnInit();
     return { component, hapticsService };
   };
+
+  it.each([
+    { end: new Date(2026, 10, 8), weekly: true },
+    { end: new Date(2026, 10, 8, 23, 59, 59), weekly: true },
+    { end: new Date(2026, 10, 9), weekly: false },
+  ])('respects the inclusive custom end date when recognizing a full week: $end', ({ end, weekly }) => {
+    const { component, hapticsService } = createComponent(undefined, search => {
+      search.selectedDateRange = DateRanges.custom;
+      search.selectedStartDate = new Date(2026, 10, 2);
+      search.selectedEndDate = end;
+    });
+    expect(component.toolbarWeekNavigation).toBe(weekly);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
 
   it('should update selected range and trigger search when a date toggle is selected', async () => {
     const { component, hapticsService } = createComponent();

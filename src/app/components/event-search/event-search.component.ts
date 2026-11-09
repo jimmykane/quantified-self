@@ -328,9 +328,14 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   private syncToolbarWeek(): void {
     const { startDate, endDate } = this.resolveCurrentRangeDates();
     const week = resolveTrainingLogWeek(startDate ? formatActivityCalendarDateParam(startDate) : null, new Date(), this.startOfTheWeek);
+    // Legacy presets can end at second precision. Custom dates are inclusive,
+    // so midnight on the following Monday must still count as an eighth day.
+    const endsWithWeek = !!endDate && (
+      (this.selectedDateRange !== DateRanges.custom && +endDate === +week.end)
+      || +this.normalizeEndDate(endDate) + 1 === +week.end);
     this.toolbarWeekNavigation = !!startDate && !!endDate
       && [DateRanges.thisWeek, DateRanges.lastWeek, DateRanges.custom].includes(this.selectedDateRange)
-      && +startDate === +week.start && (+endDate === +week.end || +endDate + 1 === +week.end);
+      && +startDate === +week.start && endsWithWeek;
     this.toolbarWeekStart = week.start;
     this.toolbarWeekEnd = week.lastDay;
     this.toolbarIsCurrentWeek = +week.start === +resolveTrainingLogWeek(null, new Date(), this.startOfTheWeek).start;

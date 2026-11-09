@@ -278,6 +278,27 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
+  it.each(['clear', 'custom', 'all'] as const)('clears a historical week anchor when leaving weeks through %s without a duplicate URL query', async action => {
+    const c = await setup();
+    c.params$.next(convertToParamMap({ period: 'calendar-week', week: '2026-10-05' })); await render(c);
+    c.events.getEventSummariesBy.mockClear();
+    if (action === 'clear') c.component.clearFilters();
+    else if (action === 'custom') {
+      c.component.selectPeriod('custom');
+      c.component.customDateForm.setValue({ start: dayjs('2026-09-01'), end: dayjs('2026-09-10') });
+      c.component.applyCustomRange();
+    } else {
+      c.component.selectPeriod('all');
+      c.dialogs[0].closed$.next(true);
+    }
+    await render(c);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    c.params$.next(convertToParamMap(Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams)
+      .filter(([, value]) => value !== null)))); await render(c);
+    expect(c.component.weekAnchor()).toBeNull();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+  });
+
   it('retains the selected calendar week when cancelling All dates', async () => {
     const c = await setup();
     c.params$.next(convertToParamMap({ period: 'calendar-week', week: '2026-11-04' })); await render(c);

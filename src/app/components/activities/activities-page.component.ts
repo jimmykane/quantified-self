@@ -315,6 +315,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.includeMergedEvents.set(false);
     const periodChanged = this.period() !== this.defaultPeriod;
     this.period.set(this.defaultPeriod);
+    this.weekAnchor.set(null);
     this.customDates.set(null);
     if (periodChanged) this.loadHistory(true);
     this.filtersChanged();
@@ -332,6 +333,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.closeAllDatesWarning();
     this.customDates.set(dates);
     this.period.set('custom');
+    this.weekAnchor.set(null);
     this.loadHistory(true);
     this.filtersChanged();
   }
@@ -399,6 +401,7 @@ export class ActivitiesPageComponent implements OnInit {
       if (this.user()?.uid !== user.uid || this.owner !== owner || owner !== this.auth.currentUser) return;
       if (confirmed === true) {
         this.period.set('all');
+        this.weekAnchor.set(null);
         this.customDates.set(null);
         this.loadHistory(true);
         // ConfirmationDialogComponent owns feedback for its confirmation button.
