@@ -1342,6 +1342,19 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings.tableSettings.selectedColumns).toEqual([DataHeartRateAvg.type, 'Distance']);
         });
 
+        it.each([
+            { name: 'empty selection', columns: [], empty: true },
+            { name: 'missing selection', columns: undefined, empty: false },
+            { name: 'null selection', columns: null, empty: false },
+            { name: 'non-array selection', columns: 'Distance', empty: false },
+            { name: 'invalid entries', columns: [null, ''], empty: false },
+        ])('normalizes activity-table columns: $name', ({ columns, empty }) => {
+            const settings = AppUserUtilities.fillMissingAppSettings({ settings: {
+                dashboardSettings: { tableSettings: { selectedColumns: columns } },
+            } } as unknown as User);
+            expect(settings.dashboardSettings.tableSettings.selectedColumns).toEqual(empty ? [] : AppUserUtilities.getDefaultSelectedTableColumns());
+        });
+
         it('should normalize sport-specific event lap table columns without discarding an empty layout', () => {
             const user = {
                 settings: {

@@ -685,8 +685,11 @@ export class AppUserUtilities extends AppUserAccess {
         settings.dashboardSettings.tableSettings.eventsPerPage = isNumber(settings.dashboardSettings.tableSettings.eventsPerPage)
             ? settings.dashboardSettings.tableSettings.eventsPerPage
             : defaultTableSettings.eventsPerPage;
-        const normalizedSelectedColumns = AppUserUtilities.normalizeTableSelectedColumns(settings.dashboardSettings.tableSettings.selectedColumns);
+        const selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns;
+        const normalizedSelectedColumns = AppUserUtilities.normalizeTableSelectedColumns(selectedColumns);
+        // An explicit empty layout is a saved choice; absent or malformed settings still use defaults.
         settings.dashboardSettings.tableSettings.selectedColumns = normalizedSelectedColumns.length > 0
+            || (Array.isArray(selectedColumns) && selectedColumns.length === 0)
             ? normalizedSelectedColumns
             : AppUserUtilities.getDefaultSelectedTableColumns();
 

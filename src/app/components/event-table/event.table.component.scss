@@ -1,6 +1,24 @@
 @use '../../../styles/breakpoints' as bp;
 @use '@angular/material' as mat;
 
+// Density uses Material's public tokens; phone controls retain their normal touch targets.
+.training-log-table {
+  @include mat.table-overrides((row-item-container-height: 48px, header-container-height: 40px));
+  @include bp.medium-and-up {
+    @include mat.table-overrides((row-item-container-height: 40px));
+    @include mat.icon-button-overrides((state-layer-size: 36px, icon-size: 20px));
+    @include mat.checkbox-overrides((state-layer-size: 32px, touch-target-display: none));
+  }
+  .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 8px !important; }
+  .event-table-header app-data-type-icon { display: none; }
+}
+.training-log-totals { padding: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.training-log-totals h3 { margin: 0 0 4px; font: var(--mat-sys-title-small); }
+.training-log-totals p { margin: 0 0 8px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.training-log-totals-scroll { max-height: 40vh; overflow: auto; }
+.training-log-totals table { width: 100%; }
+.training-log-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
+
 /* Consolidated and cleaned up styles for event table */
 
 /* Keep basic layout but remove fighting against Material */
