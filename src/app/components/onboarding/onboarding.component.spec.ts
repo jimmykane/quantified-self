@@ -302,7 +302,8 @@ describe('OnboardingComponent', () => {
         clickButton('Back');
         await fixture.whenStable();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare/saved']);
-        expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+        // Route changes get their selection feedback from the shell.
+        expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
         expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
     });
@@ -511,13 +512,38 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
-    it('does not undo a deliberate Back to privacy on a background profile update', async () => {
+    it.each([
+        { step: 'privacy', paid: false }, { step: 'start', paid: false }, { step: 'intro', paid: false },
+        { step: 'privacy', paid: true }, { step: 'start', paid: true }, { step: 'intro', paid: true },
+    ])('keeps the chosen $step step on a background profile update (paid: $paid)', async ({ step, paid }) => {
         await setupComponent(false);
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         component.back();
+        if (step !== 'privacy') component.back();
+        if (step === 'intro') component.showIntro();
+        mockUserService.hasPaidAccess.mockResolvedValue(paid);
+        component.user = { ...component.user } as any;
         await (component as any).checkAndAdvance();
-        expect(component.stage()).toBe('privacy');
+        expect(component.stage()).toBe(step);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('keeps an explicitly opened tour when the initial membership check resolves (paid: %s)', async paid => {
+        let resolveAccess!: (value: boolean) => void;
+        mockUserService.hasPaidAccess.mockReturnValue(new Promise<boolean>(resolve => resolveAccess = resolve));
+        fixture = TestBed.createComponent(OnboardingComponent);
+        component = fixture.componentInstance;
+        component.user = { ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as any;
+        component.ngOnInit();
+        await vi.waitFor(() => expect(mockUserService.hasPaidAccess).toHaveBeenCalled());
+        component.showIntro();
+        resolveAccess(paid);
+        await vi.waitFor(() => expect((component as any).advancing).toBe(false));
+        expect(component.stage()).toBe('intro');
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
     it('coalesces concurrent completion calls into one account write', async () => {

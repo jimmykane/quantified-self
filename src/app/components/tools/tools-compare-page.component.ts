@@ -1612,7 +1612,6 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   async exploreQs(): Promise<void> {
-    this.hapticsService.selection();
     await this.router.navigate(['/help'], { fragment: 'getting-started' });
   }
 
@@ -1620,7 +1619,6 @@ export class ToolsComparePageComponent implements OnInit {
     if (!this.needsAccountSetup()) {
       return;
     }
-    this.hapticsService.selection();
     await this.router.navigate(['/onboarding'], { queryParams: { returnUrl: this.showSavedComparisonsFirst ? '/tools/compare/saved' : '/tools/compare' } });
   }
 

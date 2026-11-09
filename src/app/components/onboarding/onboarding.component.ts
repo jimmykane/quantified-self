@@ -55,7 +55,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private readonly haptics = inject(AppHapticsService);
     private completing = false;
     private advancing = false;
-    private hasCheckedInitialSetup = false;
+    private hasNavigatedSetup = false;
     private formUserId: string | undefined;
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
@@ -138,13 +138,13 @@ export class OnboardingComponent implements OnInit, OnChanges {
         const accountChanged = this.formUserId !== user.uid;
         if (accountChanged) {
             if (this.formUserId) {
+                this.hasNavigatedSetup = false;
                 this.stage.set(this.hasReturnDestination() || this.isCompareFlow() ? 'privacy' : 'start');
                 this.chapterIndex.set(0);
                 this.errorMessage.set('');
                 this.expandedPolicyId = null;
             }
             this.savedConsent = null;
-            this.hasCheckedInitialSetup = false;
             this.hasPaidMembership.set(false);
             this.canFinish = false;
             this.formUserId = user.uid;
@@ -220,12 +220,13 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 (user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true);
             this.hasPaidMembership.set(isSubscribed);
             this.canFinish = isSubscribed || (user as AppUserInterface).onboardingCompleted === true;
-            const shouldResumeMembership = !this.hasCheckedInitialSetup || this.stage() === 'intro' || this.stage() === 'start';
-            this.hasCheckedInitialSetup = true;
             if (!termsAccepted) return;
+            // Resume saved setup on arrival, but never interrupt a deliberate
+            // step change or tour with a late/background account check.
+            if (this.hasNavigatedSetup && this.stage() !== 'plan') return;
             if (this.canFinish) {
                 await this.finishOnboarding();
-            } else if (!this.isCompareFlow() && shouldResumeMembership) {
+            } else if (!this.isCompareFlow()) {
                 this.moveTo('plan');
             }
         } catch (error) {
@@ -270,6 +271,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     chooseStart(choice: OnboardingStart) {
         if (this.startChoice() === choice) return;
+        this.hasNavigatedSetup = true;
         this.startChoice.set(choice);
         void this.router.navigate([], {
             relativeTo: this.route, queryParams: { start: choice }, queryParamsHandling: 'merge', replaceUrl: true,
@@ -285,11 +287,11 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     back() {
         if (this.isLoading || this.isPricingLoading) return;
-        this.haptics.selection();
         if (this.stage() === 'privacy' && this.hasReturnDestination() && this.isCompareFlow()) {
             void this.navigateAfterOnboarding();
             return;
         }
+        this.haptics.selection();
         const previous = this.stage() === 'plan' ? 'privacy'
             : this.stage() === 'privacy' && !this.hasReturnDestination() ? 'start' : 'intro';
         this.moveTo(previous);
@@ -297,6 +299,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     private moveTo(stage: 'intro' | 'start' | 'privacy' | 'plan') {
         if (this.stage() === stage) return;
+        this.hasNavigatedSetup = true;
         this.errorMessage.set('');
         this.stage.set(stage);
         this.focusStep();

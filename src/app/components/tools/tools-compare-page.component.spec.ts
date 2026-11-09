@@ -723,7 +723,8 @@ describe('ToolsComparePageComponent', () => {
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
       queryParams: { returnUrl: savedFirst ? '/tools/compare/saved' : '/tools/compare' },
     });
-    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    // The shell owns selection feedback for route navigation.
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     expect(hapticsServiceMock.success).not.toHaveBeenCalled();
     expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
   });
@@ -742,7 +743,7 @@ describe('ToolsComparePageComponent', () => {
     exploreButton()!.click();
     await fixture.whenStable();
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/help'], { fragment: 'getting-started' });
-    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
   it('shows file-specific guidance when recordings are selected', async () => {
