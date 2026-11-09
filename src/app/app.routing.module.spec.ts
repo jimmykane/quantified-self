@@ -161,6 +161,14 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
+  it('keeps the My Tracks workspace private with its own title and description', () => {
+    const route = routes.find(candidate => candidate.path === 'mytracks');
+    expect(route?.data?.['title']).toBe('My Tracks');
+    expect(route?.data?.['description']).toContain('recorded GPS activities');
+    expect(route?.data?.['robots']).toBe('noindex, nofollow');
+    expect(route?.data?.['jsonLd']).toBeUndefined();
+  });
+
   it('should define a public pricing route with a catalog-backed membership JSON-LD resolver', async () => {
     const pricingRoute = routes.find(route => route.path === 'pricing');
     const subscriptionsRoute = routes.find(route => route.path === 'subscriptions');
@@ -565,8 +573,8 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityMap,
-        title: 'Activity Map and Automatic Trip Detection',
-        h1: 'See workouts, trips, and destinations on one map',
+        title: 'My Tracks: GPS Activity Map & Trip Detection',
+        h1: 'My Tracks: activities, trips and destinations on one map',
         descriptionText: 'Map GPS workouts, filter by sport or date',
       },
       {

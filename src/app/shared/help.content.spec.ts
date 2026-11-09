@@ -17,6 +17,15 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('includes My Tracks on Starter while keeping provider imports and sync on Pro', () => {
+    const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    const starter = billing.split('### Starter (Free)')[1].split('### Basic')[0];
+    const basic = billing.split('### Basic')[1].split('### Pro')[0];
+    expect(starter).toContain('**My Tracks (Beta)**');
+    expect(basic).not.toContain('My Tracks');
+    expect(billing).toContain('**My Tracks (Beta):** Starter, Basic, Pro');
+    expect(billing).toContain('automatic provider imports and sync require Pro');
+  });
   it('explains the searchable, ordered activity-table column dialog and save recovery', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',

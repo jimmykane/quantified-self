@@ -8,6 +8,7 @@ import { DOCUMENT } from '@angular/common';
 import { PLATFORM_ID } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HOME_SEO_JSON_LD } from '../shared/home-seo';
+import { PUBLIC_SEO_ROUTE_DATA } from '../components/public-seo/public-seo-pages.content';
 
 describe('SeoService', () => {
     let service: SeoService;
@@ -124,6 +125,34 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:title', content: 'Compare GPX & FIT Files - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: description });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:description', content: description });
+    });
+
+    it('uses My Tracks public search metadata and clears its schema for the signed-in workspace', () => {
+        const data = PUBLIC_SEO_ROUTE_DATA.activityMap;
+        const schemaElement = { textContent: '' };
+        mockDocument.querySelector.mockImplementation((selector: string) =>
+            selector === 'script[type="application/ld+json"]' ? schemaElement : null);
+        mockActivatedRoute.data = of(data);
+        mockRouter.url = '/features/activity-map';
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('My Tracks: GPS Activity Map & Trip Detection - Quantified Self');
+        for (const name of ['description', 'twitter:description']) {
+            expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name, content: data.description });
+        }
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: data.description });
+        expect(JSON.parse(schemaElement.textContent)).toEqual(data.jsonLd);
+
+        mockActivatedRoute.data = of({
+            title: 'My Tracks',
+            description: 'Explore your recorded GPS activities, detected trips and destinations on your activity map.',
+            robots: 'noindex, nofollow',
+        });
+        mockRouter.url = '/mytracks';
+        routerEventsSubject.next(new NavigationEnd(2, mockRouter.url, mockRouter.url));
+        expect(titleServiceSpy.setTitle).toHaveBeenLastCalledWith('My Tracks - Quantified Self');
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'robots', content: 'noindex, nofollow' });
+        expect(mockDocument.head.removeChild).toHaveBeenCalledWith(schemaElement);
     });
 
     it('uses a page social image and resets it to the safe default on the next route', () => {

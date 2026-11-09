@@ -1260,6 +1260,7 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
 - Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
+- **My Tracks (Beta)** for mapping recorded GPS activities and exploring detected trips
 - Training plans and standalone structured workouts without a provider connection
 - Up to **${ASSISTANT_REQUEST_LIMITS.free}** built-in Assistant requests per calendar month
 - Free permission-scoped MCP connections, including approval-gated Training plan and workout changes
@@ -1270,7 +1271,6 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 - Up to **${getNumberFormatter('en-US').format(USAGE_LIMITS.basic)} activities**
 - Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**
 - Up to **${ASSISTANT_REQUEST_LIMITS.basic}** built-in Assistant requests per billing period
-- **My Tracks (Beta)** access
 - Paid-only chart customization such as custom watermark text
 
 ### Pro
@@ -1288,7 +1288,7 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 ## Feature access by area
 
 - **Dashboard / event analysis:** Starter, Basic, Pro
-- **My Tracks (Beta):** Basic, Pro
+- **My Tracks (Beta):** Starter, Basic, Pro (activity limits apply; automatic provider imports and sync require Pro)
 - **Connections page and MCP data access:** Starter, Basic, Pro
 - **Service connections and sync actions:** Pro (or active Pro grace period)
 - **History imports:** Pro (or active Pro grace period)
