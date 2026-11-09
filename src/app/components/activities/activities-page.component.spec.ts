@@ -134,7 +134,7 @@ async function openCustomDates(c: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe('ActivitiesPageComponent', () => {
-  it('renders each view in its own sort order immediately after switching views', async () => {
+  it('preserves the shared sort order when switching between custom dates and calendar weeks', async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
     try {
       const c = await setup('', true);
@@ -149,11 +149,11 @@ describe('ActivitiesPageComponent', () => {
       c.events.getEventSummariesBy.mockReturnValue(of(data)); await render(c);
       const names = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-row .activity-custom-name')].map((element: Element) => element.textContent?.trim());
       expect(names()).toEqual(['Evening run', 'Morning run']);
-      c.component.selectView('training-log'); await render(c);
+      c.component.selectPeriod('calendar-week'); await render(c);
       const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
-      expect(table.sort.direction).toBe('asc');
-      expect(names()).toEqual(['Morning run', 'Evening run']);
-      c.component.selectView('list'); await render(c);
+      expect(table.sort.direction).toBe('desc');
+      expect(names()).toEqual(['Evening run', 'Morning run']);
+      c.component.selectPeriod('month'); await render(c);
       expect(table.sort.direction).toBe('desc');
       expect(names()).toEqual(['Evening run', 'Morning run']);
       expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
@@ -161,16 +161,14 @@ describe('ActivitiesPageComponent', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('refreshes the Saved columns log preset after the list column preferences change', async () => {
+  it('shares saved columns between calendar weeks and rolling date ranges', async () => {
     const c = await setup('', true);
     c.events.getEventSummariesBy.mockReturnValue(of([])); await render(c);
-    c.component.selectView('training-log'); await render(c);
+    c.component.selectPeriod('calendar-week'); await render(c);
     const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
-    table.selectTrainingLogColumnPreset('saved'); await render(c);
-    c.component.selectView('list'); await render(c);
+    c.component.selectPeriod('month'); await render(c);
     await table.selectedColumnsChange(['Distance']); await render(c);
-    c.component.selectView('training-log'); await render(c);
-    expect(table.trainingLogColumnPreset).toBe('saved');
+    c.component.selectPeriod('calendar-week'); await render(c);
     expect(table.selectedColumns).toEqual(['Distance']);
     expect(c.userService.updateUserProperties).toHaveBeenCalledOnce();
   });
@@ -207,9 +205,10 @@ describe('ActivitiesPageComponent', () => {
       { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 10, 1).getTime() },
       { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 10, 8).getTime() },
     ], 'startDate', false, 0);
-    expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance.presentation).toBe('training-log');
+    expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance.presentation).toBe('dashboard');
     expect(c.fixture.nativeElement.querySelector('[aria-label="Previous week"]')).toBeTruthy();
-    expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeNull();
+    expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeTruthy();
+    expect(c.fixture.nativeElement.querySelector('app-compact-select[label=View]')).toBeNull();
     expect(c.dialog.open).not.toHaveBeenCalled();
     expect(c.haptics.selection).not.toHaveBeenCalled();
   });
@@ -218,12 +217,12 @@ describe('ActivitiesPageComponent', () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
     try {
       const c = await setup('Endurance'); await render(c);
-      c.component.selectView('training-log'); await render(c);
+      c.component.selectPeriod('calendar-week'); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       c.haptics.selection.mockClear();
       c.fixture.nativeElement.querySelector('[aria-label="Previous week"]').click(); await render(c);
-      expect(c.component.trainingLogWeek().dates).toEqual({ startDate: '2026-10-26', endDate: '2026-11-01' });
-      expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: 'training-log', week: '2026-10-26', tag: ['Endurance'] });
+      expect(c.component.calendarWeek().dates).toEqual({ startDate: '2026-10-26', endDate: '2026-11-01' });
+      expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'calendar-week', week: '2026-10-26', tag: ['Endurance'] });
       expect(c.haptics.selection).toHaveBeenCalledOnce();
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
       c.params$.next(convertToParamMap(Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams)
@@ -238,7 +237,7 @@ describe('ActivitiesPageComponent', () => {
       c.component.goToCurrentWeek(); await render(c);
       expect(c.component.isCurrentWeek()).toBe(true);
       expect(c.router.navigate.mock.lastCall[1].queryParams.week).toBeNull();
-      c.component.selectView('list'); await render(c);
+      c.component.selectPeriod('month'); await render(c);
       expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeTruthy();
       expect(c.component.selectedTags()).toEqual(['Endurance']);
     } finally { vi.useRealTimers(); }
@@ -251,7 +250,7 @@ describe('ActivitiesPageComponent', () => {
       c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
       c.params$.next(convertToParamMap({ view: 'training-log' })); await render(c);
       vi.setSystemTime(new Date(2026, 10, 9, 0, 1)); c.component.refreshLocalDay(); await render(c);
-      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-09');
+      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-09');
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       vi.setSystemTime(new Date(2026, 10, 10, 0, 1)); c.component.refreshLocalDay(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
@@ -259,27 +258,36 @@ describe('ActivitiesPageComponent', () => {
         ...c.user$.value.settings, unitSettings: { ...c.user$.value.settings.unitSettings, startOfTheWeek: 0 },
       } });
       c.user$.next(profile); await render(c);
-      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-08');
+      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-08');
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
       c.component.navigateWeek(-1); await render(c);
       vi.setSystemTime(new Date(2026, 10, 15, 0, 1)); c.component.refreshLocalDay(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
-      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-01');
+      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-01');
     } finally { vi.useRealTimers(); }
   });
 
-  it('restores the bounded list when cancelling an All dates history transition out of the log', async () => {
+  it('seeds Custom dates from the selected anchored calendar week and account week start', async () => {
     const c = await setup();
-    c.params$.next(convertToParamMap({ view: 'training-log', week: '2026-11-04' })); await render(c);
+    c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
+    c.user$.value.settings.unitSettings.startOfTheWeek = 0;
+    c.params$.next(convertToParamMap({ period: 'calendar-week', week: '2026-11-04' })); await render(c);
+    c.component.selectPeriod('custom'); await render(c);
+    expect(c.component.customDateForm.value.start?.format('YYYY-MM-DD')).toBe('2026-11-01');
+    expect(c.component.customDateForm.value.end?.format('YYYY-MM-DD')).toBe('2026-11-07');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+  });
+
+  it('retains the selected calendar week when cancelling All dates', async () => {
+    const c = await setup();
+    c.params$.next(convertToParamMap({ period: 'calendar-week', week: '2026-11-04' })); await render(c);
     c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
     expect(c.dialog.open).toHaveBeenCalledOnce();
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
-    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.dialogs[0].closed$.next(false); await render(c);
-    expect(c.component.view()).toBe('list');
-    expect(c.component.period()).toBe('month');
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
-    expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'month' });
+    expect(c.component.period()).toBe('calendar-week');
+    expect(c.component.weekAnchor()).toBe('2026-11-04');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -309,7 +317,7 @@ describe('ActivitiesPageComponent', () => {
         { fieldPath: 'startDate', opStr: '<', value: +new Date(after[1]) },
       ]);
       expect(c.component.weekAnchor()).toBe(anchor);
-      expect(c.component.trainingLogWeek().dates).toEqual({ startDate: dates[0], endDate: dates[1] });
+      expect(c.component.calendarWeek().dates).toEqual({ startDate: dates[0], endDate: dates[1] });
       expect(c.haptics.selection).not.toHaveBeenCalled();
     } finally {
       if (originalTimezone === undefined) delete process.env.TZ; else process.env.TZ = originalTimezone;
@@ -333,11 +341,13 @@ describe('ActivitiesPageComponent', () => {
     expect(names).toEqual(direction === 'asc' ? ['GAP 0', 'GAP 300', 'No GAP'] : ['GAP 300', 'GAP 0', 'No GAP']);
   });
 
-  it.each([false, true])('renders the Running preset and GAP with selected units (imperial=%s), sorting and full-week filtered totals', async imperial => {
+  it.each([false, true])('renders shared Running columns and GAP with selected units (imperial=%s), sorting and full-week filtered totals', async imperial => {
     const c = await setup('', true);
     c.user$.value.settings.unitSettings = normalizeUserUnitSettings({ paceUnits: [imperial ? PaceUnits.MinutesPerMile : PaceUnits.MinutesPerKilometer],
       distanceUnits: imperial ? DistanceUnits.Miles : DistanceUnits.Kilometers });
-    const savedColumns = [...c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns];
+    const savedColumns = ['Activity Types', 'Duration', 'Distance', 'Ascent', 'Average Speed', DataGradeAdjustedPaceAvg.type];
+    c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns = savedColumns;
+    c.user$.value.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
     c.params$.next(convertToParamMap({ view: 'training-log' }));
     const records = Array.from({ length: 27 }, (_, index) => new AppEventSummary({ id: `log-${index}`,
       name: index < 26 ? `Run ${index}` : 'Ride', startDate: Date.now(), endDate: Date.now(),
@@ -350,12 +360,13 @@ describe('ActivitiesPageComponent', () => {
     c.events.getEventSummariesBy.mockReturnValue(of(records)); await render(c);
     const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
     expect(table.displayedColumns).toContain(DataGradeAdjustedPaceAvg.type);
-    expect(table.displayedColumns).not.toContain('Description');
-    expect(table.displayedColumns).not.toContain('Shared');
-    expect(table.trainingLogColumnPreset).toBe('running');
+    expect(table.displayedColumns).toContain('Description');
+    expect(table.displayedColumns).toContain('Shared');
     expect(table.tablePageSize).toBe(25);
-    expect(table.trainingLogTotals.map(row => [row.sport, row.count])).toEqual([['Cycling', 1], ['Running', 26]]);
-    expect(c.fixture.nativeElement.querySelector('.training-log-totals').textContent).toContain('Weekly totals by sport');
+    expect(table.sportTotals.map(row => [row.sport, row.count])).toEqual([['Cycling', 1], ['Running', 26]]);
+    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row')).toHaveLength(2);
+    expect(c.fixture.nativeElement.querySelectorAll('table[mat-table]')).toHaveLength(1);
+    expect(c.fixture.nativeElement.querySelector('tr.activity-total-row').textContent).toContain('Totals');
     const gap = table.data.data.find(row => row.Event.getID() === 'log-0')[DataGradeAdjustedPaceAvg.type];
     expect(gap).toBe(imperial ? '07:30 min/m' : '04:40 min/km');
     expect(table.data.data.find(row => row.Event.getID() === 'log-26')[DataGradeAdjustedPaceAvg.type]).toBe('');
@@ -363,25 +374,25 @@ describe('ActivitiesPageComponent', () => {
     hydrate.mockRestore();
     expect(c.fixture.nativeElement.querySelector('th.mat-column-Average-Grade-Adjusted-Pace').textContent).toContain('GAP');
     table.paginator.nextPage(); await render(c);
-    expect(table.trainingLogTotals.find(row => row.sport === 'Running')?.count).toBe(26);
+    expect(table.sportTotals.find(row => row.sport === 'Running')?.count).toBe(26);
+    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row')).toHaveLength(2);
     table.search('Run 0'); await render(c);
-    expect(table.trainingLogTotals.map(row => [row.sport, row.count])).toEqual([['Running', 1]]);
+    expect(table.sportTotals.map(row => [row.sport, row.count])).toEqual([['Running', 1]]);
     table.clearSearch(); await render(c);
     table.sort.sort({ id: DataGradeAdjustedPaceAvg.type, start: 'asc', disableClear: true }); await render(c);
     expect(table.data.sortData(table.data.filteredData, table.sort)
       .filter(row => row[DataGradeAdjustedPaceAvg.type] !== '')[0].Event.getID()).toBe('log-0');
     await table.selectedColumnsChange(['Distance']); await render(c);
-    expect(table.trainingLogColumnPreset).toBe('custom');
-    table.selectTrainingLogColumnPreset('running'); await render(c);
+    await table.selectedColumnsChange(savedColumns); await render(c);
     expect(table.displayedColumns).toContain(DataGradeAdjustedPaceAvg.type);
     expect(c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(savedColumns);
-    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+    expect(c.userService.updateUserProperties).toHaveBeenCalledTimes(3);
     c.component.selectSports(['Cycling']); await render(c);
-    expect(table.trainingLogTotals.map(row => row.sport)).toEqual(['Cycling']);
+    expect(table.sportTotals.map(row => row.sport)).toEqual(['Cycling']);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
-    c.component.selectView('list'); await render(c);
+    c.component.selectPeriod('month'); await render(c);
     expect(table.selectedColumns).toEqual(savedColumns);
-    expect(table.trainingLogTotals).toEqual([]);
+    expect(table.sportTotals.map(row => row.sport)).toEqual(['Cycling']);
   });
 
   it('uses Dashboard’s full-range query with bounded numeric dates by default', async () => {
@@ -472,7 +483,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
     const controls = [...c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters > *')] as HTMLElement[];
-    expect(controls.map(control => control.tagName)).toEqual(['APP-COMPACT-SELECT', 'APP-TABLE-DATE-FILTER', 'APP-ACTIVITY-FILTER-PICKER', 'APP-ACTIVITY-FILTER-PICKER']);
+    expect(controls.map(control => control.tagName)).toEqual(['APP-TABLE-DATE-FILTER', 'APP-ACTIVITY-FILTER-PICKER', 'APP-ACTIVITY-FILTER-PICKER']);
     expect(c.fixture.nativeElement.querySelector('.activity-explorer-filters mat-form-field')).toBeNull();
     expect(c.fixture.nativeElement.querySelector('form')).toBeNull();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
@@ -1007,7 +1018,7 @@ describe('ActivitiesPageComponent', () => {
     const paginator = table.paginator, sort = table.sort, columns = [...table.selectedColumns];
     expect(root.querySelector('.activity-table-empty-copy')?.textContent).toContain('No activities in this date range');
     expect(root.querySelector('.activity-table-empty-copy p')?.textContent).toBe('Try a wider date range.');
-    expect(root.querySelector('.event-table-header app-data-type-icon')).not.toBeNull();
+    expect(root.querySelector('.event-table-header').textContent).toContain('Date');
     expect(root.querySelector('.qs-glass-card-panel')).not.toBeNull();
     expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(true);
     expect(c.haptics.selection).not.toHaveBeenCalled();

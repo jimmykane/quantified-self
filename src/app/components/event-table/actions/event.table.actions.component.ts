@@ -1,3 +1,4 @@
+import { TRAINING_LOG_RUNNING_COLUMNS } from '../../../helpers/activity-training-log.helper';
 import { DOCUMENT } from '@angular/common';
 import { Component, EventEmitter, Injector, Input, OnChanges, OnDestroy, Output, SimpleChanges, TemplateRef, ViewChild, afterNextRender, inject } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -36,6 +37,11 @@ export class EventTableActionsComponent implements OnChanges, OnDestroy {
   availableColumns: string[] = [];
   searchTerm = '';
   announcement = '';
+  selectedPreset = 'custom';
+  readonly presetOptions = [
+    { value: 'default', label: 'Default' }, { value: 'running', label: 'Running' },
+    { value: 'custom', label: 'Custom', disabled: true },
+  ];
   readonly labels: Record<string, string> = { [DataGradeAdjustedPaceAvg.type]: 'GAP (grade-adjusted pace)' };
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -61,6 +67,12 @@ export class EventTableActionsComponent implements OnChanges, OnDestroy {
       if (this.dialogRef === ref) this.dialogRef = null;
       if (!this.destroyed && result !== 'context-changed') this.haptics.selection();
     });
+  }
+
+  selectPreset(preset: string): void {
+    if (preset !== 'default' && preset !== 'running') return;
+    this.applyColumns((preset === 'running' ? TRAINING_LOG_RUNNING_COLUMNS
+      : AppUserUtilities.getDefaultSelectedTableColumns()).filter(type => this.dataTypes.includes(type)));
   }
 
   selectionChange(event: MatSelectionListChange): void {
@@ -98,6 +110,11 @@ export class EventTableActionsComponent implements OnChanges, OnDestroy {
   private refreshColumns(): void {
     const allowed = new Set(this.dataTypes);
     this.selectedColumns = [...new Set(this.selectedDataTypes)].filter(type => allowed.has(type));
+    this.selectedPreset = 'custom';
+    for (const [preset, columns] of [['default', AppUserUtilities.getDefaultSelectedTableColumns()], ['running', TRAINING_LOG_RUNNING_COLUMNS]] as const) {
+      const available = columns.filter(type => allowed.has(type));
+      if (available.length === this.selectedColumns.length && available.every((type, index) => type === this.selectedColumns[index])) this.selectedPreset = preset;
+    }
     const selected = new Set(this.selectedColumns);
     const search = this.searchTerm.trim().toLowerCase();
     this.availableColumns = this.dataTypes.filter(type => !selected.has(type)

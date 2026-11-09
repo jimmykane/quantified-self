@@ -20,32 +20,20 @@
       </div>
     }
     @for (tableUser of tableUsers(); track tableUser.uid) {
-      <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" [presentation]="isTrainingLog() ? 'training-log' : 'dashboard'"
+      <app-event-table [user]="tableUser" [events]="filteredEvents()" [showActions]="true" presentation="dashboard"
         [isLoading]="loading()" [showTagFilter]="false"
         [filterContext]="filterContext()" [preserveSearchOnFilterChange]="true" [hideGeneratedNames]="true"
         [emptyMessage]="emptyMessage()" [emptyHint]="emptyHint()"
         [hasLoadError]="historyError()"
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
-          <app-compact-select label="View" [value]="view()" [options]="viewOptions" [disabled]="loading()"
-            (selectionChange)="selectView($event)"></app-compact-select>
-          @if (isTrainingLog()) {
-          <nav class="training-log-week-navigation" aria-label="Training log week">
-            <button mat-icon-button type="button" aria-label="Previous week" [disabled]="loading()" (click)="navigateWeek(-1)">
-              <mat-icon>chevron_left</mat-icon>
-            </button>
-            <span class="training-log-week-label" aria-live="polite">{{ trainingLogWeek().start | date:'mediumDate' }} – {{ trainingLogWeek().lastDay | date:'mediumDate' }}</span>
-            <button mat-icon-button type="button" aria-label="Next week" [disabled]="loading()" (click)="navigateWeek(1)">
-              <mat-icon>chevron_right</mat-icon>
-            </button>
-            <button mat-button type="button" [disabled]="loading() || isCurrentWeek()" (click)="goToCurrentWeek()">This week</button>
-          </nav>
-          } @else {
           <app-table-date-filter [options]="periods" [value]="period()" customValue="custom" allValue="all"
-            [rangeForm]="customDateForm" [startDate]="customDates()?.startDate || null" [endDate]="customDates()?.endDate || null"
+            [rangeForm]="customDateForm" [startDate]="isCalendarWeek() ? calendarWeek().start : customDates()?.startDate || null"
+            [endDate]="isCalendarWeek() ? calendarWeek().lastDay : customDates()?.endDate || null"
+            [disabled]="loading()" [weekNavigation]="isCalendarWeek()" [currentWeek]="isCurrentWeek()"
+            (weekShift)="navigateWeek($event)" (currentWeekRequested)="goToCurrentWeek()"
             (selectionChange)="selectPeriod($event)" (applied)="applyCustomRange()" (cancelled)="cancelCustomRange()"
             (cleared)="clearCustomRange()" (calendarOpened)="onCustomPickerOpened()"></app-table-date-filter>
-          }
           <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports" [textButton]="true" triggerIcon="directions_run"
             [disabled]="loading()"
             [options]="sportOptions()" [selectedValues]="selectedSports()" [shortcuts]="sportShortcuts()"
@@ -59,8 +47,8 @@
               (checkedChange)="selectMergedEvents($event)"></app-merged-activities-toggle>
           }
         </div>
-        <button event-table-empty-action mat-button type="button" (click)="openDateFilter()" [disabled]="isTrainingLog() && isCurrentWeek()">
-          <mat-icon aria-hidden="true">date_range</mat-icon>{{ isTrainingLog() ? 'This week' : 'Change dates' }}
+        <button event-table-empty-action mat-button type="button" (click)="openDateFilter()">
+          <mat-icon aria-hidden="true">date_range</mat-icon>Change dates
         </button>
       </app-event-table>
     }

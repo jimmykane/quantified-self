@@ -28,16 +28,14 @@ import { AppEventService } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
-import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
 import { resolveTrainingLogWeek } from '../../helpers/activity-training-log.helper';
 import { formatActivityCalendarDateParam, navigateActivityCalendarDate } from '../../helpers/activity-calendar.helper';
 
-type ActivitiesView = 'list' | 'training-log';
 
 @Component({
   selector: 'app-activities-page',
   standalone: true,
-  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CompactSelectComponent],
+  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent, MergedActivitiesToggleComponent],
   templateUrl: './activities-page.component.html',
   styleUrls: ['./activities-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,7 +54,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly dateFilter = viewChild<TableDateFilterComponent<ActivityExplorerPeriod>>(TableDateFilterComponent);
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
-  private readonly trainingLogTimeZone = signal(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  private readonly calendarTimeZone = signal(Intl.DateTimeFormat().resolvedOptions().timeZone);
   private owner: FirebaseUserType | null = null;
   private generation = 0;
   private eventsSubscription?: Subscription;
@@ -64,9 +62,7 @@ export class ActivitiesPageComponent implements OnInit {
   private urlPeriod: ActivityExplorerPeriod = 'month';
   private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
   private loadedWeekStart = 1;
-  readonly view = signal<ActivitiesView>('list');
-  readonly isTrainingLog = computed(() => this.view() === 'training-log');
-  readonly viewOptions = [{ value: 'list' as const, label: 'List' }, { value: 'training-log' as const, label: 'Training log' }];
+  readonly isCalendarWeek = computed(() => this.period() === 'calendar-week');
   readonly weekAnchor = signal<string | null>(null);
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
@@ -82,15 +78,15 @@ export class ActivitiesPageComponent implements OnInit {
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
-  readonly trainingLogWeek = computed(() => {
+  readonly calendarWeek = computed(() => {
     // Historical offsets can change between zones that share today's offset.
-    this.trainingLogTimeZone();
+    this.calendarTimeZone();
     return resolveTrainingLogWeek(this.weekAnchor(), new Date(this.localDayStartMs()),
       this.user()?.settings?.unitSettings?.startOfTheWeek);
   });
-  readonly isCurrentWeek = computed(() => +this.trainingLogWeek().start === +resolveTrainingLogWeek(null,
+  readonly isCurrentWeek = computed(() => +this.calendarWeek().start === +resolveTrainingLogWeek(null,
     new Date(this.localDayStartMs()), this.user()?.settings?.unitSettings?.startOfTheWeek).start);
-  readonly historyRange = computed(() => this.isTrainingLog() ? this.trainingLogWeek()
+  readonly historyRange = computed(() => this.isCalendarWeek() ? this.calendarWeek()
     : activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates()));
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
@@ -119,8 +115,8 @@ export class ActivitiesPageComponent implements OnInit {
     .map(family => ({ label: family.label, values: family.activityTypes })));
   readonly filters = computed(() => ({
     tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(),
-    period: this.isTrainingLog() ? 'custom' as const : this.period(),
-    customDates: this.isTrainingLog() ? this.trainingLogWeek().dates : this.period() === 'custom' ? this.customDates() : null,
+    period: this.isCalendarWeek() ? 'custom' as const : this.period(),
+    customDates: this.isCalendarWeek() ? this.calendarWeek().dates : this.period() === 'custom' ? this.customDates() : null,
   }));
   readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), merged: this.includeMergedEvents() }));
   readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
@@ -147,12 +143,12 @@ export class ActivitiesPageComponent implements OnInit {
   refreshLocalDay(): void {
     const next = new Date().setHours(0, 0, 0, 0);
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (next === this.localDayStartMs() && (!this.isTrainingLog() || timeZone === this.trainingLogTimeZone())) return;
-    const previousWeek = this.trainingLogWeek();
+    if (next === this.localDayStartMs() && (!this.isCalendarWeek() || timeZone === this.calendarTimeZone())) return;
+    const previousWeek = this.calendarWeek();
     this.localDayStartMs.set(next);
-    this.trainingLogTimeZone.set(timeZone);
-    if (this.isTrainingLog()) {
-      const week = this.trainingLogWeek();
+    this.calendarTimeZone.set(timeZone);
+    if (this.isCalendarWeek()) {
+      const week = this.calendarWeek();
       // A fixed calendar week can gain different query bounds after a timezone change.
       if (this.user() && (+previousWeek.start !== +week.start || +previousWeek.end !== +week.end)) this.loadHistory();
       return;
@@ -174,29 +170,21 @@ export class ActivitiesPageComponent implements OnInit {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
-      const previousView = this.view();
       const previousAnchor = this.weekAnchor();
-      this.view.set(params.get('view') === 'training-log' ? 'training-log' : 'list');
-      const week = params.get('week');
-      this.weekAnchor.set(this.isTrainingLog() ? normalizeActivityExplorerCustomDates(week, week)?.startDate || null : null);
+      const legacyWeek = params.get('view') === 'training-log';
+      const requestedPeriod = legacyWeek ? 'calendar-week' : this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
       this.untagged.set(params.get('untagged') === '1');
       this.selectedSports.set(normalizeActivityExplorerSports(params.getAll('sport')));
       this.includeMergedEvents.set(params.get('merged') === '1');
-      const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
-      const period = (requestedPeriod === 'custom' && !customDates) || (this.isTrainingLog() && requestedPeriod === 'all')
-        ? this.defaultPeriod : requestedPeriod;
+      const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
       this.urlPeriod = period;
-      if (period === 'all' && this.period() !== 'all') {
-        // A history transition out of the log must show the retained bounded list
-        // range even if the user cancels the All dates warning.
-        if (previousView !== this.view() && this.user()) this.loadHistory();
-        this.confirmAllDates();
-        return;
-      }
+      if (period === 'all' && this.period() !== 'all') { this.confirmAllDates(); return; }
       this.closeAllDatesWarning();
-      const rangeChanged = previousView !== this.view() || previousAnchor !== this.weekAnchor() || previousPeriod !== period || (period === 'custom'
+      const week = params.get('week');
+      this.weekAnchor.set(period === 'calendar-week' ? normalizeActivityExplorerCustomDates(week, week)?.startDate || null : null);
+      const rangeChanged = previousAnchor !== this.weekAnchor() || previousPeriod !== period || (period === 'custom'
         && (customDates?.startDate !== this.customDates()?.startDate || customDates?.endDate !== this.customDates()?.endDate));
       this.customDates.set(customDates);
       this.period.set(period);
@@ -206,14 +194,14 @@ export class ActivitiesPageComponent implements OnInit {
       }
       if (rangeChanged && this.user()) this.loadHistory();
       else this.refreshLocalDay();
-      if (requestedPeriod === 'custom' && !customDates) this.updateUrl(true);
+      if (legacyWeek || (requestedPeriod === 'custom' && !customDates)) this.updateUrl(true);
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
         const nextUser = owner && profile?.uid === owner.uid ? profile : null;
         if (nextUser?.uid === this.user()?.uid && owner === this.owner) {
           this.user.set(nextUser);
-          if (nextUser && this.isTrainingLog() && this.loadedWeekStart !== (nextUser.settings?.unitSettings?.startOfTheWeek ?? 1)) this.loadHistory();
+          if (nextUser && this.isCalendarWeek() && this.loadedWeekStart !== (nextUser.settings?.unitSettings?.startOfTheWeek ?? 1)) this.loadHistory();
           return;
         }
         this.closeAllDatesWarning();
@@ -240,26 +228,15 @@ export class ActivitiesPageComponent implements OnInit {
       });
   }
 
-  selectView(view: ActivitiesView): void {
-    if (view === this.view() || (view !== 'list' && view !== 'training-log')) return;
-    this.closeAllDatesWarning();
-    this.customRangeOpen.set(false);
-    this.view.set(view);
-    this.weekAnchor.set(null);
-    if (this.isTrainingLog() && this.period() === 'all') this.period.set(this.defaultPeriod);
-    this.loadHistory(true);
-    this.filtersChanged();
-  }
-
   navigateWeek(direction: -1 | 1): void {
-    if (!this.isTrainingLog() || this.loading()) return;
-    this.weekAnchor.set(formatActivityCalendarDateParam(navigateActivityCalendarDate(this.trainingLogWeek().start, 'week', direction)));
+    if (!this.isCalendarWeek() || this.loading()) return;
+    this.weekAnchor.set(formatActivityCalendarDateParam(navigateActivityCalendarDate(this.calendarWeek().start, 'week', direction)));
     this.loadHistory(true);
     this.filtersChanged();
   }
 
   goToCurrentWeek(): void {
-    if (!this.isTrainingLog() || this.loading() || this.isCurrentWeek()) return;
+    if (!this.isCalendarWeek() || this.loading() || this.isCurrentWeek()) return;
     this.weekAnchor.set(null);
     this.loadHistory(true);
     this.filtersChanged();
@@ -309,7 +286,7 @@ export class ActivitiesPageComponent implements OnInit {
       this.customRangeOpen.set(true);
       return;
     }
-    if (period === this.period()) {
+    if (period === this.period() && !(period === 'calendar-week' && this.weekAnchor())) {
       if (this.customRangeOpen()) this.cancelCustomRange();
       return;
     }
@@ -322,6 +299,7 @@ export class ActivitiesPageComponent implements OnInit {
     }
     this.closeAllDatesWarning();
     this.period.set(period);
+    this.weekAnchor.set(null);
     this.customDates.set(null);
     this.loadHistory(true);
     this.filtersChanged();
@@ -372,8 +350,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   openDateFilter(): void {
     if (this.loading() || !this.owner || this.owner !== this.auth.currentUser || this.user()?.uid !== this.owner.uid) return;
-    if (this.isTrainingLog()) this.goToCurrentWeek();
-    else this.dateFilter()?.open();
+    this.dateFilter()?.open();
   }
 
   clearCustomRange(): void {
@@ -392,7 +369,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private resetCustomDateForm(): void {
     const now = new Date(this.localDayStartMs());
-    const range = activityExplorerDateRange(this.period(), now, this.customDates()) || activityExplorerDateRange(this.defaultPeriod, now)!;
+    const range = this.historyRange() || activityExplorerDateRange(this.defaultPeriod, now)!;
     this.customDateForm.reset({ start: dayjs(range.start), end: dayjs(range.end).subtract(1, 'day') });
   }
 
@@ -450,8 +427,8 @@ export class ActivitiesPageComponent implements OnInit {
         sport: this.selectedSports().length ? this.selectedSports() : null, period: this.period(), order: null,
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
-        view: this.isTrainingLog() ? 'training-log' : null,
-        week: this.isTrainingLog() ? this.weekAnchor() : null,
+        view: null,
+        week: this.isCalendarWeek() ? this.weekAnchor() : null,
       },
       queryParamsHandling: 'merge',
       replaceUrl,
@@ -524,7 +501,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private loadHistory(feedback = false): void {
     this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
-    this.trainingLogTimeZone.set(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    this.calendarTimeZone.set(Intl.DateTimeFormat().resolvedOptions().timeZone);
     this.generation += 1;
     this.eventsSubscription?.unsubscribe();
     if (!this.loading()) this.loadingHadMergedEvents.set(this.events().some(event => event.isMerge));

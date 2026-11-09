@@ -9,6 +9,8 @@
   <h2 mat-dialog-title>Choose table columns</h2>
   <mat-dialog-content class="column-dialog-content">
     <p class="column-copy">{{ scopeHint }}</p>
+    <app-compact-select label="Preset" [value]="selectedPreset" [options]="presetOptions" [disabled]="disabled || saving"
+      (selectionChange)="selectPreset($event)"></app-compact-select>
     <h3 class="column-section-title">Selected columns · table order</h3>
     <ol class="column-selected-list" aria-label="Selected table columns in order" [attr.aria-busy]="saving">
       @for (type of selectedColumns; track type; let first = $first; let last = $last) {

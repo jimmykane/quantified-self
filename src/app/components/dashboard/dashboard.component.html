@@ -76,7 +76,7 @@
       }
 
       @if (user) {
-      <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
+      <app-event-table [hideGeneratedNames]="true" [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
         [emptyMessage]="eventTableEmptyMessage" [emptyHint]="eventTableEmptyHint"
         [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events">
         <app-event-search #eventTableSearch event-table-filters class="table-toolbar-layout compact-filter-layout"

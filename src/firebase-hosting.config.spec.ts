@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
+// Activity-table Help covers shared layouts, calendar-week navigation and aligned inline period totals (2026-11-09).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);

@@ -62,6 +62,28 @@ describe('TableDateFilterComponent', () => {
     expect(c.opened).not.toHaveBeenCalled();
   });
 
+  it('shows calendar-week navigation in the date control and delegates feedback to its owner', async () => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('weekNavigation', true);
+    c.fixture.componentRef.setInput('currentWeek', false);
+    c.fixture.componentRef.setInput('startDate', '2026-11-02');
+    c.fixture.componentRef.setInput('endDate', '2026-11-08');
+    const shift = vi.fn(); const current = vi.fn();
+    c.fixture.componentInstance.weekShift.subscribe(shift);
+    c.fixture.componentInstance.currentWeekRequested.subscribe(current);
+    await c.settle();
+    expect(c.trigger.textContent).toContain('2–8 Nov 2026');
+    c.fixture.nativeElement.querySelector('[aria-label="Previous week"]').click();
+    c.fixture.nativeElement.querySelector('[aria-label="Next week"]').click();
+    c.fixture.nativeElement.querySelector('.table-date-week-return').click();
+    expect(shift.mock.calls).toEqual([[-1], [1]]);
+    expect(current).toHaveBeenCalledOnce();
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.fixture.componentRef.setInput('disabled', true); await c.settle();
+    c.fixture.nativeElement.querySelector('[aria-label="Previous week"]').click();
+    expect(shift).toHaveBeenCalledTimes(2);
+  });
+
   it('uses the native range calendar, stages both dates until Apply and restores the date button focus', async () => {
     const c = await setup();
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;

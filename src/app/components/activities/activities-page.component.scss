@@ -14,11 +14,6 @@
 .activity-catalog-error { margin-bottom: 16px; }
 .activity-history-status { justify-content: flex-start; margin-bottom: 12px; }
 .activity-explorer-filters { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
-.training-log-week-navigation { display: flex; align-items: center; flex-wrap: wrap; min-width: 0; gap: 4px; }
-.training-log-week-label { font: var(--mat-sys-body-small); font-variant-numeric: tabular-nums; }
 @include bp.max-768 {
   .activity-explorer-filters { width: 100%; gap: 8px; }
-  .training-log-week-navigation { display: grid; flex-basis: 100%; width: 100%; grid-template-columns: 40px minmax(0, 1fr) 40px; }
-  .training-log-week-label { min-width: 0; text-align: center; }
-  .training-log-week-navigation > button:last-child { grid-column: 1 / -1; justify-self: center; }
 }

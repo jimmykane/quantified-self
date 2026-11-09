@@ -70,6 +70,29 @@ describe('Merged toolbar filter rendering', () => {
     }).compileComponents();
   });
 
+  it('navigates full calendar weeks through the shared date control with one haptic per accepted change', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const fixture = TestBed.createComponent(MergedFilterTestHost);
+      fixture.detectChanges(); await fixture.whenStable();
+      const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+      const previous = fixture.nativeElement.querySelector('[aria-label="Previous week"]') as HTMLButtonElement;
+      expect(previous).toBeTruthy();
+      previous.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.componentInstance.requests.at(-1)).toMatchObject({ dateRange: DateRanges.custom,
+        startDate: new Date(2026, 9, 26), endDate: new Date(2026, 10, 1, 23, 59, 59, 999) });
+      expect(search.toolbarWeekNavigation).toBe(true);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+      fixture.nativeElement.querySelector('.table-date-week-return').click();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(fixture.componentInstance.requests.at(-1)?.dateRange).toBe(DateRanges.thisWeek);
+      expect(haptics.selection).toHaveBeenCalledTimes(2);
+      await search.onToolbarDateRangeChange(DateRanges.lastSevenDays);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[aria-label="Previous week"]')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('keeps the merged checkmark aligned when the parent rejects a filter change', async () => {
     const fixture = TestBed.createComponent(MergedFilterTestHost);
     fixture.detectChanges();

@@ -2,7 +2,7 @@
 @use '@angular/material' as mat;
 
 // Density uses Material's public tokens; phone controls retain their normal touch targets.
-.training-log-table {
+.activity-table {
   @include mat.table-overrides((row-item-container-height: 48px, header-container-height: 40px));
   @include bp.medium-and-up {
     @include mat.table-overrides((row-item-container-height: 40px));
@@ -12,12 +12,12 @@
   .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 8px !important; }
   .event-table-header app-data-type-icon { display: none; }
 }
-.training-log-totals { padding: 12px; border-top: 1px solid var(--mat-sys-outline-variant); }
-.training-log-totals h3 { margin: 0 0 4px; font: var(--mat-sys-title-small); }
-.training-log-totals p { margin: 0 0 8px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
-.training-log-totals-scroll { max-height: 40vh; overflow: auto; }
-.training-log-totals table { width: 100%; }
-.training-log-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
+.activity-total-row { background: var(--mat-sys-surface-container); cursor: default; }
+.activity-total-label, .activity-total-coverage { display: block; white-space: normal; }
+.activity-total-label { font: var(--mat-sys-label-medium); }
+.activity-total-label small, .activity-total-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
+.activity-total-label small { white-space: nowrap; }
+.activity-total-row td { border-top: 1px solid var(--mat-sys-outline-variant); }
 
 /* Consolidated and cleaned up styles for event table */
 

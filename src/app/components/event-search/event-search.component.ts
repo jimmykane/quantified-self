@@ -1,3 +1,5 @@
+import { formatActivityCalendarDateParam, navigateActivityCalendarDate } from '../../helpers/activity-calendar.helper';
+import { resolveTrainingLogWeek } from '../../helpers/activity-training-log.helper';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -83,6 +85,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public toolbarSportShortcuts: ActivityFilterPickerShortcut[] = [];
   public toolbarSelectedSports: string[] = [];
   public customRangeOpen = false;
+  public toolbarWeekNavigation = false;
+  public toolbarIsCurrentWeek = false;
+  public toolbarWeekStart: Date | null = null;
+  public toolbarWeekEnd: Date | null = null;
   @ViewChild(TableDateFilterComponent) private tableDateFilter?: TableDateFilterComponent<DateRanges>;
   constructor(
     changeDetector: ChangeDetectorRef,
@@ -149,6 +155,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.startDateControl?.setValue(startDate, { emitEvent: false });
     this.endDateControl?.setValue(endDate, { emitEvent: false });
     this.searchFormGroup.updateValueAndValidity({ emitEvent: false });
+    this.syncToolbarWeek();
   }
 
 
@@ -173,6 +180,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.selectedStartDate = startDate ? this.normalizeStartDate(startDate) : (null as any);
     this.selectedEndDate = endDate ? this.normalizeEndDate(endDate) : (null as any);
 
+    this.syncToolbarWeek();
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search')?.value,
       startDate: this.selectedStartDate,
@@ -300,6 +308,34 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     await this.search();
   }
 
+  async shiftToolbarWeek(direction: -1 | 1): Promise<void> {
+    if (this.isLoading || !this.toolbarWeekNavigation || !this.toolbarWeekStart) return;
+    const anchor = navigateActivityCalendarDate(this.toolbarWeekStart, 'week', direction);
+    const week = resolveTrainingLogWeek(formatActivityCalendarDateParam(anchor), new Date(), this.startOfTheWeek);
+    this.selectedDateRange = DateRanges.custom;
+    this.selectedStartDate = week.start;
+    this.selectedEndDate = new Date(+week.end - 1);
+    this.hapticsService?.selection();
+    this.syncToolbarDateRangeOptions();
+    await this.search();
+  }
+
+  async showToolbarCurrentWeek(): Promise<void> {
+    if (this.isLoading || this.toolbarIsCurrentWeek) return;
+    await this.selectDateRange(DateRanges.thisWeek);
+  }
+
+  private syncToolbarWeek(): void {
+    const { startDate, endDate } = this.resolveCurrentRangeDates();
+    const week = resolveTrainingLogWeek(startDate ? formatActivityCalendarDateParam(startDate) : null, new Date(), this.startOfTheWeek);
+    this.toolbarWeekNavigation = !!startDate && !!endDate
+      && [DateRanges.thisWeek, DateRanges.lastWeek, DateRanges.custom].includes(this.selectedDateRange)
+      && +startDate === +week.start && (+endDate === +week.end || +endDate + 1 === +week.end);
+    this.toolbarWeekStart = week.start;
+    this.toolbarWeekEnd = week.lastDay;
+    this.toolbarIsCurrentWeek = +week.start === +resolveTrainingLogWeek(null, new Date(), this.startOfTheWeek).start;
+  }
+
   onToolbarPickerOpened(): void { this.hapticsService?.selection(); }
 
   cancelToolbarCustomRange(): void {
@@ -368,6 +404,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       { value: DateRanges.custom, label: 'Custom dates' },
       { value: DateRanges.all, label: 'All dates' },
     ].filter(option => visibleDateRanges.has(option.value));
+    this.syncToolbarWeek();
   }
 
   private coerceDate(value: unknown): Date | null {

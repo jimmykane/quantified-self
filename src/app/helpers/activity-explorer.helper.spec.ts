@@ -8,6 +8,13 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
 });
 
 describe('Activity explorer date-range filters', () => {
+  it('keeps calendar weeks separate from rolling seven-day ranges and honors the account week start', () => {
+    const now = new Date(2026, 10, 4, 12);
+    expect(activityExplorerDateRange('calendar-week', now, null, 0)).toEqual({ start: new Date(2026, 10, 1), end: new Date(2026, 10, 8) });
+    expect(activityExplorerDateRange('calendar-week', now, null, 1)).toEqual({ start: new Date(2026, 10, 2), end: new Date(2026, 10, 9) });
+    expect(activityExplorerDateRange('week', now)).toEqual({ start: new Date(2026, 9, 29), end: new Date(2026, 10, 5) });
+  });
+
   it('places All dates after every bounded date range', () => {
     expect(ACTIVITY_EXPLORER_PERIODS.at(-1)).toEqual({ value: 'all', label: 'All dates' });
     for (const period of ACTIVITY_EXPLORER_PERIODS.slice(0, -1)) {
