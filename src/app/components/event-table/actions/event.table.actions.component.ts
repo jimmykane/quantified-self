@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { MatSelectionListChange } from '@angular/material/list';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/metrics';
 
 
 @Component({
@@ -19,6 +20,7 @@ export class EventTableActionsComponent implements OnInit {
   @Output() selectedDataTypesChange: EventEmitter<string[]> = new EventEmitter<string[]>();
   @Input() dataTypes = [
     ...AppUserUtilities.getDefaultSelectedTableColumns().filter(a => a !== 'Start Date'),
+    DataGradeAdjustedPaceAvg.type,
   ]
 
   ngOnInit() {

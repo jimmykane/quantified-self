@@ -28,11 +28,16 @@ import { AppEventService } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
+import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
+import { resolveTrainingLogWeek } from '../../helpers/activity-training-log.helper';
+import { formatActivityCalendarDateParam, navigateActivityCalendarDate } from '../../helpers/activity-calendar.helper';
+
+type ActivitiesView = 'list' | 'training-log';
 
 @Component({
   selector: 'app-activities-page',
   standalone: true,
-  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent, MergedActivitiesToggleComponent],
+  imports: [SharedModule, EventTableModule, ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CompactSelectComponent],
   templateUrl: './activities-page.component.html',
   styleUrls: ['./activities-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,6 +62,11 @@ export class ActivitiesPageComponent implements OnInit {
   private catalogVersion = 0;
   private urlPeriod: ActivityExplorerPeriod = 'month';
   private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
+  private loadedWeekStart = 1;
+  readonly view = signal<ActivitiesView>('list');
+  readonly isTrainingLog = computed(() => this.view() === 'training-log');
+  readonly viewOptions = [{ value: 'list' as const, label: 'List' }, { value: 'training-log' as const, label: 'Training log' }];
+  readonly weekAnchor = signal<string | null>(null);
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<EventRead[]>([]);
@@ -71,6 +81,12 @@ export class ActivitiesPageComponent implements OnInit {
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
+  readonly trainingLogWeek = computed(() => resolveTrainingLogWeek(this.weekAnchor(), new Date(this.localDayStartMs()),
+    this.user()?.settings?.unitSettings?.startOfTheWeek));
+  readonly isCurrentWeek = computed(() => +this.trainingLogWeek().start === +resolveTrainingLogWeek(null,
+    new Date(this.localDayStartMs()), this.user()?.settings?.unitSettings?.startOfTheWeek).start);
+  readonly historyRange = computed(() => this.isTrainingLog() ? this.trainingLogWeek()
+    : activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates()));
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
   readonly customDateForm = new FormGroup({
@@ -97,8 +113,9 @@ export class ActivitiesPageComponent implements OnInit {
   readonly sportShortcuts = computed(() => getActivityTypeFamilyFilterOptions(this.selectedSports(), this.sports())
     .map(family => ({ label: family.label, values: family.activityTypes })));
   readonly filters = computed(() => ({
-    tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(), period: this.period(),
-    customDates: this.period() === 'custom' ? this.customDates() : null,
+    tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(),
+    period: this.isTrainingLog() ? 'custom' as const : this.period(),
+    customDates: this.isTrainingLog() ? this.trainingLogWeek().dates : this.period() === 'custom' ? this.customDates() : null,
   }));
   readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), merged: this.includeMergedEvents() }));
   readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
@@ -125,7 +142,12 @@ export class ActivitiesPageComponent implements OnInit {
   refreshLocalDay(): void {
     const next = new Date().setHours(0, 0, 0, 0);
     if (next === this.localDayStartMs()) return;
+    const previousWeekStart = +this.trainingLogWeek().start;
     this.localDayStartMs.set(next);
+    if (this.isTrainingLog()) {
+      if (this.user() && !this.weekAnchor() && previousWeekStart !== +this.trainingLogWeek().start) this.loadHistory();
+      return;
+    }
     if (this.user() && this.period() !== 'all' && this.period() !== 'custom') this.loadHistory();
   }
 
@@ -143,20 +165,29 @@ export class ActivitiesPageComponent implements OnInit {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
+      const previousView = this.view();
+      const previousAnchor = this.weekAnchor();
+      this.view.set(params.get('view') === 'training-log' ? 'training-log' : 'list');
+      const week = params.get('week');
+      this.weekAnchor.set(this.isTrainingLog() ? normalizeActivityExplorerCustomDates(week, week)?.startDate || null : null);
       this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
       this.untagged.set(params.get('untagged') === '1');
       this.selectedSports.set(normalizeActivityExplorerSports(params.getAll('sport')));
       this.includeMergedEvents.set(params.get('merged') === '1');
       const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
-      const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
+      const period = (requestedPeriod === 'custom' && !customDates) || (this.isTrainingLog() && requestedPeriod === 'all')
+        ? this.defaultPeriod : requestedPeriod;
       this.urlPeriod = period;
       if (period === 'all' && this.period() !== 'all') {
+        // A history transition out of the log must show the retained bounded list
+        // range even if the user cancels the All dates warning.
+        if (previousView !== this.view() && this.user()) this.loadHistory();
         this.confirmAllDates();
         return;
       }
       this.closeAllDatesWarning();
-      const rangeChanged = previousPeriod !== period || (period === 'custom'
+      const rangeChanged = previousView !== this.view() || previousAnchor !== this.weekAnchor() || previousPeriod !== period || (period === 'custom'
         && (customDates?.startDate !== this.customDates()?.startDate || customDates?.endDate !== this.customDates()?.endDate));
       this.customDates.set(customDates);
       this.period.set(period);
@@ -173,6 +204,7 @@ export class ActivitiesPageComponent implements OnInit {
         const nextUser = owner && profile?.uid === owner.uid ? profile : null;
         if (nextUser?.uid === this.user()?.uid && owner === this.owner) {
           this.user.set(nextUser);
+          if (nextUser && this.isTrainingLog() && this.loadedWeekStart !== (nextUser.settings?.unitSettings?.startOfTheWeek ?? 1)) this.loadHistory();
           return;
         }
         this.closeAllDatesWarning();
@@ -197,6 +229,31 @@ export class ActivitiesPageComponent implements OnInit {
           else this.loadHistory();
         }
       });
+  }
+
+  selectView(view: ActivitiesView): void {
+    if (view === this.view() || (view !== 'list' && view !== 'training-log')) return;
+    this.closeAllDatesWarning();
+    this.customRangeOpen.set(false);
+    this.view.set(view);
+    this.weekAnchor.set(null);
+    if (this.isTrainingLog() && this.period() === 'all') this.period.set(this.defaultPeriod);
+    this.loadHistory(true);
+    this.filtersChanged();
+  }
+
+  navigateWeek(direction: -1 | 1): void {
+    if (!this.isTrainingLog() || this.loading()) return;
+    this.weekAnchor.set(formatActivityCalendarDateParam(navigateActivityCalendarDate(this.trainingLogWeek().start, 'week', direction)));
+    this.loadHistory(true);
+    this.filtersChanged();
+  }
+
+  goToCurrentWeek(): void {
+    if (!this.isTrainingLog() || this.loading() || this.isCurrentWeek()) return;
+    this.weekAnchor.set(null);
+    this.loadHistory(true);
+    this.filtersChanged();
   }
 
   selectTags(tags: readonly string[], untagged = false): void {
@@ -306,7 +363,8 @@ export class ActivitiesPageComponent implements OnInit {
 
   openDateFilter(): void {
     if (this.loading() || !this.owner || this.owner !== this.auth.currentUser || this.user()?.uid !== this.owner.uid) return;
-    this.dateFilter()?.open();
+    if (this.isTrainingLog()) this.goToCurrentWeek();
+    else this.dateFilter()?.open();
   }
 
   clearCustomRange(): void {
@@ -383,6 +441,8 @@ export class ActivitiesPageComponent implements OnInit {
         sport: this.selectedSports().length ? this.selectedSports() : null, period: this.period(), order: null,
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
+        view: this.isTrainingLog() ? 'training-log' : null,
+        week: this.isTrainingLog() ? this.weekAnchor() : null,
       },
       queryParamsHandling: 'merge',
       replaceUrl,
@@ -464,7 +524,8 @@ export class ActivitiesPageComponent implements OnInit {
     this.loading.set(!!user);
     if (!user) return;
     const generation = this.generation;
-    const range = activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates());
+    const range = this.historyRange();
+    this.loadedWeekStart = user.settings?.unitSettings?.startOfTheWeek ?? 1;
     if (range === undefined) {
       this.loading.set(false);
       return;

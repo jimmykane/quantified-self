@@ -17,6 +17,13 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains the Activities Training log, local columns and filtered weekly totals', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**View → Training log**', '**Weekly totals by sport**', '**Columns → Running**',
+      '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
+      'Log column, sort and page-size changes stay local', 'recorded-activity counts for partial coverage',
+      'merged comparisons stay out of totals', 'unavailable value stays blank']) expect(content).toContain(phrase);
+  });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
     const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',

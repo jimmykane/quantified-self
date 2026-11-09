@@ -65,6 +65,8 @@ import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dial
 import { resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
+import { buildTrainingLogSportTotals, TRAINING_LOG_RUNNING_COLUMNS, type TrainingLogSportTotal } from '../../helpers/activity-training-log.helper';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/metrics';
 
 interface EventTableRowCacheEntry {
   event: EventRead;
@@ -79,7 +81,7 @@ interface DeviceNameDisplayItem {
   trackKey: string;
 }
 
-export type EventTablePresentation = 'dashboard' | 'browse' | 'tag-library';
+export type EventTablePresentation = 'dashboard' | 'browse' | 'tag-library' | 'training-log';
 
 export interface EventTableEventsChange {
   userID: string;
@@ -131,6 +133,24 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private trainingLogColumns = [...TRAINING_LOG_RUNNING_COLUMNS];
+  private trainingLogSort = { active: 'Start Date', direction: 'asc' as 'asc' | 'desc' };
+  private trainingLogPageSize = 25;
+  private trainingLogPageIndex = 0;
+  trainingLogColumnPreset: 'running' | 'saved' | 'custom' = 'running';
+  readonly trainingLogColumnPresets = [
+    { value: 'running' as const, label: 'Running' },
+    { value: 'saved' as const, label: 'Saved columns' },
+    { value: 'custom' as const, label: 'Custom', disabled: true },
+  ];
+  trainingLogTotals: TrainingLogSportTotal[] = [];
+  readonly trainingLogTotalColumns = ['sport', 'count', 'duration', 'distance', 'ascent'];
+  readonly trainingLogMetricColumns = ['duration', 'distance', 'ascent'] as const;
+  readonly trainingLogMetricLabels = { duration: 'Time', distance: 'Distance', ascent: 'Ascent' };
+  readonly columnLabels: Record<string, string> = {
+    'Start Date': 'Date', 'Activity Types': 'Activity', 'Average Speed': 'Pace / speed',
+    [DataGradeAdjustedPaceAvg.type]: 'GAP', 'Average Heart Rate': 'Avg HR', 'Recovery Time': 'Recovery',
+  };
   private libraryColumns = ['Distance', 'Duration'];
   private libraryPageSize = 5;
   private libraryPageIndex = 0;
@@ -265,6 +285,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'tag-library';
   }
 
+  get isTrainingLogPresentation(): boolean {
+    return this.presentation === 'training-log';
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -278,16 +302,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableSortActive(): string {
+    if (this.isTrainingLogPresentation) return this.trainingLogSort.active;
     if (this.isLibraryPresentation) return this.librarySort.active;
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
 
   get tableSortDirection(): 'asc' | 'desc' {
+    if (this.isTrainingLogPresentation) return this.trainingLogSort.direction;
     if (this.isLibraryPresentation) return this.librarySort.direction;
     return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
   }
 
   get tablePageSize(): number {
+    if (this.isTrainingLogPresentation) return this.trainingLogPageSize;
     if (this.isLibraryPresentation) return this.libraryPageSize;
     const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
@@ -296,7 +323,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   ngOnChanges(simpleChanges: SimpleChanges): void {
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
-      this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
+      this.selectedColumns = this.isTrainingLogPresentation ? this.trainingLogColumns : this.isLibraryPresentation ? this.libraryColumns
         : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
     }
     if (this.renderedOwnerKey !== null && this.renderedOwnerKey !== this.currentOwnerKey) {
@@ -304,6 +331,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.data.data = [];
       this.rowCache.clear();
       this.selection.clear();
+      this.trainingLogTotals = [];
+      this.trainingLogColumns = [...TRAINING_LOG_RUNNING_COLUMNS];
+      this.trainingLogColumnPreset = 'running';
+      if (this.isTrainingLogPresentation) this.selectedColumns = this.trainingLogColumns;
       this.mutationLoading.set(false);
     }
     if (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames || simpleChanges.targetUser || this.pendingLoadingInputs) {
@@ -426,6 +457,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       if (this.isBrowsePresentation) {
+        return;
+      }
+      if (this.isTrainingLogPresentation) {
+        const direction = sort.direction === 'asc' ? 'asc' : 'desc';
+        if (sort.active !== this.trainingLogSort.active || direction !== this.trainingLogSort.direction) this.hapticsService.selection();
+        this.trainingLogSort = { active: sort.active, direction };
         return;
       }
       if (this.isLibraryPresentation) {
@@ -1075,9 +1112,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       ];
       return;
     }
+    const dataColumnOrder = [...this.defaultSelectedColumns, DataGradeAdjustedPaceAvg.type];
     const sortedSelectedColumns = (this.selectedColumns || [])
-      .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
-      .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
+      .filter(column => column !== 'Tags' && (this.isTrainingLogPresentation || (column !== 'Description' && column !== 'Shared')));
+    if (!this.isTrainingLogPresentation) sortedSelectedColumns.sort((a, b) => dataColumnOrder.indexOf(a) - dataColumnOrder.indexOf(b));
 
     const activityTypeColumn = sortedSelectedColumns.find(column => column === 'Activity Types');
     const remainingSelectedColumns = activityTypeColumn
@@ -1092,8 +1130,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       'Checkbox',
       'Start Date',
       ...dataColumns,
-      'Description',
-      'Shared',
+      ...(this.isTrainingLogPresentation ? [] : ['Description', 'Shared']),
       'Actions',
     ];
 
@@ -1132,6 +1169,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.isTrainingLogPresentation) {
+      const pageIndex = pageEvent.pageIndex ?? 0;
+      if (pageIndex !== this.trainingLogPageIndex || pageEvent.pageSize !== this.trainingLogPageSize) this.hapticsService.selection();
+      this.trainingLogPageIndex = pageIndex;
+      this.trainingLogPageSize = pageEvent.pageSize;
+      return;
+    }
     if (this.isLibraryPresentation) {
       const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
       const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
@@ -1350,6 +1394,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.filter = JSON.stringify({
       text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,
     });
+    this.trainingLogTotals = this.isTrainingLogPresentation
+      ? buildTrainingLogSportTotals((this.data.filteredData ?? this.data.data).map(row => row.Event),
+        this.user?.settings?.unitSettings, this.user?.settings?.summariesSettings)
+      : [];
   }
 
   private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {
@@ -1377,6 +1425,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
       return;
     }
+    if (this.isTrainingLogPresentation) {
+      this.trainingLogColumns = [...event];
+      this.trainingLogColumnPreset = 'custom';
+      this.selectedColumns = this.trainingLogColumns;
+      this.updateDisplayedColumns();
+      return;
+    }
     if (this.isLibraryPresentation) {
       // Material's selected-options order can change as choices are toggled.
       this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
@@ -1392,6 +1447,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         selectedColumns: this.selectedColumns,
       },
     });
+  }
+
+  selectTrainingLogColumnPreset(preset: string): void {
+    if (!this.isTrainingLogPresentation || this.tableIsLoading || preset === this.trainingLogColumnPreset
+      || (preset !== 'running' && preset !== 'saved')) return;
+    this.trainingLogColumnPreset = preset;
+    this.trainingLogColumns = preset === 'running' ? [...TRAINING_LOG_RUNNING_COLUMNS]
+      : [...(this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || this.defaultSelectedColumns)];
+    this.selectedColumns = this.trainingLogColumns;
+    this.updateDisplayedColumns();
+    this.hapticsService.selection();
   }
 
   ngOnDestroy() {

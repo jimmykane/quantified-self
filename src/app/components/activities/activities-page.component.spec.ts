@@ -13,8 +13,8 @@ import { By } from '@angular/platform-browser';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import dayjs, { type Dayjs } from 'dayjs';
-import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
-import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { ActivityTypes, DataActivityTypes, DataDeviceNames, DataDistance, DataGradeAdjustedPaceAvg, PaceUnits, EventImporterJSON, FileType, Privacy, DistanceUnits, User, type EventInterface } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings, normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { AppEventSummary } from '@shared/event-summary';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -134,6 +134,142 @@ async function openCustomDates(c: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe('ActivitiesPageComponent', () => {
+  it('opens a linked Training log week using the account week start without loading all history', async () => {
+    const c = await setup();
+    c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
+    c.user$.value.settings.unitSettings.startOfTheWeek = 0;
+    c.params$.next(convertToParamMap({ view: 'training-log', week: '2026-11-04', period: 'all', sport: 'Running' }));
+    await render(c);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledExactlyOnceWith(c.user$.value, [
+      { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 10, 1).getTime() },
+      { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 10, 8).getTime() },
+    ], 'startDate', false, 0);
+    expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance.presentation).toBe('training-log');
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Previous week"]')).toBeTruthy();
+    expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeNull();
+    expect(c.dialog.open).not.toHaveBeenCalled();
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('navigates weeks and browser history with one query and one accepted-action haptic', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const c = await setup('Endurance'); await render(c);
+      c.component.selectView('training-log'); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      c.haptics.selection.mockClear();
+      c.fixture.nativeElement.querySelector('[aria-label="Previous week"]').click(); await render(c);
+      expect(c.component.trainingLogWeek().dates).toEqual({ startDate: '2026-10-26', endDate: '2026-11-01' });
+      expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: 'training-log', week: '2026-10-26', tag: ['Endurance'] });
+      expect(c.haptics.selection).toHaveBeenCalledOnce();
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+      c.params$.next(convertToParamMap(Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams)
+        .filter(([, value]) => value !== null)))); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+      c.fixture.nativeElement.querySelector('[aria-label="Next week"]').click(); await render(c);
+      expect(c.component.isCurrentWeek()).toBe(true);
+      c.component.goToCurrentWeek(); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
+      c.params$.next(convertToParamMap({ view: 'training-log', week: '2026-10-26', tag: 'Endurance' })); await render(c);
+      expect(c.component.isCurrentWeek()).toBe(false);
+      c.component.goToCurrentWeek(); await render(c);
+      expect(c.component.isCurrentWeek()).toBe(true);
+      expect(c.router.navigate.mock.lastCall[1].queryParams.week).toBeNull();
+      c.component.selectView('list'); await render(c);
+      expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeTruthy();
+      expect(c.component.selectedTags()).toEqual(['Endurance']);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('moves the live current week at rollover and reloads a changed start-of-week preference', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 8, 12));
+    try {
+      const c = await setup();
+      c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
+      c.params$.next(convertToParamMap({ view: 'training-log' })); await render(c);
+      vi.setSystemTime(new Date(2026, 10, 9, 0, 1)); c.component.refreshLocalDay(); await render(c);
+      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-09');
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      vi.setSystemTime(new Date(2026, 10, 10, 0, 1)); c.component.refreshLocalDay(); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      const profile = Object.assign(new User('owner'), c.user$.value, { settings: {
+        ...c.user$.value.settings, unitSettings: { ...c.user$.value.settings.unitSettings, startOfTheWeek: 0 },
+      } });
+      c.user$.next(profile); await render(c);
+      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-08');
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+      c.component.navigateWeek(-1); await render(c);
+      vi.setSystemTime(new Date(2026, 10, 15, 0, 1)); c.component.refreshLocalDay(); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
+      expect(c.component.trainingLogWeek().dates.startDate).toBe('2026-11-01');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('restores the bounded list when cancelling an All dates history transition out of the log', async () => {
+    const c = await setup();
+    c.params$.next(convertToParamMap({ view: 'training-log', week: '2026-11-04' })); await render(c);
+    c.params$.next(convertToParamMap({ period: 'all' })); await render(c);
+    expect(c.dialog.open).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
+    c.dialogs[0].closed$.next(false); await render(c);
+    expect(c.component.view()).toBe('list');
+    expect(c.component.period()).toBe('month');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'month' });
+  });
+
+  it.each([false, true])('renders the Running preset and GAP with selected units (imperial=%s), sorting and full-week filtered totals', async imperial => {
+    const c = await setup('', true);
+    c.user$.value.settings.unitSettings = normalizeUserUnitSettings({ paceUnits: [imperial ? PaceUnits.MinutesPerMile : PaceUnits.MinutesPerKilometer],
+      distanceUnits: imperial ? DistanceUnits.Miles : DistanceUnits.Kilometers });
+    const savedColumns = [...c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns];
+    c.params$.next(convertToParamMap({ view: 'training-log' }));
+    const records = Array.from({ length: 27 }, (_, index) => new AppEventSummary({ id: `log-${index}`,
+      name: index < 26 ? `Run ${index}` : 'Ride', startDate: Date.now(), endDate: Date.now(),
+      srcFileType: FileType.FIT, description: null, isMerge: false, privacy: Privacy.Private,
+      stats: { 'Activity Types': [index < 26 ? ActivityTypes.Running : ActivityTypes.Cycling], Duration: 3600, Distance: 10_000,
+        Ascent: 100, 'Average Speed': 3, ...(index < 26 ? { [DataGradeAdjustedPaceAvg.type]: index === 0 ? 280 : 300 } : {}),
+        'Average Cadence': 170 },
+    }));
+    const hydrate = vi.spyOn(EventImporterJSON, 'getEventFromJSON');
+    c.events.getEventSummariesBy.mockReturnValue(of(records)); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    expect(table.displayedColumns).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(table.displayedColumns).not.toContain('Description');
+    expect(table.displayedColumns).not.toContain('Shared');
+    expect(table.trainingLogColumnPreset).toBe('running');
+    expect(table.tablePageSize).toBe(25);
+    expect(table.trainingLogTotals.map(row => [row.sport, row.count])).toEqual([['Cycling', 1], ['Running', 26]]);
+    expect(c.fixture.nativeElement.querySelector('.training-log-totals').textContent).toContain('Weekly totals by sport');
+    const gap = table.data.data.find(row => row.Event.getID() === 'log-0')[DataGradeAdjustedPaceAvg.type];
+    expect(gap).toBe(imperial ? '07:30 min/m' : '04:40 min/km');
+    expect(table.data.data.find(row => row.Event.getID() === 'log-26')[DataGradeAdjustedPaceAvg.type]).toBe('');
+    expect(hydrate).not.toHaveBeenCalled();
+    hydrate.mockRestore();
+    expect(c.fixture.nativeElement.querySelector('th.mat-column-Average-Grade-Adjusted-Pace').textContent).toContain('GAP');
+    table.paginator.nextPage(); await render(c);
+    expect(table.trainingLogTotals.find(row => row.sport === 'Running')?.count).toBe(26);
+    table.search('Run 0'); await render(c);
+    expect(table.trainingLogTotals.map(row => [row.sport, row.count])).toEqual([['Running', 1]]);
+    table.clearSearch(); await render(c);
+    table.sort.sort({ id: DataGradeAdjustedPaceAvg.type, start: 'asc', disableClear: true }); await render(c);
+    expect(table.data.sortData(table.data.filteredData, table.sort)
+      .filter(row => row[DataGradeAdjustedPaceAvg.type] !== '')[0].Event.getID()).toBe('log-0');
+    await table.selectedColumnsChange(['Distance']); await render(c);
+    expect(table.trainingLogColumnPreset).toBe('custom');
+    table.selectTrainingLogColumnPreset('running'); await render(c);
+    expect(table.displayedColumns).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(savedColumns);
+    expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+    c.component.selectSports(['Cycling']); await render(c);
+    expect(table.trainingLogTotals.map(row => row.sport)).toEqual(['Cycling']);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    c.component.selectView('list'); await render(c);
+    expect(table.selectedColumns).toEqual(savedColumns);
+    expect(table.trainingLogTotals).toEqual([]);
+  });
+
   it('uses Dashboard’s full-range query with bounded numeric dates by default', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 21, 12));
@@ -222,7 +358,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
     const controls = [...c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters > *')] as HTMLElement[];
-    expect(controls.map(control => control.tagName)).toEqual(['APP-TABLE-DATE-FILTER', 'APP-ACTIVITY-FILTER-PICKER', 'APP-ACTIVITY-FILTER-PICKER']);
+    expect(controls.map(control => control.tagName)).toEqual(['APP-COMPACT-SELECT', 'APP-TABLE-DATE-FILTER', 'APP-ACTIVITY-FILTER-PICKER', 'APP-ACTIVITY-FILTER-PICKER']);
     expect(c.fixture.nativeElement.querySelector('.activity-explorer-filters mat-form-field')).toBeNull();
     expect(c.fixture.nativeElement.querySelector('form')).toBeNull();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
