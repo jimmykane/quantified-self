@@ -40,6 +40,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
 import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
 import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
+import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
+import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
 import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import {
@@ -274,6 +276,8 @@ interface DashboardTodayReadinessViewModel {
   hrvTone: DashboardTodayReadinessTone;
   hrvRangeIndicator: DashboardTodayRangeIndicator | null;
   overnightHeartRateText: string;
+  overnightHeartRateReadingText: string | null;
+  overnightHeartRateReadingKind: 'avg' | 'min' | null;
   overnightHeartRateCue: DashboardTodayDirectionCue | null;
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
@@ -327,6 +331,8 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     hrvTone: 'neutral',
     hrvRangeIndicator: null,
     overnightHeartRateText: '--',
+    overnightHeartRateReadingText: null,
+    overnightHeartRateReadingKind: null,
     overnightHeartRateCue: null,
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
@@ -2252,6 +2258,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const rampText = this.formatDashboardTodayMetric(context.rampRate, true);
     const score = awaitingSleep || warningText ? null : context.score;
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
+    const heartRateValue = context.averageHeartRateBpm ?? context.minimumHeartRateBpm;
+    const heartRateKind = context.averageHeartRateBpm != null ? 'avg' : 'min';
+    const heartRateDisplay = heartRateValue != null
+      ? formatCanonicalSleepMetricSportsLibValue(
+        heartRateKind === 'avg' ? SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate : SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate,
+        heartRateValue, this.user?.settings?.unitSettings,
+      ) : null;
     const matchingNights = sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap
       && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs);
     const sourceLabel = resolveHealthChangeSourceLabel(matchingNights, context.latestSleepAtMs !== null);
@@ -2303,12 +2316,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       hrvTone: hrv.tone,
       hrvRangeIndicator,
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
+      overnightHeartRateReadingText: heartRateDisplay ? [heartRateDisplay.value, heartRateDisplay.unit].filter(Boolean).join(' ') : null,
+      overnightHeartRateReadingKind: heartRateDisplay ? heartRateKind : null,
       overnightHeartRateCue: buildDashboardTodayBaselineCue(context.overnightHeartRateRatio),
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null
         : (context.overnightHeartRateRatio - 1) * 100,
       overnightHeartRateTone,
-      overnightHeartRateContextText: context.overnightHeartRateRatio !== null
+      overnightHeartRateContextText: heartRateDisplay || context.overnightHeartRateRatio !== null
         ? [context.overnightHeartRateCalculatedByQs ? 'Calculated by QS from Garmin samples' : '', sleepStatus.contextText].filter(Boolean).join(' · ') : '',
       recoveryText,
       recoveryRemainingPercent,

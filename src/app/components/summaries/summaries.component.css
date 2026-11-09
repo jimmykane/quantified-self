@@ -383,7 +383,10 @@
   --qs-metric-indicator-range-color: color-mix(in srgb, var(--qs-today-positive) 26%, var(--mat-sys-surface-container));
 }
 .dashboard-today-load-value,
+.dashboard-today-overnight-hr-value,
 .dashboard-hrv-status { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; }
+.dashboard-overnight-hr-reading { white-space: nowrap; }
+.dashboard-overnight-hr-kind { font-size: 0.7em; font-weight: 400; color: var(--mat-sys-on-surface-variant); }
 .dashboard-current-state-row .dashboard-hrv-status { margin-top: 0.15rem; }
 .dashboard-current-state-row .dashboard-hrv-status small { margin-top: 0; }
 .dashboard-direction-cue {

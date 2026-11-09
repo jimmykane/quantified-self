@@ -47,6 +47,7 @@ import {
   DataAscent,
   DataDistance,
   DataDuration,
+  DistanceUnits,
   AppThemes,
   TileTypes,
   TimeIntervals,
@@ -79,6 +80,7 @@ import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-ti
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { DashboardDailyBriefingComponent } from './dashboard-daily-briefing/dashboard-daily-briefing.component';
 import { ActivityCalendarService } from '../../services/activity-calendar.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
@@ -1922,6 +1924,9 @@ describe('SummariesComponent', () => {
     expect(overnightHeartRate?.getAttribute('data-cue-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('.dashboard-direction-cue')?.getAttribute('aria-label')).toContain('Below your usual level');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.querySelector('.dashboard-overnight-hr-reading')?.getAttribute('aria-label'))
+      .toBe('Average sleep heart rate: 48 bpm');
+    expect(overnightHeartRate?.querySelector('.dashboard-overnight-hr-kind')?.textContent).toBe('avg');
     expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
     expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
       .toBe('Overnight heart rate for the latest 7 eligible nights');
@@ -1957,6 +1962,38 @@ describe('SummariesComponent', () => {
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+  });
+
+  it.each([
+    { average: 54, minimum: 42, kind: 'avg', accessible: 'Average sleep heart rate: 54 bpm' },
+    { average: null, minimum: 42, kind: 'min', accessible: 'Minimum sleep heart rate: 42 bpm' },
+  ])('shows the latest $kind sleep HR without a baseline, respects units and clears expired readings', scenario => {
+    const nowMs = Date.UTC(2026, 10, 9, 12);
+    vi.useFakeTimers(); vi.setSystemTime(nowMs);
+    component.showTodaySummary = true;
+    component['readinessSleepSessions'] = [{
+      id: 'latest', sleepDate: '2026-11-08', startTimeMs: nowMs - 33 * 3_600_000,
+      endTimeMs: nowMs - 25 * 3_600_000, durationSeconds: 28_800, score: { value: 81 },
+      vitals: { averageHeartRateBpm: scenario.average, minimumHeartRateBpm: scenario.minimum },
+      source: { provider: 'SuuntoApp', sourceSessionKey: 'latest' },
+    }] as SleepSession[];
+    const host = fixture.nativeElement as HTMLElement;
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      component.user = { settings: { unitSettings, dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+      component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+      component['changeDetector'].markForCheck(); fixture.detectChanges();
+      expect(host.querySelector('.dashboard-overnight-hr-reading')?.getAttribute('aria-label')).toBe(scenario.accessible);
+      expect(host.querySelector('.dashboard-overnight-hr-kind')?.textContent).toBe(scenario.kind);
+      expect(host.querySelector('.dashboard-today-overnight-hr .dashboard-direction-cue')).toBeNull();
+      expect(host.querySelector('.dashboard-today-overnight-hr small')?.textContent).toBe('Comparison unavailable');
+      expect(component.dashboardTodayReadiness.overnightHeartRateContextText).toContain('Last available');
+      expect(component.dashboardTodayReadiness.awaitingSleep).toBe(true);
+    }
+    vi.setSystemTime(nowMs + 48 * 3_600_000);
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('.dashboard-overnight-hr-reading')).toBeNull();
+    expect(component.dashboardTodayReadiness.overnightHeartRateReadingKind).toBeNull();
   });
 
   it.each([

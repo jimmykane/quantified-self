@@ -185,12 +185,17 @@
       </div>
       <div class="dashboard-today-overnight-hr" [attr.data-cue-tone]="dashboardTodayReadiness.overnightHeartRateTone">
         <dt>Overnight HR</dt>
-        <dd>
+        <dd class="dashboard-today-overnight-hr-value">
+          @if (dashboardTodayReadiness.overnightHeartRateReadingText; as reading) {
+            <span class="dashboard-overnight-hr-reading" role="img" [attr.aria-label]="(dashboardTodayReadiness.overnightHeartRateReadingKind === 'avg' ? 'Average' : 'Minimum') + ' sleep heart rate: ' + reading">
+              {{ reading }} <span class="dashboard-overnight-hr-kind" aria-hidden="true">{{ dashboardTodayReadiness.overnightHeartRateReadingKind }}</span>
+            </span>
+          }
           @if (dashboardTodayReadiness.overnightHeartRateCue; as cue) {
             <span class="dashboard-direction-cue" role="img" [attr.aria-label]="cue.label + ': ' + dashboardTodayReadiness.overnightHeartRateText">
               <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon>{{ dashboardTodayReadiness.overnightHeartRateText }}
             </span>
-          } @else {
+          } @else if (!dashboardTodayReadiness.overnightHeartRateReadingText) {
             {{ dashboardTodayReadiness.overnightHeartRateText }}
           }
         </dd>

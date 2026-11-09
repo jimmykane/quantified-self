@@ -1,6 +1,6 @@
 import type { DerivedTrainingDurabilityMetricPayload } from '@shared/derived-metrics';
 import {
-  buildReadinessSignals,
+  buildReadinessEvaluation,
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_SLEEP_MAX_AGE_MS,
   type ReadinessConfidence,
@@ -58,6 +58,8 @@ export interface DashboardReadinessSignalsContext {
   averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
   overnightHeartRateRatio: number | null;
+  averageHeartRateBpm?: number | null;
+  minimumHeartRateBpm?: number | null;
   overnightHeartRateCalculatedByQs?: boolean;
   loadAtMs?: number | null;
   trend: DashboardInsightTrendPoint[];
@@ -242,14 +244,17 @@ export function buildDashboardReadinessSignalsContext(input: {
       averageHeartRateSourceKey: point.averageHeartRateSourceKey,
       minimumHeartRateSourceKey: point.minimumHeartRateSourceKey,
     }));
-  const context = buildReadinessSignals({
+  const evaluation = buildReadinessEvaluation({
     form: input.formNow?.value,
     rampRate: input.rampRate?.rampRate,
     sleepPoints,
     nowMs: input.nowMs,
   });
+  const context = evaluation?.signals;
   return context ? {
     ...context,
+    averageHeartRateBpm: evaluation.averageHeartRate.latestValue,
+    minimumHeartRateBpm: evaluation.minimumHeartRate.latestValue,
     overnightHeartRateCalculatedByQs: (input.sleepTrend?.points || []).some(point => point.heartRateCalculatedByQs
       && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs),
     loadAtMs: [input.formNow?.latestDayMs, input.rampRate?.latestDayMs]
