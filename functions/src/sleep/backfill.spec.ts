@@ -695,6 +695,41 @@ describe('backfillSuuntoAppSleep', () => {
             expect.objectContaining({ status: 'failed', nextBackfillAllowedAtMs: null }), expect.any(Number));
     });
 
+    it.each([1, 2])('drains an in-flight Health account %i after another window fails, without admitting more work', async pendingAccount => {
+        seedSuuntoToken();
+        hoisted.tokenDocs.push({ id: 'suunto-token-2', data: () => ({}) });
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => ({
+            userName: tokenDoc.id === 'suunto-token-2' ? 'suunto-user-2' : 'suunto-user-1',
+        }));
+        const dayMs = 86_400_000;
+        const selectedStartMs = nowMs - 56 * dayMs;
+        let rejectRecent: (error: Error) => void = () => {};
+        let releasePending: () => void = () => {};
+        const recentFailure = new Promise<void>((_resolve, reject) => { rejectRecent = reject; });
+        const pending = new Promise<void>(resolve => { releasePending = resolve; });
+        hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
+            if (input.type === 'suunto_health_poll') {
+                if (input.rangeEndMs === nowMs) await recentFailure;
+                if (input.rangeStartMs === selectedStartMs + 26 * dayMs
+                    && input.providerUserId === `suunto-user-${pendingAccount}`) await pending;
+            }
+            return { id: 'queue-item' };
+        });
+        const result = queueSuuntoSleepHealthHistory('user-1', { startMs: selectedStartMs, endMs: nowMs });
+        const rejection = expect(result).rejects.toMatchObject({ code: 'internal' });
+        const expectedWrites = pendingAccount === 1 ? 4 : 5;
+        await vi.waitFor(() => expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWrites));
+        rejectRecent(new Error('queue unavailable'));
+        // Drain rejection handlers while the other account write is still pending.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        releasePending();
+        await rejection;
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWrites);
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp,
+            expect.objectContaining({ status: 'failed', lastBackfillQueueItems: 2, nextBackfillAllowedAtMs: null }), Date.now());
+    });
+
     it('queues separately sized Sleep and Health windows for every eligible Suunto account', async () => {
         seedSuuntoToken();
         const userID = 'suunto-health-user';
