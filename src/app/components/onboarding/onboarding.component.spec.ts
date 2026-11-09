@@ -154,14 +154,14 @@ describe('OnboardingComponent', () => {
     it('takes the full tour forward and back with focus on the new heading', async () => {
         await setupComponent(true);
         clickButton('Next');
-        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Look beyond');
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Track your training');
         await fixture.whenStable();
         expect(document.activeElement).toBe(fixture.nativeElement.querySelector('h1'));
         clickButton('Back');
         expect(component.chapterIndex()).toBe(0);
         clickButton('Next');
         clickButton('Next');
-        clickButton('Find my starting point');
+        clickButton('Continue setup');
         expect(component.stage()).toBe('start');
         expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
     });

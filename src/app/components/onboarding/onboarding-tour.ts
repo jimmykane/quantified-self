@@ -1,33 +1,33 @@
 /** The optional Field guide introduces existing workspaces, without granting consent or starting imports. */
 export const FIELD_GUIDE_CHAPTERS = [
     {
-        hero: 'Go further. See more.',
-        title: 'Every part of your training, together.',
-        description: 'Your watch sees the session. Quantified Self helps you see how it all fits together.',
+        hero: 'Your activities, together.',
+        title: 'Review all your activities in one place.',
+        description: 'Bring your workouts into Quantified Self (QS) to explore each session and compare your progress over time.',
         points: [
-            { icon: 'watch', title: 'Bring your activities together', description: 'Different sports and services, one home.' },
-            { icon: 'insights', title: 'See the wider picture', description: 'Explore health and sleep alongside training.' },
-            { icon: 'tune', title: 'Make the view yours', description: 'Start simple and explore at your own pace.' },
+            { icon: 'dashboard', title: 'Find your activities', description: 'Browse workouts across sports and sources in your Dashboard.' },
+            { icon: 'route', title: 'Explore each workout', description: 'Open an activity to inspect its route, laps and performance charts.' },
+            { icon: 'compare_arrows', title: 'Compare your efforts', description: 'Compare activities side by side using recorded pace, heart rate and power.' },
         ],
     },
     {
-        hero: 'Small moments. Bigger picture.',
-        title: 'Look beyond a single workout.',
-        description: 'A great session is one chapter. Explore the patterns across your activities, health and sleep.',
+        hero: 'Understand your training. Plan ahead.',
+        title: 'Track your training and plan your next week.',
+        description: 'See how your training changes over time, explore recovery data and organize upcoming workouts.',
         points: [
-            { icon: 'monitoring', title: 'Follow your training over time', description: 'Look at your workload, consistency and progress.' },
-            { icon: 'bedtime', title: 'Put recovery in context', description: 'Explore the sleep and health data your sources support.' },
-            { icon: 'edit_note', title: 'Remember the things numbers miss', description: 'Add Timeline notes about life around your training.' },
+            { icon: 'monitoring', title: 'Follow your training load', description: 'Use Training to track fitness, fatigue, form and weekly volume.' },
+            { icon: 'bedtime', title: 'Explore your recovery', description: 'Review sleep and health trends when available from your sources.' },
+            { icon: 'calendar_month', title: 'Plan your workouts', description: 'Create training plans and structured workouts in your calendar.' },
         ],
     },
     {
-        hero: 'Your next chapter.',
-        title: 'Make room for what comes next.',
-        description: 'Get to know your patterns. Then use your workspace to plan, review and keep moving.',
+        hero: 'Start your way.',
+        title: 'Get started with your first activity.',
+        description: 'Connect a watch, upload an activity file or explore first. Finish account setup to open your workspace.',
         points: [
-            { icon: 'calendar_month', title: 'Give your week a little structure', description: 'Create plans and workouts in your training calendar.' },
-            { icon: 'route', title: 'Get closer to every activity', description: 'Explore recorded routes, laps and the details that matter.' },
-            { icon: 'shield', title: 'Choose your connections', description: 'Review provider permissions and optional sharing before you start.' },
+            { icon: 'watch', title: 'Connect your watch', description: 'With Pro, import activities from Garmin, Suunto, COROS or Wahoo.' },
+            { icon: 'upload_file', title: 'Upload an activity file', description: 'Start free with FIT, GPX or TCX uploads from your Dashboard.' },
+            { icon: 'explore', title: 'Take a look around', description: 'Explore QS with Starter and add your activities when you’re ready.' },
         ],
     },
 ] as const;

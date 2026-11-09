@@ -59,10 +59,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly setupProgress = computed(() => this.stage() === 'start' ? '01 / Your starting point'
-        : this.stage() === 'privacy' ? '02 / Your privacy' : '03 / Your membership');
+        : this.stage() === 'privacy' ? '02 / Account preferences' : '03 / Your membership');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
-        : this.stage() === 'start' ? 'Every journey starts somewhere.'
-        : this.stage() === 'privacy' ? 'Your story. Your data.' : 'Room to go further.');
+        : this.stage() === 'start' ? 'Choose your first step.'
+        : this.stage() === 'privacy' ? 'Set up your account.' : 'Choose a plan that fits.');
     readonly completionHint = computed(() => this.hasReturnDestination()
         ? `After setup, you’ll return to ${this.returnTarget().label}.`
         : this.startChoice() === 'connect'
