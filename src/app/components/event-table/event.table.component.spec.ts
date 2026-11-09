@@ -639,28 +639,47 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it('gives library sorting and pagination feedback for changes while keeping hydration and parent resets silent', async () => {
-        component.presentation = 'tag-library';
-        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+    it.each(['tag-library', 'training-log'] as const)('gives %s sorting and pagination feedback while keeping hydration and parent resets silent', async presentation => {
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        component.presentation = presentation;
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', presentation, false) });
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
         component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
-        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
-        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
-        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize: 5 } as any); };
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize } as any); };
         component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
     });
 
-    it('gives page feedback after the data source silently clamps a filtered page back to the first page', async () => {
-        component.presentation = 'tag-library';
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+    it.each(['tag-library', 'training-log'] as const)('gives %s page feedback after a silent filtered-page clamp', async presentation => {
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        component.presentation = presentation;
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize } as any);
         mockHapticsService.selection.mockClear();
         // Material can clamp pageIndex without emitting a page event after filtering.
         component.paginator.pageIndex = 0;
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize } as any);
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it.each(['tag-library', 'training-log'] as const)('gives one %s tag-filter haptic when resetting the paginator', async presentation => {
+        component.presentation = presentation;
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, previousPageIndex: 1, pageSize } as any); };
+        mockHapticsService.selection.mockClear();
+        component.updateTagFilters(['untagged']);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('keeps Training log page-size synchronization silent', () => {
+        component.presentation = 'training-log';
+        component.paginator._changePageSize = pageSize => { void component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize }); };
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'training-log', false) });
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('keeps search focused after its clear button disappears and gives one feedback', () => {

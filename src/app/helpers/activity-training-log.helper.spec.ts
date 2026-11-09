@@ -40,6 +40,13 @@ describe('Training log weeks', () => {
 });
 
 describe('Training log sport totals', () => {
+  it('retains recorded ascent for summaries with no sport metadata', () => {
+    const summary = event('unknown', [], { Duration: 600, Distance: 1000, Ascent: 123 });
+    const [total] = buildTrainingLogSportTotals([summary]);
+    expect(total.sport).toBe(ActivityTypes.unknown);
+    expect(total.ascent).toEqual({ value: '123 m', coverage: '' });
+    expect(buildTrainingLogSportTotals([summary], null, { removeAscentForEventTypes: [ActivityTypes.unknown] })[0].ascent.value).toBe('--');
+  });
   it('totals every matching recording per sport, keeping multisport together and comparisons out', () => {
     const stats = { [DataDuration.type]: 3600, [DataDistance.type]: 10_000, [DataAscent.type]: 100 };
     const runs = Array.from({ length: 26 }, (_, index) => event(`run-${index}`, [ActivityTypes.Running], stats));

@@ -134,6 +134,47 @@ async function openCustomDates(c: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe('ActivitiesPageComponent', () => {
+  it('renders each view in its own sort order immediately after switching views', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const c = await setup('', true);
+      c.user$.value.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+      c.params$.next(convertToParamMap({ period: 'custom', start: '2026-11-02', end: '2026-11-08' }));
+      const data = [
+        new AppEventSummary({ id: 'early', name: 'Morning run', startDate: +new Date(2026, 10, 2), endDate: +new Date(2026, 10, 2, 1),
+          srcFileType: FileType.FIT, description: null, isMerge: false, privacy: Privacy.Private, stats: { 'Activity Types': [ActivityTypes.Running], Distance: 1000 } }),
+        new AppEventSummary({ id: 'late', name: 'Evening run', startDate: +new Date(2026, 10, 4), endDate: +new Date(2026, 10, 4, 1),
+          srcFileType: FileType.FIT, description: null, isMerge: false, privacy: Privacy.Private, stats: { 'Activity Types': [ActivityTypes.Running], Distance: 2000 } }),
+      ];
+      c.events.getEventSummariesBy.mockReturnValue(of(data)); await render(c);
+      const names = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-row .activity-custom-name')].map((element: Element) => element.textContent?.trim());
+      expect(names()).toEqual(['Evening run', 'Morning run']);
+      c.component.selectView('training-log'); await render(c);
+      const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+      expect(table.sort.direction).toBe('asc');
+      expect(names()).toEqual(['Morning run', 'Evening run']);
+      c.component.selectView('list'); await render(c);
+      expect(table.sort.direction).toBe('desc');
+      expect(names()).toEqual(['Evening run', 'Morning run']);
+      expect(c.userService.updateUserProperties).not.toHaveBeenCalled();
+      expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('refreshes the Saved columns log preset after the list column preferences change', async () => {
+    const c = await setup('', true);
+    c.events.getEventSummariesBy.mockReturnValue(of([])); await render(c);
+    c.component.selectView('training-log'); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    table.selectTrainingLogColumnPreset('saved'); await render(c);
+    c.component.selectView('list'); await render(c);
+    await table.selectedColumnsChange(['Distance']); await render(c);
+    c.component.selectView('training-log'); await render(c);
+    expect(table.trainingLogColumnPreset).toBe('saved');
+    expect(table.selectedColumns).toEqual(['Distance']);
+    expect(c.userService.updateUserProperties).toHaveBeenCalledOnce();
+  });
+
   it('opens a linked Training log week using the account week start without loading all history', async () => {
     const c = await setup();
     c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);

@@ -154,7 +154,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private libraryColumns = ['Distance', 'Duration'];
   private libraryPageSize = 5;
   private libraryPageIndex = 0;
-  private suppressLibraryPageFeedback = false;
+  private suppressPageFeedback = false;
   private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
   readonly libraryAvailableColumns = [
     'Distance', 'Duration',
@@ -323,6 +323,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   ngOnChanges(simpleChanges: SimpleChanges): void {
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
+      if (this.isTrainingLogPresentation && this.trainingLogColumnPreset === 'saved') {
+        this.trainingLogColumns = [...(this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || this.defaultSelectedColumns)];
+      }
       this.selectedColumns = this.isTrainingLogPresentation ? this.trainingLogColumns : this.isLibraryPresentation ? this.libraryColumns
         : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
     }
@@ -337,6 +340,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (this.isTrainingLogPresentation) this.selectedColumns = this.trainingLogColumns;
       this.mutationLoading.set(false);
     }
+    if (preferencesChanged && this.sort) {
+      // Input bindings update the header without emitting sortChange. Set the
+      // destination view's sort before rebuilding data, including identical ranges.
+      this.sort.active = this.tableSortActive;
+      this.sort.direction = this.tableSortDirection;
+    }
     if (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames || simpleChanges.targetUser || this.pendingLoadingInputs) {
       this.pendingLoadingInputs = !!this.isLoading || !this.events || this.awaitingOwnerEvents;
       if (!this.pendingLoadingInputs && this.paginator && this.sort) {
@@ -346,7 +355,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (preferencesChanged) {
       const nextPageSize = this.tablePageSize;
       if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
-        this.paginator._changePageSize(nextPageSize);
+        this.changePageSilently(() => this.paginator._changePageSize(nextPageSize));
       }
       this.updateDisplayedColumns();
     }
@@ -386,10 +395,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.tagFilters = [];
       this.untaggedFilter = false;
       this.selection.clear();
-      this.suppressLibraryPageFeedback = true;
-      this.paginator?.firstPage();
-      this.suppressLibraryPageFeedback = false;
+      this.changePageSilently(() => this.paginator?.firstPage());
       this.libraryPageIndex = 0;
+      this.trainingLogPageIndex = 0;
       this.applyTableFilter();
     }
     if (this.pendingTableFilter) {
@@ -1171,7 +1179,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async pageChanges(pageEvent: PageEvent) {
     if (this.isTrainingLogPresentation) {
       const pageIndex = pageEvent.pageIndex ?? 0;
-      if (pageIndex !== this.trainingLogPageIndex || pageEvent.pageSize !== this.trainingLogPageSize) this.hapticsService.selection();
+      const previousPageIndex = pageEvent.previousPageIndex ?? this.trainingLogPageIndex;
+      if (!this.suppressPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.trainingLogPageSize)) this.hapticsService.selection();
       this.trainingLogPageIndex = pageIndex;
       this.trainingLogPageSize = pageEvent.pageSize;
       return;
@@ -1179,7 +1188,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isLibraryPresentation) {
       const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
       const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
-      if (!this.suppressLibraryPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      if (!this.suppressPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
       this.libraryPageIndex = pageIndex;
       this.libraryPageSize = pageEvent.pageSize;
       return;
@@ -1201,6 +1210,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
   }
 
+  private changePageSilently(change: () => void): void {
+    const previous = this.suppressPageFeedback;
+    this.suppressPageFeedback = true;
+    try { change(); } finally { this.suppressPageFeedback = previous; }
+  }
+
   searchTerm: string = '';
 
   search(searchTerm: string) {
@@ -1215,7 +1230,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.tagFilters = tags;
     this.untaggedFilter = untagged;
     this.hapticsService.selection();
-    this.paginator?.firstPage();
+    this.changePageSilently(() => this.paginator?.firstPage());
     this.applyTableFilter();
   }
 

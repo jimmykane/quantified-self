@@ -57,7 +57,8 @@ export function buildTrainingLogSportTotals(
   for (const event of events) {
     if (!isNormalActivityEvent(event)) continue;
     const types = [...new Set(event.getActivityTypesAsArray().map(type => ActivityTypesHelper.resolveActivityType(type) || ActivityTypes.unknown))];
-    const sport = types.length > 1 ? ActivityTypes.Multisport : types[0] || ActivityTypes.unknown;
+    if (!types.length) types.push(ActivityTypes.unknown);
+    const sport = types.length > 1 ? ActivityTypes.Multisport : types[0];
     const group = sports.get(sport) || { count: 0, duration: createMetric(), distance: createMetric(), ascent: createMetric() };
     group.count++;
     for (const key of ['duration', 'distance', 'ascent'] as const) {
