@@ -78,7 +78,7 @@ async function setup(tag = '', realTable = false) {
     getEventsPageOnceByWithMeta: vi.fn(), getEventCountBy: vi.fn(), getEventCount: vi.fn(),
   };
   const catalog = { listAllTags: vi.fn().mockResolvedValue(['Endurance', 'Race day', 'Recovery']) };
-  const haptics = { selection: vi.fn(), error: vi.fn() };
+  const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const dialogs: { close: ReturnType<typeof vi.fn>; closed$: Subject<boolean | undefined> }[] = [];
   const dialog = { open: vi.fn().mockImplementation(() => {
     const closed$ = new Subject<boolean | undefined>();

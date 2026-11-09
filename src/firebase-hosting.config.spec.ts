@@ -361,6 +361,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
     // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
+    // Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
   });
 
@@ -497,6 +498,7 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
+    // Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
@@ -580,6 +582,7 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
+    // Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');

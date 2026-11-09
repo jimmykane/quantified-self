@@ -17,6 +17,12 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains the searchable, ordered activity-table column dialog and save recovery', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',
+      '**Add columns**', 'failed save restores the previous choices and order', 'Training log and Tag library changes stay local',
+      'normal list also keeps Description fixed']) expect(content).toContain(phrase);
+  });
   it('explains the Activities Training log, local columns and filtered weekly totals', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**View → Training log**', '**Weekly totals by sport**', '**Columns → Running**',

@@ -133,6 +133,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  readonly eventColumnChoices = [...AppUserUtilities.getDefaultSelectedTableColumns().filter(type => type !== 'Description'), DataGradeAdjustedPaceAvg.type];
+  readonly trainingLogColumnChoices = ['Description', ...this.eventColumnChoices];
+  readonly columnsSaving = signal(false);
+  readonly columnSaveError = signal<string | null>(null);
+  private columnSaveGeneration = 0;
   private trainingLogColumns = [...TRAINING_LOG_RUNNING_COLUMNS];
   private trainingLogSort = { active: 'Start Date', direction: 'asc' as 'asc' | 'desc' };
   private trainingLogPageSize = 25;
@@ -289,6 +294,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'training-log';
   }
 
+  get columnPickerContext(): string {
+    return `${this.currentOwnerKey}:${this.presentation}`;
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -321,6 +330,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    if (simpleChanges.presentation || (this.renderedOwnerKey !== null && this.renderedOwnerKey !== this.currentOwnerKey)) {
+      this.columnSaveGeneration++;
+      this.columnsSaving.set(false);
+      this.columnSaveError.set(null);
+    }
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
       if (this.isTrainingLogPresentation && this.trainingLogColumnPreset === 'saved') {
@@ -1123,10 +1137,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       ];
       return;
     }
-    const dataColumnOrder = [...this.defaultSelectedColumns, DataGradeAdjustedPaceAvg.type];
     const sortedSelectedColumns = (this.selectedColumns || [])
       .filter(column => column !== 'Tags' && (this.isTrainingLogPresentation || (column !== 'Description' && column !== 'Shared')));
-    if (!this.isTrainingLogPresentation) sortedSelectedColumns.sort((a, b) => dataColumnOrder.indexOf(a) - dataColumnOrder.indexOf(b));
 
     const activityTypeColumn = sortedSelectedColumns.find(column => column === 'Activity Types');
     const remainingSelectedColumns = activityTypeColumn
@@ -1437,7 +1449,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async selectedColumnsChange(event: string[]) {
-    if (this.isBrowsePresentation) {
+    if (this.isBrowsePresentation || this.columnsSaving() || !this.user) {
       return;
     }
     if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
@@ -1451,20 +1463,35 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     if (this.isLibraryPresentation) {
-      // Material's selected-options order can change as choices are toggled.
-      this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
+      this.libraryColumns = [...new Set(event)].filter(column => this.libraryAvailableColumns.includes(column));
       this.selectedColumns = this.libraryColumns;
       this.updateDisplayedColumns();
       return;
     }
-    this.selectedColumns = event
+    const previous = this.selectedColumns;
+    const context = this.columnPickerContext;
+    const generation = ++this.columnSaveGeneration;
+    const isCurrent = () => !this.destroyed && generation === this.columnSaveGeneration && context === this.columnPickerContext;
+    this.columnsSaving.set(true);
+    this.columnSaveError.set(null);
+    this.selectedColumns = [...event];
     this.updateDisplayedColumns();
-    this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
-    await this.persistDashboardSettings({
-      tableSettings: {
-        selectedColumns: this.selectedColumns,
-      },
-    });
+    try {
+      await this.persistDashboardSettings({ tableSettings: { selectedColumns: this.selectedColumns } });
+      if (isCurrent()) {
+        this.user.settings.dashboardSettings.tableSettings.selectedColumns = [...event];
+        this.hapticsService.success();
+      }
+    } catch {
+      if (!isCurrent()) return;
+      this.selectedColumns = previous;
+      this.updateDisplayedColumns();
+      this.columnSaveError.set('Could not save columns. Your previous columns have been restored.');
+      this.snackBar.open('Could not save table columns. Please try again.', 'Close');
+      this.hapticsService.error();
+    } finally {
+      if (isCurrent()) this.columnsSaving.set(false);
+    }
   }
 
   selectTrainingLogColumnPreset(preset: string): void {
