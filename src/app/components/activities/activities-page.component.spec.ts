@@ -175,6 +175,28 @@ describe('ActivitiesPageComponent', () => {
     expect(c.userService.updateUserProperties).toHaveBeenCalledOnce();
   });
 
+  it('keeps an empty saved activity-table layout after a profile round trip', async () => {
+    const c = await setup('', true);
+    c.events.getEventSummariesBy.mockReturnValue(of([])); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    await table.selectedColumnsChange([]); await render(c);
+    const saved = c.userService.updateUserProperties.mock.lastCall[1].settings.dashboardSettings.tableSettings.selectedColumns;
+    expect(saved).toEqual([]);
+    const profile = Object.assign(new User('owner'), c.user$.value, { settings: AppUserUtilities.fillMissingAppSettings({
+      ...c.user$.value, settings: { ...c.user$.value.settings, dashboardSettings: {
+        ...c.user$.value.settings.dashboardSettings, tableSettings: {
+          ...c.user$.value.settings.dashboardSettings.tableSettings, selectedColumns: saved,
+        },
+      } },
+    }) });
+    c.user$.next(profile); await render(c);
+    expect(table.selectedColumns).toEqual([]);
+    expect(table.displayedColumns).not.toContain('Distance');
+    expect(table.displayedColumns).not.toContain('Duration');
+    const picker = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
+    expect(picker.selectedColumns).toEqual([]);
+  });
+
   it('opens a linked Training log week using the account week start without loading all history', async () => {
     const c = await setup();
     c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);

@@ -1117,6 +1117,31 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.error).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])('keeps the pending column choice through a same-owner profile refresh (save succeeds=%s)', async succeeds => {
+        component.selectedColumns = ['Duration'];
+        component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Duration'];
+        let finish!: () => void;
+        mockUserService.updateUserProperties.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+            finish = () => succeeds ? resolve() : reject(new Error('offline'));
+        }));
+        const save = component.selectedColumnsChange(['Distance']);
+        const previousUser = component.user;
+        component.user = Object.assign(new User(previousUser.uid), previousUser, { settings: {
+            ...previousUser.settings,
+            unitSettings: { ...previousUser.settings.unitSettings, distanceUnits: DistanceUnits.Miles },
+        } });
+        component.ngOnChanges({ user: new SimpleChange(previousUser, component.user, false) });
+        expect(component.columnsSaving()).toBe(true);
+        expect(component.selectedColumns).toEqual(['Distance']);
+        expect(component.displayedColumns).toContain('Distance');
+        expect(component.displayedColumns).not.toContain('Duration');
+        finish(); await save;
+        expect(component.selectedColumns).toEqual(succeeds ? ['Distance'] : ['Duration']);
+        expect(component.user.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(succeeds ? ['Distance'] : ['Duration']);
+        expect(component.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
+        expect(component.columnsSaving()).toBe(false);
+    });
+
     it('should persist sort changes without writing unrelated user settings', async () => {
         (component.sort.sortChange as Subject<any>).next({ active: 'startDate', direction: 'asc' });
         await Promise.resolve();

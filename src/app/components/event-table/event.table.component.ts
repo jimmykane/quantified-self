@@ -336,7 +336,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.columnSaveError.set(null);
     }
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
-    if (preferencesChanged) {
+    // A live profile refresh can carry the old layout while its replacement is saving.
+    if (preferencesChanged && !this.columnsSaving()) {
       if (this.isTrainingLogPresentation && this.trainingLogColumnPreset === 'saved') {
         this.trainingLogColumns = [...(this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || this.defaultSelectedColumns)];
       }
@@ -1468,7 +1469,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.updateDisplayedColumns();
       return;
     }
-    const previous = this.selectedColumns;
+    const previous = [...this.selectedColumns];
     const context = this.columnPickerContext;
     const generation = ++this.columnSaveGeneration;
     const isCurrent = () => !this.destroyed && generation === this.columnSaveGeneration && context === this.columnPickerContext;
