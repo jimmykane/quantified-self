@@ -107,7 +107,11 @@ export class DailyWorkoutSuggestionComponent {
     }
     if (this.busy()) return 'Preparing with your latest available context…';
     if (this.error()) return this.error();
-    if (value?.state === 'failed') return 'Today’s suggestion could not be generated.';
+    if (value?.state === 'failed') {
+      if (value.failureReason === 'temporary-service') return 'Today’s suggestion failed because the AI service was temporarily unavailable.';
+      if (value.failureReason === 'invalid-output') return 'The AI could not produce a valid workout today.';
+      return 'Today’s suggestion could not be generated.';
+    }
     if (value?.state === 'planned') return 'Your workout is planned for today.';
     if (value?.state === 'completed') return 'You already recorded a workout today.';
     if (value?.state === 'rest-day') return 'Today is a rest day.';
@@ -194,16 +198,18 @@ export class DailyWorkoutSuggestionComponent {
     const uid = this.ownerUid();
     if (this.busy() || !this.daily.eligible(uid) || !this.preferences().enabled || !this.visible() || !this.dataReady()) return;
     if (useAvailableData && !this.waitingForData()) return;
+    // After an uncertain response, retrieve the receipt before considering unused work.
+    const checkOnly = !!this.error() || this.status()?.state === 'preparing' || this.status()?.state === 'ready';
     const sequence = ++this.sequence;
     this.checkedSleepKey = this.evidenceKey(); this.importFinishedDuringLoad = false;
     this.loading.set(true); this.error.set(null); this.actionError.set(null);
-    let preparing = useAvailableData;
+    let preparing = useAvailableData || !checkOnly;
     try {
       let status = useAvailableData
         ? await this.daily.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
-        : await this.daily.request(uid, 'status', () => this.current(sequence, uid), undefined, refresh);
+        : await this.daily.request(uid, checkOnly ? 'status' : 'prepare', () => this.current(sequence, uid), undefined, refresh);
       if (!this.current(sequence, uid)) return;
-      if (!useAvailableData && ['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) {
+      if (!useAvailableData && checkOnly && ['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) {
         if (this.dataReady() && this.visible()) {
           preparing = true;
           status = await this.daily.request(uid, 'prepare', () => this.current(sequence, uid));

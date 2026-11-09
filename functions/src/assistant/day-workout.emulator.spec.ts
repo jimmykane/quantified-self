@@ -14,6 +14,7 @@ import { createFirestoreTrainingReads, readTrainingPlans } from '../mcp/training
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from '../mcp/training-plans.schemas';
 import { collectDailyWorkoutSuggestionCoverage, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import type { AssistantMcpSession } from './mcp-session';
+import { DayWorkoutModelError } from './day-workout-diagnostics';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation private state and existing MCP read-back', () => {
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required');
@@ -22,6 +23,46 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it.each([false, true])('keeps one durable daily charge across concurrent views and transport recovery (recovered: %s)', async recover => {
+    const uid = `daily-retry-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const preferences = { enabled: true, followRoutine: false, controls };
+    await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let attempts = 0;
+    const generate = vi.fn(async () => {
+      if (++attempts === 1) { entered(); await blocked; throw new DayWorkoutModelError('unavailable'); }
+      if (!recover) throw new DayWorkoutModelError('unavailable');
+      return { kind: 'rest', rationale: 'Keep it easy.' };
+    });
+    const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+      selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
+      regenerate: vi.fn(), log: vi.fn(), context: async () => ({ evidence: { daily: {
+        dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } },
+        activitiesToday: { scanComplete: true, activities: [] },
+        plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } },
+      } }, usedContext: [], missingContext: [], previousStrength: [], references: [] }) };
+    const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
+    let pending: Promise<unknown> | undefined;
+    try {
+      pending = runDailyWorkoutSuggestion(input, identity, deps); await started;
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('preparing');
+      release(); const result = await pending;
+      expect(result).toMatchObject(recover ? { state: 'ready' } : { state: 'failed', failureReason: 'temporary-service' });
+      expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+      expect(await store.begin(uid, preferences)).toBeNull(); expect(generate).toHaveBeenCalledTimes(2);
+      const receipt = (await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get(`messages.${controls.localDate}`);
+      expect(receipt.charged).toBe(true); expect(receipt.state).toBe(recover ? 'ready' : 'failed');
+      expect((await user.collection('assistantUsage').get()).empty).toBe(true);
+      if (!recover) {
+        await user.collection('assistantConversations').doc('daily-workout-suggestion')
+          .update({ [`messages.${controls.localDate}.failureReason`]: 'PRIVATE_PROVIDER_REPLY' });
+        expect((await store.read(uid)).status).toEqual({ localDate: controls.localDate, state: 'failed' });
+      }
+    } finally { release(); await pending?.catch(() => undefined); await db.recursiveDelete(user); }
+  }, 30_000);
   it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('replaces %s in place and reads the new recipe through existing MCP contracts', async sport => {
     const uid = `replacement-mcp-${randomUUID()}`, user = db.doc(`users/${uid}`), nowMs = Date.parse('2026-10-28T12:00Z');
     await user.set({}); await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });

@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angu
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest } from '@shared/day-workout';
-import { isDailyWorkoutEventAdvice, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { isDailyWorkoutFailureReason, isDailyWorkoutEventAdvice, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -153,6 +153,7 @@ export class DailyWorkoutSuggestionService {
   private validStatus(status: DailyWorkoutSuggestionStatus | null): status is DailyWorkoutSuggestionStatus {
     try {
       if (!status || !states.includes(status.state) || status.localDate !== this.preferences().controls.localDate) return false;
+      if (status.failureReason !== undefined && (status.state !== 'failed' || !isDailyWorkoutFailureReason(status.failureReason))) return false;
       if (status.state !== 'ready') return true;
       const result = status.result;
       if (!status.controls || !result || typeof result.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(result.requestId)
@@ -245,7 +246,7 @@ export class DailyWorkoutSuggestionService {
       return this.request(uid, action, current, expectedDate, refresh);
     }
     if (action === 'status' && !refresh && entry.status) return entry.status;
-    if (action === 'prepare' && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
+    if (action === 'prepare' && !refresh && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
     if (action === 'dismiss') this.invalidate();
     const epoch = entry.epoch, sleepKey = entry.observedSleepKey;
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser

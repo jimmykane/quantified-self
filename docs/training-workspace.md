@@ -797,7 +797,7 @@ Rules/index deployment, MCP refresh or plugin rebuild is required for these fron
 
 `generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
 App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
-The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects
+The model has no tools. The server parses a canonical prescription, allows at most two model attempts total, rejects
 unsupported editor endings, and enforces strict time across all timed steps and repeat passes. Targets require
 an exact, unambiguous saved athlete reference; absent references lead to effort guidance rather than invented
 thresholds. Explicit Garmin power zones are the separate symbolic exception described under
@@ -829,10 +829,16 @@ error category and validation issue codes, never raw model replies, prompts, rec
 Canonical recipe/strength failures also include up to five distinct `validationIssues`: an allowlisted code,
 a known schema-field prefix with normalized array positions, and an exact allowlisted rule or static fallback.
 The same safe details enter the existing single correction prompt. Unknown property names, authored IDs, values
-and arbitrary exception messages are excluded; unrecognized rules fall back to code-specific guidance. Genkit JSON/
-schema failures keep their generic diagnostic. This does not add model attempts, change quota or reset daily receipts.
+and arbitrary exception messages are excluded; unrecognized rules fall back to code-specific guidance. Genkit schema
+failures use the same bounded known-field diagnostics from the SDK's structured error details; its full exception
+message contains the private reply and must never enter logs or correction prompts. Malformed JSON retains a generic
+reason. At the model boundary only, Genkit UNAVAILABLE, RESOURCE_EXHAUSTED and DEADLINE_EXCEEDED may spend the
+remaining second attempt after 500 ms and active-request checks before and after the delay. Transport recovery,
+schema correction and provider-format improvement share that two-attempt ceiling, including mixed failures. Event-day
+guidance also permits one transport retry. Authorization, context, receipt and unknown errors are not model retries.
+This changes neither quota reservations nor daily admission; an unmetered response stays explicitly unknown in usage logs.
 MCP impact review: no wire or consent impact; the diagnostics and correction prompt are private to first-party generation.
-Help is unchanged because the supported controls and review flow are unchanged.
+Help explains bounded recovery and the manual-generation allowance after a confirmed daily failure.
 
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
 and actual Feeling/RPE minimum/maximum buckets. The generator replaces its all-sport recording-day buckets with
@@ -6421,7 +6427,12 @@ opt-outs; all applicable choices, including Timeline, default on. The preference
 
 V1 prepares on the first eligible foreground Today visit after the current data listeners settle (a 1.5-second UI
 debounce), at any hour. The saved IANA zone defines the local date and its one included model allowance; there is no
-start-hour or noon cutoff. With sleep personalization enabled, a completed main
+start-hour or noon cutoff. The first visit uses one `prepare` request, which checks coverage and reads or prepares the
+daily receipt on the server, instead of a separate `status` round trip before preparation. Cached results and
+same-day foreground returns remain unchanged. Revalidating a displayed ready recipe, a running receipt or an uncertain
+response uses `status`; only a verified unused/waiting receipt may then advance to preparation, while the view remains
+eligible, visible and hydrated. Explicit refresh bypasses either action's cached response but still joins an in-flight
+operation. Admission and post-generation coverage fences remain in place. With sleep personalization enabled, a completed main
 sleep ending in the previous seven local dates establishes an expectation for today's sleep. The existing validated
 daily report must include a completed main sleep ending on the current date in that zone, with the same end time in
 its on-read recovery sleep driver. Otherwise the server returns `waiting-sleep` before model admission, preserving
@@ -6505,10 +6516,19 @@ A schedule/rest invalidation may retain a same-scope recipe for display while re
 labels it as the saved suggestion; Review still requires a successful fresh coverage read before opening it.
 Verified rest/covered status replaces it, and owner, day, eligibility or preferences changes clear the display fallback.
 Request/retrieval errors do not claim that generation failed: only the server's failed state offers manual generation.
+A confirmed charged model failure persists an optional fixed `failureReason` (`temporary-service`, `invalid-output`,
+or `unknown`) in the existing private daily receipt. A successfully saved known failure returns its final status in
+the original request; uncertain saves still require retrieval. The Today row explains known failures and states that
+**Generate manually** uses Assistant allowance. Legacy receipts retain generic wording. Neither failure reasons nor
+browser reloads reopen a charged day; current schedule/rest coverage still takes precedence. Store/cache projections
+reject arbitrary failure text. Aggregate diagnostics include fixed failure category/stage and attempt/token counters,
+never the model reply, raw exception, user ID, recovery data or Timeline content.
 Warning diagnostics use fixed action and allowlisted SDK-code labels, deduplicated per account/day/preferences scope,
 and retain only the existing Sentry identity. No exception text, controls, recipe, Sleep or Timeline content is attached.
-This is first-party presentation/read recovery only: MCP read projections, mutation confirmations, consent, model
-admission and the daily allowance are unchanged; no backend, rules, index, plugin or MCP refresh deployment is needed.
+MCP impact review: first-party presentation, model retry and private receipt metadata only. Public Training read
+projections, recipes, strict mutation confirmations, scopes, consent and provider actions are unchanged. Existing
+emulator read-back coverage remains applicable; no new MCP mutation is authorized. Deployment of these recovery
+changes requires `generateDayWorkout` and the frontend, with no Rules, indexes, plugin rebuild or MCP refresh.
 No recovery,
 metric, feedback or routine-history reads are added to cache retrieval. A weekday
 sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching

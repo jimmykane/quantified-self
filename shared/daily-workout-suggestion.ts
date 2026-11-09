@@ -25,11 +25,17 @@ export interface DailyWorkoutEventAdviceV1 {
   previousLoads: [];
 }
 export type DailyWorkoutSuggestionResult = GenerateDayWorkoutResponse | DailyWorkoutEventAdviceV1;
+export type DailyWorkoutFailureReason = 'temporary-service' | 'invalid-output' | 'unknown';
+export function isDailyWorkoutFailureReason(value: unknown): value is DailyWorkoutFailureReason {
+  return value === 'temporary-service' || value === 'invalid-output' || value === 'unknown';
+}
 export interface DailyWorkoutSuggestionStatus {
   localDate: string;
   state: 'off' | 'waiting' | 'waiting-sleep' | 'waiting-import' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
   controls?: DayWorkoutControls;
   result?: DailyWorkoutSuggestionResult;
+  /** Fixed first-party failure category; never model output or provider error text. */
+  failureReason?: DailyWorkoutFailureReason;
 }
 function validAdviceDate(value: unknown): boolean {
   try { normalizeTrainingLocalDate(value); return true; } catch { return false; }

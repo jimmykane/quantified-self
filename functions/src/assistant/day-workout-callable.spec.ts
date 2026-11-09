@@ -42,6 +42,41 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it.each(['UNAVAILABLE', 'RESOURCE_EXHAUSTED', 'DEADLINE_EXCEEDED'] as const)('recovers a transient %s inside one quota reservation and two model attempts', async status => {
+    const { provider, generate } = mockSdkOutputs(new GenkitError({ status, message: 'PRIVATE_REPLY' }),
+      JSON.stringify({ kind: 'rest', rationale: 'Take it easy.' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      expect((await runGenerateDayWorkout(request, auth, deps)).kind).toBe('rest');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce(); expect(deps.finalize).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+  it.each(['transport-first', 'schema-first', 'two-outages'])('never exceeds two total attempts with %s', async order => {
+    const outage = new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' });
+    const invalid = JSON.stringify({ kind: 'rest', rationale: 123 });
+    const outputs = order === 'transport-first' ? [outage, invalid] : order === 'schema-first' ? [invalid, outage] : [outage, outage];
+    const { provider, generate } = mockSdkOutputs(...outputs, JSON.stringify({ kind: 'rest', rationale: 'Unreachable' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+      expect(provider).toHaveBeenCalledTimes(2); expect(deps.reserve).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+  it.each([false, true])('rechecks the active request before spending the transport retry (revoked during backoff: %s)', async duringBackoff => {
+    const { provider, generate } = mockSdkOutputs(new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' }),
+      JSON.stringify({ kind: 'rest', rationale: 'Unreachable' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    provider.mockImplementationOnce(async () => {
+      vi.mocked(deps.store.assertActive).mockRejectedValue(new HttpsError('aborted', 'Request changed'));
+      if (duringBackoff) vi.mocked(deps.store.assertActive).mockResolvedValueOnce(undefined);
+      throw new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' });
+    });
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+      expect(provider).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
   it.each(['override', 'shared', 'imported'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
     const deps = dependencies();
     const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: request.controls.sport, family: 'running' as const,
@@ -196,6 +231,9 @@ describe('generateDayWorkout callable', () => {
       const response = await runGenerateDayWorkout(request, auth, deps);
       expect(response.draft?.structure).toEqual(reply.structure);
       expect(JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction).toContain('Invalid prescription schema.');
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).toContain('$.structure.nodes[].ending');
+      expect(correction).not.toContain('Easy run'); expect(correction).not.toContain('Keep it easy.');
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.reserve).toHaveBeenCalledOnce();
       expect(deps.finalize).toHaveBeenCalledOnce();

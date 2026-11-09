@@ -1,4 +1,5 @@
 import type { DayWorkoutControls, DayWorkoutDraft, DayWorkoutLoadSource } from '../../../shared/day-workout';
+import type { DayWorkoutValidationDiagnostic } from './day-workout-diagnostics';
 import { parseWorkoutStructureV1, hasGarminPowerZoneTargetV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, projectStrengthWorkoutToV1,
@@ -6,7 +7,7 @@ import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, projectStrengthW
 
 // Only server-authored messages belong here; safe to use for model corrections and diagnostics.
 export class DayWorkoutSuggestionValidationError extends Error {
-  constructor(message: string) { super(message); this.name = 'DayWorkoutSuggestionValidationError'; }
+  constructor(message: string, readonly diagnostics: DayWorkoutValidationDiagnostic[] = []) { super(message); this.name = 'DayWorkoutSuggestionValidationError'; }
 }
 
 export interface PreviousStrengthPrescription { localDate: string; strength: StrengthWorkoutDraftV1 }

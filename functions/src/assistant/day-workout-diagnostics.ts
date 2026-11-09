@@ -1,8 +1,31 @@
 import { WorkoutStructureValidationError, type WorkoutStructureValidationIssue } from '../../../shared/planned-workout';
 import { StrengthWorkoutValidationError } from '../../../shared/strength-workout';
+import { GenkitError } from 'genkit';
+import { ValidationError as GenkitValidationError } from 'genkit/schema';
 
 type IssueCode = WorkoutStructureValidationIssue['code'];
 export interface DayWorkoutValidationDiagnostic { code: IssueCode; field: string; reason: string }
+
+/** Only errors from the model boundary may spend the existing second attempt on transport recovery. */
+export class DayWorkoutModelError extends Error {
+  constructor(readonly category: 'unavailable' | 'rate-limited' | 'timeout') {
+    super('The workout model is temporarily unavailable.'); this.name = 'DayWorkoutModelError';
+  }
+}
+export function transientDayWorkoutModelError(error: unknown): DayWorkoutModelError | null {
+  if (!(error instanceof GenkitError)) return null;
+  switch (error.status) {
+    case 'UNAVAILABLE': return new DayWorkoutModelError('unavailable');
+    case 'RESOURCE_EXHAUSTED': return new DayWorkoutModelError('rate-limited');
+    case 'DEADLINE_EXCEEDED': return new DayWorkoutModelError('timeout');
+    default: return null;
+  }
+}
+export function isDayWorkoutSchemaError(error: unknown): error is GenkitValidationError {
+  // Genkit's ESM/CJS exports can hold distinct ValidationError constructors with the same base.
+  return error instanceof GenkitValidationError || error instanceof GenkitError
+    && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
+}
 
 const fallbackReasons: Record<IssueCode, string> = {
   invalid_type: 'Use the type required by the prescription schema.',
@@ -39,6 +62,7 @@ const safeReasons = new Set([
   'The V1 projection cannot exceed 100 nodes.',
 ]);
 const safeFields = new Set([
+  'structure', 'strength', 'title', 'rationale', 'estimatedMinutes', 'minimum', 'maximum',
   'version', 'sport', 'poolLength', 'meters', 'presentation', 'nodes', 'steps', 'id', 'kind', 'purpose',
   'ending', 'seconds', 'kilojoules', 'repetitions', 'allowEarlyLap', 'targets', 'note', 'count', 'mode',
   'minimumPercent', 'maximumPercent', 'reference', 'minimumBpm', 'maximumBpm', 'bpm',
@@ -47,7 +71,7 @@ const safeFields = new Set([
   'exercises', 'sets', 'name', 'externalLoadKg', 'restAfterSeconds',
 ]);
 
-function safeField(path: string, root: 'structure' | 'strength'): string {
+function safeField(path: string, root?: 'structure' | 'strength'): string {
   const fields: string[] = [];
   // Parser paths can include arbitrary unknown property names. Keep only a known
   // prefix and normalize array positions; never include IDs, unknown keys or values.
@@ -58,7 +82,28 @@ function safeField(path: string, root: 'structure' | 'strength'): string {
       fields.push(match[1] + (part.includes('[') ? '[]' : ''));
     }
   }
-  return `$.${root}${fields.length ? '.' + fields.join('.') : ''}`;
+  return `$${root ? '.' + root : ''}${fields.length ? '.' + fields.join('.') : ''}`;
+}
+
+/** Keep only known fields and fixed reasons; Genkit's message contains the entire private model reply. */
+export function dayWorkoutSchemaDiagnostics(error: unknown): DayWorkoutValidationDiagnostic[] {
+  if (!isDayWorkoutSchemaError(error)) return [];
+  const detail = error.detail as { errors?: unknown } | undefined;
+  if (!Array.isArray(detail?.errors)) return [];
+  const result: DayWorkoutValidationDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const item of detail.errors.slice(0, 40)) {
+    if (!item || typeof item !== 'object' || typeof item.path !== 'string' || typeof item.message !== 'string') continue;
+    const code: IssueCode = item.message === 'must NOT have additional properties' ? 'unknown_field'
+      : /^must be (?:object|array|string|number|integer|boolean|null)$/.test(item.message) ? 'invalid_type' : 'invalid_value';
+    const field = safeField(item.path.length <= 512 ? '$.' + item.path.replace(/\.(\d{1,6})(?=\.|$)/g, '[$1]') : '$');
+    const diagnostic = { code, field, reason: fallbackReasons[code] };
+    const key = JSON.stringify(diagnostic);
+    if (seen.has(key)) continue;
+    seen.add(key); result.push(diagnostic);
+    if (result.length === 5) break;
+  }
+  return result;
 }
 
 export function dayWorkoutValidationDiagnostics(error: unknown): DayWorkoutValidationDiagnostic[] {

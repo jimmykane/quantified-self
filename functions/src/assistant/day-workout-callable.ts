@@ -1,9 +1,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'zod';
-import { GenkitError } from 'genkit';
 import type { ModelMiddleware } from 'genkit/model';
-import { ValidationError as GenkitValidationError } from 'genkit/schema';
 import { WORKOUT_STRUCTURE_MAX_NODES, WorkoutStructureValidationError } from '../../../shared/planned-workout';
 import { isStrengthWorkoutSportV1, StrengthWorkoutValidationError } from '../../../shared/strength-workout';
 import { TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_GARMIN_POWER_ZONE_TARGET_SCHEMA, TRAINING_STRENGTH_DRAFT_SCHEMA } from '../mcp/training-plans.schemas';
@@ -20,7 +18,7 @@ import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-wor
 import { createAssistantMcpSession } from './mcp-session';
 import { assistantGenkit } from './model';
 import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion, type ValidatedDaySuggestion } from './day-workout-validation';
-import { dayWorkoutValidationDiagnostics } from './day-workout-diagnostics';
+import { DayWorkoutModelError, dayWorkoutSchemaDiagnostics, dayWorkoutValidationDiagnostics, isDayWorkoutSchemaError, transientDayWorkoutModelError } from './day-workout-diagnostics';
 
 export interface DayWorkoutDependencies {
   store: DayWorkoutStore;
@@ -123,15 +121,23 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
       config: { maxOutputTokens: 8192 } });
     return response.output;
   } catch (error) {
-    // Genkit's mixed ESM/CJS exports can hold distinct ValidationError constructors with the same base.
-    const schemaFailure = error instanceof GenkitValidationError || error instanceof GenkitError
-      && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
     // Only parsing/validation after a provider response is a correctable prescription failure.
-    if (modelResponded && (schemaFailure || error instanceof SyntaxError)) {
-      throw new DayWorkoutSuggestionValidationError('Invalid prescription schema.');
+    if (modelResponded && (isDayWorkoutSchemaError(error) || error instanceof SyntaxError)) {
+      throw new DayWorkoutSuggestionValidationError('Invalid prescription schema.', dayWorkoutSchemaDiagnostics(error));
     }
+    if (!modelResponded) { const transient = transientDayWorkoutModelError(error); if (transient) throw transient; }
     throw error;
   }
+}
+
+/** Transport recovery shares the two-attempt budget with prescription correction, never a new daily admission. */
+export async function retryDayWorkoutModelError(error: unknown, attempt: number, assertActive: () => Promise<void>): Promise<boolean> {
+  if (!(error instanceof DayWorkoutModelError) || attempt !== 0) return false;
+  await assertActive();
+  logger.warn('[DayWorkout] Retrying transient model failure.', { attempt: 1, category: error.category });
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await assertActive();
+  return true;
 }
 
 /** Shared bounded correction/validation path for manual and included daily suggestions. */
@@ -153,6 +159,7 @@ export async function generateValidatedDayWorkout(request: GenerateDayWorkoutReq
       if (improvement && attempt === 0) { providerFallback = candidate; correction = improvement; continue; }
       suggestion = improvement && providerFallback ? providerFallback : candidate; break;
     } catch (error) {
+      if (await retryDayWorkoutModelError(error, attempt, assertActive)) continue;
       // A format-only retry may retain a valid draft, but authority must be rechecked before returning it.
       if (!(error instanceof DayWorkoutSuggestionValidationError
         || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) {
@@ -160,7 +167,7 @@ export async function generateValidatedDayWorkout(request: GenerateDayWorkoutReq
         throw error;
       }
       await assertActive();
-      const validationIssues = dayWorkoutValidationDiagnostics(error);
+      const validationIssues = error instanceof DayWorkoutSuggestionValidationError ? error.diagnostics : dayWorkoutValidationDiagnostics(error);
       logger.warn('[DayWorkout] Invalid model prescription.', {
         attempt: attempt + 1,
         errorName: error instanceof Error ? error.name : 'unknown',

@@ -490,12 +490,12 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(() => service.save('owner', service.preferences(), { enabled: true, providers: [] })).toThrow();
     expect(updateUserProperties).toHaveBeenCalledOnce();
   });
-  it('lets an explicit refresh bypass cached status and shares that refresh', async () => {
+  it.each(['status', 'prepare'] as const)('lets an explicit %s refresh bypass the cache and shares that refresh', async action => {
     const { service, call, result } = setup(); await service.request('owner', 'status', () => true);
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const first = service.request('owner', 'status', () => true, undefined, true);
-    const second = service.request('owner', 'status', () => true, undefined, true);
+    const first = service.request('owner', action, () => true, undefined, true);
+    const second = service.request('owner', action, () => true, undefined, true);
     expect(call).toHaveBeenCalledTimes(2); finish({ data: result() }); await Promise.all([first, second]);
   });
   it.each(['dismiss', 'use-available-data'] as const)('keeps the view cancellation fence on explicit %s actions', async action => {
@@ -610,6 +610,21 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const saved = JSON.parse(second.saved.getItem(key)!); saved.status.result.draft = {};
     second.saved.setItem(key, JSON.stringify(saved)); const third = setup(second.saved);
     expect(third.service.cached('owner')).toBeNull();
+  });
+  it.each(['temporary-service', 'invalid-output', 'unknown', undefined] as const)('restores a terminal failure with %s reason without another API call', async failureReason => {
+    const first = setup(), status: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'failed',
+      ...(failureReason ? { failureReason } : {}) };
+    first.service.remember('owner', status);
+    const next = setup(first.saved);
+    expect(next.service.cached('owner')?.status).toEqual(status);
+    expect(await next.service.request('owner', 'prepare', () => true)).toEqual(status);
+    expect(next.call).not.toHaveBeenCalled();
+  });
+  it('rejects a cached failure containing arbitrary provider text', () => {
+    const first = setup(); first.service.remember('owner', { localDate: '2026-10-30', state: 'failed' });
+    const key = [...first.saved.values.keys()][0], value = JSON.parse(first.saved.getItem(key)!);
+    value.status.failureReason = 'PRIVATE_PROVIDER_RESPONSE'; first.saved.setItem(key, JSON.stringify(value));
+    expect(setup(first.saved).service.cached('owner')).toBeNull();
   });
   it('continues caching in memory when browser storage is blocked', async () => {
     const saved = storage(); saved.setItem = () => { throw Error('Blocked'); };

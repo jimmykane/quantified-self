@@ -2,12 +2,43 @@ import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { parseWorkoutStructureV1, WorkoutStructureValidationError } from '../../../shared/planned-workout';
 import { parseStrengthWorkoutDraftV1, StrengthWorkoutValidationError } from '../../../shared/strength-workout';
-import { dayWorkoutValidationDiagnostics } from './day-workout-diagnostics';
+import { GenkitError } from 'genkit';
+import { ValidationError } from 'genkit/schema';
+import { dayWorkoutSchemaDiagnostics, dayWorkoutValidationDiagnostics, transientDayWorkoutModelError } from './day-workout-diagnostics';
 
 function failure(parse: () => unknown): unknown { try { parse(); } catch (error) { return error; } throw Error('Expected invalid fixture'); }
 const step = { kind: 'step', id: 'PRIVATE_NODE_ID', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] };
 
 describe('day workout validation diagnostics', () => {
+  it.each(['UNAVAILABLE', 'RESOURCE_EXHAUSTED', 'DEADLINE_EXCEEDED'] as const)('classifies only a transient model %s', status => {
+    const error = transientDayWorkoutModelError(new GenkitError({ status, message: 'PRIVATE_PROVIDER_REPLY' }));
+    expect(error).not.toBeNull(); expect(error!.message).not.toContain('PRIVATE');
+  });
+  it('does not retry arbitrary errors, authentication failures or invalid requests', () => {
+    for (const error of [new Error('503'), { status: 'UNAVAILABLE' },
+      new GenkitError({ status: 'INVALID_ARGUMENT', message: 'PRIVATE' }),
+      new GenkitError({ status: 'PERMISSION_DENIED', message: 'PRIVATE' })]) {
+      expect(transientDayWorkoutModelError(error)).toBeNull();
+    }
+  });
+  it('keeps only bounded known schema paths and fixed reasons from Genkit details', () => {
+    const error = new ValidationError({ data: { title: 'PRIVATE_TITLE' }, schema: {}, errors: [
+      { path: 'structure.nodes.0.ending.seconds', message: 'must be number' },
+      { path: 'structure.nodes.12.ending.seconds', message: 'must be number' },
+      { path: 'structure.nodes.0.PRIVATE_KEY', message: 'must NOT have additional properties' },
+      { path: 'rationale', message: 'PRIVATE_VALUE' },
+      { path: 'PRIVATE'.repeat(100), message: 'PRIVATE_VALUE' },
+      { path: 'title', message: 'must be string' },
+      { path: 'kind', message: 'must be string' },
+    ] });
+    const diagnostics = dayWorkoutSchemaDiagnostics(error);
+    expect(diagnostics).toHaveLength(5);
+    expect(diagnostics[0]).toEqual({ field: '$.structure.nodes[].ending.seconds', code: 'invalid_type',
+      reason: 'Use the type required by the prescription schema.' });
+    expect(diagnostics[1].field).toBe('$.structure.nodes[]');
+    expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE');
+    expect(dayWorkoutSchemaDiagnostics(new Error(error.message))).toEqual([]);
+  });
   it('identifies canonical value failures without including authored values', () => {
     const error = failure(() => parseWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running,
       poolLength: { meters: 25, presentation: 'meters' }, nodes: [{ ...step, note: ' ' }, step] }));
