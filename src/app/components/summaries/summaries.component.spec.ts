@@ -1,3 +1,7 @@
+import { defaultDashboardTodaySettings } from '../../helpers/dashboard-today-settings.helper';
+import { DailyWorkoutSuggestionComponent } from './daily-workout-suggestion/daily-workout-suggestion.component';
+import { DashboardTodayComponent } from './today/dashboard-today.component';
+import { DashboardTodayDataService } from '../../services/dashboard-today-data.service';
 import {
   getDashboardChartCatalog,
 } from '../../helpers/dashboard-chart-catalog.helper';
@@ -202,7 +206,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [DashboardTodayComponent, AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
@@ -233,6 +237,7 @@ describe('SummariesComponent', () => {
       ],
     }).compileComponents();
 
+    TestBed.overrideComponent(DashboardTodayComponent, { remove: { imports: [DailyWorkoutSuggestionComponent] }, add: { schemas: [NO_ERRORS_SCHEMA], providers: [{ provide: DashboardTodayDataService, useValue: { connect: vi.fn(), metrics: signal({}) } }] } });
     fixture = TestBed.createComponent(SummariesComponent);
     component = fixture.componentInstance;
     component.showActions = true;
@@ -2137,6 +2142,60 @@ describe('SummariesComponent', () => {
       component['syncReadinessSleepSubscription']();
     });
 
+    it('keeps Readiness unchanged when its individual sleep drivers are hidden', () => {
+      load$.next(loadState); sleep$.next(nights); vi.advanceTimersToNextFrame();
+      const score = component.dashboardTodayReadiness.score;
+      component.user.settings.dashboardSettings.today = component.todaySettings = defaultDashboardTodaySettings();
+      component['syncReadinessSleepSubscription'](); component['refreshDashboardTodaySignals']();
+      const host = render();
+      expect(component.dashboardTodayReadiness.score).toBe(score);
+      expect(score).not.toBeNull();
+      expect(host.querySelector('.dashboard-training-state-primary')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-primary')).not.toBeNull();
+      expect(host.querySelector('.dashboard-today-load')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-sleep')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')).toBeNull();
+      expect(host.querySelector('.dashboard-today-overnight-hr')).toBeNull();
+      expect(host.querySelector('app-daily-workout-suggestion')).toBeNull();
+      expect(component.dashboardGlanceSignals.map(signal => signal.id)).toEqual(['readiness', 'training-load']);
+    });
+    it('releases unused Sleep and derived subscriptions for a measurement-only Today', () => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight', 'steps'] };
+      mockDashboardDerivedMetricsService.watch.mockClear(); mockSleepService.watchForDashboard.mockClear();
+      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      component['syncDerivedMetricsSubscription']();
+      expect(load$.observed).toBe(false); expect(sleep$.observed).toBe(false);
+      expect(mockDashboardDerivedMetricsService.watch).not.toHaveBeenCalled();
+      expect(mockSleepService.watchForDashboard).not.toHaveBeenCalled();
+      expect(component.dashboardGlanceSignals).toEqual([]);
+    });
+    it('keeps an independently selected Recovery block explicit while loading or failed', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, recovery: true, metrics: [] };
+      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      component['refreshDashboardTodaySignals']();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Loading…');
+      load$.next({ ...createDashboardDerivedMetricsMissingState(), recoveryNowStatus: 'failed' });
+      vi.advanceTimersToNextFrame();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Recovery unavailable');
+      expect(sleep$.observed).toBe(false);
+    });
+    it('retains the independent Form chart dependency when Today is empty', () => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: [] };
+      component.user.settings.dashboardSettings.tiles = [{ type: TileTypes.Chart, chartType: DASHBOARD_FORM_CHART_TYPE }] as never;
+      expect(component['resolveDashboardDerivedMetricKinds']()).toContain('form');
+    });
+    it('preserves compact metric order, expands one summary and allows an empty Today', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), readiness: false, metrics: ['sleep', 'load'] };
+      let host = render();
+      expect(Array.from(host.querySelectorAll('.dashboard-current-state-row dt')).map(element => element.textContent.trim())).toEqual(['Sleep', 'Load']);
+      expect(host.querySelector('.dashboard-current-state-top')?.classList.contains('single-summary')).toBe(true);
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, trainingState: false, metrics: [] };
+      host = render();
+      expect(host.querySelector('.dashboard-current-state-top')).toBeNull();
+      expect(host.querySelector('.dashboard-current-state-row dl')).toBeNull();
+      expect(host.querySelector('app-dashboard-today')?.textContent).toContain('Customize Today');
+    });
+
     it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
       if (first === 'load') load$.next(loadState);
       else sleep$.next(nights);
@@ -2270,7 +2329,7 @@ describe('SummariesComponent', () => {
       // The unit runner does not attach external component CSS. Check its stable
       // sizing contract here; real viewport geometry is verified in the browser.
       const stylesheet = document.createElement('style');
-      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/today/dashboard-today.component.css'), 'utf8');
       host.appendChild(stylesheet);
       const readiness = host.querySelector<HTMLElement>('.dashboard-readiness-primary')!;
       const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
@@ -2289,7 +2348,7 @@ describe('SummariesComponent', () => {
       const pendingLayout = reservations();
       const pendingTopAndRecoveryHeight = reservedTopAndRecoveryHeight();
       expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
-      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Loading…');
       expect(getComputedStyle(host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band')!).boxSizing).toBe('border-box');
       expect(getComputedStyle(readiness).alignContent).toBe('start');
       expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
@@ -4130,7 +4189,7 @@ describe('SummariesComponent', () => {
     const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(summaryHeading?.nextElementSibling).toBe(today?.parentElement);
+    expect(summaryHeading?.nextElementSibling).toBe(today?.closest('app-dashboard-today'));
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 

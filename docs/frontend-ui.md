@@ -300,9 +300,36 @@ and tablets place the four drivers below the primary summaries instead of squeez
 minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
 geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
 
-Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, four drivers,
+Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, selected compact metrics,
 and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
 with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
+
+Today configuration is stored in the versioned `dashboardSettings.today` field. The owner opens the same lazy Material
+editor from **Dashboard options → Customize Today** or the global dashboard chart manager. The editor keeps a local
+draft until Save, writes only that field through `DashboardConfigurationService`, and uses its conflict checks. Cancel
+and dismissal do not persist. Training state and Readiness retain their larger top views; a single summary fills that
+row. Compact metrics follow the saved order, with at most four columns on desktop and two on phones. Reordering uses
+handles in the editor plus accessible up/down buttons. Recovery left and Today's suggestion remain optional full-width
+context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
+An empty Today offers Customize Today and retains the existing title, date and calendar action.
+
+New profiles explicitly start with Training state, Readiness and Load. Hydrating an existing profile without the field
+preserves the full legacy card. Restore defaults and Reset to starter dashboard explicitly select the three-block
+layout. Readiness still uses all its existing drivers when a driver cell is hidden. The greeting uses only displayed
+assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
+
+Today scopes its derived and Sleep subscriptions to enabled consumers, independently of visible charts' dependencies.
+`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals share Calendar's bounded
+summary listener for the current browser-local day, across all sports, using the same exclusions/TSS/ascent rules.
+They do not follow event-table or chart filters. Weight uses a bounded newest-first query for actual Health point
+measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection
+from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
+report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
+Opening the editor does not start metric readers.
+The new Today reader/editor code exceeds the prior total-script cap by approximately 14.5 kB in the optimized beta
+build. Matching beta/production `allScript` caps move from 14.25 to 14.27 MB, with the initial 1474 kB and warning
+budgets unchanged. The editor stays lazy; the initial bundle remains 1.41 MB. This records bundle accounting only,
+not a device runtime speed claim.
 
 Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the
 Readiness score, confidence and signal indicators until the latest eligible completed main night ends on the current

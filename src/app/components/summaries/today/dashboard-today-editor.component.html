@@ -1,0 +1,117 @@
+<section class="today-editor" [attr.aria-busy]="saving()">
+  <h2 mat-dialog-title>Customize Today</h2>
+  <div mat-dialog-content class="today-editor-content">
+    <p>
+      Choose what stays at a glance. Hidden sleep and HRV still contribute to
+      Readiness when it is shown.
+    </p>
+    <h3>Summaries</h3>
+    <p class="today-editor-hint">These keep their larger views at the top.</p>
+    @for (block of summaries; track block.id) {
+      <mat-checkbox
+        [checked]="draft()[block.id]"
+        [disabled]="saving()"
+        (change)="toggleBlock(block.id, $event.checked)"
+        >{{ block.label }}</mat-checkbox
+      >
+    }
+    <h3>Metrics</h3>
+    <p class="today-editor-hint">
+      Use a handle or the arrows to change the order. Activity totals always
+      cover today and all sports.
+    </p>
+    <div
+      cdkDropList
+      [cdkDropListDisabled]="saving()"
+      (cdkDropListDropped)="drop($event)"
+      aria-label="Selected Today metrics"
+    >
+      @for (metric of selected(); track metric.id; let index = $index) {
+        <div cdkDrag class="today-editor-row">
+          <button
+            cdkDragHandle
+            mat-icon-button
+            type="button"
+            [disabled]="saving()"
+            [attr.aria-label]="'Drag ' + metric.label"
+          >
+            <mat-icon>drag_indicator</mat-icon>
+          </button>
+          <mat-checkbox
+            [checked]="true"
+            [disabled]="saving()"
+            (change)="toggleMetric(metric.id, $event.checked)"
+            >{{ metric.label }}</mat-checkbox
+          >
+          <div class="today-editor-order">
+            <button
+              mat-icon-button
+              type="button"
+              [disabled]="saving() || index === 0"
+              [attr.aria-label]="'Move ' + metric.label + ' up'"
+              (click)="move(index, -1)"
+            >
+              <mat-icon>arrow_upward</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              [disabled]="saving() || index === selected().length - 1"
+              [attr.aria-label]="'Move ' + metric.label + ' down'"
+              (click)="move(index, 1)"
+            >
+              <mat-icon>arrow_downward</mat-icon>
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+    @for (metric of catalog; track metric.id) {
+      @if (!draft().metrics.includes(metric.id)) {
+        <div class="today-editor-available">
+          <mat-checkbox
+            [checked]="false"
+            [disabled]="saving()"
+            (change)="toggleMetric(metric.id, $event.checked)"
+            >{{ metric.label }}</mat-checkbox
+          ><small>{{ metric.detail }}</small>
+        </div>
+      }
+    }
+    <h3>Context</h3>
+    @for (block of context; track block.id) {
+      <mat-checkbox
+        [checked]="draft()[block.id]"
+        [disabled]="saving()"
+        (change)="toggleBlock(block.id, $event.checked)"
+        >{{ block.label }}</mat-checkbox
+      >
+    }
+    <button mat-button type="button" [disabled]="saving()" (click)="reset()">
+      Restore defaults
+    </button>
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+    }
+  </div>
+  <div mat-dialog-actions class="today-editor-actions" align="end">
+    <button mat-button type="button" [disabled]="saving()" (click)="cancel()">
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      type="button"
+      [disabled]="saving()"
+      (click)="save()"
+    >
+      <span class="today-editor-save">
+        @if (saving()) {
+          <mat-spinner diameter="18" />
+        } @else {
+          <mat-icon>check</mat-icon>
+        }
+        <span>{{ saving() ? 'Saving…' : 'Save changes' }}</span></span
+      >
+    </button>
+  </div>
+</section>

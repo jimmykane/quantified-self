@@ -1,3 +1,4 @@
+import { DashboardTodayEditorService } from '../../../services/dashboard-today-editor.service';
 import { DASHBOARD_HEALTH_GROUPS, dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { buildDashboardHealthContext, DashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
@@ -22,6 +23,12 @@ import { DashboardChartLibraryState } from './dashboard-chart-library-state.serv
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
 @Component({ selector: 'app-dashboard-chart-library', standalone: false, templateUrl: './dashboard-chart-library.component.html', styleUrls: ['./dashboard-chart-library.component.css'], providers: [DashboardChartPreviewService] })
 export class DashboardChartLibraryComponent {
+  private readonly todayEditor = inject(DashboardTodayEditorService);
+  async customizeToday(): Promise<void> {
+    if (this.state.busy()) return;
+    await this.state.close(false);
+    if (!this.expanded() && await this.todayEditor.open(this.user())) this.pickerClosed.emit();
+  }
   private readonly document = inject(DOCUMENT);
   private readonly dialog = inject(MatDialog);
   private readonly bottomSheet = inject(MatBottomSheet);

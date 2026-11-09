@@ -147,6 +147,7 @@ function expectDashboardSettingsOnlyWrite(
   userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> },
   dialogData: { user: any },
   callIndex = 0,
+  includeToday = false,
 ): void {
   const dashboardSettings = dialogData.user.settings.dashboardSettings;
   const dashboardSettingsPatch: Record<string, unknown> = {
@@ -159,6 +160,7 @@ function expectDashboardSettingsOnlyWrite(
   if (dashboardSettings.dismissedCuratedRecoveryNowTile !== undefined) {
     dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
   }
+  if (includeToday) dashboardSettingsPatch.today = dashboardSettings.today;
   expect(userServiceMock.updateUserProperties.mock.calls[callIndex]).toEqual([
     dialogData.user,
     {
@@ -1159,7 +1161,8 @@ describe('DashboardTileConfiguration', () => {
     expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
     expect(routeServiceMock.watchHasAnyRoutePreview).not.toHaveBeenCalled();
     expect(derivedMetricsServiceMock.watch).not.toHaveBeenCalled();
-    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData, 0, true);
+    expect(dialogData.user.settings.dashboardSettings.today.metrics).toEqual(['load']);
   });
 
   it('keeps the layout when reset is cancelled', async () => {

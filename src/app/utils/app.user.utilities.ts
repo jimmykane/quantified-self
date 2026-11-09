@@ -1,3 +1,4 @@
+import { normalizeDashboardTodaySettings } from '../helpers/dashboard-today-settings.helper';
 import { AppUserAccess } from '../helpers/user-access.helper';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../helpers/dashboard-health-tile.helper';
 import {
@@ -557,6 +558,7 @@ export class AppUserUtilities extends AppUserAccess {
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.showTodaySummary = settings.dashboardSettings.showTodaySummary !== false;
+        settings.dashboardSettings.today = normalizeDashboardTodaySettings(settings.dashboardSettings.today);
         settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
             settings.dashboardSettings.eventTableFilters,
             {

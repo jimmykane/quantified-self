@@ -1,3 +1,4 @@
+import { DashboardTodayEditorService } from '../../../services/dashboard-today-editor.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypesMultiSelectComponent } from '../../activity-types-multi-select/activity-types-multi-select.component';
 import { ActivityFilterPickerComponent } from '../../shared/activity-filter-picker/activity-filter-picker.component';
@@ -59,6 +60,7 @@ describe('responsive chart picker interactions', () => {
     derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
     events.getEventSummariesBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent, ActivityTypesMultiSelectComponent], imports: [ActivityFilterPickerComponent, CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
+      { provide: DashboardTodayEditorService, useValue: { open: vi.fn().mockResolvedValue(false) } },
       { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
       {provide:DashboardHealthService,useValue:{watch:()=>EMPTY}}, DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
