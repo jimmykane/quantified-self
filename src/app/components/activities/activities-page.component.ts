@@ -56,6 +56,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly dateFilter = viewChild<TableDateFilterComponent<ActivityExplorerPeriod>>(TableDateFilterComponent);
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
+  private readonly trainingLogTimeZone = signal(Intl.DateTimeFormat().resolvedOptions().timeZone);
   private owner: FirebaseUserType | null = null;
   private generation = 0;
   private eventsSubscription?: Subscription;
@@ -81,8 +82,12 @@ export class ActivitiesPageComponent implements OnInit {
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
-  readonly trainingLogWeek = computed(() => resolveTrainingLogWeek(this.weekAnchor(), new Date(this.localDayStartMs()),
-    this.user()?.settings?.unitSettings?.startOfTheWeek));
+  readonly trainingLogWeek = computed(() => {
+    // Historical offsets can change between zones that share today's offset.
+    this.trainingLogTimeZone();
+    return resolveTrainingLogWeek(this.weekAnchor(), new Date(this.localDayStartMs()),
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+  });
   readonly isCurrentWeek = computed(() => +this.trainingLogWeek().start === +resolveTrainingLogWeek(null,
     new Date(this.localDayStartMs()), this.user()?.settings?.unitSettings?.startOfTheWeek).start);
   readonly historyRange = computed(() => this.isTrainingLog() ? this.trainingLogWeek()
@@ -141,11 +146,15 @@ export class ActivitiesPageComponent implements OnInit {
   @HostListener('window:focus')
   refreshLocalDay(): void {
     const next = new Date().setHours(0, 0, 0, 0);
-    if (next === this.localDayStartMs()) return;
-    const previousWeekStart = +this.trainingLogWeek().start;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (next === this.localDayStartMs() && (!this.isTrainingLog() || timeZone === this.trainingLogTimeZone())) return;
+    const previousWeek = this.trainingLogWeek();
     this.localDayStartMs.set(next);
+    this.trainingLogTimeZone.set(timeZone);
     if (this.isTrainingLog()) {
-      if (this.user() && !this.weekAnchor() && previousWeekStart !== +this.trainingLogWeek().start) this.loadHistory();
+      const week = this.trainingLogWeek();
+      // A fixed calendar week can gain different query bounds after a timezone change.
+      if (this.user() && (+previousWeek.start !== +week.start || +previousWeek.end !== +week.end)) this.loadHistory();
       return;
     }
     if (this.user() && this.period() !== 'all' && this.period() !== 'custom') this.loadHistory();
@@ -515,6 +524,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private loadHistory(feedback = false): void {
     this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
+    this.trainingLogTimeZone.set(Intl.DateTimeFormat().resolvedOptions().timeZone);
     this.generation += 1;
     this.eventsSubscription?.unsubscribe();
     if (!this.loading()) this.loadingHadMergedEvents.set(this.events().some(event => event.isMerge));

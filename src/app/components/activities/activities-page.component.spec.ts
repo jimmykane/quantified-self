@@ -260,6 +260,57 @@ describe('ActivitiesPageComponent', () => {
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'month' });
   });
 
+  it.each([
+    { anchor: '2026-11-04', timezone: 'America/New_York',
+      before: ['2026-11-01T22:00:00Z', '2026-11-08T22:00:00Z'],
+      after: ['2026-11-02T05:00:00Z', '2026-11-09T05:00:00Z'], dates: ['2026-11-02', '2026-11-08'] },
+    { anchor: '2026-07-16', timezone: 'Africa/Johannesburg',
+      before: ['2026-07-12T21:00:00Z', '2026-07-19T21:00:00Z'],
+      after: ['2026-07-12T22:00:00Z', '2026-07-19T22:00:00Z'], dates: ['2026-07-13', '2026-07-19'] },
+  ])('reloads an anchored week after a timezone change to $timezone', async ({ anchor, timezone, before, after, dates }) => {
+    const originalTimezone = process.env.TZ;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T12:00:00Z'));
+    try {
+      process.env.TZ = 'Europe/Helsinki';
+      const c = await setup();
+      c.params$.next(convertToParamMap({ view: 'training-log', week: anchor })); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledExactlyOnceWith(c.user$.value, [
+        { fieldPath: 'startDate', opStr: '>=', value: +new Date(before[0]) },
+        { fieldPath: 'startDate', opStr: '<', value: +new Date(before[1]) },
+      ], 'startDate', false, 0);
+      process.env.TZ = timezone;
+      c.component.refreshLocalDay(); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(c.events.getEventSummariesBy.mock.lastCall[1]).toEqual([
+        { fieldPath: 'startDate', opStr: '>=', value: +new Date(after[0]) },
+        { fieldPath: 'startDate', opStr: '<', value: +new Date(after[1]) },
+      ]);
+      expect(c.component.weekAnchor()).toBe(anchor);
+      expect(c.component.trainingLogWeek().dates).toEqual({ startDate: dates[0], endDate: dates[1] });
+      expect(c.haptics.selection).not.toHaveBeenCalled();
+    } finally {
+      if (originalTimezone === undefined) delete process.env.TZ; else process.env.TZ = originalTimezone;
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['asc', 'desc'] as const)('keeps missing GAP last when sorting %s, including recorded zero', async direction => {
+    const c = await setup('', true);
+    c.params$.next(convertToParamMap({ view: 'training-log' }));
+    const records = [undefined, 300, 0].map((gap, index) => new AppEventSummary({ id: `gap-${index}`,
+      name: gap === undefined ? 'No GAP' : `GAP ${gap}`, startDate: Date.now(), endDate: Date.now(),
+      srcFileType: FileType.FIT, description: null, isMerge: false, privacy: Privacy.Private,
+      stats: { 'Activity Types': [ActivityTypes.Running], ...(gap === undefined ? {} : { [DataGradeAdjustedPaceAvg.type]: gap }) },
+    }));
+    c.events.getEventSummariesBy.mockReturnValue(of(records)); await render(c);
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    table.sort.sort({ id: DataGradeAdjustedPaceAvg.type, start: direction, disableClear: true }); await render(c);
+    const names = [...c.fixture.nativeElement.querySelectorAll('tr.activity-row .activity-custom-name')]
+      .map((element: Element) => element.textContent?.trim());
+    expect(names).toEqual(direction === 'asc' ? ['GAP 0', 'GAP 300', 'No GAP'] : ['GAP 300', 'GAP 0', 'No GAP']);
+  });
+
   it.each([false, true])('renders the Running preset and GAP with selected units (imperial=%s), sorting and full-week filtered totals', async imperial => {
     const c = await setup('', true);
     c.user$.value.settings.unitSettings = normalizeUserUnitSettings({ paceUnits: [imperial ? PaceUnits.MinutesPerMile : PaceUnits.MinutesPerKilometer],

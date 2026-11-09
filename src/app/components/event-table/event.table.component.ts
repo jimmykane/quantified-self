@@ -437,7 +437,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.paginator = this.paginator;
     this.data.sort = this.sort;
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
-      return (statRowElement as any)[`sort.${header}`];
+      const value = (statRowElement as any)[`sort.${header}`];
+      // Keep unavailable GAP after recorded values in either direction, including zero.
+      if (header === DataGradeAdjustedPaceAvg.type && value == null) return this.sort.direction === 'asc' ? Infinity : -Infinity;
+      return value;
     };
     this.data.filterPredicate = (row: any, filter: string) => {
       const filterState = this.parseTableFilter(filter);

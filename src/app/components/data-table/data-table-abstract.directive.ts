@@ -121,7 +121,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     });
     for (const type of EVENT_TABLE_STAT_TYPES) {
       if (type === DataRPE.type || type === DataFeeling.type) continue;
-      lazy(`sort.${type}`, () => getStat(type)?.getValue() ?? 0);
+      lazy(`sort.${type}`, () => getStat(type)?.getValue() ?? (type === DataGradeAdjustedPaceAvg.type ? null : 0));
     }
 
     return statRowElement;
