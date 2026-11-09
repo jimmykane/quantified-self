@@ -17,7 +17,7 @@ export const FIELD_GUIDE_CHAPTERS = [
         points: [
             { icon: 'monitoring', title: 'Follow your training over time', description: 'Look at your workload, consistency and progress.' },
             { icon: 'bedtime', title: 'Put recovery in context', description: 'Explore the sleep and health data your sources support.' },
-            { icon: 'edit_note', title: 'Remember the things numbers miss', description: 'Add private Timeline notes about life around your training.' },
+            { icon: 'edit_note', title: 'Remember the things numbers miss', description: 'Add Timeline notes about life around your training.' },
         ],
     },
     {
