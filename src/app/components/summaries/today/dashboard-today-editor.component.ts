@@ -1,4 +1,8 @@
 import {
+  afterNextRender,
+  computed,
+  Injector,
+  viewChildren,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
@@ -17,7 +21,8 @@ import {
   MatDialogRef,
 } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
+import { MatCheckbox, MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import equal from 'fast-deep-equal';
@@ -32,6 +37,7 @@ import {
   normalizeDashboardTodaySettings,
 } from '../../../helpers/dashboard-today-settings.helper';
 import {
+  DashboardConfigurationConflict,
   DashboardConfigurationService,
   cloneDashboardSettings,
 } from '../../../services/dashboard-configuration.service';
@@ -62,10 +68,20 @@ export class DashboardTodayEditorComponent {
   private readonly users = inject(AppUserService);
   private readonly haptics = inject(AppHapticsService);
   private readonly destroy = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly announcer = inject(LiveAnnouncer);
+  private readonly checkboxes = viewChildren(MatCheckbox);
   private readonly baseline = cloneDashboardSettings(
     this.user.settings.dashboardSettings
   );
-  readonly draft = signal(normalizeDashboardTodaySettings(this.baseline.today));
+  private readonly initial = normalizeDashboardTodaySettings(
+    this.baseline.today
+  );
+  readonly draft = signal(this.initial);
+  readonly hasChanges = computed(() => !equal(this.draft(), this.initial));
+  readonly isDefault = computed(() =>
+    equal(this.draft(), defaultDashboardTodaySettings())
+  );
   readonly catalog = DASHBOARD_TODAY_METRICS;
   readonly selected = signal(this.rows(this.draft().metrics));
   readonly saving = signal(false);
@@ -75,8 +91,16 @@ export class DashboardTodayEditorComponent {
     { id: 'readiness', label: 'Readiness' },
   ] as const;
   readonly context = [
-    { id: 'recovery', label: 'Recovery left' },
-    { id: 'suggestion', label: 'Today’s suggestion' },
+    {
+      id: 'recovery',
+      label: 'Recovery left',
+      detail: 'Your latest recovery estimate, separate from Readiness.',
+    },
+    {
+      id: 'suggestion',
+      label: 'Today’s suggestion',
+      detail: 'Pro · A daily workout suggestion from the Assistant.',
+    },
   ] as const;
   constructor() {
     effect(() => {
@@ -105,6 +129,23 @@ export class DashboardTodayEditorComponent {
         ? [...this.draft().metrics, id]
         : this.draft().metrics.filter((value) => value !== id)
     );
+    const label = this.catalog.find((metric) => metric.id === id)!.label;
+    void this.announcer.announce(
+      `${label} ${checked ? 'added to' : 'removed from'} Today.`
+    );
+    this.focusMetric(id);
+  }
+  private focusMetric(id: DashboardTodayMetricId): void {
+    // A checkbox moves between the shown and available lists; preserve keyboard focus.
+    afterNextRender(
+      () => {
+        if (!this.destroy.destroyed)
+          this.checkboxes()
+            .find((checkbox) => checkbox.id === `today-metric-${id}`)
+            ?.focus();
+      },
+      { injector: this.injector }
+    );
   }
   private setMetrics(metrics: DashboardTodayMetricId[]) {
     this.draft.update((value) => ({ ...value, metrics }));
@@ -123,6 +164,12 @@ export class DashboardTodayEditorComponent {
     moveItemInArray(metrics, index, target);
     this.haptics.selection();
     this.setMetrics(metrics);
+    const id = metrics[target],
+      label = this.catalog.find((metric) => metric.id === id)!.label;
+    void this.announcer.announce(
+      `${label} moved to position ${target + 1} of ${metrics.length}.`
+    );
+    this.focusMetric(id);
   }
   drop(event: CdkDragDrop<unknown>): void {
     this.move(event.previousIndex, event.currentIndex - event.previousIndex);
@@ -133,6 +180,9 @@ export class DashboardTodayEditorComponent {
     this.haptics.selection();
     this.draft.set(defaults);
     this.selected.set(this.rows(defaults.metrics));
+    void this.announcer.announce(
+      'Default layout selected. Save changes to apply.'
+    );
   }
   cancel(): void {
     if (!this.saving()) {
@@ -142,9 +192,7 @@ export class DashboardTodayEditorComponent {
   }
   async save(): Promise<void> {
     if (this.saving() || this.users.user()?.uid !== this.user.uid) return;
-    if (
-      equal(this.draft(), normalizeDashboardTodaySettings(this.baseline.today))
-    ) {
+    if (!this.hasChanges()) {
       this.ref.close(false);
       return;
     }
@@ -168,9 +216,9 @@ export class DashboardTodayEditorComponent {
       if (this.destroy.destroyed || this.users.user()?.uid !== this.user.uid)
         return;
       this.error.set(
-        error instanceof Error
-          ? error.message
-          : 'Could not save Today. Please try again.'
+        error instanceof DashboardConfigurationConflict
+          ? 'Your dashboard changed elsewhere. Close this window and reopen Customize Today before saving.'
+          : 'Couldn’t save Today. Your changes are still here. Please try again.'
       );
       this.haptics.error();
     } finally {

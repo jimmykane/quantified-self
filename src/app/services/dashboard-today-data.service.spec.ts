@@ -41,6 +41,18 @@ describe('Today optional data', () => {
     users.user.set({ ...user, uid: 'other' }); service.connect(user, settings(['activities']), '2026-11-09');
     expect(stream.observed).toBe(false); expect(service.metrics()).toEqual({});
   });
+  it('distinguishes a missing pinned weight source from a failed read', async () => {
+    user.settings.appSettings.healthWorkspace = { metricSources: { body_weight: 'missing-source' } } as never;
+    const service = TestBed.inject(DashboardTodayDataService);
+    service.connect(user, settings(['weight']), '2026-11-09');
+    await Promise.resolve(); await Promise.resolve();
+    expect(service.metrics().weight).toMatchObject({ status: 'empty', detail: 'No weigh-in from your selected source' });
+    service.connect(user, settings([]), '2026-11-09');
+    health.loadLatestMeasurement.mockRejectedValueOnce(new Error('Firestore unavailable'));
+    service.connect(user, settings(['weight']), '2026-11-09');
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(service.metrics().weight).toMatchObject({ status: 'error', detail: 'Couldn’t load weight' });
+  });
   it('ignores an old Health result after the configured metric is removed', async () => {
     let resolve!: (value: { results: []; complete: boolean }) => void;
     health.loadLatestMeasurement.mockReturnValue(new Promise(done => { resolve = done; }));

@@ -2194,6 +2194,7 @@ describe('SummariesComponent', () => {
       expect(host.querySelector('.dashboard-current-state-top')).toBeNull();
       expect(host.querySelector('.dashboard-current-state-row dl')).toBeNull();
       expect(host.querySelector('app-dashboard-today')?.textContent).toContain('Customize Today');
+      expect(host.querySelector('app-dashboard-today')?.textContent).toContain('No items selected');
     });
 
     it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {

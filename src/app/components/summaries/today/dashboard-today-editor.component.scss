@@ -8,7 +8,8 @@
   overflow: auto;
   min-height: 0;
 }
-h3 {
+h3,
+h4 {
   font: var(--mat-sys-title-small);
   margin: 20px 0 6px;
 }
@@ -59,4 +60,11 @@ mat-checkbox {
   .today-editor-actions {
     padding-inline: 12px;
   }
+}
+
+.today-editor-error {
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  margin: 8px 24px 0;
+  overflow-wrap: anywhere;
 }

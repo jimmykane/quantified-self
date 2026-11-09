@@ -435,9 +435,13 @@
       !settings().suggestion &&
       isOwnerDashboard
     ) {
-      <button mat-button type="button" (click)="customize.emit()">
-        Customize Today<mat-icon>tune</mat-icon>
-      </button>
+      <div class="dashboard-today-empty">
+        <p>No items selected</p>
+        <small>Add a panel or metric to see it here.</small>
+        <button mat-button type="button" (click)="customize.emit()">
+          <mat-icon>tune</mat-icon>Customize Today
+        </button>
+      </div>
     }
   </section>
   @if (settings().suggestion && isOwnerDashboard && user?.uid) {

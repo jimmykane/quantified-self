@@ -182,13 +182,14 @@
 .dashboard-current-state-row dl app-metric-indicator { display: block; margin: 0.35rem 0; max-width: 170px; width: 100%; }
 
 .dashboard-current-state-row dl {
-  display: grid;
-  grid-template-columns: repeat(var(--today-metric-columns, 4), minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   margin: 0;
   min-block-size: 7.5rem;
 }
 
 .dashboard-current-state-row dl > div {
+  flex: 1 1 calc(100% / var(--today-metric-columns, 4));
   border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   box-sizing: border-box;
@@ -395,8 +396,8 @@
     border-right: 0;
   }
 
-  .dashboard-current-state-row dl {
-    grid-template-columns: repeat(min(var(--today-metric-columns, 4), 2), minmax(0, 1fr));
+  .dashboard-current-state-row dl > div {
+    flex-basis: calc(100% / min(var(--today-metric-columns, 4), 2));
   }
 
   .dashboard-current-state-row dl > div:nth-child(odd) {
@@ -450,3 +451,8 @@
 
 .dashboard-current-state-row dl > div:nth-child(4n + 1) { border-left: 0; }
 @media (max-width: 720px) { .dashboard-current-state-row dl > div:nth-child(odd) { border-left: 0; } }
+
+.dashboard-today-empty { padding: 1rem; }
+.dashboard-today-empty p { font: var(--mat-sys-title-small); margin: 0 0 0.25rem; }
+.dashboard-today-empty small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.dashboard-today-empty button { display: flex; margin-top: 0.5rem; }

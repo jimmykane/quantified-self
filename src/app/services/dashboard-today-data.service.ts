@@ -175,7 +175,11 @@ export class DashboardTodayDataService {
           id === 'weight' ? 'body_weight' : 'steps'
         ] ?? null;
       this.patch({
-        [id]: { value: '—', detail: 'Loading reading…', status: 'loading' },
+        [id]: {
+          value: '—',
+          detail: id === 'weight' ? 'Loading weight…' : 'Loading steps…',
+          status: 'loading',
+        },
       });
       const request =
         id === 'weight'
@@ -220,14 +224,16 @@ export class DashboardTodayDataService {
                 ? [display.value, display.unit].filter(Boolean).join(' ')
                 : '—',
               detail: selected
-                ? `${selected.series.sourceLabel} · ${date}${value.complete ? '' : ' · Partial readings'}`
+                ? `${selected.series.sourceLabel} · ${date}${value.complete ? '' : ' · Some history unavailable'}`
                 : !value.complete
                   ? 'Some readings unavailable'
                   : preferred
-                    ? 'Selected Health source has no reading'
+                    ? id === 'weight'
+                      ? 'No weigh-in from your selected source'
+                      : 'No steps from your selected source today'
                     : id === 'weight'
                       ? 'No weigh-in recorded'
-                      : 'No reading today',
+                      : 'No steps recorded today',
               status: !value.complete ? 'error' : selected ? 'ready' : 'empty',
             },
           });
@@ -237,7 +243,10 @@ export class DashboardTodayDataService {
             this.patch({
               [id]: {
                 value: '—',
-                detail: 'Reading unavailable',
+                detail:
+                  id === 'weight'
+                    ? 'Couldn’t load weight'
+                    : 'Couldn’t load steps',
                 status: 'error',
               },
             });

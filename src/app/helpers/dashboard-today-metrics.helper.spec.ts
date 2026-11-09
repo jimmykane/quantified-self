@@ -13,16 +13,24 @@ describe('Today activity metrics', () => {
     const values = buildTodayActivityMetrics([run, run, event('missing')], true);
     expect(values.activities.value).toBe('2');
     expect(values.distance.value).toBe('10.00 Km');
-    expect(values.distance.detail).toBe('From 1 of 2 activities loaded');
+    expect(values.distance.detail).toBe('Recorded in 1 of 2 activities');
     expect(values.ascent.value).toBe('0 m');
     expect(values.tss.value).toBe('—');
     expect(buildTodayActivityMetrics([], true).distance.value).not.toBe('—');
     expect(buildTodayActivityMetrics([], false).distance.value).toBe('—');
   });
+  it('distinguishes partial totals from a completed day with missing metric values', () => {
+    const partial = buildTodayActivityMetrics([event('run', { Distance: 1000 })], false);
+    expect(partial.activities).toMatchObject({ value: '1', status: 'error', detail: 'Partial activity count' });
+    expect(partial.distance).toMatchObject({ status: 'error', detail: 'Partial total · 1 activity' });
+    expect(partial.tss).toMatchObject({ value: '—', status: 'error', detail: 'Activity data is incomplete for today' });
+    expect(buildTodayActivityMetrics([event('missing')], true).tss).toMatchObject({ status: 'empty', detail: 'No value recorded today' });
+    expect(buildTodayActivityMetrics([], true).activities.detail).toBe('No activities recorded today');
+  });
   it('uses canonical units and existing elevation exclusions', () => {
     const run = event('run', { Distance: 10_000, Ascent: 100 });
     expect(buildTodayActivityMetrics([run], true, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })).distance.value).toBe('6.22 mi');
-    expect(buildTodayActivityMetrics([run], true, null, { removeAscentForEventTypes: [ActivityTypes.Running] }).ascent.value).toBe('—');
+    expect(buildTodayActivityMetrics([run], true, null, { removeAscentForEventTypes: [ActivityTypes.Running] }).ascent).toMatchObject({ value: '—', detail: 'Ascent excluded by your settings' });
   });
   it('counts metadata without constructing metrics and avoids hidden metric reads', () => {
     const run = event('run', { [DataDistance.type]: 1000 });

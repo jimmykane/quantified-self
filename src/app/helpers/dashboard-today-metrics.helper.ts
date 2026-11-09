@@ -50,10 +50,12 @@ export function buildTodayActivityMetrics(
     ? {
         activities: {
           value: number.format(unique.length),
-          detail: complete
-            ? 'Recorded today · all sports'
-            : 'Activities loaded so far',
-          status: 'ready',
+          detail: !complete
+            ? 'Partial activity count'
+            : unique.length
+              ? 'Today · all sports'
+              : 'No activities recorded today',
+          status: complete ? 'ready' : 'error',
         },
       }
     : {};
@@ -93,16 +95,22 @@ export function buildTodayActivityMetrics(
             compactDuration: true,
           })
         : null;
+    let detail = 'Today · all sports';
+    if (!complete) {
+      detail = display ? `Partial total · ${number.format(count)} ${count === 1 ? 'activity' : 'activities'}` : 'Activity data is incomplete for today';
+    } else if (!display) {
+      const ascentExcluded = id === 'ascent' && elevation.families.length > 0
+        && elevation.families.every(family => family.metrics.ascent.eligibleEventCount === 0);
+      detail = ascentExcluded ? 'Ascent excluded by your settings' : 'No value recorded today';
+    } else if (knownEmpty) {
+      detail = 'No activities recorded today';
+    } else if (count !== unique.length) {
+      detail = `Recorded in ${number.format(count)} of ${number.format(unique.length)} activities`;
+    }
     result[id] = {
       value: display?.text ?? '—',
-      status: display ? 'ready' : 'empty',
-      detail: !display
-        ? 'No recorded value today'
-        : knownEmpty
-          ? 'No activities yet today'
-          : complete && count === unique.length
-            ? 'Recorded today · all sports'
-            : `From ${number.format(count)} of ${number.format(unique.length)} activities loaded`,
+      status: !complete ? 'error' : display ? 'ready' : 'empty',
+      detail,
     };
   }
   return result;

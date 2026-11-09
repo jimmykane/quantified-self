@@ -2,11 +2,11 @@
   <h2 mat-dialog-title>Customize Today</h2>
   <div mat-dialog-content class="today-editor-content">
     <p>
-      Choose what stays at a glance. Hidden sleep and HRV still contribute to
-      Readiness when it is shown.
+      Choose what appears in Today. Hiding individual metrics won’t change
+      Readiness.
     </p>
     <h3>Summaries</h3>
-    <p class="today-editor-hint">These keep their larger views at the top.</p>
+    <p class="today-editor-hint">Larger panels, shown above your metrics.</p>
     @for (block of summaries; track block.id) {
       <mat-checkbox
         [checked]="draft()[block.id]"
@@ -17,8 +17,7 @@
     }
     <h3>Metrics</h3>
     <p class="today-editor-hint">
-      Use a handle or the arrows to change the order. Activity totals always
-      cover today and all sports.
+      Shown in this order. Drag a handle or use the arrows to reorder.
     </p>
     <div
       cdkDropList
@@ -38,6 +37,7 @@
             <mat-icon>drag_indicator</mat-icon>
           </button>
           <mat-checkbox
+            [id]="'today-metric-' + metric.id"
             [checked]="true"
             [disabled]="saving()"
             (change)="toggleMetric(metric.id, $event.checked)"
@@ -64,12 +64,23 @@
             </button>
           </div>
         </div>
+      } @empty {
+        <p class="today-editor-hint">
+          No metrics selected. Add one from the list below.
+        </p>
       }
     </div>
+    @if (selected().length < catalog.length) {
+      <h4>Add metrics</h4>
+    }
+    <p class="today-editor-hint">
+      Activity totals cover today across all sports.
+    </p>
     @for (metric of catalog; track metric.id) {
       @if (!draft().metrics.includes(metric.id)) {
         <div class="today-editor-available">
           <mat-checkbox
+            [id]="'today-metric-' + metric.id"
             [checked]="false"
             [disabled]="saving()"
             (change)="toggleMetric(metric.id, $event.checked)"
@@ -78,22 +89,33 @@
         </div>
       }
     }
-    <h3>Context</h3>
+    <h3>Extras</h3>
     @for (block of context; track block.id) {
-      <mat-checkbox
-        [checked]="draft()[block.id]"
-        [disabled]="saving()"
-        (change)="toggleBlock(block.id, $event.checked)"
-        >{{ block.label }}</mat-checkbox
-      >
+      <div class="today-editor-available">
+        <mat-checkbox
+          [checked]="draft()[block.id]"
+          [disabled]="saving()"
+          (change)="toggleBlock(block.id, $event.checked)"
+          >{{ block.label }}</mat-checkbox
+        >
+        <small>{{ block.detail }}</small>
+      </div>
     }
-    <button mat-button type="button" [disabled]="saving()" (click)="reset()">
+    <button
+      mat-button
+      type="button"
+      [disabled]="saving() || isDefault()"
+      (click)="reset()"
+    >
       Restore defaults
     </button>
-    @if (error()) {
-      <p role="alert">{{ error() }}</p>
-    }
+    <p class="today-editor-hint">
+      Defaults show Training state, Readiness and Load. Save to apply.
+    </p>
   </div>
+  @if (error()) {
+    <p class="today-editor-error" role="alert">{{ error() }}</p>
+  }
   <div mat-dialog-actions class="today-editor-actions" align="end">
     <button mat-button type="button" [disabled]="saving()" (click)="cancel()">
       Cancel
@@ -101,7 +123,7 @@
     <button
       mat-flat-button
       type="button"
-      [disabled]="saving()"
+      [disabled]="saving() || !hasChanges()"
       (click)="save()"
     >
       <span class="today-editor-save">

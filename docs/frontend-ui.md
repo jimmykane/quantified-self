@@ -308,10 +308,14 @@ Today configuration is stored in the versioned `dashboardSettings.today` field. 
 editor from **Dashboard options → Customize Today** or the global dashboard chart manager. The editor keeps a local
 draft until Save, writes only that field through `DashboardConfigurationService`, and uses its conflict checks. Cancel
 and dismissal do not persist. Training state and Readiness retain their larger top views; a single summary fills that
-row. Compact metrics follow the saved order, with at most four columns on desktop and two on phones. Reordering uses
-handles in the editor plus accessible up/down buttons. Recovery left and Today's suggestion remain optional full-width
+row. Compact metrics follow the saved order, with at most four columns on desktop and two on phones; the last row
+expands to use the available width. The editor separates shown metrics from Add metrics. Reordering uses handles plus
+accessible up/down buttons, announces the resulting position and keeps focus on the moved metric. Checkbox focus is
+also retained when a metric moves between the shown and available lists. Recovery left and Today's suggestion remain optional full-width
 context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
-An empty Today offers Customize Today and retains the existing title, date and calendar action.
+An empty Today explains that no items are selected, offers Customize Today and retains the existing title, date and
+calendar action. Save is enabled only for a changed draft. Restore defaults explains the three-block layout before
+saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
 
 New profiles explicitly start with Training state, Readiness and Load. Hydrating an existing profile without the field
 preserves the full legacy card. Restore defaults and Reset to starter dashboard explicitly select the three-block
@@ -326,9 +330,8 @@ measurements, without a chart-window cutoff or workout-profile fallback. Steps u
 from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
 report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
 Opening the editor does not start metric readers.
-The new Today reader/editor code exceeds the prior total-script cap by approximately 14.5 kB in the optimized beta
-build. Matching beta/production `allScript` caps move from 14.25 to 14.27 MB, with the initial 1474 kB and warning
-budgets unchanged. The editor stays lazy; the initial bundle remains 1.41 MB. This records bundle accounting only,
+The Today reader/editor is accounted for by matching beta/production `allScript` caps of 14.27 MB, compared with
+14.25 MB on the feature base. The initial 1474 kB and warning budgets are unchanged. The editor stays lazy; the initial bundle remains 1.41 MB. This records bundle accounting only,
 not a device runtime speed claim.
 
 Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the

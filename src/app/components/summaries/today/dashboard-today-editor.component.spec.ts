@@ -1,10 +1,14 @@
 import { TestBed } from '@angular/core/testing';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardTodayEditorComponent } from './dashboard-today-editor.component';
-import { DashboardConfigurationService } from '../../../services/dashboard-configuration.service';
+import {
+  DashboardConfigurationConflict,
+  DashboardConfigurationService,
+} from '../../../services/dashboard-configuration.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { AppUserInterface } from '../../../models/app-user.interface';
@@ -13,6 +17,7 @@ import { defaultDashboardTodaySettings } from '../../../helpers/dashboard-today-
 describe('Customize Today', () => {
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const persistence = { save: vi.fn() };
+  const announcer = { announce: vi.fn().mockResolvedValue(undefined) };
   const ref = { close: vi.fn(), disableClose: false };
   const users = { user: signal<AppUserInterface | null>(null) };
   let user: AppUserInterface;
@@ -32,6 +37,7 @@ describe('Customize Today', () => {
         { provide: DashboardConfigurationService, useValue: persistence },
         { provide: AppUserService, useValue: users },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: LiveAnnouncer, useValue: announcer },
       ],
     });
   });
@@ -50,6 +56,12 @@ describe('Customize Today', () => {
       'overnight-hr',
     ]);
     expect(haptics.selection).not.toHaveBeenCalled();
+    expect(announcer.announce).not.toHaveBeenCalled();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        'button[mat-flat-button]'
+      )?.disabled
+    ).toBe(true);
     editor.toggleMetric('weight', true);
     fixture.detectChanges();
     const button = (
@@ -108,17 +120,87 @@ describe('Customize Today', () => {
     await editor.save();
     expect(haptics.selection).toHaveBeenCalledTimes(count);
     expect(persistence.save).toHaveBeenCalledTimes(1);
-    reject(new Error('Your dashboard changed.'));
+    reject(new DashboardConfigurationConflict());
     await pending;
     fixture.detectChanges();
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('[role="alert"]')
         ?.textContent
-    ).toContain('Your dashboard changed.');
+    ).toContain('Your dashboard changed elsewhere.');
     expect(user.settings.dashboardSettings.today).toBeUndefined();
     expect(haptics.success).not.toHaveBeenCalled();
     expect(haptics.error).toHaveBeenCalledTimes(1);
     expect(ref.close).not.toHaveBeenCalled();
+  });
+  it('enables Save only for a changed draft and explains what restoring defaults will show', () => {
+    const fixture = render(),
+      editor = fixture.componentInstance;
+    const save = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        'button[mat-flat-button]'
+      )!;
+    expect(save().disabled).toBe(true);
+    editor.toggleBlock('readiness', false);
+    fixture.detectChanges();
+    expect(save().disabled).toBe(false);
+    editor.toggleBlock('readiness', true);
+    fixture.detectChanges();
+    expect(save().disabled).toBe(true);
+    editor.reset();
+    fixture.detectChanges();
+    expect(editor.isDefault()).toBe(true);
+    expect(save().disabled).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain(
+      'Defaults show Training state, Readiness and Load.'
+    );
+    const count = haptics.selection.mock.calls.length;
+    editor.reset();
+    expect(haptics.selection).toHaveBeenCalledTimes(count);
+  });
+  it('retains focus when a metric moves between lists and announces accepted reorder actions', async () => {
+    const fixture = render(),
+      editor = fixture.componentInstance;
+    editor.toggleMetric('weight', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const input = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        '#today-metric-weight input'
+      )!;
+    expect(document.activeElement).toBe(input());
+    editor.move(4, -4);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(input());
+    expect(announcer.announce).toHaveBeenLastCalledWith(
+      'Weight moved to position 1 of 5.'
+    );
+    editor.toggleMetric('weight', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(input());
+    expect(input().checked).toBe(false);
+    expect(announcer.announce).toHaveBeenLastCalledWith(
+      'Weight removed from Today.'
+    );
+  });
+  it('keeps failed saves visible outside the scrolling list without exposing technical errors', async () => {
+    persistence.save.mockRejectedValue(
+      new Error('FirebaseError: permission-denied in users/config')
+    );
+    const fixture = render(),
+      editor = fixture.componentInstance;
+    editor.reset();
+    await editor.save();
+    fixture.detectChanges();
+    const error = (fixture.nativeElement as HTMLElement).querySelector(
+      '[role="alert"]'
+    );
+    expect(error?.textContent).toContain('Your changes are still here.');
+    expect(error?.closest('.today-editor-content')).toBeNull();
+    expect(error?.textContent).not.toContain('Firebase');
+    expect(editor.hasChanges()).toBe(true);
+    expect(haptics.error).toHaveBeenCalledOnce();
   });
   it('closes on an account switch and rejects stale saves without feedback', async () => {
     const fixture = render(),

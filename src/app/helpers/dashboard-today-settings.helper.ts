@@ -8,40 +8,56 @@ export const DASHBOARD_TODAY_METRICS: readonly {
   label: string;
   detail: string;
 }[] = [
-  { id: 'load', label: 'Load', detail: 'Current Form and seven-day ramp' },
+  { id: 'load', label: 'Load', detail: 'Form and your weekly fitness change' },
   {
     id: 'sleep',
     label: 'Sleep',
-    detail: 'Latest eligible night’s score and duration',
+    detail: 'Recent sleep score and duration',
   },
-  { id: 'hrv', label: 'HRV', detail: 'Seven-day average and personal range' },
+  {
+    id: 'hrv',
+    label: 'HRV',
+    detail: '7-day average compared with your usual range',
+  },
   {
     id: 'overnight-hr',
     label: 'Overnight HR',
-    detail: 'Latest eligible night’s heart rate and baseline comparison',
+    detail: 'Overnight heart rate compared with your usual level',
   },
   {
     id: 'weight',
     label: 'Weight',
-    detail: 'Latest weigh-in, with its source and date',
+    detail: 'Latest weigh-in, with its date and source',
   },
-  { id: 'tss', label: 'TSS', detail: 'Recorded today · all sports' },
-  { id: 'ascent', label: 'Ascent', detail: 'Recorded today · all sports' },
+  {
+    id: 'tss',
+    label: 'TSS',
+    detail: 'Training Stress Score from today’s activities',
+  },
+  {
+    id: 'ascent',
+    label: 'Ascent',
+    detail: 'Elevation gained during activities',
+  },
   {
     id: 'duration',
     label: 'Activity duration',
-    detail: 'Recorded today · all sports',
+    detail: 'Total recorded activity time',
   },
-  { id: 'distance', label: 'Distance', detail: 'Recorded today · all sports' },
+  {
+    id: 'distance',
+    label: 'Distance',
+    detail: 'Total recorded activity distance',
+  },
   {
     id: 'activities',
     label: 'Activities',
-    detail: 'Recorded today · all sports',
+    detail: 'Number of activities recorded today',
   },
   {
     id: 'steps',
     label: 'Steps',
-    detail: 'Today’s reading · uses your Health source choice',
+    detail: 'Today’s step count, using your source choice in Health',
   },
 ];
 const ids = new Set(DASHBOARD_TODAY_METRICS.map((item) => item.id));
