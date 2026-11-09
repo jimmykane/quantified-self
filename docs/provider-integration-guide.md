@@ -1646,6 +1646,12 @@ and propagate the actual queue transition result. Explicit terminal URL/size/HTT
 see [Garmin download handling](garmin-integration.md#delivery-and-trust-boundary). This backend correction needs
 only `processWorkoutTask`; existing import monitoring covers it without new metrics or alert configuration.
 
+Garmin processing-error, usage-limit and missing-user paths, plus the shared Suunto/COROS missing-user and
+empty-event terminal paths, also return the transition helper's actual result. A committed DLQ move is acknowledged, a failed state write remains
+retryable, and stale/deleted work retains its guarded no-op result. This does not change retry increments, limits,
+provider requests or persistence operations. Monitoring is **covered/unchanged** by the existing committed-DLQ,
+worker failure and retry signals; only `processWorkoutTask` needs deployment after separate approval.
+
 The existing 15-minute, 30-minute, one-hour, two-hour and then four-hour retry delays, concurrency, schedules, leases,
 revision checks, lifecycle/deletion fences and terminal error classifications are unchanged. Twenty task attempts
 include the first delivery and span approximately 64 hours before runtime/throttling delays, rather than approximately

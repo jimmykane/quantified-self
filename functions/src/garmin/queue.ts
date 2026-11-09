@@ -563,12 +563,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     } else if (e instanceof UsageLimitExceededError) {
       logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-      return QueueResult.RetryIncremented;
+      return increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
     } else if (e instanceof UserNotFoundError) {
       logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
-      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
-      return QueueResult.MovedToDLQ;
+      return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
     }
 
     const err = e instanceof Error ? e : new Error(String(e));
@@ -583,8 +581,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     }
 
     logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${(serviceToken as any).userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
-    await increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
-    return QueueResult.RetryIncremented;
+    return increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
   }
 }
 

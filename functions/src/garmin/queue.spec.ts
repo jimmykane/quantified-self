@@ -1253,13 +1253,14 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             );
         });
 
-        it('should abort retries (move to DLQ) if UserNotFoundError is thrown by setEvent', async () => {
+        it.each(['MOVED_TO_DLQ', 'FAILED', 'PROCESSED'])('returns %s from the missing-user terminal transition', async outcome => {
             const { UserNotFoundError } = await import('../utils');
             mockSetEvent.mockRejectedValue(new UserNotFoundError('User not found'));
+            mockMoveToDeadLetterQueue.mockResolvedValueOnce(outcome);
 
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
-            expect(result).toBe('MOVED_TO_DLQ');
+            expect(result).toBe(outcome);
             expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
                 queueItem,
                 expect.any(Error),
@@ -1268,12 +1269,13 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             );
         });
 
-        it('should increment retry count by 20 if UsageLimitExceededError is thrown by setEvent', async () => {
+        it.each(['RETRY_INCREMENTED', 'MOVED_TO_DLQ', 'FAILED', 'PROCESSED'])('returns %s from the usage-limit transition without changing its retry increment', async outcome => {
             mockSetEvent.mockRejectedValue(new UsageLimitExceededError('Limit exceeded'));
+            mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(outcome);
 
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
-            expect(result).toBe('RETRY_INCREMENTED');
+            expect(result).toBe(outcome);
             expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
                 queueItem,
                 expect.any(Error),
@@ -1282,12 +1284,13 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             );
         });
 
-        it('should catch generic errors in saving event and increment retry count by 1', async () => {
+        it.each(['RETRY_INCREMENTED', 'MOVED_TO_DLQ', 'FAILED', 'PROCESSED'])('returns %s from a general processing-error transition without changing its retry increment', async outcome => {
             mockSetEvent.mockRejectedValue(new Error('Database error'));
+            mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(outcome);
 
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
-            expect(result).toBe('RETRY_INCREMENTED');
+            expect(result).toBe(outcome);
             expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
                 queueItem,
                 expect.any(Error),

@@ -396,6 +396,7 @@ import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkout
 import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
+import * as queueUtils from './queue-utils';
 import { PermanentCOROSFITDownloadError } from './coros/file-download';
 import {
     COROSFITDetailAuthError,
@@ -3065,6 +3066,30 @@ describe('queue', () => {
                 expect(mockRetainCOROSTrainingCompletion).not.toHaveBeenCalled();
                 expect(mockBatch.set).not.toHaveBeenCalled();
             });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI].flatMap(serviceName =>
+            ['USER_NOT_FOUND', 'EVENT_EMPTY_ERROR'].flatMap(context =>
+                [QueueResult.MovedToDLQ, QueueResult.Failed, QueueResult.Processed].map(outcome => ({ serviceName, context, outcome })))))(
+            'preserves $outcome from $serviceName terminal transition $context', async ({ serviceName, context, outcome }) => {
+                const item = { ...suuntoQueueItem, openId: 'corosOpenId', FITFileURI: 'https://oss.coros.com/run.fit' };
+                vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload(Buffer.alloc(600))));
+                if (serviceName === ServiceNames.COROSAPI) {
+                    mockRef.parent.id = 'COROSAPIWorkoutQueue';
+                    let live: Record<string, unknown> = { ...item, ref: undefined };
+                    mockRef.get.mockImplementation(async () => ({ exists: true, data: () => ({ ...live }) }));
+                    mockRef.update.mockImplementation(async update => { live = { ...live, ...update }; });
+                    vi.mocked(getTokenData).mockResolvedValue({ accessToken: 'token', openId: 'corosOpenId' } as Awaited<ReturnType<typeof getTokenData>>);
+                }
+                const error = context === 'USER_NOT_FOUND' ? new utils.UserNotFoundError('User not found')
+                    : Object.assign(new Error('No activities found'), { code: 'EVENT_EMPTY_ERROR' });
+                vi.mocked(utils.setEvent).mockRejectedValueOnce(error);
+                const transition = vi.spyOn(queueUtils, 'moveToDeadLetterQueue').mockResolvedValueOnce(outcome);
+                try {
+                    await expect(parseWorkoutQueueItemForServiceName(serviceName, item)).resolves.toBe(outcome);
+                    expect(transition).toHaveBeenCalledExactlyOnceWith(item, error, undefined, context);
+                } finally { transition.mockRestore(); }
+            },
+        );
 
         it('dead-letters a verified Suunto identity conflict without another parse retry', async () => {
             vi.mocked(utils.setEvent).mockRejectedValueOnce(new ActivityIdentityConflictError());
