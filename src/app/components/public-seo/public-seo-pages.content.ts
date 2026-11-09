@@ -305,13 +305,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Period Context',
-        title: 'Read totals and activity mix below the calendar',
+        title: 'Read period totals and activity mix',
         copy: 'The selected period has its own summary and duration comparison, independent from dashboard event-search filters and custom tile ranges.',
         items: [
           {
             icon: 'analytics',
             title: 'Distance, duration, and ascent',
-            copy: 'Read selected-period totals above the calendar in your preferred units. Adjacent dates shown only to complete a month grid do not change month totals.',
+            copy: 'Read selected-period totals in your preferred units. Adjacent dates shown only to complete a month grid do not change month totals.',
           },
           {
             icon: 'bar_chart',
@@ -1675,22 +1675,22 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'FIT Activity Upload',
         title: 'Import a selected FIT activity to Suunto',
-        copy: 'Connect Suunto in Quantified Self, then use its Uploads tool when you need to send one selected FIT activity for a missing session, one-off correction, or migration.',
+        copy: 'In Connections, connect Suunto with Pro and write access, then choose Send activities. Use Local files to prepare a FIT recording without adding it to your Quantified Self archive. Preview sends nothing; review the prepared activities before confirming Send.',
         items: [
           {
             icon: 'login',
             title: 'Connect Suunto',
-            copy: 'Sign in with Pro access, connect Suunto in Services, and keep the connection active before starting an activity upload.',
+            copy: 'Sign in with Pro access, connect Suunto in Connections, and grant write access before sending activities.',
           },
           {
             icon: 'upload_file',
             title: 'Select a FIT activity',
-            copy: 'Open Suunto Services, choose Uploads, and select the FIT activity file you want to send. This is an activity workflow, not a route upload.',
+            copy: 'Under Suunto, choose Send activities, then Local files and Choose FIT files. Review the prepared activities before confirming Send. This is an activity workflow, not a route upload.',
           },
           {
             icon: 'sync',
             title: 'Check each upload status',
-            copy: 'Suunto FIT activity uploads show a status for each file, with retry controls when a file needs another attempt.',
+            copy: 'Review Delivery results and Recent sends. Queued and Waiting for provider are not confirmed delivery. Use Check status or Retry sending when offered; if acceptance is uncertain, check Suunto before sending another copy.',
           },
         ],
       },
@@ -1702,12 +1702,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'sync_alt',
             title: 'Turn on automatic activity sync',
-            copy: 'In the source provider’s Services tools, turn on automatic activity sync to send eligible new Garmin, COROS, or Wahoo activities to Suunto after Quantified Self imports them.',
+            copy: 'In Connections, open Set up automatic sending under Garmin, COROS, or Wahoo, choose To Suunto, and enable automatic activity sync. Only eligible new imports are sent; connecting accounts alone does not enable sending.',
           },
           {
             icon: 'published_with_changes',
-            title: 'Sync past activities by date',
-            copy: 'Use Sync past activities in the source provider’s Services tools to choose a date range for activities already stored in Quantified Self. This does not turn on future automatic sync.',
+            title: 'Send past activities by date',
+            copy: 'Under Suunto in Connections, open Send past activities and choose Saved activities. Set your dates and Activity sources, then choose Preview saved activities. Preview sends nothing. Activities need a retained original FIT file; merged activities, unsupported originals, and previous deliveries are excluded. After you review the selection, confirm Send. This does not enable future automatic sync.',
           },
           {
             icon: 'route',
@@ -1720,15 +1720,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I import a FIT activity to Suunto?',
-        answer: 'Yes. With Pro access and an active Suunto connection, open Uploads in Suunto Services and select the FIT activity file you want to send.',
+        answer: 'Yes. With Pro and Suunto write access, choose Send activities under Suunto in Connections, then Local files and Choose FIT files. Review the prepared activities before confirming Send. These files are not added to your Quantified Self archive.',
       },
       {
         question: 'Can I automatically sync Garmin, COROS, or Wahoo activities to Suunto?',
-        answer: 'Yes. Connect Suunto and the source provider, then turn on automatic activity sync in that source provider’s Services tools. Eligible new activities are sent after they arrive in Quantified Self.',
+        answer: 'Yes. With Pro, connect Suunto and the source provider in Connections. Under Garmin, COROS, or Wahoo, open Set up automatic sending, choose To Suunto, and enable automatic activity sync. Eligible new imports are sent; a one-time past send does not enable this.',
       },
       {
         question: 'Can I import past activities to Suunto?',
-        answer: 'Yes. Use Sync past activities in the source provider’s Services tools and choose a date range for activities already stored in Quantified Self. Future automatic sync stays off unless you enable it separately.',
+        answer: 'Yes. With Pro and Suunto write access, open Send past activities under Suunto in Connections. Choose Saved activities, set dates and Activity sources, then choose Preview saved activities. Preview sends nothing. Only eligible retained original FIT files can be sent. After you review ready and excluded activities, confirm Send. Future automatic sync stays off unless you enable it separately.',
       },
       {
         question: 'Can I import a GPX route to Suunto as an activity?',
@@ -1743,10 +1743,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('All Guides', '/guides'),
     ],
     howToSteps: [
-      'Connect Suunto to Quantified Self with Pro access.',
-      'For one activity file, open Uploads in Suunto Services and select a FIT activity.',
-      'For provider sync, connect Garmin, COROS, or Wahoo and turn on automatic activity sync in its Services tools.',
-      'Use Sync past activities in the source provider’s Services tools when you need an existing date range.',
+      'Connect Suunto in Connections with Pro and write access.',
+      'For a local FIT activity, choose Send activities under Suunto, then Local files and Choose FIT files; review before confirming Send.',
+      'For future provider imports, connect Garmin, COROS, or Wahoo, open Set up automatic sending under that provider, choose To Suunto, and enable automatic activity sync.',
+      'Under Suunto in Connections, open Send past activities, choose Saved activities, dates and Activity sources, then choose Preview saved activities; review ready and excluded activities before confirming Send. This does not enable future automatic sync.',
     ],
   },
   importActivitiesToWahoo: {

@@ -507,7 +507,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
@@ -531,7 +531,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-11-03');
     // COROS guide clarifies the history limit and keeps its setup tab through signup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-11-03');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');

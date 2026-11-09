@@ -10,6 +10,36 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('describes Calendar period context without assuming one placement for every view', () => {
+    const section = PUBLIC_SEO_PAGES.activityCalendar.sections.find(item => item.eyebrow === 'Period Context')!;
+    expect(section.title).toBe('Read period totals and activity mix');
+    expect(JSON.stringify(section)).not.toMatch(/(?:above|below) the calendar/);
+    expect(section.items[0].copy).toContain('Adjacent dates shown only to complete a month grid do not change month totals');
+    expect(JSON.stringify(section)).toContain('never increase completed distance');
+  });
+
+  it('teaches the Suunto destination workspace for saved activity imports', () => {
+    const page = PUBLIC_SEO_PAGES.importActivitiesToSuunto;
+    const history = page.sections.flatMap(section => section.items)
+      .find(item => item.icon === 'published_with_changes')!.copy;
+    const faq = page.faqItems.find(item => item.question === 'Can I import past activities to Suunto?')!.answer;
+    for (const copy of [history, faq, page.howToSteps![3]]) {
+      for (const phrase of ['Suunto', 'Connections', 'Send past activities', 'Saved activities',
+        'Activity sources', 'Preview saved activities', 'review', 'Send', 'automatic sync']) {
+        expect(copy).toContain(phrase);
+      }
+    }
+    const copy = JSON.stringify(page);
+    for (const phrase of ['Pro', 'write access', 'retained original FIT', 'excluded',
+      'Preview sends nothing', 'Recent sends', 'not confirmed delivery']) {
+      expect(copy).toContain(phrase);
+    }
+    expect(copy).not.toContain('Sync past activities');
+    expect(copy).not.toContain('Services');
+    expect(copy).not.toContain('Uploads');
+    expect(copy).not.toContain('three months');
+  });
+
   it.each(['syncGarminToWahoo', 'importActivitiesToWahoo'] as const)(
     'teaches destination-side saved activity sending in %s', key => {
       const page = PUBLIC_SEO_PAGES[key];

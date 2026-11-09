@@ -260,6 +260,26 @@ describe('PublicSeoPageComponent', () => {
     mcpFixture.destroy();
   });
 
+  it('renders Suunto import steps and FAQ with the destination-side saved workflow', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.importActivitiesToSuunto;
+    const fixture = TestBed.createComponent(PublicSeoPageComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const steps = root.querySelectorAll('.how-to-list li');
+    expect(steps).toHaveLength(4);
+    expect(steps[3].textContent).toContain('Under Suunto in Connections');
+    expect(steps[3].textContent).toContain('Preview saved activities');
+    expect(steps[3].textContent).toContain('review ready and excluded activities before confirming Send');
+    const historyFaq = Array.from(root.querySelectorAll('.faq-item'))
+      .find(item => item.textContent?.includes('Can I import past activities to Suunto?'))!;
+    expect(historyFaq.textContent).toContain('Send past activities under Suunto in Connections');
+    expect(historyFaq.textContent).toContain('Preview sends nothing');
+    expect(historyFaq.textContent).toContain('Future automatic sync stays off');
+    expect(root.textContent).not.toContain('Sync past activities');
+    expect(root.textContent).not.toContain('Uploads');
+    fixture.destroy();
+  });
+
   it('renders the public Activity Calendar overview and help links', () => {
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.activityCalendar;
 
@@ -274,6 +294,9 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
+    expect(text).toContain('Read period totals and activity mix');
+    expect(text).not.toContain('totals above the calendar');
+    expect(text).not.toContain('activity mix below the calendar');
     expect(text).toContain('See the active plan’s phases');
     expect(calendarFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(8);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
