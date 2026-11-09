@@ -13,8 +13,9 @@ export class GlobalErrorHandler implements ErrorHandler {
     handleError(error: any) {
         const moduleLoadFailedMessage = /Loading chunk .* failed|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
         const errorMessage = error?.message || error?.toString() || '';
+        const requiresExplicitRecovery = error?.code === 'account/settings-load-failed';
 
-        if (moduleLoadFailedMessage.test(errorMessage)) {
+        if (!requiresExplicitRecovery && moduleLoadFailedMessage.test(errorMessage)) {
             try {
                 // Persist the guard before navigating. Without usable session storage,
                 // leave recovery to the user instead of risking a reload loop.

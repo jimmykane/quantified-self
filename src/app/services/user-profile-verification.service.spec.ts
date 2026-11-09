@@ -168,6 +168,37 @@ describe('UserProfileVerificationService', () => {
     expect(sdk.getDoc).toHaveBeenCalledTimes(8);
   });
 
+  it('normalizes a real Lite SDK fetch rejection without making any network requests', async () => {
+    const { initializeApp, deleteApp } = await import('firebase/app');
+    const lite = await vi.importActual<typeof import('firebase/firestore/lite')>('firebase/firestore/lite');
+    const firebaseApp = initializeApp({ projectId: 'demo-profile-recovery', apiKey: 'demo-key' }, 'profile-transport-test');
+    const firestore = lite.getFirestore(firebaseApp);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      sdk.getFirestore.mockReturnValue(firestore);
+      sdk.doc.mockImplementation(lite.doc);
+      sdk.getDoc.mockImplementation(lite.getDoc);
+      await expect(service.verifyIfIncomplete('u1', null)).rejects.toMatchObject({
+        code: 'unavailable',
+        cause: { name: 'FirebaseError', code: 'unknown', message: 'Request failed with error: undefined' },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      for (const [url, request] of fetchMock.mock.calls) {
+        expect(String(url)).toContain('/projects/demo-profile-recovery/databases/(default)/documents:batchGet');
+        expect(request?.method).toBe('POST');
+      }
+      expect(loadUserSettingsUtilities).not.toHaveBeenCalled();
+    } finally {
+      await lite.terminate(firestore);
+      await deleteApp(firebaseApp);
+      fetchMock.mockRestore();
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it.each([
     new FirebaseError('unknown', 'Unexpected server response'),
     new FirebaseError('permission-denied', 'Request failed with error: undefined'),

@@ -114,6 +114,22 @@ describe('GlobalErrorHandler', () => {
     });
 
     it.each([
+        'Failed to fetch dynamically imported module: https://example.com/settings.js',
+        'Importing a module script failed.',
+        'error loading dynamically imported module: https://example.com/settings.js',
+    ])('honors explicit account recovery even when its message matches an import failure: %s', message => {
+        const error = Object.assign(new TypeError(message), { code: 'account/settings-load-failed' });
+        handler.handleError(error);
+        expect(windowMock.windowRef.location.reload).not.toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.getItem).not.toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.setItem).not.toHaveBeenCalled();
+        expect(loggerMock.error).toHaveBeenCalledWith(error);
+        // An explicitly recoverable failure must not consume the route reload budget.
+        handler.handleError(new TypeError('Importing a module script failed.'));
+        expect(windowMock.windowRef.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
         new TypeError('Failed to fetch'),
         new TypeError('Load failed'),
         new Error('NG0750'),

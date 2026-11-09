@@ -48,6 +48,8 @@ Chrome's failed dynamic import, Safari's `Importing a module script failed` and 
 The handler writes its shared session guard before reloading. Missing or blocked session storage skips automatic
 navigation, and storage/navigation exceptions cannot replace the original error report. Deferred-view errors and
 account-settings import failures retain their explicit recovery actions; nested causes do not trigger this reload.
+The `account/settings-load-failed` classification takes precedence even when the error's own message matches a
+browser import failure; these errors do not consume the automatic route-reload guard.
 
 `DeferredLoadDiagnosticsService` reports one fixed-label warning per allowlisted area per app instance, including
 the specific public preview key. It adds no exception text, URL, account content or persisted tracking state.
