@@ -204,7 +204,7 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptMarketingPolicy')!.value).toBe(false);
         setRequiredPoliciesAccepted();
         fixture.detectChanges();
-        clickButton('Continue with Starter to Compare');
+        clickButton('Continue free');
         await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledWith([path]));
         expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
         expect(mockUserService.setFreeTier).toHaveBeenCalledOnce();
@@ -252,7 +252,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(true);
         expect(component.hasPaidMembership()).toBe(true);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain('Continue to Compare');
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain('Open Compare');
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
@@ -1062,7 +1062,7 @@ describe('OnboardingComponent', () => {
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(returningComponent.user, { onboardingCompleted: true });
             expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
             returnFixture.detectChanges();
-            expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(path === '/tools/compare' ? 'Continue with Starter to Compare' : `Continue to ${label}`);
+            expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(path === '/tools/compare' ? 'Continue free' : `Continue to ${label}`);
             expect(returningComponent.isLoading).toBe(false);
         },
     );

@@ -60,7 +60,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly isCompareFlow = computed(() => this.completionTarget().path === '/tools/compare' || this.completionTarget().path === '/tools/compare/saved');
-    readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'One step before your comparison' : this.stage() === 'start' ? '01 / Your starting point'
+    readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
         : this.stage() === 'privacy' ? '02 / Account preferences' : '03 / Your membership');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
         : this.stage() === 'start' ? 'Choose your first step.'

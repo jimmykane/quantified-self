@@ -101,7 +101,7 @@ describe('help.content', () => {
     expect(content).toContain('**Compare recordings**');
     expect(content).toContain('**Explore QS**');
     expect(content).toContain('without the tour, watch setup, or pricing step');
-    expect(content).toContain('**Continue with Starter to Compare**');
+    expect(content).toContain('**Continue free**');
     expect(content).toContain('Existing paid memberships stay unchanged');
     expect(content).toContain('Saved comparisons links return to the saved list');
     expect(content).toContain('**Explore more of QS**');

@@ -78,10 +78,10 @@
                             </div>
                         }
                         @case ('privacy') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Get ready to compare.' : 'Review your account preferences.' }}</h1>
-                            <p class="lead">{{ isCompareFlow() ? 'Compare recordings from the same workout. No watch connection needed.' : 'Accept the required policies, then choose whether to enable analytics and marketing.' }}</p>
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Finish account setup' : 'Review your account preferences.' }}</h1>
+                            <p class="lead">{{ isCompareFlow() ? 'Review the policies below. Next, add recordings from the same workout to compare GPS tracks and measurements.' : 'Accept the required policies, then choose whether to enable analytics and marketing.' }}</p>
                             @if (isCompareFlow()) {
-                                <p class="setup-note">{{ hasPaidMembership() ? 'Your membership includes file comparison.' : 'File comparison is included with Starter.' }} Uploads and new comparisons use your activity allowance.</p>
+                                <p class="setup-note">@if (!hasPaidMembership()) { Starter is free. } Uploads and new comparisons count toward your activity limit.</p>
                             }
                             <form [formGroup]="termsFormGroup" class="onboarding-form" (ngSubmit)="onTermsSubmit()">
                                 <div class="policy-list">
@@ -102,7 +102,7 @@
                                 <div class="onboarding-actions">
                                     <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
                                     <button mat-flat-button type="submit" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading || !user">
-                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Continue to Compare' : 'Continue with Starter to Compare') : 'Save and continue' }}</span></span>
+                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Open Compare' : 'Continue free') : 'Save and continue' }}</span></span>
                                     </button>
                                 </div>
                             </form>
