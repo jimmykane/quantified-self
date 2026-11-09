@@ -9,7 +9,7 @@ export function buildWebPushMonitoring(project, channel) {
   const aggregate = { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: [] };
   const runbook = 'https://github.com/jimmykane/quantified-self/blob/develop/docs/web-push-notifications.md#monitoring';
   const bundle = { project, metrics: [{ name, description: `[${OWNER}] Explicit self-test outcomes. Acceptance is not display or reading. Expected permission, throttling, disabled configuration and expired registrations are not service failures.`,
-    filter: `${runtime} jsonPayload.message="[WebPush]" jsonPayload.telemetryVersion=1 jsonPayload.outcome=("accepted" OR "expired" OR "failed")`,
+    filter: `${runtime} jsonPayload.message:"[WebPush]" jsonPayload.telemetryVersion=1 jsonPayload.outcome=("accepted" OR "expired" OR "failed")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: [{ key: 'outcome', valueType: 'STRING', description: 'Fixed accepted, expired or failed category' }] },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)' } }],
     policies: [{ displayName: 'QS Web Push: Repeated self-test sender failures', userLabels: { managed_by: OWNER, policy_id: 'sender' },
@@ -31,7 +31,7 @@ export function buildWebPushMonitoring(project, channel) {
   const historyFilter = `metric.type="logging.googleapis.com/user/${historyName}" ${historyRuntime}`;
   bundle.metrics.push({ name: historyName,
     description: `[${OWNER}] Explicit history-import completion attempts. Acceptance is not display; cancelled, expired and limited are expected lifecycle outcomes.`,
-    filter: `${historyRuntime} jsonPayload.message="[HistoryImportPush]" jsonPayload.telemetryVersion=1 jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    filter: `${historyRuntime} jsonPayload.message:"[HistoryImportPush]" jsonPayload.telemetryVersion=1 jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: [{ key: 'outcome', valueType: 'STRING', description: 'Fixed accepted, expired, failed, cancelled or limited category' }] },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)' } });
   const failureCondition = (displayName, failureFilter) => ({ displayName, conditionThreshold: {
@@ -63,7 +63,7 @@ export function buildWebPushMonitoring(project, channel) {
   const overdueFilter = `metric.type="logging.googleapis.com/user/${overdueName}" ${activityRuntime}`;
   bundle.metrics.push({ name: activityName,
     description: `[${OWNER}] New-activity notification attempts and admission/preparation failures, including Gen 1 legacy import workers. Accepted is transport acceptance, never display.`,
-    filter: `${activityBase} jsonPayload.message="[ActivitySyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    filter: `${activityBase} jsonPayload.message:"[ActivitySyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
   for (const [metricName, extra, description] of [
@@ -103,7 +103,7 @@ export function buildWebPushMonitoring(project, channel) {
   const deliveryHeartbeatFilter = `metric.type="logging.googleapis.com/user/${deliveryHeartbeat}" ${deliveryRuntime}`;
   const deliveryOverdueFilter = `metric.type="logging.googleapis.com/user/${deliveryOverdue}" ${deliveryRuntime}`;
   bundle.metrics.push({ name: deliveryName, description: `[${OWNER}] Activity delivery notification admission and send attempts. Acceptance is not device display.`,
-    filter: `${deliveryBase} jsonPayload.message="[ActivityDeliveryPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    filter: `${deliveryBase} jsonPayload.message:"[ActivityDeliveryPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
   for (const [name, extra] of [[deliveryHeartbeat, ''], [deliveryOverdue, ' jsonPayload.oldestDueAgeSeconds>=180']]) {

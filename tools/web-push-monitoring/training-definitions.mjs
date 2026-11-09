@@ -7,7 +7,7 @@ export function appendTrainingPushMonitoring(bundle, project, channel, owner, ru
     ...names.slice(1).map(name => `metric.type="logging.googleapis.com/user/${name}" ${runtime}`)];
   const aggregate = { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: [] };
   bundle.metrics.push({ name: names[0], description: `[${owner}] Training notification admission and send outcomes. Acceptance is not display.`,
-    filter: `${base} jsonPayload.message="[TrainingSyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    filter: `${base} jsonPayload.message:"[TrainingSyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
   for (let index = 1; index < 3; index++) bundle.metrics.push({ name: names[index],

@@ -73,6 +73,8 @@ describe('help.content', () => {
 
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['**Retry category settings**', '**Reload app**', 'Your saved category choices are retained',
+      'Reloading does not enable notifications or change your browser permission']) expect(copy).toContain(phrase);
     for (const phrase of ['install it from the same site', 'beta and production are separate installations',
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
     expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');

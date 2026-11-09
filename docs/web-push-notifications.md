@@ -125,6 +125,14 @@ values during read failures and same-account reloads, preserves saved values on 
 account callbacks. Read errors and reloads block new consent and editing until every category is confirmed again.
 The import form links to category/device settings if unavailable.
 
+Notification listener teardown drains its saved handles before calling the SDK and attempts every unsubscribe even
+when Firestore throws. Auth changes and destruction still fence callbacks and reset owner state. A Firestore internal
+assertion means its local queue cannot safely accept new work: category editing stays blocked, the last confirmed
+same-account choices remain visible, and Settings offers **Reload app**. Only that explicit action reloads the page;
+ordinary read errors retain **Retry category settings**. Token refresh does not restart a known failed queue. No
+persistence clearing, automatic reload, permission prompt or category write is part of recovery. This contains the
+notification lifecycle failure and provides recovery; it does not repair the browser/SDK's IndexedDB implementation.
+
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
 consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
 default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
@@ -450,6 +458,15 @@ node tools/web-push-monitoring/cli.mjs --project=quantified-self-io --notificati
 During readback, validate every dashboard and alert-condition filter with Monitoring's `timeSeries.list` API,
 including filters with no current samples. Multi-service comparisons must use `one_of(...)`; Logging's
 `label=("a" OR "b")` shorthand is not valid Monitoring syntax. Offline bundle tests do not replace this live check.
+
+Outcome metrics use Logging substring comparisons for the full bracketed marker, for example
+`jsonPayload.message:"[ActivityDeliveryPush]"`. Firebase's error logger prefixes the marker with `Error:` and appends
+a stack trace, so equality with the whole message misses real failures. The runtime/project scope, telemetry version,
+fixed phases/outcomes and label extractors still bound each metric. Native 5xx, overdue and heartbeat coverage,
+thresholds, ownership and the existing alert channel are unchanged. Regression fixtures use the installed Firebase
+logger's real info/error formatting. Applying these corrected definitions still requires separate cloud approval;
+no sender deployment or flag activation is needed for this monitoring correction. Training activation remains a
+separate rollout step.
 
 The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. Category opt-outs and revision changes use the existing suppression/cancelled paths and do not add an alert or label. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. History completion has no notification outbox or dead-letter queue; its backlog remains the existing coordinator backlog. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
 

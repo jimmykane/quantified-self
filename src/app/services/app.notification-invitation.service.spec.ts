@@ -12,7 +12,7 @@ vi.mock('app/firebase/auth', async original => ({ ...await original<typeof impor
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
   doc: vi.fn((_db, path) => ({ path })), onSnapshot: vi.fn(), runTransaction: vi.fn() }));
 const flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
-let owner, auth, owners, settings, accountExists, transaction, listeners, errors;
+let owner, auth, owners, settings, accountExists, transaction, listeners, errors, stops;
 function setup(platform = 'browser') {
   TestBed.configureTestingModule({ providers: [AppNotificationInvitationService,
     { provide: PLATFORM_ID, useValue: platform }, { provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
@@ -24,11 +24,11 @@ function publish(value = settings, metadata = { fromCache: false, hasPendingWrit
   listeners[index]({ data: () => value, metadata });
 }
 beforeEach(() => {
-  vi.clearAllMocks(); localStorage.clear(); listeners = []; errors = []; settings = {}; accountExists = true;
+  vi.clearAllMocks(); localStorage.clear(); listeners = []; errors = []; stops = []; settings = {}; accountExists = true;
   owner = { uid: 'owner', getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }) };
   auth = { currentUser: owner }; owners = new BehaviorSubject(owner); vi.mocked(user).mockReturnValue(owners);
   vi.mocked(onSnapshot).mockImplementation((_ref, _options, next, error) => {
-    listeners.push(next); errors.push(error); return vi.fn();
+    const stop = vi.fn(); stops.push(stop); listeners.push(next); errors.push(error); return stop;
   });
   transaction = { get: vi.fn(async ref => ({ exists: () => accountExists,
     data: () => ref.path.endsWith('/config/settings') ? settings : {} })), set: vi.fn() };
@@ -37,6 +37,24 @@ beforeEach(() => {
 afterEach(() => TestBed.resetTestingModule());
 
 describe('account notification invitation preferences', () => {
+  it('resets invitation state after a failed SDK cleanup and fences the old account', async () => {
+    const service = setup(); await flush(); publish();
+    stops[0].mockImplementation(() => { throw new Error('Firestore queue failed'); });
+    const next = { ...owner, uid: 'next' }; auth.currentUser = next; owners.next(next); await flush();
+    expect(service.uid()).toBe('next'); expect(service.ready()).toBe(false); expect(service.due()).toBe(false);
+    publish({ appSettings: { notificationInvitation: { version: 1, choice: 'dismissed' } } }, undefined, 0);
+    expect(service.ready()).toBe(false);
+    publish(); expect(service.due()).toBe(true);
+    auth.currentUser = null; owners.next(null); await flush();
+    expect(service.uid()).toBeNull(); expect(service.due()).toBe(false);
+    expect(stops[0]).toHaveBeenCalledOnce();
+  });
+  it('completes destruction even when Firestore unsubscribe throws', async () => {
+    const service = setup(); await flush();
+    stops[0].mockImplementation(() => { throw new Error('Firestore queue failed'); });
+    expect(() => TestBed.resetTestingModule()).not.toThrow();
+    publish(); expect(service.ready()).toBe(false); expect(stops[0]).toHaveBeenCalledOnce();
+  });
   it('does not read browser storage or Firestore on the server', async () => {
     const service = setup('server'); await flush();
     expect(service.due()).toBe(false); expect(user).not.toHaveBeenCalled(); expect(onSnapshot).not.toHaveBeenCalled();

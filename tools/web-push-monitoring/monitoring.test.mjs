@@ -6,6 +6,37 @@ import { buildWebPushMonitoring, OWNER } from './definitions.mjs';
 import { applyWebPushMonitoring } from './cli.mjs';
 const project = 'demo-push-monitoring';
 const channel = `projects/${project}/notificationChannels/123`;
+test('outcome filters accept real Firebase info messages and wrapped error messages', () => {
+  const outcomes = [
+    ['qs_web_push_outcomes_v1', '[WebPush]'],
+    ['qs_history_import_push_outcomes_v1', '[HistoryImportPush]'],
+    ['qs_activity_sync_push_outcomes_v1', '[ActivitySyncPush]'],
+    ['qs_activity_delivery_push_outcomes_v1', '[ActivityDeliveryPush]'],
+    ['qs_training_sync_push_outcomes_v1', '[TrainingSyncPush]'],
+  ];
+  const fixture = spawnSync(process.execPath, ['-e', `
+    const logger = require('firebase-functions/logger');
+    for (const [, marker] of ${JSON.stringify(outcomes)}) {
+      logger.info(marker, { telemetryVersion: 1, phase: 'send', outcome: 'accepted' });
+      logger.error(marker, { telemetryVersion: 1, phase: 'send', outcome: 'failed' });
+    }
+  `], { cwd: 'functions', encoding: 'utf8', env: { PATH: process.env.PATH } });
+  assert.equal(fixture.status, 0, fixture.stderr);
+  const records = (fixture.stdout + fixture.stderr).split('\n').filter(Boolean).map(line => JSON.parse(line));
+  assert.equal(records.length, outcomes.length * 2);
+  const bundle = buildWebPushMonitoring(project, channel);
+  for (const [name, marker] of outcomes) {
+    const metric = bundle.metrics.find(metric => metric.name === name);
+    const matching = records.filter(record => record.message.includes(marker));
+    assert.equal(matching.length, 2);
+    assert.equal(matching.find(record => record.outcome === 'accepted').message, marker);
+    assert.match(matching.find(record => record.outcome === 'failed').message, /^Error: \[/);
+    // Logging substring comparisons retain the exact bracketed marker, so Firebase's
+    // stack-trace wrapper matches without relying on equality with the whole message.
+    assert.ok(metric.filter.includes(`jsonPayload.message:${JSON.stringify(marker)}`), name);
+    assert.ok(!metric.filter.includes(`jsonPayload.message=${JSON.stringify(marker)}`), name);
+  }
+});
 test('Monitoring alert and chart filters reject Logging-only grouped comparison values', () => {
   const bundle = buildWebPushMonitoring(project, channel);
   const filters = [

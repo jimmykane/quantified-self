@@ -11,7 +11,7 @@ import { AppNotificationDevicesService, type NotificationDevice } from '../../se
 const push = { state: signal('disabled'), operation: signal<string | null>(null), message: signal(''), registered: signal(false),
   canEnable: signal(true), canDisable: signal(false), canTest: signal(false), enable: vi.fn(), disable: vi.fn(), sendTest: vi.fn() };
 const categoryEnabled = signal(true);
-const preferences = { status: signal('ready'), saving: signal<string | null>(null), message: signal(''), canEdit: signal(true),
+const preferences = { status: signal('ready'), saving: signal<string | null>(null), message: signal(''), canEdit: signal(true), reloadRequired: signal(false),
   categories: computed(() => NOTIFICATION_CATEGORIES.map(category => ({ ...category, enabled: categoryEnabled() }))),
   isEnabled: () => categoryEnabled(), setEnabled: vi.fn(), reload: vi.fn() };
 const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
@@ -22,7 +22,7 @@ const devices = { devices: signal([device]), status: signal('ready'), saving: si
   reload: vi.fn(), loadMore: vi.fn(), disable: vi.fn() };
 beforeEach(() => {
   vi.clearAllMocks(); categoryEnabled.set(true); preferences.status.set('ready'); preferences.saving.set(null);
-  preferences.message.set(''); preferences.canEdit.set(true); preferences.setEnabled.mockResolvedValue(true);
+  preferences.message.set(''); preferences.canEdit.set(true); preferences.reloadRequired.set(false); preferences.setEnabled.mockResolvedValue(true);
   push.state.set('disabled'); push.operation.set(null); push.message.set(''); push.registered.set(false);
   push.canEnable.set(true); push.canDisable.set(false); push.canTest.set(false); push.enable.mockResolvedValue(undefined);
   devices.devices.set([device]); devices.status.set('ready'); devices.saving.set(null); devices.message.set('');
@@ -78,6 +78,17 @@ describe('notification Settings', () => {
     preferences.status.set('error'); preferences.canEdit.set(false); fixture.detectChanges();
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent.includes('Retry category')) as HTMLButtonElement;
     button.click(); expect(preferences.reload).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('labels failed-queue recovery as an explicit app reload and keeps all category changes blocked', () => {
+    preferences.status.set('error'); preferences.canEdit.set(false); preferences.reloadRequired.set(true);
+    preferences.message.set('Notification settings could not reconnect. Reload the app to try again.');
+    const fixture = TestBed.createComponent(PushNotificationSettingsComponent); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent.trim() === 'Reload app') as HTMLButtonElement;
+    expect(button).toBeTruthy(); expect(fixture.nativeElement.textContent).not.toContain('Retry category settings');
+    for (const toggle of fixture.debugElement.queryAll(By.css('mat-slide-toggle'))) expect(toggle.componentInstance.disabled).toBe(true);
+    expect(preferences.reload).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); expect(preferences.reload).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
   it('owns accepted-action feedback and reports async success/error exactly once', async () => {
     const fixture = TestBed.createComponent(PushNotificationSettingsComponent);

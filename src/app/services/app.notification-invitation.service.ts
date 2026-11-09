@@ -33,7 +33,7 @@ export class AppNotificationInvitationService {
   private readonly stoppedAccounts = new Set<string>();
 
   constructor() {
-    this.destroy.onDestroy(() => { this.epoch++; this.unsubscribe?.(); });
+    this.destroy.onDestroy(() => { this.epoch++; this.stopListening(); });
     if (!this.browser) return;
     user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => { this.observing = this.observe(owner); });
     const refresh = () => {
@@ -57,9 +57,15 @@ export class AppNotificationInvitationService {
     if (this.stoppedAccounts.has(uid)) return true;
     try { return this.storage.getItem(this.key(uid)) !== null; } catch { return true; }
   }
+  private stopListening(): void {
+    const unsubscribe = this.unsubscribe; this.unsubscribe = undefined;
+    // Firestore can throw here after its queue has failed. The epoch already
+    // fences callbacks; cleanup must not abort account reset or destruction.
+    try { unsubscribe?.(); } catch { /* The invitation remains unavailable until a confirmed read. */ }
+  }
   private async observe(owner: FirebaseUserType | null): Promise<void> {
     const epoch = ++this.epoch;
-    this.unsubscribe?.(); this.unsubscribe = undefined;
+    this.stopListening();
     this.owner = owner; this.uid.set(null); this.ready.set(false); this.writes = 0; this.saving.set(false); this.saved.set(null);
     this.message.set(''); this.locallyStopped.set(true);
     if (!owner) return;

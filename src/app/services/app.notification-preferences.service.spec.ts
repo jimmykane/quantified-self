@@ -6,6 +6,7 @@ import { Auth, user } from 'app/firebase/auth';
 import { Firestore, onSnapshot, runTransaction } from 'app/firebase/firestore';
 import { NOTIFICATION_CATEGORIES } from '@shared/notification-categories';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
+import { AppWindowService } from './app.window.service';
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), user: vi.fn() }));
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
   doc: vi.fn((_db, path) => ({ path })), onSnapshot: vi.fn(), runTransaction: vi.fn(), serverTimestamp: () => 'server-time' }));
@@ -14,8 +15,10 @@ const preference = (enabled: boolean, revision: number) => ({ schemaVersion: 1, 
 let owner: { uid: string; getIdTokenResult: ReturnType<typeof vi.fn> };
 let auth: { currentUser: typeof owner | null };
 let owners: BehaviorSubject<typeof owner | null>;
-let listeners: { next: (snapshot: unknown) => void; error: () => void; stop: ReturnType<typeof vi.fn> }[];
+let listeners: { next: (snapshot: unknown) => void; error: (error?: unknown) => void; stop: ReturnType<typeof vi.fn> }[];
 let saved: unknown;
+const reloadPage = vi.fn();
+const failedQueue = () => new Error('FIRESTORE (12.10.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: b815)');
 let tx: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 const emit = (value: unknown, metadata = { fromCache: false, hasPendingWrites: false }, index?: number) => {
   // Existing cases exercise History imports; independently confirm the other category.
@@ -24,6 +27,7 @@ const emit = (value: unknown, metadata = { fromCache: false, hasPendingWrites: f
 };
 function setup(platform = 'browser') {
   TestBed.configureTestingModule({ providers: [{ provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
+    { provide: AppWindowService, useValue: { windowRef: { location: { reload: reloadPage } } } },
     { provide: PLATFORM_ID, useValue: platform }] });
   return TestBed.inject(AppNotificationPreferencesService);
 }
@@ -39,6 +43,79 @@ beforeEach(() => {
 });
 afterEach(() => TestBed.resetTestingModule());
 describe('account notification categories', () => {
+  it('resets the account and releases every listener even when SDK cleanup throws', async () => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    const old = [...listeners]; old[0].stop.mockImplementation(() => { throw new Error('Synthetic cleanup failure'); });
+    auth.currentUser = null; owners.next(null); await tick();
+    expect(service.status()).toBe('signed-out'); expect(service.canEdit()).toBe(false);
+    for (const listener of old) expect(listener.stop).toHaveBeenCalledOnce();
+    old[0].next({ data: () => preference(true, 4), metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.status()).toBe('signed-out'); expect(reloadPage).not.toHaveBeenCalled();
+    const next = { ...owner, uid: 'next' }; auth.currentUser = next; owners.next(next); await tick(); emit(undefined);
+    expect(service.status()).toBe('ready');
+    for (const listener of old) expect(listener.stop).toHaveBeenCalledOnce();
+  });
+  it('does not let a failed listener cleanup abort destruction or accept late snapshots', async () => {
+    const service = setup(); await tick(); emit(undefined); const old = [...listeners];
+    old[0].stop.mockImplementation(() => { throw failedQueue(); });
+    expect(() => TestBed.resetTestingModule()).not.toThrow();
+    for (const listener of old) expect(listener.stop).toHaveBeenCalledOnce();
+    old[0].error(); expect(service.status()).toBe('ready'); expect(reloadPage).not.toHaveBeenCalled();
+  });
+  it('requires an explicit app reload after the Firestore queue has failed and ignores subsequent snapshots', async () => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    listeners[0].error(failedQueue());
+    expect(service.status()).toBe('error'); expect(service.reloadRequired()).toBe(true);
+    expect(service.canEdit()).toBe(false); expect(service.categories()[0].enabled).toBe(false);
+    expect(service.message()).toContain('Reload the app'); expect(reloadPage).not.toHaveBeenCalled();
+    emit(preference(true, 4)); expect(service.status()).toBe('error');
+    expect(service.categories()[0].enabled).toBe(false);
+    const reads = vi.mocked(onSnapshot).mock.calls.length;
+    service.reload(); expect(reloadPage).toHaveBeenCalledOnce();
+    expect(onSnapshot).toHaveBeenCalledTimes(reads); expect(runTransaction).not.toHaveBeenCalled();
+  });
+  it('handles a failed queue when registering a listener or cleaning up a signed-in session', async () => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    listeners[0].stop.mockImplementation(() => { throw failedQueue(); });
+    listeners[0].error(); service.reload(); await tick();
+    expect(service.status()).toBe('error'); expect(service.reloadRequired()).toBe(true);
+    expect(service.categories()[0].enabled).toBe(false); expect(reloadPage).not.toHaveBeenCalled();
+    service.reload(); expect(reloadPage).toHaveBeenCalledOnce();
+  });
+  it('offers app recovery after a synchronous listener-registration failure', async () => {
+    vi.mocked(onSnapshot).mockImplementationOnce(() => { throw failedQueue(); });
+    const service = setup(); await tick();
+    expect(service.status()).toBe('error'); expect(service.reloadRequired()).toBe(true);
+    expect(reloadPage).not.toHaveBeenCalled(); service.reload(); expect(reloadPage).toHaveBeenCalledOnce();
+  });
+  it('does not restart a known failed queue on token refresh or account changes', async () => {
+    const service = setup(); await tick(); emit(preference(false, 3)); listeners[0].error(failedQueue());
+    const reads = vi.mocked(onSnapshot).mock.calls.length;
+    owners.next(owner); await tick();
+    expect(service.status()).toBe('error'); expect(service.categories()[0].enabled).toBe(false);
+    const next = { ...owner, uid: 'next' }; auth.currentUser = next; owners.next(next); await tick();
+    expect(service.status()).toBe('error'); expect(service.isEnabled('history_import')).toBe(false);
+    expect(onSnapshot).toHaveBeenCalledTimes(reads); expect(reloadPage).not.toHaveBeenCalled();
+    auth.currentUser = null; owners.next(null); await tick(); service.reload();
+    expect(service.status()).toBe('signed-out'); expect(reloadPage).not.toHaveBeenCalled();
+  });
+  it.each(['success', 'failure'])('retains the recovery action when an earlier save ends with %s', async outcome => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    let finish!: (value: unknown) => void; let reject!: (error: Error) => void;
+    vi.mocked(runTransaction).mockImplementationOnce(() => new Promise((resolve, fail) => { finish = resolve; reject = fail; }));
+    const save = service.setEnabled('history_import', true); listeners[0].error(failedQueue());
+    if (outcome === 'success') { finish({ enabled: true, revision: 4 }); await save; }
+    else { reject(new Error('Offline')); await expect(save).rejects.toThrow(); }
+    expect(service.status()).toBe('error'); expect(service.message()).toContain('Reload the app');
+    expect(service.reloadRequired()).toBe(true); expect(service.canEdit()).toBe(false);
+  });
+  it.each(['setEnabled', 'enableAll'] as const)('blocks further changes after a failed queue during %s', async action => {
+    const service = setup(); await tick(); emit(preference(false, 3));
+    vi.mocked(runTransaction).mockRejectedValueOnce(failedQueue());
+    await expect(action === 'enableAll' ? service.enableAll() : service.setEnabled('history_import', true)).rejects.toThrow();
+    expect(service.reloadRequired()).toBe(true); expect(service.canEdit()).toBe(false);
+    expect(service.categories()[0].enabled).toBe(false); expect(reloadPage).not.toHaveBeenCalled();
+  });
   it('enables every category atomically using fresh revisions, including choices changed on another device', async () => {
     const service = setup(); await tick(); emit(undefined);
     tx.get.mockImplementation(async ref => ({ data: () => preference(false, ref.path.endsWith('activity_sync') ? 8 : 2) }));
