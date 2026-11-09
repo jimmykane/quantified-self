@@ -689,14 +689,27 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
     const windowDays = batchedResource === 'sleep' || batchedResource === 'health'
         ? suuntoHistoryWindowDays(batchedResource)
         : getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
+    // Keep existing coordinator plans/receipt identities intact. New manual
+    // Health admissions fit one padded worker target; Sleep retains its policy.
+    const healthWindowDays = options.execution ? windowDays : suuntoHistoryWindowDays('health');
     if (batchedResource && Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_HISTORY_WINDOWS_PER_BATCH) {
         throw new Error('Suunto history batch bound exceeded.');
     }
 
-    if (Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS) {
+    if (Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS
+        || (includeHealth && Math.ceil((nowMs - startMs) / (healthWindowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS)) {
         throw new HttpsError('resource-exhausted', 'Suunto history exceeds the per-request window limit.');
     }
-    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
+    const sleepWindows = includeSleep ? chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse() : [];
+    const healthWindows = includeHealth ? chunkSleepBackfillRange(startMs, nowMs, healthWindowDays).reverse() : [];
+    const windows = options.execution
+        ? Array.from({ length: Math.max(sleepWindows.length, healthWindows.length) }, (_, index) => ({
+            sleep: sleepWindows[index], health: healthWindows[index],
+        }))
+        : [
+            ...sleepWindows.map(sleep => ({ sleep, health: undefined })),
+            ...healthWindows.map(health => ({ sleep: undefined, health })),
+        ].sort((left, right) => (right.sleep ?? right.health)!.endMs - (left.sleep ?? left.health)!.endMs);
     const nextAllowedAtMs = (options.execution?.cooldownStartedAtMs ?? nowMs) + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
     const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs, options.execution);
     if (!cooldownClaimed) {
@@ -724,20 +737,20 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
             let batchFailed = false;
             const results = await Promise.allSettled(windows.slice(offset, offset + SUUNTO_BACKFILL_WINDOW_BATCH_SIZE).map(async window => {
                 try {
-                    if (includeSleep) {
-                    await enqueueHistorySleepItem(options.execution, {
-                        type: 'suunto_poll',
-                        provider: SLEEP_PROVIDERS.SuuntoApp,
-                        userID,
-                        providerUserId: sleepToken.providerUserId,
-                        rangeStartMs: window.startMs,
-                        rangeEndMs: window.endMs,
-                        dispatchImmediately: false,
-                        dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
-                    });
-                    sleepQueued += 1;
+                    if (window.sleep) {
+                        await enqueueHistorySleepItem(options.execution, {
+                            type: 'suunto_poll',
+                            provider: SLEEP_PROVIDERS.SuuntoApp,
+                            userID,
+                            providerUserId: sleepToken.providerUserId,
+                            rangeStartMs: window.sleep.startMs,
+                            rangeEndMs: window.sleep.endMs,
+                            dispatchImmediately: false,
+                            dedupeKey: `sleep-backfill:${userID}:${window.sleep.startMs}:${window.sleep.endMs}`,
+                        });
+                        sleepQueued += 1;
                     }
-                    if (includeHealth) {
+                    if (window.health) {
                         for (const healthToken of healthTokens) {
                             if (batchFailed) return;
                             await enqueueHistorySleepItem(options.execution, {
@@ -745,16 +758,18 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
                                 provider: SLEEP_PROVIDERS.SuuntoApp,
                                 userID,
                                 providerUserId: healthToken.providerUserId,
-                                rangeStartMs: window.startMs,
-                                rangeEndMs: window.endMs,
+                                rangeStartMs: window.health.startMs,
+                                rangeEndMs: window.health.endMs,
                                 healthTrigger: 'backfill',
                                 dispatchImmediately: false,
-                                dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.startMs}:${window.endMs}`,
+                                dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.health.startMs}:${window.health.endMs}`,
                             });
                             healthQueued += 1;
                         }
                     }
-                    queued += 1;
+                    // Combined responses retain the Sleep-range count. The
+                    // independent per-account Health total is healthQueued.
+                    if (window.sleep || !includeSleep) queued += 1;
                 } catch (error) {
                     batchFailed = true;
                     throw error;
