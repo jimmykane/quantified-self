@@ -219,6 +219,7 @@ export class DailyWorkoutSuggestionComponent {
         }
       }
       if (!this.current(sequence, uid)) return;
+      if (status.state === 'failed' && this.status()?.state !== 'failed') this.daily.event(uid, 'failed', 'failed');
       this.status.set(status);
       this.needsCheck = false;
     } catch {

@@ -243,7 +243,8 @@ export class DailyWorkoutSuggestionService {
       const waitingEpoch = entry.epoch;
       await processing;
       if (this.cache !== entry || entry.epoch !== waitingEpoch) throw Error('Daily suggestion access changed.');
-      return this.request(uid, action, current, expectedDate, refresh);
+      // The completed read already refreshed this scope. Recheck access and prepare only if it is still waiting.
+      return this.request(uid, action, current, expectedDate, action === 'prepare' ? false : refresh);
     }
     if (action === 'status' && !refresh && entry.status) return entry.status;
     if (action === 'prepare' && !refresh && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;

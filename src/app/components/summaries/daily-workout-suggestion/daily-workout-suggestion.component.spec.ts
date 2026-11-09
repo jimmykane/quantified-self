@@ -911,6 +911,21 @@ describe('compact daily workout in Today', () => {
     expect(fixture.nativeElement.textContent).toContain('Generate manually');
     expect(fixture.nativeElement.textContent).not.toContain('Check again');
   });
+  it('reports a confirmed generation failure once without counting cached displays or tab focus again', async () => {
+    const { fixture, request, event, setVisible, cached, cacheRevision } = setup();
+    const failed: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'failed', failureReason: 'invalid-output' };
+    request.mockResolvedValue(failed);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(event).toHaveBeenCalledExactlyOnceWith('owner', 'failed', 'failed');
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+    await fixture.componentInstance.load(); fixture.detectChanges();
+    expect(event).toHaveBeenCalledOnce();
+    cached.mockReturnValue({ status: failed, sleepKey: 'night-a' });
+    cacheRevision.update(value => value + 1); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(event).toHaveBeenCalledOnce();
+  });
   it.each([
     ['temporary-service', 'AI service was temporarily unavailable'],
     ['invalid-output', 'AI could not produce a valid workout'],

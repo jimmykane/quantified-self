@@ -396,6 +396,28 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2)); finishGeneration({ data: result() });
     expect((await generation).state).toBe('ready'); expect(service.cached('owner')?.status?.state).toBe('ready');
   });
+  it.each(['ready', 'failed', 'planned', 'completed', 'rest-day', 'dismissed', 'preparing'] as const)(
+    'reuses a pending status returning %s when preparation asks for a refresh', async state => {
+      const { service, call, result } = setup();
+      let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+      call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      const read = service.request('owner', 'status', () => true, undefined, true);
+      const prepare = service.request('owner', 'prepare', () => true, undefined, true);
+      const status: DailyWorkoutSuggestionStatus = state === 'ready' ? result() : { localDate: '2026-10-30', state };
+      finish({ data: status });
+      expect(await read).toEqual(status); expect(await prepare).toEqual(status);
+      expect(call).toHaveBeenCalledOnce();
+    });
+  it('still fences a retired view when refreshed preparation waits for a terminal status', async () => {
+    const { service, call, result } = setup(); let current = true;
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const read = service.request('owner', 'status', () => true);
+    const prepare = service.request('owner', 'prepare', () => current, undefined, true);
+    const rejected = expect(prepare).rejects.toThrow('access changed');
+    current = false; finish({ data: result() }); await read; await rejected;
+    expect(call).toHaveBeenCalledOnce();
+  });
   it('queues the explicit available-data choice after a pending sleep check', async () => {
     const { service, call, result } = setup();
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;

@@ -6432,7 +6432,9 @@ daily receipt on the server, instead of a separate `status` round trip before pr
 same-day foreground returns remain unchanged. Revalidating a displayed ready recipe, a running receipt or an uncertain
 response uses `status`; only a verified unused/waiting receipt may then advance to preparation, while the view remains
 eligible, visible and hydrated. Explicit refresh bypasses either action's cached response but still joins an in-flight
-operation. Admission and post-generation coverage fences remain in place. With sleep personalization enabled, a completed main
+operation. When preparation waits for a pending status read, that response satisfies the refresh; only a waiting
+receipt dispatches preparation, after rechecking the caller's access and scope. Admission and post-generation coverage
+fences remain in place. With sleep personalization enabled, a completed main
 sleep ending in the previous seven local dates establishes an expectation for today's sleep. The existing validated
 daily report must include a completed main sleep ending on the current date in that zone, with the same end time in
 its on-read recovery sleep driver. Otherwise the server returns `waiting-sleep` before model admission, preserving
@@ -6518,7 +6520,8 @@ Verified rest/covered status replaces it, and owner, day, eligibility or prefere
 Request/retrieval errors do not claim that generation failed: only the server's failed state offers manual generation.
 A confirmed charged model failure persists an optional fixed `failureReason` (`temporary-service`, `invalid-output`,
 or `unknown`) in the existing private daily receipt. A successfully saved known failure returns its final status in
-the original request; uncertain saves still require retrieval. The Today row explains known failures and states that
+the original request; uncertain saves still require retrieval. If the follow-up read fails, the original fixed recovery
+error is returned without overwriting the terminal receipt or exposing the database exception. The Today row explains known failures and states that
 **Generate manually** uses Assistant allowance. Legacy receipts retain generic wording. Neither failure reasons nor
 browser reloads reopen a charged day; current schedule/rest coverage still takes precedence. Store/cache projections
 reject arbitrary failure text. Aggregate diagnostics include fixed failure category/stage and attempt/token counters,
@@ -6568,6 +6571,9 @@ Measurement: consent-aware `daily_workout_suggestion` product events use only fi
 direct successful Add, dismissal, enable/disable and failure. A shown event is once per state/component visit, not a
 unique-person count; preference edits use their own event rather than counting as new opt-ins. Edited workouts saved
 later in the full editor are not attributed as direct daily acceptance.
+An API response confirming failure records `action: failed, state: failed` when the row enters that state, even when
+the callable returns normally. Restoring a cached failed row and tab-focus changes do not emit another failure;
+request errors retain the existing failed action without a state. Use server attempt logs for generation counts.
 Explicitly accepted rest uses the existing added action with rest-day state; workout Add keeps ready state, so rest
 acceptance can be separated from authored-workout additions without adding telemetry fields or counting it as generation.
 `[DailyWorkoutSuggestion]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,

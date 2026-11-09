@@ -105,6 +105,22 @@ describe('daily workout preparation', () => {
       .rejects.toMatchObject({ code: 'unavailable' });
     expect(deps.generate).toHaveBeenCalledTimes(2);
   });
+  it('sanitizes a read failure after recording a confirmed model failure and retrieves the same receipt later', async () => {
+    const deps = dependencies(); deps.generate.mockResolvedValue({ bad: 'PRIVATE_MODEL_REPLY' } as never);
+    const finish = deps.store.finish.getMockImplementation()!;
+    deps.store.finish.mockImplementationOnce(async (...args) => {
+      await finish(...args);
+      deps.store.read.mockRejectedValueOnce(Error('PRIVATE_DATABASE_ERROR'));
+    });
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    await expect(runDailyWorkoutSuggestion(input, identity, deps)).rejects.toMatchObject({
+      code: 'unavailable', message: 'Today’s suggestion could not finish. Check again to retrieve it, or use the manual generator.',
+    });
+    expect(await runDailyWorkoutSuggestion({ ...input, action: 'status' }, identity, deps))
+      .toEqual({ localDate: dailyControls.localDate, state: 'failed', failureReason: 'invalid-output' });
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.store.finish).toHaveBeenCalledOnce(); expect(JSON.stringify(deps.log.mock.calls)).not.toContain('PRIVATE');
+  });
   it.each(['override', 'shared', 'imported'] as const)('resolves %s power after routine sport selection and retains it after settings change', async origin => {
     const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
     const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,

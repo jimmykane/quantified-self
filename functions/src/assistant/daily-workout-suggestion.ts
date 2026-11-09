@@ -278,7 +278,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       .then(() => true, () => false);
     // A confirmed charged failure is terminal today. Lost save/read responses remain an explicit status check.
     if (stage === 'generation' && failureReason !== 'unknown' && attempts > 0 && finished) {
-      return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
+      try { return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status); }
+      catch { /* Keep the failed receipt; an unavailable read uses the same safe recovery error below. */ }
     }
     throw new HttpsError('unavailable', 'Today’s suggestion could not finish. Check again to retrieve it, or use the manual generator.');
   } finally {
