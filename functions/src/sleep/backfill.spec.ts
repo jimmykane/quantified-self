@@ -668,6 +668,39 @@ describe('backfillSuuntoAppSleep', () => {
         }
     });
 
+    it('retains the coordinator batch barrier while a child admission remains pending', async () => {
+        seedSuuntoToken();
+        const width = 28 * 86_400_000;
+        const selectedStartMs = nowMs - 5 * width;
+        let release: () => void = () => {};
+        const pending = new Promise<void>(resolve => { release = resolve; });
+        hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
+            if (input.rangeEndMs === nowMs) await pending;
+            return { path: 'sleepSyncQueue/legacy-child' };
+        });
+        const execution = {
+            runId: 'legacy-run', tokenPath: 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1',
+            providerUserId: 'suunto-user-1', cooldownStartedAtMs: nowMs,
+            requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        const result = queueSuuntoSleepHealthHistory('user-1', {
+            execution, startMs: selectedStartMs, endMs: nowMs, resources: ['health'],
+        });
+        try {
+            await vi.waitFor(() => expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(4));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(execution.onQueued).toHaveBeenCalledTimes(3);
+            expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(4);
+            expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        } finally {
+            release();
+            await result;
+        }
+        expect(await result).toMatchObject({ queued: 5, sleepQueued: 0, healthQueued: 5 });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(5);
+        expect(execution.onQueued).toHaveBeenCalledTimes(5);
+    });
+
     it.each([1, 2, 8])('keeps manual admission bounded and responsive with %i Health accounts', async accounts => {
         seedSuuntoToken();
         for (let index = 2; index <= accounts; index++) {
