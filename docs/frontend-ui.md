@@ -69,6 +69,13 @@ The optimized production build with recovery/build tags exceeded the preceding t
 Matching beta/production `allScript` error caps move from 14.20 to 14.21 MB for this addition; the 1474 kB initial cap
 and warning budgets remain unchanged. This is bundle accounting, not a runtime speed measurement.
 
+## Field guide onboarding bundle allowance
+
+The Field guide onboarding rebased onto `529562129` exceeds a 14.23 MB total-script cap by 522 bytes in production
+and 532 bytes in beta. Production and beta therefore use a matching 14.24 MB `allScript` error cap for the
+onboarding, checkout-resume and Help integration. The 1474 kB initial cap, 13000 kB total-script warning
+and public startup checks remain unchanged. This is bundle accounting, not a runtime performance measurement.
+
 ## Frontend build identification
 
 `npm run build`, `build-beta` and `build-production` use `tools/angular-build.mjs` after the existing public-snapshot
