@@ -645,6 +645,60 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.addSleepSyncQueueItem.mock.calls.every(([job]) => job.dispatchImmediately === false)).toBe(true);
     });
 
+    it('refills completed manual admission slots while multi-account Health writes are pending', async () => {
+        seedSuuntoToken();
+        hoisted.tokenDocs.push({ id: 'suunto-token-2', data: () => ({}) });
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => ({
+            userName: tokenDoc.id === 'suunto-token-2' ? 'suunto-user-2' : 'suunto-user-1',
+        }));
+        const selectedStartMs = nowMs - 56 * 86_400_000;
+        let release: () => void = () => {};
+        const pending = new Promise<void>(resolve => { release = resolve; });
+        hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
+            if (input.type === 'suunto_health_poll' && input.rangeStartMs > selectedStartMs) await pending;
+            return { id: 'queue-item' };
+        });
+        const result = queueSuuntoSleepHealthHistory('user-1', { startMs: selectedStartMs, endMs: nowMs });
+        try {
+            await vi.waitFor(() => expect(hoisted.addSleepSyncQueueItem.mock.calls.some(([job]) =>
+                job.type === 'suunto_health_poll' && job.rangeStartMs === selectedStartMs)).toBe(true));
+        } finally {
+            release();
+            await result;
+        }
+    });
+
+    it.each([1, 2, 8])('keeps manual admission bounded and responsive with %i Health accounts', async accounts => {
+        seedSuuntoToken();
+        for (let index = 2; index <= accounts; index++) {
+            hoisted.tokenDocs.push({ id: `suunto-token-${index}`, data: () => ({}) });
+        }
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => ({
+            userName: tokenDoc.id.replace('token', 'user'),
+        }));
+        let active = 0;
+        let peak = 0;
+        hoisted.addSleepSyncQueueItem.mockImplementation(async () => {
+            active++;
+            peak = Math.max(peak, active);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            active--;
+            return { id: 'queue-item' };
+        });
+        const result = queueSuuntoSleepHealthHistory('user-1', {
+            startMs: nowMs - 56 * 86_400_000, endMs: nowMs,
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.runAllTimersAsync();
+        expect(await result).toMatchObject({ queued: 2, sleepQueued: 2, healthQueued: 3 * accounts });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2 + 3 * accounts);
+        expect(peak).toBeLessThanOrEqual(4);
+        expect(active).toBe(0);
+        // Controlled 100-ms writes: a slow Health window must not add another
+        // full account-serial phase after the other slots have completed.
+        expect(Date.now() - nowMs).toBeLessThanOrEqual(100 * (accounts + 1));
+    });
+
     it('rejects a range above the admission cap before claiming cooldown or writing jobs', async () => {
         seedSuuntoToken();
         vi.setSystemTime(Date.parse('2100-01-01'));
@@ -702,7 +756,7 @@ describe('backfillSuuntoAppSleep', () => {
             userName: tokenDoc.id === 'suunto-token-2' ? 'suunto-user-2' : 'suunto-user-1',
         }));
         const dayMs = 86_400_000;
-        const selectedStartMs = nowMs - 56 * dayMs;
+        const selectedStartMs = nowMs - 140 * dayMs;
         let rejectRecent: (error: Error) => void = () => {};
         let releasePending: () => void = () => {};
         const recentFailure = new Promise<void>((_resolve, reject) => { rejectRecent = reject; });
@@ -710,14 +764,17 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
             if (input.type === 'suunto_health_poll') {
                 if (input.rangeEndMs === nowMs) await recentFailure;
-                if (input.rangeStartMs === selectedStartMs + 26 * dayMs
+                if (input.rangeStartMs === selectedStartMs + 104 * dayMs
                     && input.providerUserId === `suunto-user-${pendingAccount}`) await pending;
             }
+            // Let completed Sleep slots refill, then keep those writes pending
+            // while a newer Health window fails. Older windows remain unstarted.
+            if (input.rangeEndMs <= selectedStartMs + 104 * dayMs) await pending;
             return { id: 'queue-item' };
         });
         const result = queueSuuntoSleepHealthHistory('user-1', { startMs: selectedStartMs, endMs: nowMs });
         const rejection = expect(result).rejects.toMatchObject({ code: 'internal' });
-        const expectedWrites = pendingAccount === 1 ? 4 : 5;
+        const expectedWrites = pendingAccount === 1 ? 6 : 7;
         await vi.waitFor(() => expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWrites));
         rejectRecent(new Error('queue unavailable'));
         // Drain rejection handlers while the other account write is still pending.
@@ -727,7 +784,7 @@ describe('backfillSuuntoAppSleep', () => {
         await rejection;
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWrites);
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp,
-            expect.objectContaining({ status: 'failed', lastBackfillQueueItems: 2, nextBackfillAllowedAtMs: null }), Date.now());
+            expect.objectContaining({ status: 'failed', lastBackfillQueueItems: 3, nextBackfillAllowedAtMs: null }), Date.now());
     });
 
     it('queues separately sized Sleep and Health windows for every eligible Suunto account', async () => {

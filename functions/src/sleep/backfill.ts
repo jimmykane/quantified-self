@@ -731,52 +731,64 @@ export async function queueSuuntoSleepHealthHistory(userID: string, options: Sle
         })
         : [];
     try {
-        // Only four queue admissions can be in flight. Recent windows go first;
-        // provider calls remain on the existing rate-limited durable workers.
-        for (let offset = 0; offset < windows.length; offset += SUUNTO_BACKFILL_WINDOW_BATCH_SIZE) {
-            let batchFailed = false;
-            const results = await Promise.allSettled(windows.slice(offset, offset + SUUNTO_BACKFILL_WINDOW_BATCH_SIZE).map(async window => {
-                try {
-                    if (window.sleep) {
+        let admissionFailed = false;
+        const enqueueWindow = async (window: (typeof windows)[number]): Promise<void> => {
+            try {
+                if (window.sleep) {
+                    await enqueueHistorySleepItem(options.execution, {
+                        type: 'suunto_poll',
+                        provider: SLEEP_PROVIDERS.SuuntoApp,
+                        userID,
+                        providerUserId: sleepToken.providerUserId,
+                        rangeStartMs: window.sleep.startMs,
+                        rangeEndMs: window.sleep.endMs,
+                        dispatchImmediately: false,
+                        dedupeKey: `sleep-backfill:${userID}:${window.sleep.startMs}:${window.sleep.endMs}`,
+                    });
+                    sleepQueued += 1;
+                }
+                if (window.health) {
+                    for (const healthToken of healthTokens) {
+                        if (admissionFailed) return;
                         await enqueueHistorySleepItem(options.execution, {
-                            type: 'suunto_poll',
+                            type: 'suunto_health_poll',
                             provider: SLEEP_PROVIDERS.SuuntoApp,
                             userID,
-                            providerUserId: sleepToken.providerUserId,
-                            rangeStartMs: window.sleep.startMs,
-                            rangeEndMs: window.sleep.endMs,
+                            providerUserId: healthToken.providerUserId,
+                            rangeStartMs: window.health.startMs,
+                            rangeEndMs: window.health.endMs,
+                            healthTrigger: 'backfill',
                             dispatchImmediately: false,
-                            dedupeKey: `sleep-backfill:${userID}:${window.sleep.startMs}:${window.sleep.endMs}`,
+                            dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.health.startMs}:${window.health.endMs}`,
                         });
-                        sleepQueued += 1;
+                        healthQueued += 1;
                     }
-                    if (window.health) {
-                        for (const healthToken of healthTokens) {
-                            if (batchFailed) return;
-                            await enqueueHistorySleepItem(options.execution, {
-                                type: 'suunto_health_poll',
-                                provider: SLEEP_PROVIDERS.SuuntoApp,
-                                userID,
-                                providerUserId: healthToken.providerUserId,
-                                rangeStartMs: window.health.startMs,
-                                rangeEndMs: window.health.endMs,
-                                healthTrigger: 'backfill',
-                                dispatchImmediately: false,
-                                dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.health.startMs}:${window.health.endMs}`,
-                            });
-                            healthQueued += 1;
-                        }
-                    }
-                    // Combined responses retain the Sleep-range count. The
-                    // independent per-account Health total is healthQueued.
-                    if (window.sleep || !includeSleep) queued += 1;
-                } catch (error) {
-                    batchFailed = true;
-                    throw error;
+                }
+                // Combined responses retain the Sleep-range count. The
+                // independent per-account Health total is healthQueued.
+                if (window.sleep || !includeSleep) queued += 1;
+            } catch (error) {
+                admissionFailed = true;
+                throw error;
+            }
+        };
+        if (options.execution) {
+            // Retain the coordinator's existing bounded batch/receipt behavior.
+            for (let offset = 0; offset < windows.length; offset += SUUNTO_BACKFILL_WINDOW_BATCH_SIZE) {
+                const results = await Promise.allSettled(windows.slice(offset, offset + SUUNTO_BACKFILL_WINDOW_BATCH_SIZE).map(enqueueWindow));
+                const failure = results.find(result => result.status === 'rejected');
+                if (failure?.status === 'rejected') throw failure.reason;
+            }
+        } else {
+            // Refill each of the four manual admission slots as it completes.
+            // A slow multi-account Health window must not stall free slots.
+            let nextWindow = 0;
+            const results = await Promise.allSettled(Array.from({ length: Math.min(SUUNTO_BACKFILL_WINDOW_BATCH_SIZE, windows.length) }, async () => {
+                while (!admissionFailed && nextWindow < windows.length) {
+                    await enqueueWindow(windows[nextWindow++]);
                 }
             }));
-            // Drain started writes before clearing the cooldown on failure, so a
-            // retry cannot race unfinished writes from this invocation.
+            // Drain all started writes before releasing cooldown on failure.
             const failure = results.find(result => result.status === 'rejected');
             if (failure?.status === 'rejected') throw failure.reason;
         }

@@ -443,7 +443,10 @@ A partial enqueue keeps the cursor and cooldown; retry repeats the exact determi
 started admission to settle. The pre-existing 500-task/backlog admission stop and 100-child hard bound still apply.
 
 The separate manual `backfillSuuntoAppSleep` callable aligns new admissions to 28-day Sleep and 26-day Health
-windows, retaining scheduled dispatch, account fan-out, cooldown, deletion and queue guards. Its release only
+windows, retaining scheduled dispatch, account fan-out, cooldown, deletion and queue guards. It refills up to four
+active admissions as each finishes, so shorter Sleep writes do not leave capacity idle behind multi-account Health
+windows. The first observed failure stops new ranges and remaining account admissions; all started writes drain
+before cooldown is released. Coordinator batch barriers remain unchanged. Its release only
 requires that callable; the coordinator's immediate-dispatch policy and consumer-before-producer rollout below
 do not apply to this manual follow-up. Existing coordinator plans and receipt identities stay intact, without
 migrating queue rows or changing worker continuation handling.
