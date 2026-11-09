@@ -6,7 +6,7 @@ approved manual deployment workflows. Independent jobs run the same mandatory ch
 | Job | Required checks |
 | --- | --- |
 | `unit_tests` | Credentials, workflow/emulator coverage contracts, monitoring definitions, plugin validation and frontend lint |
-| `functions_tests` | Functions install/lint and the complete ordinary suite |
+| `functions_tests` | Functions install/lint, the complete ordinary suite and SDK-backed Web Push monitoring checks |
 | `functions_build` | Independent Functions build, compiled entrypoint and MCP contract checks |
 | `frontend_plan` | Frontend allocation/policy/shard guards and one automatically balanced plan for the tested commit |
 | `frontend_tests` | Two runners covering the complete suite across all three projects |
@@ -26,6 +26,10 @@ publishing timing hints. Its report validator uses only Node built-ins, so the g
 Keep suite jobs independent except for their shared scheduling plans when adding CI checks. Add any new mandatory job to the final gate and its executable
 failure tests. Do not put frontend or Rules tests back after the Functions suite, or raise per-runner worker limits
 to obtain parallelism. Node setup caches npm downloads using the applicable lockfiles; each runner still uses `npm ci`.
+The Web Push monitoring checks use the real `firebase-functions/logger` output, so they run after Functions dependencies
+are installed in `functions_tests`. Keep SDK-dependent checks out of the root-only validation job; do not add another
+Functions installation there or replace the SDK fixture with a mock just to satisfy CI.
+
 Both Functions jobs install root dependencies because shared sources resolve them there. Build/compiled checks
 run concurrently with ordinary tests instead of waiting behind them; the MCP comparison still uses the PR base SHA
 or push's previous SHA, fetched when needed. Only Rules and

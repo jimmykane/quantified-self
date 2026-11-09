@@ -77,9 +77,6 @@ jobs:
       - name: Test connection-history coordinator monitoring configuration
         run: npm run test:connection-history-monitoring
 
-      - name: Test Web Push monitoring configuration
-        run: npm run test:web-push-monitoring
-
       - name: Test email delivery and marketing monitoring configuration
         run: npm run test:email-monitoring
 
@@ -136,6 +133,10 @@ jobs:
           npm run lint
           # Preserve serial files and isolated forks within this runner.
           npm run test -- --no-file-parallelism
+
+      # The real Firebase logger fixture needs the Functions SDK installed above.
+      - name: Test Web Push monitoring configuration
+        run: npm run test:web-push-monitoring
 
   functions_build:
     runs-on: ubuntu-latest
