@@ -360,6 +360,7 @@ describe('Firebase Hosting configuration', () => {
     // Notification category help distinguishes retry from explicit app reload and retains saved choices (2026-11-09).
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
+    // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
   });
 

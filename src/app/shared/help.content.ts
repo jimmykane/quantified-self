@@ -1986,7 +1986,7 @@ Some older email delivery records may remain after account deletion. Those with 
 
 If sign-in or account loading has not finished after 15 seconds, **Loading is taking longer than expected** replaces the rolling numbers. Check your connection and select **Reload page** to try again. Reloading keeps your browser session and does not clear storage or change saved account data. If loading finishes in the meantime, the app continues automatically. If you then see an account recovery message, use **Retry** there. For repeated failures, contact support with your browser name and the time it happened; never send passwords or verification tokens.
 
-If account loading stalls after sign-in, QS attempts an independent server check automatically. If that also times out, use **Retry** on the account recovery screen. A browser-verification timeout instead offers **Reload page**. Neither recovery signs you out, clears browser storage or changes saved account data.
+If account loading stalls after sign-in, QS attempts an independent server check automatically. Temporary connection failures during this check retry automatically a limited number of times. If it still fails or times out, use **Retry** on the account recovery screen. A browser-verification timeout instead offers **Reload page**. Neither recovery signs you out, clears browser storage or changes saved account data.
 
 ### Account software could not load
 
@@ -1995,6 +1995,8 @@ If you see **We couldn't load the account software**, you're still signed in, bu
 ### A section or preview couldn't load
 
 If navigation, a Settings section, a map or a public preview couldn't download, that section shows **Reload page**. Check your connection, then select it to try again. Save or copy any unsaved edits first: reloading can discard them. QS does not reload automatically for this message. Reloading keeps your browser session and saved account data; you do not need to clear browser storage. If the browser cancels the reload, the button becomes available again after a few seconds.
+
+When opening a page fails, QS may reload once automatically in that tab. If it still fails, check your connection and reload manually.
 
 ### Browser verification paused
 

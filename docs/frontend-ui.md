@@ -43,6 +43,12 @@ The clicked button owns one selection haptic and prevents double dispatch. A fiv
 explicit attempt if the browser cancels navigation; it never initiates a reload itself. Teardown cancels that timer.
 If navigation throws, the fallback stays usable and points to the browser's reload control.
 
+Uncaught route/module import failures retain the global handler's one automatic reload per tab session, including
+Chrome's failed dynamic import, Safari's `Importing a module script failed` and Firefox's import-loading wording.
+The handler writes its shared session guard before reloading. Missing or blocked session storage skips automatic
+navigation, and storage/navigation exceptions cannot replace the original error report. Deferred-view errors and
+account-settings import failures retain their explicit recovery actions; nested causes do not trigger this reload.
+
 `DeferredLoadDiagnosticsService` reports one fixed-label warning per allowlisted area per app instance, including
 the specific public preview key. It adds no exception text, URL, account content or persisted tracking state.
 Reused error views report changes to their area input, while the shared service still deduplicates each area.
@@ -1192,6 +1198,11 @@ Complete profile snapshots add no Firestore reads. Incomplete snapshots require 
 reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
 and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
 restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
+Firestore Lite's fetch-rejection signature (`FirebaseError`, code `unknown`, exact message
+`Request failed with error: undefined`) is normalized to `unavailable` only where `getDoc` rejects. The original
+error remains its cause. This uses the existing four retries with backoff and the same account/session fences;
+it adds no nested retry budget. Other unknown errors, settings imports/merges and permanent read failures retain
+their original classification. Exhaustion exposes the existing manual **Retry** without publishing missing data.
 The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.

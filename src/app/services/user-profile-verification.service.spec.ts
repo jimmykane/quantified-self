@@ -6,6 +6,7 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
+import { FirebaseError } from 'firebase/app';
 
 vi.mock('../helpers/user-settings.loader', () => ({ loadUserSettingsUtilities: vi.fn() }));
 
@@ -155,6 +156,46 @@ describe('UserProfileVerificationService', () => {
     sdk.getDoc.mockRejectedValueOnce(error);
     await expect(service.verifyIfIncomplete('u1', null)).rejects.toBe(error);
     expect(await service.verifyIfIncomplete('u1', null)).toEqual(expect.objectContaining(agreements));
+  });
+
+  it('normalizes the Lite fetch rejection for the existing account retry policy and releases the shared request', async () => {
+    const cause = new FirebaseError('unknown', 'Request failed with error: undefined');
+    sdk.getDoc.mockRejectedValueOnce(cause);
+    const first = service.verifyIfIncomplete('u1', null);
+    expect(service.verifyIfIncomplete('u1', null)).toBe(first);
+    await expect(first).rejects.toMatchObject({ code: 'unavailable', cause });
+    expect(await service.verifyIfIncomplete('u1', null)).toMatchObject({ uid: 'u1', ...agreements });
+    expect(sdk.getDoc).toHaveBeenCalledTimes(8);
+  });
+
+  it.each([
+    new FirebaseError('unknown', 'Unexpected server response'),
+    new FirebaseError('permission-denied', 'Request failed with error: undefined'),
+    new FirebaseError('unauthenticated', 'Request failed with error: undefined'),
+    new FirebaseError('invalid-argument', 'Request failed with error: undefined'),
+    Object.assign(new Error('Request failed with error: undefined'), { code: 'unknown' }),
+    new TypeError('Failed to fetch'),
+  ])('preserves errors outside the exact Lite transport signature: %s', async error => {
+    sdk.getDoc.mockRejectedValueOnce(error);
+    await expect(service.verifyIfIncomplete('u1', null)).rejects.toBe(error);
+  });
+
+  it('does not normalize a settings merge failure that resembles the Lite transport signature', async () => {
+    const error = new FirebaseError('unknown', 'Request failed with error: undefined');
+    vi.mocked(loadUserSettingsUtilities).mockRejectedValueOnce(error);
+    await expect(service.verifyIfIncomplete('u1', null)).rejects.toBe(error);
+  });
+
+  it.each(['switch', 'sign out', 'same account session'])('discards a failed Lite request after %s', async change => {
+    let reject!: (error: Error) => void;
+    sdk.getDoc.mockReturnValueOnce(new Promise((_resolve, rejectRead) => { reject = rejectRead; }));
+    const result = service.verifyIfIncomplete('u1', null);
+    const discarded = expect(result).rejects.toMatchObject({ code: 'cancelled' });
+    await vi.waitFor(() => expect(sdk.getDoc).toHaveBeenCalledTimes(4));
+    auth.currentUser = change === 'sign out' ? null : { uid: change === 'switch' ? 'u2' : 'u1' };
+    reject(new FirebaseError('unknown', 'Request failed with error: undefined'));
+    await discarded;
+    expect(loadUserSettingsUtilities).not.toHaveBeenCalled();
   });
 
   it('discards verification when the account changes while requests are pending', async () => {

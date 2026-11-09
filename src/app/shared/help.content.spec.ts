@@ -21,6 +21,8 @@ describe('help.content', () => {
     const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',
       'does not reload automatically for this message', 'button becomes available again']) expect(troubleshooting).toContain(phrase);
+    expect(troubleshooting).toContain('may reload once automatically in that tab');
+    expect(troubleshooting).toContain('Temporary connection failures during this check retry automatically a limited number of times');
   });
   it('explains explicit Garmin averaging and the independent Suunto display limits', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
