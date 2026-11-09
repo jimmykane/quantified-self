@@ -122,6 +122,29 @@ consent and location exclusions. Lazy derivation does not authorize exposing a m
 existing [MCP workflow](../.agent/skills/mcp-metric-surface/SKILL.md) for any affected MCP contract and retain
 [Training's existing semantics](training-workspace.md) for Training or derived consumers.
 
+## Activities Training log
+
+Activities can select a `training-log` presentation of the existing event table. The owner-scoped numeric start-date
+query reads the complete local calendar week, using the account's start-of-week preference and an exclusive next-week
+boundary. View and optional fixed week anchor live in the route query; an unanchored current week advances at the week
+boundary. Browser history and live preference changes reuse the normal query cancellation and owner guards.
+
+The log's Running preset, custom columns, chronological sort and page size are local to the mounted table. They do not
+overwrite saved Dashboard/list preferences. GAP uses the existing canonical `Average Grade Adjusted Pace` stat, its
+lazy sort/display cells and Sports Lib unit conversion. It is also available in the normal table's column picker.
+
+Sport totals consume all filtered table rows before pagination, including the table's text-search and tag predicate.
+`activity-training-log.helper.ts` reads only Duration, Distance and eligible Ascent, formats aggregate values through
+the shared Sports Lib display helper, and retains missing/zero/partial coverage distinctions. Exact sport types remain
+separate, a recording with multiple sports contributes once to Multisport, and generated comparisons are excluded.
+Neither row construction nor totals hydrate child activities or streams. Totals are hidden while loading or failed
+rather than presented as a completed week. Existing sport/account elevation exclusions remain in force.
+
+MCP impact review: this is an Activities presentation over existing recorded summaries. No numeric class, parser,
+persisted metric, derived snapshot, Training plan/workout, permission, query contract or public MCP schema changes.
+The automatic persisted-only numeric catalog already covers GAP. No reparse, migration, plugin rebuild or deployment
+is required to prepare this change; historical summaries without GAP remain unavailable.
+
 ## Verification for future changes
 
 Use focused behavioral tests to establish that metadata reads construct no metrics, selected reads construct only

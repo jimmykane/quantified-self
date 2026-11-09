@@ -6,18 +6,19 @@ import { SimpleChange } from '@angular/core';
 import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
 import { EventTableActionsComponent } from './actions/event.table.actions.component';
 import { MatListModule, type MatSelectionListChange } from '@angular/material/list';
-import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconModule } from '@angular/material/icon';
-import { OverlayContainer } from '@angular/cdk/overlay';
-import { By } from '@angular/platform-browser';
-import { HapticTapDirective } from '../../directives/haptic-tap.directive';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -28,7 +29,7 @@ import { LoggerService } from '../../services/logger.service';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { DatePipe } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { from, of, Subject } from 'rxjs';
 import { User, DataAscent, DataDescent, DataPace, DataSpeedAvg, ActivityTypes, DataDeviceNames } from '@sports-alliance/sports-lib';
@@ -563,15 +564,15 @@ describe('EventTableComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-table-actions').selectedDataTypes).toEqual(['Distance', 'Duration']);
     });
 
-    it('keeps the Tag library metric order stable when the picker adds and restores columns', async () => {
+    it('honors the chosen Tag library metric order when the picker adds and restores columns', async () => {
         component.showActions = true;
         component.presentation = 'tag-library';
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
         await component.selectedColumnsChange(['Duration', 'Distance', 'Ascent']);
-        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Distance', 'Duration', 'Ascent', 'Tags', 'Actions']);
+        expect(component.displayedColumns).toEqual(['Checkbox', 'Start Date', 'Name', 'Duration', 'Distance', 'Ascent', 'Tags', 'Actions']);
         await component.selectedColumnsChange(['Duration', 'Ascent']);
         await component.selectedColumnsChange(['Duration', 'Ascent', 'Distance']);
-        expect(component.selectedColumns).toEqual(['Distance', 'Duration', 'Ascent']);
+        expect(component.selectedColumns).toEqual(['Duration', 'Ascent', 'Distance']);
         expect(component.libraryAvailableColumns.slice(0, 2)).toEqual(['Distance', 'Duration']);
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
@@ -632,35 +633,56 @@ describe('EventTableComponent', () => {
     it('gives column selection feedback once and stays silent when the selection is unchanged', () => {
         const actions = TestBed.runInInjectionContext(() => new EventTableActionsComponent());
         actions.selectedDataTypes = ['Distance'];
-        const change = { source: { selectedOptions: { selected: [{ value: 'Distance' }, { value: 'Duration' }] } } } as unknown as MatSelectionListChange;
+        actions.ngOnChanges({});
+        actions.selectedDataTypesChange.subscribe(next => { actions.selectedDataTypes = next; actions.ngOnChanges({}); });
+        const change = { options: [{ value: 'Duration', selected: true }] } as unknown as MatSelectionListChange;
         actions.selectionChange(change);
         actions.selectionChange(change);
         expect(actions.selectedDataTypes).toEqual(['Distance', 'Duration']);
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it('gives library sorting and pagination feedback for changes while keeping hydration and parent resets silent', async () => {
-        component.presentation = 'tag-library';
-        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
+    it.each(['tag-library', 'training-log'] as const)('gives %s sorting and pagination feedback while keeping hydration and parent resets silent', async presentation => {
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        component.presentation = presentation;
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', presentation, false) });
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
         component.sort.sortChange.next({ active: 'Distance', direction: 'asc' });
-        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
-        await component.pageChanges({ pageIndex: 1, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
-        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize: 5 } as any); };
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, pageSize } as any); };
         component.ngOnChanges({ filterContext: new SimpleChange('endurance', 'recovery', false) });
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
     });
 
-    it('gives page feedback after the data source silently clamps a filtered page back to the first page', async () => {
-        component.presentation = 'tag-library';
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+    it.each(['tag-library', 'training-log'] as const)('gives %s page feedback after a silent filtered-page clamp', async presentation => {
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        component.presentation = presentation;
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize } as any);
         mockHapticsService.selection.mockClear();
         // Material can clamp pageIndex without emitting a page event after filtering.
         component.paginator.pageIndex = 0;
-        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize: 5 } as any);
+        await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize } as any);
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it.each(['tag-library', 'training-log'] as const)('gives one %s tag-filter haptic when resetting the paginator', async presentation => {
+        component.presentation = presentation;
+        const pageSize = presentation === 'tag-library' ? 5 : 25;
+        await component.pageChanges({ pageIndex: 1, pageSize } as any);
+        component.paginator.firstPage = () => { void component.pageChanges({ pageIndex: 0, previousPageIndex: 1, pageSize } as any); };
+        mockHapticsService.selection.mockClear();
+        component.updateTagFilters(['untagged']);
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('keeps Training log page-size synchronization silent', () => {
+        component.presentation = 'training-log';
+        component.paginator._changePageSize = pageSize => { void component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize }); };
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'training-log', false) });
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('keeps search focused after its clear button disappears and gives one feedback', () => {
@@ -1057,6 +1079,67 @@ describe('EventTableComponent', () => {
         mockUserService.updateUserProperties.mockClear();
         await component.selectedColumnsChange(['Name', 'Start Date']);
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('persists the chosen metric order and restores it after a failed save', async () => {
+        await component.selectedColumnsChange(['Distance', 'Duration']);
+        expect(component.displayedColumns.indexOf('Distance')).toBeLessThan(component.displayedColumns.indexOf('Duration'));
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
+        let reject!: (error: Error) => void;
+        mockUserService.updateUserProperties.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+        const save = component.selectedColumnsChange(['Duration', 'Distance']);
+        expect(component.columnsSaving()).toBe(true);
+        expect(component.displayedColumns.indexOf('Duration')).toBeLessThan(component.displayedColumns.indexOf('Distance'));
+        await component.selectedColumnsChange(['Ascent']);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(2);
+        reject(new Error('offline')); await save;
+        expect(component.columnsSaving()).toBe(false);
+        expect(component.selectedColumns).toEqual(['Distance', 'Duration']);
+        expect(mockUser.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(['Distance', 'Duration']);
+        expect(component.columnSaveError()).toContain('previous columns have been restored');
+        expect(mockHapticsService.error).toHaveBeenCalledOnce();
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
+    });
+
+    it('ignores a failed column save after switching to Training log', async () => {
+        let reject!: (error: Error) => void;
+        mockUserService.updateUserProperties.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+        const save = component.selectedColumnsChange(['Distance']);
+        expect(mockUser.settings.dashboardSettings.tableSettings.selectedColumns).toEqual([]);
+        component.presentation = 'training-log';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'training-log', false) });
+        const columns = [...component.selectedColumns];
+        reject(new Error('offline')); await save;
+        expect(component.selectedColumns).toEqual(columns);
+        expect(component.columnSaveError()).toBeNull();
+        expect(mockUser.settings.dashboardSettings.tableSettings.selectedColumns).toEqual([]);
+        expect(component.columnsSaving()).toBe(false);
+        expect(mockHapticsService.error).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('keeps the pending column choice through a same-owner profile refresh (save succeeds=%s)', async succeeds => {
+        component.selectedColumns = ['Duration'];
+        component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Duration'];
+        let finish!: () => void;
+        mockUserService.updateUserProperties.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+            finish = () => succeeds ? resolve() : reject(new Error('offline'));
+        }));
+        const save = component.selectedColumnsChange(['Distance']);
+        const previousUser = component.user;
+        component.user = Object.assign(new User(previousUser.uid), previousUser, { settings: {
+            ...previousUser.settings,
+            unitSettings: { ...previousUser.settings.unitSettings, distanceUnits: DistanceUnits.Miles },
+        } });
+        component.ngOnChanges({ user: new SimpleChange(previousUser, component.user, false) });
+        expect(component.columnsSaving()).toBe(true);
+        expect(component.selectedColumns).toEqual(['Distance']);
+        expect(component.displayedColumns).toContain('Distance');
+        expect(component.displayedColumns).not.toContain('Duration');
+        finish(); await save;
+        expect(component.selectedColumns).toEqual(succeeds ? ['Distance'] : ['Duration']);
+        expect(component.user.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(succeeds ? ['Distance'] : ['Duration']);
+        expect(component.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
+        expect(component.columnsSaving()).toBe(false);
     });
 
     it('should persist sort changes without writing unrelated user settings', async () => {
@@ -2645,46 +2728,150 @@ describe('EventTableComponent', () => {
     });
 });
 
-describe('EventTableActionsComponent Material menu', () => {
-    it('initializes only the visible metric columns as selected and applies an accepted change', async () => {
-        const haptics = { selection: vi.fn() };
-        await TestBed.configureTestingModule({
-            declarations: [EventTableActionsComponent, HapticTapDirective],
-            imports: [MatListModule, MatMenuModule, MatButtonModule, MatIconModule, NoopAnimationsModule],
-            providers: [{ provide: AppHapticsService, useValue: haptics }],
-        }).compileComponents();
-        const menuFixture = TestBed.createComponent(EventTableActionsComponent);
-        menuFixture.componentRef.setInput('selectedDataTypes', ['Distance', 'Duration']);
-        menuFixture.componentRef.setInput('dataTypes', ['Duration', 'Distance', 'Ascent']);
-        menuFixture.detectChanges();
-        const changes = vi.fn();
-        menuFixture.componentInstance.selectedDataTypesChange.subscribe(changes);
-        const trigger = menuFixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
-        trigger.openMenu();
-        menuFixture.detectChanges();
-        await menuFixture.whenStable();
-        const overlay = TestBed.inject(OverlayContainer).getContainerElement();
-        const options = [...overlay.querySelectorAll<HTMLElement>('[role="option"]')];
-        expect(options.map(option => [option.textContent.trim(), option.getAttribute('aria-selected')])).toEqual([
-            ['Duration', 'true'], ['Distance', 'true'], ['Ascent', 'false'],
-        ]);
-        expect(haptics.selection).not.toHaveBeenCalled();
-        menuFixture.componentRef.setInput('disabled', true);
-        menuFixture.detectChanges();
-        expect(menuFixture.nativeElement.querySelector('button').disabled).toBe(true);
-        expect(overlay.querySelector('[role="listbox"]').getAttribute('aria-disabled')).toBe('true');
-        options[2].click();
-        menuFixture.detectChanges();
-        expect(menuFixture.componentInstance.selectedDataTypes).toEqual(['Distance', 'Duration']);
-        expect(haptics.selection).not.toHaveBeenCalled();
-        expect(changes).not.toHaveBeenCalled();
-        menuFixture.componentRef.setInput('disabled', false);
-        menuFixture.detectChanges();
-        options[2].click();
-        menuFixture.detectChanges();
-        expect(haptics.selection).toHaveBeenCalledOnce();
-        trigger.closeMenu();
-        await menuFixture.whenStable();
-        expect(changes).toHaveBeenCalledWith(['Duration', 'Distance', 'Ascent']);
+async function setupColumnPicker(selected = ['Distance', 'Duration']) {
+    const haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({
+        declarations: [EventTableActionsComponent],
+        imports: [CommonModule, MatListModule, MatButtonModule, MatIconModule, MatCheckboxModule, MatDialogModule,
+            MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatTooltipModule, NoopAnimationsModule],
+        providers: [{ provide: AppHapticsService, useValue: haptics }],
+        schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(EventTableActionsComponent);
+    fixture.componentRef.setInput('selectedDataTypes', selected);
+    fixture.componentRef.setInput('dataTypes', ['Duration', 'Distance', 'Ascent', 'Average Grade Adjusted Pace']);
+    const changes = vi.fn();
+    const host = { acceptChanges: true };
+    fixture.componentInstance.selectedDataTypesChange.subscribe(next => {
+        changes(next);
+        if (host.acceptChanges) fixture.componentRef.setInput('selectedDataTypes', next);
+    });
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    trigger.focus(); trigger.click(); await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const columns = () => Array.from(dialog.querySelectorAll<HTMLElement>('[data-event-column]')).map(row => row.dataset.eventColumn);
+    return { fixture, component: fixture.componentInstance, haptics, changes, host, trigger, dialog, columns, settle };
+}
+
+describe('EventTableActionsComponent Material dialog', () => {
+    it('shows saved columns in order and only unselected choices without writing on open or close', async () => {
+        const p = await setupColumnPicker();
+        expect(p.columns()).toEqual(['Distance', 'Duration']);
+        expect(p.dialog.getAttribute('aria-label')).toBe('Choose table columns');
+        expect(document.activeElement).toBe(p.dialog.querySelector('h2'));
+        expect([...p.dialog.querySelectorAll('mat-list-option')].map(option => option.getAttribute('aria-label')))
+            .toEqual(['Ascent', 'GAP (grade-adjusted pace)']);
+        expect(p.changes).not.toHaveBeenCalled();
+        expect(p.haptics.selection).toHaveBeenCalledOnce();
+        p.dialog.querySelector<HTMLButtonElement>('[mat-dialog-close]')!.click(); await p.settle();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(document.activeElement).toBe(p.trigger);
+        expect(p.changes).not.toHaveBeenCalled();
+        expect(p.haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('searches available columns by label without losing selected columns or giving typing feedback', async () => {
+        const p = await setupColumnPicker();
+        const search = p.dialog.querySelector<HTMLInputElement>('[data-event-column-search]')!;
+        search.value = 'gap'; search.dispatchEvent(new Event('input', { bubbles: true })); await p.settle();
+        expect(p.columns()).toEqual(['Distance', 'Duration']);
+        expect(p.dialog.querySelectorAll('mat-list-option')).toHaveLength(1);
+        expect(p.dialog.querySelector('mat-list-option')?.textContent).toContain('GAP');
+        expect(p.haptics.selection).toHaveBeenCalledOnce();
+        const clear = p.dialog.querySelector<HTMLButtonElement>('[aria-label="Clear column search"]')!;
+        clear.focus(); clear.click(); await p.settle();
+        expect(document.activeElement).toBe(search);
+        expect(search.value).toBe('');
+        expect(p.changes).not.toHaveBeenCalled();
+        expect(p.haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('adds a column through Space and keeps focus inside the dialog as the option moves', async () => {
+        const p = await setupColumnPicker();
+        const option = p.dialog.querySelector<HTMLElement>('mat-list-option[aria-label="Ascent"]')!;
+        option.focus(); option.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
+        await p.settle();
+        expect(p.columns()).toEqual(['Distance', 'Duration', 'Ascent']);
+        expect(p.changes).toHaveBeenCalledExactlyOnceWith(['Distance', 'Duration', 'Ascent']);
+        expect(document.activeElement?.closest('[data-event-column]')?.getAttribute('data-event-column')).toBe('Ascent');
+        expect(p.haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('moves columns with native buttons and announces their position', async () => {
+        const p = await setupColumnPicker();
+        const move = p.dialog.querySelector<HTMLButtonElement>('[aria-label="Move Duration up"]')!;
+        move.focus(); move.click(); await p.settle();
+        expect(p.columns()).toEqual(['Duration', 'Distance']);
+        expect(p.changes).toHaveBeenCalledExactlyOnceWith(['Duration', 'Distance']);
+        expect(move.disabled).toBe(true);
+        expect(document.activeElement?.closest('[data-event-column]')?.getAttribute('data-event-column')).toBe('Duration');
+        expect(p.dialog.textContent).toContain('Duration moved to position 1 of 2');
+        move.click(); await p.settle();
+        expect(p.changes).toHaveBeenCalledTimes(1);
+        expect(p.haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('removes the last selected column without losing focus and returns it to available choices', async () => {
+        const p = await setupColumnPicker(['Distance']);
+        const checkbox = p.dialog.querySelector<HTMLInputElement>('[data-event-column] input')!;
+        checkbox.focus(); checkbox.click(); await p.settle();
+        expect(p.columns()).toEqual([]);
+        expect(p.changes).toHaveBeenCalledExactlyOnceWith([]);
+        expect(p.dialog.textContent).toContain('No columns selected');
+        expect(document.activeElement).toBe(p.dialog.querySelector('[data-event-column-search]'));
+        expect(p.dialog.querySelector('mat-list-option[aria-label="Distance"]')).toBeTruthy();
+    });
+
+    it('pauses editing while saving and shows the restored selection after failure', async () => {
+        const p = await setupColumnPicker();
+        const checkbox = p.dialog.querySelector<HTMLInputElement>('[data-event-column] input')!;
+        checkbox.focus(); checkbox.click();
+        p.fixture.componentRef.setInput('saving', true); await p.settle();
+        expect(p.dialog.textContent).toContain('Saving columns');
+        expect([...p.dialog.querySelectorAll<HTMLInputElement>('[data-event-column] input')].every(input => input.disabled)).toBe(true);
+        expect(p.dialog.contains(document.activeElement)).toBe(true);
+        p.component.moveColumn('Duration', -1);
+        expect(p.changes).toHaveBeenCalledTimes(1);
+        p.fixture.componentRef.setInput('selectedDataTypes', ['Distance', 'Duration']);
+        p.fixture.componentRef.setInput('saveError', 'Could not save columns. Your previous columns have been restored.');
+        p.fixture.componentRef.setInput('saving', false); await p.settle();
+        expect(p.columns()).toEqual(['Distance', 'Duration']);
+        expect(p.dialog.querySelector('[role="alert"]')?.textContent).toContain('previous columns have been restored');
+        expect(p.dialog.contains(document.activeElement)).toBe(true);
+    });
+
+    it('restores a synchronously rejected change when the parent input reference stays unchanged', async () => {
+        const p = await setupColumnPicker();
+        const previous = p.component.selectedDataTypes;
+        p.host.acceptChanges = false;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            p.dialog.querySelector<HTMLButtonElement>('[aria-label="Move Duration up"]')!.click();
+            p.fixture.componentRef.setInput('selectedDataTypes', previous);
+            p.fixture.componentRef.setInput('saveError', 'Could not save columns. Your previous columns have been restored.');
+            await p.settle();
+            expect(p.component.selectedDataTypes).toBe(previous);
+            expect(p.columns()).toEqual(['Distance', 'Duration']);
+        }
+    });
+
+    it.each(['disabled', 'contextKey'])('closes silently when %s changes and does not emit a stale layout', async field => {
+        const p = await setupColumnPicker();
+        p.fixture.componentRef.setInput(field, field === 'disabled' ? true : 'another-owner'); await p.settle();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(p.changes).not.toHaveBeenCalled();
+        expect(p.haptics.selection).toHaveBeenCalledOnce();
+    });
+
+    it('does not reopen or steal focus when a save finishes after dismissal', async () => {
+        const p = await setupColumnPicker();
+        p.fixture.componentRef.setInput('saving', true); await p.settle();
+        p.dialog.querySelector<HTMLButtonElement>('[mat-dialog-close]')!.click(); await p.settle();
+        p.fixture.componentRef.setInput('saving', false);
+        p.fixture.componentRef.setInput('selectedDataTypes', ['Duration']); await p.settle();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(document.activeElement).toBe(p.trigger);
+        expect(p.changes).not.toHaveBeenCalled();
     });
 });

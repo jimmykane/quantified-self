@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from '../../../tools/public-prerender-metadata.mjs';
+import { ACTIVITY_MAP_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from '../../../tools/public-prerender-metadata.mjs';
 import { TRAINING_PLANS_SEO_CONTENT } from '../components/public-seo/training-plans-page.content';
+import { PUBLIC_SEO_PAGES } from '../components/public-seo/public-seo-pages.content';
 
 describe('public prerender metadata', () => {
+  it.each(['title', 'description', 'h1', 'accessNote', 'freeOfferDescription'] as const)(
+    'keeps the My Tracks build verifier %s aligned with public route content', key => {
+      expect(ACTIVITY_MAP_PRERENDER_METADATA[key]).toBe(PUBLIC_SEO_PAGES.activityMap[key]);
+    },
+  );
+
   it('keeps the release notes build verifier aligned with its route and page heading', () => {
     const source = readFileSync(new URL('../app.routing.module.ts', import.meta.url), 'utf8');
     const route = source.split("path: 'releases',")[1]?.split("path: 'payment/cancel',")[0];

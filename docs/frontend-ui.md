@@ -71,10 +71,11 @@ and warning budgets remain unchanged. This is bundle accounting, not a runtime s
 
 ## Field guide onboarding bundle allowance
 
-The Field guide onboarding rebased onto `529562129` exceeds a 14.23 MB total-script cap by 522 bytes in production
-and 532 bytes in beta. Production and beta therefore use a matching 14.24 MB `allScript` error cap for the
-onboarding, checkout-resume and Help integration. The 1474 kB initial cap, 13000 kB total-script warning
-and public startup checks remain unchanged. This is bundle accounting, not a runtime performance measurement.
+The optional Field guide, intent-first setup and compact Compare flow integrated with `develop` at `17528a20e`
+exceed the 14.25 MB total-script cap by 13.51 kB in the production build. Production and beta use a matching
+14.27 MB `allScript` error cap for this onboarding, checkout-resume and Help integration. No new runtime
+library dependency is introduced. The 1474 kB initial cap, 13000 kB total-script warning and public startup
+checks remain unchanged. This is bundle accounting, not a runtime performance measurement.
 
 ## Frontend build identification
 

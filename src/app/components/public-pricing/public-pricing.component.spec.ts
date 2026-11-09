@@ -263,8 +263,11 @@ describe('PublicPricingComponent', () => {
         const cards = root.querySelector('.products-grid')!;
         const details = root.querySelector('.plan-details')!;
         expect(cards.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(root.querySelectorAll('.plan-capabilities article')).toHaveLength(8);
+        expect(root.querySelectorAll('.plan-capabilities article')).toHaveLength(9);
         expect(root.textContent).toContain('My Tracks (Beta)');
+        expect(root.querySelector('[aria-labelledby="included-heading"]')?.textContent).toContain('My Tracks (Beta)');
+        expect(root.querySelector('[aria-label="What paid plans add"]')?.textContent).not.toContain('My Tracks');
+        expect(root.querySelector('a[href="/features/activity-map"]')).not.toBeNull();
         expect(root.textContent).toContain('custom chart watermark text');
         expect(root.querySelector('a[href="/features/training-plans"]')).not.toBeNull();
         expect(root.querySelector('a[href="/help#plans-and-billing"]')).not.toBeNull();

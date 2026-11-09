@@ -17,6 +17,28 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('includes My Tracks on Starter while keeping provider imports and sync on Pro', () => {
+    const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    const starter = billing.split('### Starter (Free)')[1].split('### Basic')[0];
+    const basic = billing.split('### Basic')[1].split('### Pro')[0];
+    expect(starter).toContain('**My Tracks (Beta)**');
+    expect(basic).not.toContain('My Tracks');
+    expect(billing).toContain('**My Tracks (Beta):** Starter, Basic, Pro');
+    expect(billing).toContain('automatic provider imports and sync require Pro');
+  });
+  it('explains the searchable, ordered activity-table column dialog and save recovery', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',
+      '**Add columns**', 'failed save restores the previous choices and order', 'Training log and Tag library changes stay local',
+      'normal list also keeps Description fixed']) expect(content).toContain(phrase);
+  });
+  it('explains the Activities Training log, local columns and filtered weekly totals', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**View → Training log**', '**Weekly totals by sport**', '**Columns → Running**',
+      '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
+      'Log column, sort and page-size changes stay local', 'recorded-activity counts for partial coverage',
+      'merged comparisons stay out of totals', 'unavailable value stays blank']) expect(content).toContain(phrase);
+  });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
     const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',

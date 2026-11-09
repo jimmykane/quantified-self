@@ -310,6 +310,19 @@ describe('public-seo-pages.content', () => {
 
   });
 
+  it('keeps My Tracks Starter access and Pro provider requirements in visible and structured content', () => {
+    const page = PUBLIC_SEO_PAGES.activityMap;
+    expect(page.accessNote).toContain('included with Starter, Basic and Pro');
+    expect(page.accessNote).toContain('Automatic provider imports and sync require Pro');
+    expect(page.faqItems.find(item => item.question === 'Which plans include My Tracks?')?.answer)
+      .toContain('Manual activity file uploads are available on every plan');
+    const entities = PUBLIC_SEO_ROUTE_DATA.activityMap.jsonLd['mainEntity'] as Record<string, unknown>[];
+    expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['offers'])
+      .toMatchObject({ price: '0', description: page.freeOfferDescription });
+    expect(JSON.stringify(entities.find(entity => entity['@type'] === 'FAQPage'))).toContain('Which plans include My Tracks?');
+    expect(page.path).toBe('features/activity-map');
+  });
+
   it('keeps generic privacy boilerplate out of public copy', () => {
     const copy = Object.values(PUBLIC_SEO_PAGES).map(page => ({
       ...page,
@@ -415,7 +428,7 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
-    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See workouts, trips, and destinations on one map');
+    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('My Tracks: activities, trips and destinations on one map');
     expect(PUBLIC_SEO_PAGES.activityMap.description).toContain('group activity history into trips');
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => section.preview === 'activity-map')).toBe(true);
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => (

@@ -732,7 +732,12 @@ const topLevelRoutes: Routes = [
   {
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
-    data: { title: 'MyTracks', animation: 'MyTracks', disableRouteAnimation: true, preload: true },
+    data: {
+      title: 'My Tracks',
+      description: 'Explore your recorded GPS activities, detected trips and destinations on your activity map.',
+      robots: 'noindex, nofollow',
+      animation: 'MyTracks', disableRouteAnimation: true, preload: true,
+    },
     canMatch: [authGuard, onboardingGuard]
   },
   {

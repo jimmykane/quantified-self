@@ -1,5 +1,5 @@
 <!-- Table Section -->
-<div class="qs-glass-card-panel table-container">
+<div class="qs-glass-card-panel table-container" [class.training-log-table]="isTrainingLogPresentation">
   @if (showToolbar) {
   <div class="table-toolbar">
     <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
@@ -16,6 +16,10 @@
 
       <div class="table-toolbar-filters">
         <ng-content select="[event-table-filters]"></ng-content>
+        @if (isTrainingLogPresentation) {
+          <app-compact-select label="Columns" [value]="trainingLogColumnPreset" [options]="trainingLogColumnPresets"
+            [disabled]="tableIsLoading" (selectionChange)="selectTrainingLogColumnPreset($event)"></app-compact-select>
+        }
         @if (showTagFilter) {
         <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
           [textButton]="true" triggerIcon="sell" [disabled]="tableIsLoading"
@@ -24,13 +28,16 @@
         }
         <ng-content select="[event-table-trailing-filters]"></ng-content>
         @if (isLibraryPresentation) {
-          <app-event-table-actions [attr.inert]="tableIsLoading ? '' : null" [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
+          <app-event-table-actions [attr.inert]="tableIsLoading ? '' : null" [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns"
+            [contextKey]="columnPickerContext" scopeHint="Changes apply to this Tag library table only. Date, activity name, tags and row actions stay in their fixed positions."
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
       </div>
       @if (canManageEvents && !isLibraryPresentation) {
         <div class="table-toolbar-actions" [attr.inert]="tableIsLoading ? '' : null">
-          <app-event-table-actions [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" icon="tune"
+          <app-event-table-actions [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" [saving]="columnsSaving()" [saveError]="columnSaveError()"
+            [contextKey]="columnPickerContext" [dataTypes]="isTrainingLogPresentation ? trainingLogColumnChoices : eventColumnChoices"
+            [scopeHint]="isTrainingLogPresentation ? 'Changes apply to this Training log only. Date, tags and row actions stay in their fixed positions. On phones, sport and tags stay first.' : 'Changes save automatically for activity lists. Date, tags, description and row actions stay in their fixed positions. On phones, sport and tags stay first.'"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         </div>
       }
@@ -146,7 +153,7 @@
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
             <app-data-type-icon [dataType]="column" aria-hidden="true"></app-data-type-icon>
-            <span class="cdk-visually-hidden">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : column }}</span>
+            <span [class.cdk-visually-hidden]="!isTrainingLogPresentation">{{ isTrainingLogPresentation ? (columnLabels[column] || column) : isLibraryPresentation && column === 'Name' ? 'Activity' : column }}</span>
           </th>
           }
           <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
@@ -315,6 +322,35 @@
       </div>
     }
   </div>
+
+  @if (isTrainingLogPresentation && !tableIsLoading && !hasLoadError && trainingLogTotals.length) {
+  <section class="training-log-totals" aria-label="Weekly totals by sport">
+    <h3>Weekly totals by sport</h3>
+    <p>All matching activities in this week. Multisport recordings stay together; merged comparisons are excluded.</p>
+    <div class="training-log-totals-scroll qs-scrollbar" tabindex="0" role="region" aria-label="Weekly sport totals table">
+      <table mat-table [dataSource]="trainingLogTotals">
+        <ng-container matColumnDef="sport">
+          <th mat-header-cell *matHeaderCellDef>Sport</th>
+          <td mat-cell *matCellDef="let total">{{ total.sport }}</td>
+        </ng-container>
+        <ng-container matColumnDef="count">
+          <th mat-header-cell *matHeaderCellDef>Activities</th>
+          <td mat-cell *matCellDef="let total">{{ total.count | number }}</td>
+        </ng-container>
+        @for (metric of trainingLogMetricColumns; track metric) {
+          <ng-container [matColumnDef]="metric">
+            <th mat-header-cell *matHeaderCellDef>{{ trainingLogMetricLabels[metric] }}</th>
+            <td mat-cell *matCellDef="let total">{{ total[metric].value }}
+              @if (total[metric].coverage) { <span class="training-log-coverage">{{ total[metric].coverage }}</span> }
+            </td>
+          </ng-container>
+        }
+        <tr mat-header-row *matHeaderRowDef="trainingLogTotalColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: trainingLogTotalColumns"></tr>
+      </table>
+    </div>
+  </section>
+  }
 
   <div class="activity-table-footer" [hidden]="showEmptyNotice">
     <div class="activity-table-loading-status" role="status" aria-live="polite">

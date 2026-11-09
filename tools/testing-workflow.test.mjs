@@ -69,6 +69,23 @@ test('Functions CI runs the complete suite serially and keeps runner errors fata
   assert.doesNotMatch(functionsStep.run, /dangerouslyIgnoreUnhandledErrors|passWithNoTests|\|\|\s*true/);
 });
 
+test('SDK-backed Web Push monitoring runs after Functions dependencies are installed in the same job', () => {
+  const command = 'npm run test:web-push-monitoring';
+  const consumers = Object.entries(shared.jobs)
+    .filter(([, job]) => job.steps?.some(step => step.run === command))
+    .map(([id]) => id);
+  assert.deepEqual(consumers, ['functions_tests']);
+  const steps = shared.jobs.functions_tests.steps;
+  const installIndex = steps.findIndex(step => {
+    const commands = (step.run ?? '').split('\n').map(line => line.trim());
+    return commands.includes('cd functions') && commands.includes('npm ci');
+  });
+  const monitoringIndex = steps.findIndex(step => step.run === command);
+  assert.ok(installIndex >= 0 && monitoringIndex > installIndex,
+    'The real Firebase logger fixture needs Functions dependencies installed before it runs');
+  assert.notEqual(steps[monitoringIndex]['continue-on-error'], true);
+});
+
 test('MCP push checks retain both complete suites with a non-interactive report and fatal runner errors', () => {
   const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
   const command = scripts['hooks:mcp:pre-push'];

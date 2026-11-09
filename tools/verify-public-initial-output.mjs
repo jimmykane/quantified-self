@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { marked } from 'marked';
-import { RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
+import { ACTIVITY_MAP_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -416,6 +416,7 @@ function assertPrerenderedDocuments() {
     }
     if (route === '/releases') assertReleasesDocument(documentRef);
     if (route === '/pricing') assertPricingDocument(documentRef);
+    if (route === '/features/activity-map') assertActivityMapDocument(documentRef);
 
     dom.window.close();
   }
@@ -436,6 +437,20 @@ function assertPublicSnapshotMetadata(documentRef, route, metadata) {
   }
   if (documentRef.querySelector('meta[name="robots"]')?.getAttribute('content')?.includes('noindex')) {
     throw new Error(`Prerendered ${route} must be indexable.`);
+  }
+}
+
+function assertActivityMapDocument(documentRef) {
+  assertPublicSnapshotMetadata(documentRef, '/features/activity-map', ACTIVITY_MAP_PRERENDER_METADATA);
+  const accessNote = documentRef.querySelector('.hero-access-note')?.textContent?.trim();
+  if (accessNote !== ACTIVITY_MAP_PRERENDER_METADATA.accessNote) {
+    throw new Error('Prerendered My Tracks must explain Starter access and Pro provider requirements.');
+  }
+  const jsonLd = JSON.parse(documentRef.querySelector('script[type="application/ld+json"]')?.textContent ?? '{}');
+  const application = jsonLd.mainEntity?.find(entity => entity['@type'] === 'SoftwareApplication');
+  if (application?.offers?.price !== '0'
+    || application?.offers?.description !== ACTIVITY_MAP_PRERENDER_METADATA.freeOfferDescription) {
+    throw new Error('Prerendered My Tracks must qualify its free offer with activity limits and Pro provider requirements.');
   }
 }
 

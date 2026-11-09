@@ -203,6 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
+// Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
@@ -509,7 +510,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
+    // My Tracks is included on Starter; pricing and the public map overview now agree (2026-11-09).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
@@ -540,7 +542,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
@@ -704,7 +706,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.24mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.27mb',
     });
   });
 

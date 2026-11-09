@@ -5,6 +5,14 @@ export const RELEASES_PRERENDER_METADATA = {
   h1: 'Release Notes',
 };
 
+export const ACTIVITY_MAP_PRERENDER_METADATA = {
+  title: 'My Tracks: GPS Activity Map & Trip Detection',
+  description: 'Map GPS workouts, filter by sport or date, and group activity history into trips with My Tracks. Included with Starter; provider imports and sync require Pro.',
+  h1: 'My Tracks: activities, trips and destinations on one map',
+  accessNote: 'My Tracks is included with Starter, Basic and Pro. Activity limits apply. Automatic provider imports and sync require Pro.',
+  freeOfferDescription: 'My Tracks mapping is included with Starter, Basic and Pro; activity limits apply. Automatic provider imports and sync require Pro.',
+};
+
 export const TRAINING_PLANS_PRERENDER_METADATA = {
   title: 'Training Plans for Running, Cycling & More',
   description: 'Build or generate structured workouts, create free training plans, and explore opt-in daily AI suggestions with Pro. Review workouts or rest before adding.',

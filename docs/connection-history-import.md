@@ -436,11 +436,20 @@ without it retain their exact 30-day parent/28-day child ranges, receipts, retry
 migration or replay occurs. An omitted batch size uses the same 104/112-day default in both the planner and receipt
 identity; it cannot reuse a receipt for a 30-day batch. Unsupported batch versions or mismatched provider/resource
 snapshots stop visibly before admission instead of silently falling back to legacy windows.
-The manual combined Sleep/Health callable, other providers, activities, routes,
-permissions, source writers, queue concurrency, retry budgets and half-hour recovery remain unchanged. The same
-pinned account and lifecycle guards apply to all four children, with immediate dispatch and `preserveExisting`.
+Other providers, activities, routes, permissions, source writers, queue concurrency, retry budgets and half-hour
+recovery remain unchanged. The same pinned account and lifecycle guards apply to all four coordinator children,
+with immediate dispatch and `preserveExisting`.
 A partial enqueue keeps the cursor and cooldown; retry repeats the exact deterministic children and waits for every
 started admission to settle. The pre-existing 500-task/backlog admission stop and 100-child hard bound still apply.
+
+The separate manual `backfillSuuntoAppSleep` callable aligns new admissions to 28-day Sleep and 26-day Health
+windows, retaining scheduled dispatch, account fan-out, cooldown, deletion and queue guards. It refills up to four
+active admissions as each finishes, so shorter Sleep writes do not leave capacity idle behind multi-account Health
+windows. The first observed failure stops new ranges and remaining account admissions; all started writes drain
+before cooldown is released. Coordinator batch barriers remain unchanged. Its release only
+requires that callable; the coordinator's immediate-dispatch policy and consumer-before-producer rollout below
+do not apply to this manual follow-up. Existing coordinator plans and receipt identities stay intact, without
+migrating queue rows or changing worker continuation handling.
 
 ### Offline stress evidence and latency limitation
 
