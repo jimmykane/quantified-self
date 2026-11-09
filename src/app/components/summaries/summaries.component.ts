@@ -264,6 +264,7 @@ interface DashboardTodayReadinessViewModel {
   rampCue: DashboardTodayDirectionCue | null;
   scoreTone: DashboardTodayCueTone;
   sleepText: string;
+  sleepDurationText: string | null;
   sleepScore: number | null;
   sleepContextText: string;
   hrvText: string;
@@ -319,6 +320,7 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     rampCue: null,
     scoreTone: 'neutral',
     sleepText: '--',
+    sleepDurationText: null,
     sleepScore: null,
     sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
@@ -2258,6 +2260,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const rampText = this.formatDashboardTodayMetric(context.rampRate, true);
     const score = awaitingSleep || warningText ? null : context.score;
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
+    const sleepDurationDisplay = context.sleepDurationSeconds != null
+      ? formatCanonicalSleepMetricSportsLibValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
+        context.sleepDurationSeconds, this.user?.settings?.unitSettings, { compactDuration: true }) : null;
     const heartRateValue = context.averageHeartRateBpm ?? context.minimumHeartRateBpm;
     const heartRateKind = context.averageHeartRateBpm != null ? 'avg' : 'min';
     const heartRateDisplay = heartRateValue != null
@@ -2302,6 +2307,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       rampText,
       rampCue: buildDashboardTodayRampCue(context.rampRate),
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
+      sleepDurationText: sleepDurationDisplay ? [sleepDurationDisplay.value, sleepDurationDisplay.unit].filter(Boolean).join(' ') : null,
       sleepScore: context.sleepScore,
       sleepContextText: warningText && context.latestSleepAtMs === null
         ? 'Sleep unavailable'

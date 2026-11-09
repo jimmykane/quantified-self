@@ -344,6 +344,7 @@ describe('dashboard-training-insights.helper', () => {
     expect(context?.minimumHeartRateBpm).toBe(48);
     expect(context?.rampRate).toBe(1);
     expect(context?.latestSleepAtMs).toBe(750);
+    expect(context?.sleepDurationSeconds).toBe(8 * 3_600);
     expect(context?.trend).toEqual([]);
   });
 
@@ -423,8 +424,32 @@ describe('dashboard-training-insights.helper', () => {
       minimumHeartRateRatio: null,
       averageHeartRateBpm: null,
       minimumHeartRateBpm: null,
+      sleepDurationSeconds: null,
       trend: [],
     });
+  });
+
+  it.each([
+    { duration: 31_440, expected: 31_440 },
+    { duration: 0, expected: null },
+    { duration: null, expected: null },
+  ])('keeps duration tied to the selected night without substituting other nights or naps: $duration', scenario => {
+    const nowMs = Date.UTC(2026, 10, 9, 12);
+    const point = {
+      id: 'latest', sleepDate: '2026-11-09', provider: 'SuuntoApp', sourceKey: 'suunto-account',
+      startTimeMs: nowMs - 10 * 3_600_000, endTimeMs: nowMs - 3_600_000,
+      totalSeconds: scenario.duration, score: 81, isNap: false, isPlaceholder: false,
+    };
+    const context = buildDashboardReadinessSignalsContext({ nowMs, sleepTrend: {
+      latestPoint: null,
+      points: [
+        { ...point, id: 'older', sleepDate: '2026-11-08', endTimeMs: point.endTimeMs - 86_400_000, totalSeconds: 36_000 },
+        point,
+        { ...point, id: 'nap', endTimeMs: nowMs - 1_000, isNap: true, totalSeconds: 3_600 },
+        { ...point, id: 'future', endTimeMs: nowMs + 86_400_000, totalSeconds: 43_200 },
+      ] as never,
+    } });
+    expect(context).toMatchObject({ sleepDurationSeconds: scenario.expected, latestSleepAtMs: point.endTimeMs });
   });
 
   it.each([

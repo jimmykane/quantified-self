@@ -1964,6 +1964,34 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
   });
 
+  it.each([0, 1])('shows sleep duration beside the score for a night %s days ago and clears it when unavailable', daysAgo => {
+    const nowMs = Date.UTC(2026, 10, 9, 12);
+    vi.useFakeTimers(); vi.setSystemTime(nowMs);
+    component.showTodaySummary = true;
+    const endTimeMs = nowMs - (daysAgo * 24 + 1) * 3_600_000;
+    component['readinessSleepSessions'] = [{
+      id: 'latest', sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+      startTimeMs: endTimeMs - 31_440_000, endTimeMs, durationSeconds: 31_440,
+      score: { value: 81 }, source: { provider: 'SuuntoApp', sourceSessionKey: 'latest' },
+    }] as SleepSession[];
+    const host = fixture.nativeElement as HTMLElement;
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      component.user = { settings: { unitSettings, dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+      component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+      component['changeDetector'].markForCheck(); fixture.detectChanges();
+      const sleep = host.querySelector('.dashboard-today-sleep')!;
+      expect(sleep.querySelector('.dashboard-today-sleep-value > span')?.textContent).toBe('81/100');
+      expect(sleep.querySelector('.dashboard-today-sleep-duration')?.getAttribute('aria-label')).toBe('Sleep duration: 08h 44m');
+      expect(sleep.querySelector('.dashboard-today-sleep-duration')?.textContent).toBe('08h 44m');
+      expect(sleep.querySelector('small')?.textContent).toBe(daysAgo ? 'Last available · Nov 8' : 'Today');
+    }
+    component['readinessSleepSessions'] = [];
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('.dashboard-today-sleep-duration')).toBeNull();
+    expect(component.dashboardTodayReadiness.sleepDurationText).toBeNull();
+  });
+
   it.each([
     { average: 54, minimum: 42, kind: 'avg', accessible: 'Average sleep heart rate: 54 bpm' },
     { average: null, minimum: 42, kind: 'min', accessible: 'Minimum sleep heart rate: 42 bpm' },

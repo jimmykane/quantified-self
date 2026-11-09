@@ -161,7 +161,17 @@
         </div>
         <small>Form / ramp</small>
       </div>
-      <div class="dashboard-today-sleep" [class.has-score]="dashboardTodayReadiness.sleepScore !== null"><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
+      <div class="dashboard-today-sleep" [class.has-score]="dashboardTodayReadiness.sleepScore !== null">
+        <dt>Sleep</dt>
+        <dd class="dashboard-today-sleep-value">
+          <span>{{ dashboardTodayReadiness.sleepText }}</span>
+          @if (dashboardTodayReadiness.sleepDurationText; as duration) {
+            <span class="dashboard-today-sleep-duration" role="img" [attr.aria-label]="'Sleep duration: ' + duration">{{ duration }}</span>
+          }
+        </dd>
+        <div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div>
+        <small>{{ dashboardTodayReadiness.sleepContextText }}</small>
+      </div>
       <div class="dashboard-readiness-hrv" [attr.data-cue-tone]="dashboardTodayReadiness.hrvCueTone">
         <dt>HRV · 7-day average</dt>
         <dd>{{ dashboardTodayReadiness.hrvText }}</dd>

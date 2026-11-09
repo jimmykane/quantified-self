@@ -52,6 +52,7 @@ export interface DashboardReadinessSignalsContext {
   form: number | null;
   rampRate: number | null;
   sleepScore: number | null;
+  sleepDurationSeconds?: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
   hrvPersonalRange: ReadinessHrvPersonalRange | null;
@@ -251,8 +252,10 @@ export function buildDashboardReadinessSignalsContext(input: {
     nowMs: input.nowMs,
   });
   const context = evaluation?.signals;
+  const sleepDurationSeconds = evaluation?.latestSleep?.totalSeconds;
   return context ? {
     ...context,
+    sleepDurationSeconds: Number.isFinite(sleepDurationSeconds) && sleepDurationSeconds > 0 ? sleepDurationSeconds : null,
     averageHeartRateBpm: evaluation.averageHeartRate.latestValue,
     minimumHeartRateBpm: evaluation.minimumHeartRate.latestValue,
     overnightHeartRateCalculatedByQs: (input.sleepTrend?.points || []).some(point => point.heartRateCalculatedByQs
