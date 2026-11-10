@@ -14,7 +14,7 @@
   table.mat-mdc-table { width: max-content; min-width: 0; }
 }
 .event-table-column-heading { display: flex; align-items: center; gap: 6px; }
-.event-table-column-heading app-data-type-icon { display: flex; flex-shrink: 0; }
+.event-table-column-heading app-data-type-icon { display: flex; flex-shrink: 0; color: var(--mat-sys-on-surface); }
 .activity-total-row { background: var(--mat-sys-surface-container); cursor: default; }
 .activity-total-label, .activity-total-coverage { display: block; white-space: normal; }
 .activity-total-label { font: var(--mat-sys-label-medium); }
