@@ -1,6 +1,7 @@
 {
   "node": [
     "src/app/components/event/chart/event.card.chart.template.spec.ts",
+    "src/app/components/onboarding/terrain/onboarding-terrain.geometry.spec.ts",
     "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/components/shared/reviewer-benchmark-preview/reviewer-benchmark-rr-preview.data.spec.ts",
     "src/app/helpers/account-startup-diagnostics.helper.spec.ts",
@@ -148,6 +149,7 @@
     "src/app/helpers/metric-semantics.helper.spec.ts",
     "src/app/helpers/notification-invitation.helper.spec.ts",
     "src/app/helpers/number-format.helper.spec.ts",
+    "src/app/helpers/onboarding-navigation.helper.spec.ts",
     "src/app/helpers/pace-axis.helper.spec.ts",
     "src/app/helpers/personal-metric-range.helper.spec.ts",
     "src/app/helpers/plan-generation.helper.spec.ts",
@@ -238,6 +240,7 @@
     "src/app/utils/app.user.utilities.spec.ts"
   ],
   "dom": [
+    "src/app/components/onboarding/terrain/onboarding-terrain.renderer.spec.ts",
     "src/app/firebase/firestore-http-response-guard.spec.ts",
     "src/app/helpers/assistant-message-format.helper.spec.ts",
     "src/app/helpers/dashboard-chart-layout.helper.spec.ts",

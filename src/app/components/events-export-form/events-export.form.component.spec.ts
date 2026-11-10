@@ -21,6 +21,9 @@ import {
   DataActivityTypes,
   DataDistance,
   DataDuration,
+  DataAscent,
+  DataDescent,
+  ElevationUnits,
   DataSpeed,
   DataSpeedAvg,
   DataPaceAvg,
@@ -205,6 +208,21 @@ describe('EventsExportFormComponent', () => {
 
     const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
+  });
+
+  it.each([
+    [DistanceUnits.Kilometers, ElevationUnits.Meters, '"30 m","15 m"'],
+    [DistanceUnits.Miles, ElevationUnits.Meters, '"30 m","15 m"'],
+    [DistanceUnits.Kilometers, ElevationUnits.Feet, '"100 ft","50 ft"'],
+    [DistanceUnits.Miles, ElevationUnits.Feet, '"100 ft","50 ft"'],
+  ] as const)('exports elevation in %s / %s preferences without changing source stats', async (distanceUnits, elevationUnits, expected) => {
+    component.user.settings.unitSettings = { ...component.user.settings.unitSettings, distanceUnits, elevationUnits };
+    const ascent = new DataAscent(30.48), descent = new DataDescent(15.24);
+    vi.spyOn(component.events[0], 'getStat').mockImplementation(type => type === DataAscent.type ? ascent : type === DataDescent.type ? descent : null);
+    component.exportFromGroup.patchValue({ ascent: true, descent: true });
+    await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    await expect(readBlobText(mockFileService.downloadFile.mock.calls[0][0])).resolves.toBe(`Ascent,Descent\r\n${expected}\r\n`);
+    expect(ascent.getValue()).toBe(30.48); expect(descent.getValue()).toBe(15.24);
   });
 
   it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])(

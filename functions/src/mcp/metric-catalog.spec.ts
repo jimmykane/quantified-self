@@ -9,6 +9,7 @@ import {
   DataDepthAvg,
   DataDepthAvgFeet,
   DataDistance,
+  ElevationUnits,
   DataDiveAscentRateAvg,
   DataDiveAscentRateAvgFeetPerSecond,
   DataGroundContactTimePercentage,
@@ -30,6 +31,7 @@ import {
   UnitSystem,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
 import {
   buildSportsLibNumericMetricCatalog,
   getSportsLibNumericMetricCatalog,
@@ -40,6 +42,17 @@ import {
 } from './metric-catalog';
 
 describe('MCP Sports Lib metric catalog', () => {
+  it('retains canonical metre catalog and persisted values under a feet display preference', () => {
+    for (const Metric of [DataStore.DataAltitude, DataStore.DataAscent, DataStore.DataDescent]) {
+      const display = DynamicDataLoader.getUnitBasedDataFromDataInstance(new Metric(30.48), normalizeUserUnitSettings({ elevationUnits: ElevationUnits.Feet }))[0];
+      expect(display.getDisplayUnit()).toBe('ft');
+      expect(resolveSportsLibNumericMetric(Metric.type)).toMatchObject({ type: Metric.type, unit: 'm', unitSystem: 'metric' });
+      const json = JSON.parse(JSON.stringify(display));
+      expect(json).toEqual({ [Metric.type]: 30.48 });
+      expect(projectSportsLibNumericMetricValue(Metric.type, json[Metric.type])).toBe(30.48);
+      expect(resolveAvailableSportsLibMetrics([json]).map(item => item.type)).toContain(Metric.type);
+    }
+  });
   it.each([
     [DataStore.DataDistanceMiles.type, 'mi'],
     [DataStore.DataGNSSDistanceMiles.type, 'mi'],

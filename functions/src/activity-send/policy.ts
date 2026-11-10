@@ -19,8 +19,9 @@ export function sendIdentifier(value: unknown): string {
   return value;
 }
 export function decodeSendFile(input: Buffer, filename: string): Buffer {
-  if (!input.length || input.length > ACTIVITY_SEND_LIMITS.fileBytes || !/\.fit(?:\.gz)?$/i.test(filename)) {
-    const reason = !input.length ? 'empty_body' : input.length > ACTIVITY_SEND_LIMITS.fileBytes ? 'file_too_large' : 'unsupported_extension';
+  if (!input.length) throw new SendFileValidationError('empty_body', 0, 'No file data was received. Download the file to this device and select it again.');
+  if (input.length > ACTIVITY_SEND_LIMITS.fileBytes || !/\.fit(?:\.gz)?$/i.test(filename)) {
+    const reason = input.length > ACTIVITY_SEND_LIMITS.fileBytes ? 'file_too_large' : 'unsupported_extension';
     throw new SendFileValidationError(reason, input.length, 'Choose a FIT or FIT.gz file up to 20 MiB.');
   }
   let fit: Buffer;

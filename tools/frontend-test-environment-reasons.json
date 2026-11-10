@@ -39,6 +39,10 @@
     "environment": "angular",
     "reason": "Compiles dashboard and tray offer templates with Material controls, reactive permission/preference state, async click handling, account changes and haptics."
   },
+  "src/app/components/onboarding/terrain/onboarding-terrain.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify theme effects, afterNextRender lazy initialization, reduced motion, Material pause/play bindings, one haptic owner, fallback states and DestroyRef cleanup."
+  },
   "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Today rest-day indicator with TestBed to verify owner-fenced signal inputs, shared plan reads, date changes, Material navigation, haptic ownership and destruction cleanup."

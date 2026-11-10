@@ -131,7 +131,7 @@ export class BenchmarkBottomSheetComponent {
   }
 
   copyBenchmarkSummary(): void {
-    const copied = this.benchmarkReviewService.copySummary(this.data.result, this.benchmarkReviewTags);
+    const copied = this.benchmarkReviewService.copySummary(this.data.result, this.benchmarkReviewTags, this.data.unitSettings);
     this.snackBar.open(copied ? 'Benchmark summary copied.' : 'Could not copy benchmark summary.', undefined, { duration: 2500 });
   }
 

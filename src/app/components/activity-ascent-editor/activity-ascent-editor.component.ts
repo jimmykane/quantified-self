@@ -7,7 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { type User } from '@sports-alliance/sports-lib';
+import { DataAltitude, ElevationUnits, type User } from '@sports-alliance/sports-lib';
 import { MAX_ACTIVITY_ASCENT_METERS, validActivityAscent, activityElevationMetric, type ActivityElevationMetric } from '@shared/activity-ascent';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { ActivityAscentService, type ActivityAscentRow } from '../../services/activity-ascent.service';
@@ -37,7 +37,16 @@ export class ActivityAscentEditorComponent implements OnInit {
   readonly loading = signal(true);
   readonly busy = signal(false);
   readonly error = signal('');
-  readonly max = MAX_ACTIVITY_ASCENT_METERS;
+  private readonly elevationUnits = this.data.user.settings?.unitSettings?.elevationUnits === ElevationUnits.Feet
+    ? ElevationUnits.Feet : ElevationUnits.Meters;
+  private toDisplay(value: number | null): number | null {
+    return value === null ? null : new DataAltitude(value, this.elevationUnits).getDisplayNumericValue();
+  }
+  private canonicalValue(): number | null {
+    const value = this.value();
+    return typeof value !== 'number' || !Number.isFinite(value) ? null : DataAltitude.fromDisplayValue(value, this.elevationUnits).getValue();
+  }
+  readonly max = this.toDisplay(MAX_ACTIVITY_ASCENT_METERS);
   readonly unit = computed(() => resolveUnitAwareDisplayFromValue(activityElevationMetric(this.metric()).type, 1, this.data.user.settings?.unitSettings)?.unit ?? '');
   readonly sourceText = computed(() => {
     const row = this.selected();
@@ -46,7 +55,7 @@ export class ActivityAscentEditorComponent implements OnInit {
       ? resolveUnitAwareDisplayFromValue(activityElevationMetric(this.metric()).type, source, this.data.user.settings?.unitSettings)?.text ?? 'Unavailable' : 'Unavailable';
   });
   readonly canSave = computed(() => !!this.selected() && !this.loading() && !this.busy()
-    && (this.reset() || (validActivityAscent(this.value()) && this.value() !== this.selected()?.value)));
+    && (this.reset() || (validActivityAscent(this.canonicalValue()) && this.value() !== this.toDisplay(this.selected()?.value ?? null))));
   private generation = 0;
 
   constructor() {
@@ -65,7 +74,7 @@ export class ActivityAscentEditorComponent implements OnInit {
       const rows = await this.service.load(this.data.user.uid, this.data.eventId, this.metric());
       if (this.destroyRef.destroyed || generation !== this.generation) return;
       const selected = rows.find(row => row.id === selectedId) ?? rows[0];
-      this.rows.set(rows); this.selectedId.set(selected?.id ?? ''); this.value.set(selected?.value ?? null);
+      this.rows.set(rows); this.selectedId.set(selected?.id ?? ''); this.value.set(this.toDisplay(selected?.value ?? null));
     } catch (error) {
       if (!this.destroyRef.destroyed && generation === this.generation)
         this.error.set(error instanceof Error ? error.message : 'Could not load elevation.');
@@ -79,12 +88,12 @@ export class ActivityAscentEditorComponent implements OnInit {
   select(id: string): void {
     const row = this.rows().find(item => item.id === id);
     if (!row || this.busy() || id === this.selectedId()) return;
-    this.haptics.selection(); this.selectedId.set(id); this.value.set(row.value); this.reset.set(false); this.error.set('');
+    this.haptics.selection(); this.selectedId.set(id); this.value.set(this.toDisplay(row.value)); this.reset.set(false); this.error.set('');
   }
   restore(): void {
     const row = this.selected();
     if (!row?.correction || this.busy() || this.reset()) return;
-    this.haptics.selection(); this.reset.set(true); this.value.set(row.correction.sourceValue);
+    this.haptics.selection(); this.reset.set(true); this.value.set(this.toDisplay(row.correction.sourceValue));
   }
   edit(value: number | null): void { this.value.set(value); this.reset.set(false); }
   close(): void { if (this.busy()) return; this.haptics.selection(); this.generation++; this.ref.close(); }
@@ -94,7 +103,7 @@ export class ActivityAscentEditorComponent implements OnInit {
     this.haptics.selection(); this.busy.set(true); this.error.set(''); this.ref.disableClose = true;
     const generation = this.generation;
     try {
-      const saved = await this.service.save(this.data.user.uid, this.data.eventId, row, this.reset() ? null : this.value(), this.metric());
+      const saved = await this.service.save(this.data.user.uid, this.data.eventId, row, this.reset() ? null : this.canonicalValue(), this.metric());
       if (this.destroyRef.destroyed || generation !== this.generation) return;
       this.haptics.success(); this.ref.close(saved);
     } catch (error) {

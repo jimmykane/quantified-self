@@ -578,8 +578,20 @@ export const HELP_SECTIONS: HelpSection[] = [
     content: `## Start in three steps
 
 1. Sign in with an email magic link, Google, or GitHub.
-2. Complete onboarding and accept the required policies.
+2. Choose what you want to do first, then review the required account policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
+
+On your first sign-in, choose **Compare recordings**, **Connect my watch**, **Upload an activity file**, or **Let me look around**. For a quick introduction to the app, choose **Explore QS**. **Skip the intro** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
+
+Choose **Pause motion** for a still landscape or **Play motion** to animate it. The illustration starts still when your device requests reduced motion.
+
+Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. You can change your starting point or preferences before finishing. Your starting point is kept when you reload or return from checkout.
+
+**Start free or connect your watch.** Starter is free and includes manual uploads and comparisons; provider connections require Pro. General setup shows the available plans after you save your preferences. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.
+
+**Just comparing files?** Enter through [Compare](/tools/compare), or choose **Compare recordings** during setup. You’ll review your account policies without the tour, watch setup, or pricing step. Choose **Continue free** to open Compare, or **Open Compare** if you already have a paid membership. Your existing plan stays the same. Uploads and new comparisons use your activity allowance. Opening a Saved comparisons link takes you back to that list after setup. Add two or more recordings of the same workout; benchmark reports need recordings that overlap in time. Available measurements depend on your files. After you save a comparison, **Explore more of QS** opens Getting Started help.
+
+After setup, **Connect my watch** opens **Connections**, where you choose a service and review its permissions. **Upload an activity file** opens **Dashboard**; choose **Upload** to select your file. **Let me look around** also opens Dashboard so you can add data later.
 
 The sync guides' **Start Setup** action opens Connections. If sign-in or onboarding is required, complete it and choose **Continue to Connections** to resume setup. Provider connections require Pro. Opening setup does not connect a provider or enable automatic sync; you choose those actions in Connections.
 
@@ -1537,7 +1549,7 @@ After the provider confirms processing failed, **Stop unsent activities** is als
 
 Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent. Accepted uploads keep their existing status checks; unknown acceptance never triggers an automatic replacement upload.
 
-- **Local files:** up to 50 FIT or FIT.gz recordings per batch, at most **20 MiB compressed and expanded per file**, and **200 MiB** temporary storage per account. The private temporary copy is not added to your QS activity archive. Course files belong in the route tools. Reselect the same file after a failed, cancelled or timed-out transfer to resume the draft; remove incomplete rows if needed, then **Review prepared activities**. Removing a row takes it out of the draft immediately; temporary storage cleanup continues in the background and retries if needed. Start a new send to add a file you removed.
+- **Local files:** up to 50 FIT or FIT.gz recordings per batch, at most **20 MiB compressed and expanded per file**, and **200 MiB** temporary storage per account. The private temporary copy is not added to your QS activity archive. Course files belong in the route tools. If the file cannot be read or no file data is received, download it to this device and select it again. Reselect the same file after a failed, cancelled or timed-out transfer to resume the draft; remove incomplete rows if needed, then **Review prepared activities**. Removing a row takes it out of the draft immediately; temporary storage cleanup continues in the background and retries if needed. Start a new send to add a file you removed.
 - **Saved activities:** choose **Send to service** on an owned activity or the dashboard selection toolbar, or choose sources and dates in the workspace. Dates use your local calendar days. Retained, readable FIT originals are checked before sending; excluded or deleted originals, merged activities, unsupported sources and previous deliveries are explained in the review. If the preview is interrupted, reopen the draft and choose **Continue saved-activity preview**; it keeps your original selection. A temporary file-read failure pauses the preview without excluding the recording; continue when checking becomes available again. A range with no eligible recordings explains that result. Changing sources or dates requires a new reviewed draft.
 - **Durable results:** a confirmed batch continues when you navigate away, reload or close the browser. **Queued**, **Sending**, **Waiting for provider**, **Delivered**, **Already exists or queued**, **Stopped**, and **Needs action** describe each recording. Finished includes exclusions and failures; it is not a success count. **Delivery details** retain recorded send attempts and processing retries across explicit retries. The file transfer percentage measures bytes, while provider processing has no invented percentage.
 - **Recovery:** use **Review connection** for connection problems and **Check status** for an accepted upload. **Retry sending** appears only after the provider confirms processing failed. **Resume sending** can restart an activity that never began sending after you restore Pro or reconnect the same account. The review shows the sending deadline; stopped or expired batches require a new send, while accepted uploads can still be checked and draft files removed. Unknown acceptance requires checking the provider before sending another copy. Reconnecting a different destination account requires a new draft.
@@ -1810,9 +1822,15 @@ The section summaries reflect your current choices, including unsaved edits. Ope
 edits. A **Save changes** bar appears when you make changes and stays available as you scroll; it applies edits
 across all sections. Failed saves keep your choices so you can retry. Privacy & emails is immediately before Account.
 
+**Elevation** independently selects metres or feet for altitude, ascent and descent across charts, summaries, calendars
+and tables. Kilometre and mile presets choose metres and feet respectively; **Customize units** can mix either elevation
+unit with either distance choice. Existing accounts keep metres until they change it. The ascent/descent editor accepts
+the selected unit and converts it back to metres when saved. Original recordings and stored activity values are unchanged.
+Vertical speed keeps its own rate preference.
+
 **Units & formatting** contains the unit preset, regional format, and start of week. Select **Customize units** to
-change individual preferences such as weight or swim pace. Mixed choices are labelled **Custom unit choices**.
-Choosing a preset replaces the individual distance, speed, pace, swim pace, and vertical speed choices; weight,
+change individual preferences such as elevation, weight or swim pace. Mixed choices are labelled **Custom unit choices**.
+Choosing a preset replaces the individual distance, elevation, speed, pace, swim pace, and vertical speed choices; weight,
 week start, and regional format remain independent. Presets require **Save changes**. Your name and identity details are in **Account**;
 custom watermark text is in **Charts**. Account deletion remains separate at the bottom of Account.
 

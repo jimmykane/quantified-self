@@ -705,7 +705,8 @@ describe('ToolsComparePageComponent', () => {
     expect(hapticsServiceMock.warning).toHaveBeenCalled();
   });
 
-  it('directs a newly signed-in user with no saved profile to account setup before accepting files', async () => {
+  it.each([false, true])('preserves the comparison destination during account setup (saved first: %s)', async savedFirst => {
+    Object.defineProperty(component, 'showSavedComparisonsFirst', { value: savedFirst });
     profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
     userSubject.next(new User('user-1'));
     fixture.detectChanges();
@@ -714,17 +715,46 @@ describe('ToolsComparePageComponent', () => {
     const input = fixture.nativeElement.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input.disabled).toBe(true);
     const setupButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
-      .find(button => button.textContent?.includes('Complete account setup'));
+      .find(button => button.textContent?.includes('Finish account setup'));
     expect(setupButton).toBeTruthy();
     setupButton.click();
     await fixture.whenStable();
 
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
-      queryParams: { returnUrl: '/tools/compare' },
+      queryParams: { returnUrl: savedFirst ? '/tools/compare/saved' : '/tools/compare' },
     });
-    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    // The shell owns selection feedback for route navigation.
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
     expect(hapticsServiceMock.success).not.toHaveBeenCalled();
     expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+  });
+
+  it('offers optional QS help after a saved comparison and navigates only when selected', async () => {
+    userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    fixture.detectChanges();
+    const exploreButton = () => (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
+      .find(button => button.textContent?.includes('Explore more of QS'));
+    expect(exploreButton()).toBeUndefined();
+    component.comparisons.set([makeComparisonEvent('first-comparison')]);
+    fixture.detectChanges();
+    expect(exploreButton()).toBeTruthy();
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+    exploreButton()!.click();
+    await fixture.whenStable();
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/help'], { fragment: 'getting-started' });
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
+  it('shows file-specific guidance when recordings are selected', async () => {
+    userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Add two or more recordings of the same workout');
+    expect(fixture.nativeElement.textContent).not.toContain('For benchmark reports, choose recordings that overlap in time.');
+    component.selectedFiles.set([new File(['a'], 'watch.fit'), new File(['b'], 'reference.fit')]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('For benchmark reports, choose recordings that overlap in time.');
   });
 
   it('does not upload or stage files for a missing profile even if the disabled controls are bypassed', async () => {
