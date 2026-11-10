@@ -367,6 +367,7 @@ describe('Firebase Hosting configuration', () => {
     // Today customization help explains Add metrics, Save/Cancel and the three-block starter (2026-11-09).
     // Today Recovery is opt-in for profiles without an explicit saved choice (2026-11-10).
     // Today editor availability explains per-metric periods and keeps missing-data choices usable (2026-11-10).
+    // Missing calculated values are distinct from an active availability refresh (2026-11-10).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
   });

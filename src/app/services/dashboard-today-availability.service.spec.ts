@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { WeightUnits } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppUserInterface } from '../models/app-user.interface';
@@ -33,13 +34,29 @@ describe('Today editor evidence lifecycle', () => {
   const open = () => { const service = TestBed.inject(DashboardTodayAvailabilityService); service.connect(user); TestBed.flushEffects(); return service; };
   it('checks all candidate metrics with one shared scope, read-only snapshot access and no preference writes', () => {
     const service = open();
-    expect(derived.watch).toHaveBeenCalledExactlyOnceWith(user, { metricKinds: ['form', 'form_now', 'ramp_rate', 'recovery_now'], reportReadErrors: true });
+    expect(derived.watch).toHaveBeenCalledExactlyOnceWith({ uid: 'owner' }, { metricKinds: ['form', 'form_now', 'ramp_rate', 'recovery_now'], reportReadErrors: true });
     expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
     expect(optional.connect.mock.calls.at(-1)?.[1].metrics).toHaveLength(11);
     service.connect(user); TestBed.flushEffects();
     expect(derived.watch).toHaveBeenCalledTimes(1);
     expect(derived.ensureForDashboard).not.toHaveBeenCalled();
     expect(user.settings.dashboardSettings.today).toBeUndefined();
+  });
+  it('uses updated same-owner source pins and units without restarting Sleep or snapshot readers', () => {
+    open();
+    const updated = { ...user, settings: { ...user.settings,
+      unitSettings: { ...user.settings.unitSettings, weightUnits: WeightUnits.Pounds },
+      appSettings: { ...user.settings.appSettings, healthWorkspace: { metricSources: { body_weight: 'new-weight-source' } } },
+    } } as AppUserInterface;
+    users.user.set(updated); TestBed.flushEffects();
+    expect(optional.connect.mock.calls.at(-1)?.[0]).toBe(updated);
+    expect(derived.watch).toHaveBeenCalledTimes(1); expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
+    users.user.set({ ...updated, settings: { ...updated.settings,
+      dashboardSettings: { ...updated.settings.dashboardSettings, today: { version: 1, trainingState: true,
+        readiness: true, recovery: false, suggestion: false, metrics: ['load'] } },
+    } }); TestBed.flushEffects();
+    expect(derived.watch).toHaveBeenCalledTimes(1); expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
   });
   it('keeps failures separate from empty results and receives shared optional metric updates', () => {
     const service = open();

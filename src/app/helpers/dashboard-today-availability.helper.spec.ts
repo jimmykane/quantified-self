@@ -59,6 +59,31 @@ describe('Today selector data availability', () => {
     expect(buildDashboardTodayAvailability({ ...input(), derived: active }).recovery.hasData).toBe(true);
     expect(buildDashboardTodayAvailability({ ...input(), nowMs: nowMs + 3_600_001, derived: active }).recovery.hasData).toBe(false);
     expect(buildDashboardTodayAvailability({ ...input(), derived: { ...active, recoveryNowStatus: 'stale' } }).recovery.state).toBe('updating');
-    expect(buildDashboardTodayAvailability({ ...input(), derived: { ...derived, formStatus: 'failed' } }).trainingState.state).toBe('error');
+    expect(buildDashboardTodayAvailability({ ...input(), derived: { ...derived, formNowStatus: 'failed' } }).trainingState)
+      .toMatchObject({ state: 'error', hasData: true, label: 'Some data unavailable' });
+  });
+  it('does not let an unused Form snapshot override ready compact load evidence', () => {
+    const availability = buildDashboardTodayAvailability({ ...input(), derived: { ...derived, formStatus: 'failed' } });
+    expect(availability.trainingState.state).toBe('ready');
+    expect(availability.load.state).toBe('ready');
+    expect(availability.readiness.state).toBe('ready');
+  });
+  it('uses the ready Form series while a failed compact Form fallback is unused', () => {
+    const formPoints = [{ time: Date.UTC(2026, 10, 10), trainingStressScore: 10, activityCount: 1,
+      ctl: 10, atl: 8, formSameDay: 2, formPriorDay: 0 }];
+    const availability = buildDashboardTodayAvailability({ ...input(), derived: {
+      ...derived, formPoints, formNow: null, formNowStatus: 'failed',
+    } });
+    expect(availability.trainingState.state).toBe('ready');
+    expect(availability.load.state).toBe('ready');
+    expect(availability.readiness.state).toBe('ready');
+  });
+  it('distinguishes missing calculated data from a calculation that is actually updating', () => {
+    const missing = { ...derived, formNow: null, formNowStatus: 'missing' as const,
+      rampRate: null, rampRateStatus: 'missing' as const, recoveryNowStatus: 'missing' as const };
+    expect(buildDashboardTodayAvailability({ ...input(), derived: missing }).load)
+      .toMatchObject({ state: 'no-data', hasData: false, label: 'Not calculated yet' });
+    expect(buildDashboardTodayAvailability({ ...input(), derived: missing }).recovery.state).toBe('no-data');
+    expect(buildDashboardTodayAvailability({ ...input(), derived: { ...missing, formNowStatus: 'building' } }).load.state).toBe('updating');
   });
 });

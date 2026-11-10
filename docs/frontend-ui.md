@@ -375,7 +375,10 @@ load/recovery snapshots. They never ensure/rebuild snapshots or generate a sugge
 restart checks; closing the editor or changing accounts releases its listeners and aborts pending Health reads. A minute
 clock updates expiry and the local activity day. Recorded zero is available evidence; the displayed zero for an empty
 activity day is not. Missing data never disables a choice. Status text describes its checkbox and wraps below the
-reorder controls at narrow widths. Dashboard charts and picker previews resolve snapshot kinds through
+reorder controls at narrow widths. Missing snapshots say **Not calculated yet**, rather than implying an active update.
+Availability follows the same ready Form-series/compact-snapshot precedence as Today, ignoring unused fallback errors.
+Health checks use the current profile's source pins, units and ascent settings while the editor is open; same-owner
+profile updates do not restart the Sleep or training snapshot readers. Dashboard charts and picker previews resolve snapshot kinds through
 `dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
 must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
 The manager waits for its overlay to finish closing before opening Customize Today, restores focus after the editor

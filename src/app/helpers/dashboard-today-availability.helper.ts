@@ -24,10 +24,10 @@ const noData = (label: string) => availability('no-data', label);
 
 function derivedAvailability(statuses: readonly DashboardDerivedMetricStatus[], hasData: boolean,
   emptyLabel: string): DashboardChartAvailability {
-  if (statuses.includes('failed')) return availability('error', 'Could not check data', hasData);
+  if (statuses.includes('failed')) return availability('error', hasData ? 'Some data unavailable' : 'Could not check data', hasData);
   if (statuses.some(isDerivedMetricPendingStatus)) return availability('updating', 'Updating data…', hasData);
   if (hasData) return ready();
-  if (statuses.includes('missing')) return availability('updating', 'Waiting for calculated data');
+  if (statuses.includes('missing')) return noData('Not calculated yet');
   return noData(emptyLabel);
 }
 
@@ -60,8 +60,12 @@ export function buildDashboardTodayAvailability(input: {
     formNow: training.formNow, rampRate: training.rampRate,
     sleepTrend: input.sleepStatus === 'ready' ? input.sleep : null, nowMs: input.nowMs,
   });
-  const statuses = derived ? training.formNowFromSeries && training.rampRateFromSeries
-    ? [derived.formStatus] : [derived.formStatus, derived.formNowStatus, derived.rampRateStatus] : [];
+  // Only the snapshots actually used by Today can affect its availability. A ready
+  // Form series can supply Form even before it contains a seven-day ramp comparison.
+  const statuses = derived ? [
+    training.formNowFromSeries ? derived.formStatus : derived.formNowStatus,
+    training.rampRateFromSeries ? derived.formStatus : derived.rampRateStatus,
+  ] : [];
   if (derived) {
     result.trainingState = derivedAvailability(statuses, !!training.state.label, 'No training data yet');
     result.load = derivedAvailability(statuses, finite(context?.form) || finite(context?.rampRate), 'No load data yet');
