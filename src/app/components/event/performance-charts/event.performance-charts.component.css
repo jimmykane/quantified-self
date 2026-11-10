@@ -6,9 +6,14 @@
 }
 
 .performance-charts-container {
+  --event-section-header-padding: 0;
   display: block;
   width: 100%;
 }
+
+.performance-disclosure { min-height: 44px; flex-shrink: 0; }
+.performance-disclosure-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.performance-disclosure-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
 
 .performance-charts-tabs {
   width: 100%;

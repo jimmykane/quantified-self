@@ -239,6 +239,7 @@ export interface AppEventDetailsSettingsInterface {
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
+    showPerformanceCharts?: boolean;
     eventLineContinuity?: import('../helpers/event-chart-line-continuity.helper').EventLineContinuitySettings;
     theme?: ChartThemes;
     fillOpacityVersion?: number;

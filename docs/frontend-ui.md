@@ -999,6 +999,17 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
+`EventPerformanceChartsComponent` uses the shared Event section header with a surface-free **Show/Hide charts**
+Material button. `chartSettings.showPerformanceCharts` is an optional account preference: only explicit `false`
+collapses the section, preserving the visible default for existing accounts. The signed-in viewer owns this preference,
+including while viewing another owner's shared activity; anonymous viewers use transient local state and never write
+owner settings. The existing chart-settings writer saves only this field and checks the expected viewer ID. Accepted
+changes own one selection haptic, pending saves disable repeat clicks and show progress, failures restore the saved
+state with an error notice, and stale completions after account changes are ignored. Hydration stays silent.
+Collapsed content retains its `aria-controls` target but unmounts the chart children and missing-output notice. Showing
+charts restores the active performance tab. Dive Profile, R–R & HRV, ordinary charts, the map and Training impact keep
+their independent behavior. This changes presentation only, without metric calculations, activity writes or MCP impact.
+
 `BenchmarkRRComponent` is shared by ordinary workouts, explicit multisport merges and benchmarks. Event Details
 mounts it after the performance/dive charts only when a selected activity has valid saved R–R statistics or an original
 IBI stream with usable timing metadata. The panel independently filters to those same eligible recordings; no-data

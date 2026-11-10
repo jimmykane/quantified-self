@@ -1,8 +1,12 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, input, signal } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, User } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 
 type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
+let nextContentId = 0;
 
 @Component({
   selector: 'app-event-performance-charts',
@@ -12,6 +16,65 @@ type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePowe
   standalone: false,
 })
 export class EventPerformanceChartsComponent {
+  readonly viewer = input<User | null>(null);
+  readonly contentId = `event-performance-charts-${nextContentId++}`;
+  private readonly settings = inject(AppUserSettingsQueryService);
+  private readonly haptics = inject(AppHapticsService);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly visibilityOverride = signal<{ viewerID: string | null; shown: boolean } | null>(null);
+  private readonly pendingSave = signal<{ viewerID: string; shown: boolean } | null>(null);
+  readonly saving = computed(() => !!this.pendingSave() && this.pendingSave()?.viewerID === this.viewer()?.uid);
+  readonly expanded = computed(() => {
+    const viewerID = this.viewer()?.uid ?? null;
+    const override = this.visibilityOverride();
+    return override?.viewerID === viewerID ? override.shown
+      : !viewerID || this.settings.chartSettings()?.showPerformanceCharts !== false;
+  });
+  private selectedTab: PerformanceTabId | null = null;
+
+  constructor() {
+    effect(() => {
+      const viewerID = this.viewer()?.uid ?? null;
+      const override = this.visibilityOverride();
+      if (override && override.viewerID !== viewerID) this.visibilityOverride.set(null);
+      const pending = this.pendingSave();
+      if (pending && pending.viewerID !== viewerID) this.pendingSave.set(null);
+      if (viewerID && !this.saving() && override?.viewerID === viewerID
+        && override.shown === (this.settings.chartSettings()?.showPerformanceCharts !== false)) {
+        this.visibilityOverride.set(null);
+      }
+    });
+  }
+
+  async toggleExpanded(): Promise<void> {
+    if (this.destroyRef.destroyed || this.saving() || !this.availableTabs.length) return;
+    const viewerID = this.viewer()?.uid ?? null;
+    const shown = !this.expanded();
+    this.visibilityOverride.set({ viewerID, shown });
+    this.haptics.selection();
+    // Anonymous viewers can collapse their view without writing the shared owner's settings.
+    if (!viewerID) return;
+    const request = { viewerID, shown };
+    this.pendingSave.set(request);
+    const stillCurrent = () => !this.destroyRef.destroyed && this.pendingSave() === request && this.viewer()?.uid === viewerID;
+    try {
+      await this.settings.updateChartSettings({ showPerformanceCharts: shown }, { force: true, expectedUserID: viewerID });
+      if (stillCurrent()) this.haptics.success();
+    } catch {
+      if (stillCurrent()) {
+        this.visibilityOverride.set(null);
+        this.haptics.error();
+        this.snackBar.open('Could not save performance chart visibility. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (this.pendingSave() === request) this.pendingSave.set(null);
+    }
+  }
+
+  get selectedTabIndex(): number { return Math.max(0, this.availableTabs.indexOf(this.selectedTab)); }
+  selectTab(index: number): void { this.selectedTab = this.availableTabs[index] ?? null; }
+
   @Input() activities: ActivityInterface[] = [];
   @Input() darkTheme = false;
   @Input() useAnimations = false;

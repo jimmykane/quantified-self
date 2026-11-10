@@ -42,6 +42,12 @@ describe('help.content', () => {
       '**Next period** stops at the current window', 'arrows cannot navigate into future periods']) expect(content).toContain(phrase);
     expect(content).not.toContain('**View → Training log**');
   });
+  it('explains remembered performance chart visibility without hiding other event sections', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const text of ['**Performance charts** has a **Hide charts** / **Show charts** button',
+      'remembered across activities and devices', 'Charts start visible until you hide them',
+      'R–R & HRV keep their own visibility', 'anonymous shared link', 'previous saved visibility returns']) expect(content).toContain(text);
+  });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
     const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',

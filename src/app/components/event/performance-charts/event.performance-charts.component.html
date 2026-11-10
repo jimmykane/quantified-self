@@ -1,4 +1,20 @@
 <div class="performance-charts-container">
+  @if (availableTabs.length) {
+  <app-event-section-header icon="monitoring" title="Performance charts">
+    <button mat-button type="button" class="performance-disclosure" [disabled]="saving()"
+      [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
+      [attr.aria-label]="expanded() ? 'Hide performance charts' : 'Show performance charts'" (click)="toggleExpanded()">
+      <span class="performance-disclosure-content">
+        <span>{{ expanded() ? 'Hide charts' : 'Show charts' }}</span>
+        <span class="performance-disclosure-icon">
+          @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
+          @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
+        </span>
+      </span>
+    </button>
+  </app-event-section-header>
+  <div [id]="contentId" [hidden]="!expanded()">
+  @if (expanded()) {
   @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
   <section class="performance-durability-notice" aria-label="Durability unavailable">
     <mat-icon aria-hidden="true">info_outline</mat-icon>
@@ -9,7 +25,7 @@
   </section>
   }
   @if (shouldShowTabs) {
-  <mat-tab-group class="performance-charts-tabs">
+  <mat-tab-group class="performance-charts-tabs" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectTab($event)">
     @for (tab of availableTabs; track tab) {
     <mat-tab [aria-label]="getTabLabel(tab)">
       <ng-template mat-tab-label>
@@ -66,5 +82,8 @@
   </app-event-cadence-power>
   }
   }
+  }
+  }
+  </div>
   }
 </div>
