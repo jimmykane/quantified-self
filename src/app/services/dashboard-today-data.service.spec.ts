@@ -69,12 +69,12 @@ describe('Today optional data', () => {
     const service = TestBed.inject(DashboardTodayDataService);
     service.connect(user, settings(['weight']), '2026-11-09');
     await Promise.resolve(); await Promise.resolve();
-    expect(service.metrics().weight).toMatchObject({ status: 'empty', detail: 'No weigh-in from your selected source' });
+    expect(service.metrics().weight).toMatchObject({ status: 'empty', detail: 'No weigh-in recorded for the selected source' });
     service.connect(user, settings([]), '2026-11-09');
     health.loadLatestMeasurement.mockRejectedValueOnce(new Error('Firestore unavailable'));
     service.connect(user, settings(['weight']), '2026-11-09');
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    expect(service.metrics().weight).toMatchObject({ status: 'error', detail: 'Couldn’t load weight' });
+    expect(service.metrics().weight).toMatchObject({ status: 'error', detail: 'Unable to load weight' });
   });
   it('ignores an old Health result after the configured metric is removed', async () => {
     let resolve!: (value: { results: []; complete: boolean }) => void;

@@ -101,12 +101,12 @@ export class DashboardTodayEditorComponent {
     {
       id: 'recovery',
       label: 'Recovery left',
-      detail: 'Your latest recovery estimate, separate from Readiness.',
+      detail: 'Estimated recovery time remaining. Does not affect Readiness.',
     },
     {
       id: 'suggestion',
       label: 'Today’s suggestion',
-      detail: 'Pro · A daily workout suggestion from the Assistant.',
+      detail: 'Daily workout suggestion from the Assistant. Available with Pro.',
     },
   ] as const;
   constructor() {
@@ -189,7 +189,7 @@ export class DashboardTodayEditorComponent {
     this.draft.set(defaults);
     this.selected.set(this.rows(defaults.metrics));
     void this.announcer.announce(
-      'Default layout selected. Save changes to apply.'
+      'Default layout selected. Select Save changes to apply it.'
     );
   }
   cancel(): void {
@@ -225,8 +225,8 @@ export class DashboardTodayEditorComponent {
         return;
       this.error.set(
         error instanceof DashboardConfigurationConflict
-          ? 'Your dashboard changed elsewhere. Close this window and reopen Customize Today before saving.'
-          : 'Couldn’t save Today. Your changes are still here. Please try again.'
+          ? 'Your dashboard settings have changed. Reopen Customize Today and make your selections again.'
+          : 'Unable to save your Today settings. Your selections have been retained. Please try again.'
       );
       this.haptics.error();
     } finally {

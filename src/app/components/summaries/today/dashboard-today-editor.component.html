@@ -2,12 +2,12 @@
   <h2 mat-dialog-title>Customize Today</h2>
   <div mat-dialog-content class="today-editor-content">
     <p>
-      Choose what appears in Today. Hiding individual metrics won’t change
-      Readiness.
+      Choose the information shown in Today. Your selections do not affect
+      Readiness calculations.
     </p>
-    <p class="today-editor-hint">Data checks use each metric’s own period. You can select items without data.</p>
+    <p class="today-editor-hint">Data availability is shown for each metric. You can select metrics without data.</p>
     <h3>Summaries</h3>
-    <p class="today-editor-hint">Larger panels, shown above your metrics.</p>
+    <p class="today-editor-hint">Detailed summaries displayed above the metrics.</p>
     @for (block of summaries; track block.id) {
       <div class="today-editor-available">
       <mat-checkbox
@@ -22,7 +22,7 @@
     }
     <h3>Metrics</h3>
     <p class="today-editor-hint">
-      Shown in this order. Drag a handle or use the arrows to reorder.
+      Drag a handle or use the arrows to change the display order.
     </p>
     <div
       cdkDropList
@@ -75,7 +75,7 @@
         </div>
       } @empty {
         <p class="today-editor-hint">
-          No metrics selected. Add one from the list below.
+          No metrics are selected. Choose a metric from the list below.
         </p>
       }
     </div>
@@ -83,7 +83,7 @@
       <h4>Add metrics</h4>
     }
     <p class="today-editor-hint">
-      Activity totals cover today across all sports.
+      Activity totals include all sports recorded today.
     </p>
     @for (metric of catalog; track metric.id) {
       @if (!draft().metrics.includes(metric.id)) {
@@ -100,7 +100,7 @@
         </div>
       }
     }
-    <h3>Extras</h3>
+    <h3>Additional information</h3>
     @for (block of context; track block.id) {
       <div class="today-editor-available">
         <mat-checkbox
@@ -125,7 +125,7 @@
       Restore defaults
     </button>
     <p class="today-editor-hint">
-      Defaults show Training state, Readiness and Load. Save to apply.
+      Defaults: Training state, Readiness and Load. Select Save changes to apply.
     </p>
   </div>
   @if (error()) {

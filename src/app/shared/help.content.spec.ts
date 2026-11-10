@@ -1768,7 +1768,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Recovery left** is off by default');
     expect(gettingStartedSection?.content).toContain('Data indicators beside selected and available metrics');
     expect(gettingStartedSection?.content).toContain('You can select a metric without data');
-    expect(gettingStartedSection?.content).toContain('**Not calculated yet** means a calculated value is not available yet');
+    expect(gettingStartedSection?.content).toContain('**Not calculated yet** means that no calculated value is available');
   });
 
   it('should document My Tracks trip sorting and the inferred Home entry', () => {

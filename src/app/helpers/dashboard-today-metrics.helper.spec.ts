@@ -23,8 +23,8 @@ describe('Today activity metrics', () => {
   });
   it('distinguishes partial totals from a completed day with missing metric values', () => {
     const partial = buildTodayActivityMetrics([event('run', { Distance: 1000 })], false);
-    expect(partial.activities).toMatchObject({ value: '1', status: 'error', detail: 'Partial activity count' });
-    expect(partial.distance).toMatchObject({ status: 'error', detail: 'Partial total · 1 activity' });
+    expect(partial.activities).toMatchObject({ value: '1', status: 'error', detail: 'Incomplete activity count' });
+    expect(partial.distance).toMatchObject({ status: 'error', detail: 'Incomplete total · 1 activity' });
     expect(partial.tss).toMatchObject({ value: '—', status: 'error', detail: 'Activity data is incomplete for today' });
     expect(buildTodayActivityMetrics([event('missing')], true).tss).toMatchObject({ status: 'empty', detail: 'No value recorded today' });
     expect(buildTodayActivityMetrics([], true).activities.detail).toBe('No activities recorded today');
@@ -32,7 +32,7 @@ describe('Today activity metrics', () => {
   it('uses canonical units and existing elevation exclusions', () => {
     const run = event('run', { Distance: 10_000, Ascent: 100 });
     expect(buildTodayActivityMetrics([run], true, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })).distance.value).toBe('6.22 mi');
-    expect(buildTodayActivityMetrics([run], true, null, { removeAscentForEventTypes: [ActivityTypes.Running] }).ascent).toMatchObject({ value: '—', detail: 'Ascent excluded by your settings' });
+    expect(buildTodayActivityMetrics([run], true, null, { removeAscentForEventTypes: [ActivityTypes.Running] }).ascent).toMatchObject({ value: '—', detail: 'Ascent is excluded in your settings' });
   });
   it('counts metadata without constructing metrics and avoids hidden metric reads', () => {
     const run = event('run', { [DataDistance.type]: 1000 });

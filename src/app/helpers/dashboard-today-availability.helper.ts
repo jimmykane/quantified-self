@@ -18,13 +18,13 @@ export type TodayAvailabilitySnapshots = Pick<DashboardDerivedMetricsState,
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const availability = (state: DashboardChartAvailability['state'], label: string, hasData = false,
   reason = ''): DashboardChartAvailability => ({ state, label, hasData, reason });
-const ready = () => availability('ready', 'Ready with your data', true);
+const ready = () => availability('ready', 'Data available', true);
 const loading = () => availability('loading', 'Checking data…');
 const noData = (label: string) => availability('no-data', label);
 
 function derivedAvailability(statuses: readonly DashboardDerivedMetricStatus[], hasData: boolean,
   emptyLabel: string): DashboardChartAvailability {
-  if (statuses.includes('failed')) return availability('error', hasData ? 'Some data unavailable' : 'Could not check data', hasData);
+  if (statuses.includes('failed')) return availability('error', hasData ? 'Partial data available' : 'Unable to load data', hasData);
   if (statuses.some(isDerivedMetricPendingStatus)) return availability('updating', 'Updating data…', hasData);
   if (hasData) return ready();
   if (statuses.includes('missing')) return noData('Not calculated yet');
@@ -46,7 +46,7 @@ export function buildDashboardTodayAvailability(input: {
     if (!metric || metric.status === 'loading') continue;
     const hasData = metric.hasData ?? metric.status === 'ready';
     result[id] = metric.status === 'error'
-      ? availability('error', hasData ? 'Some data unavailable' : 'Could not check data', hasData, metric.detail)
+      ? availability('error', hasData ? 'Partial data available' : 'Unable to load data', hasData, metric.detail)
       : hasData ? ready() : noData(metric.detail);
   }
   const derived = input.derived;
@@ -67,29 +67,29 @@ export function buildDashboardTodayAvailability(input: {
     training.rampRateFromSeries ? derived.formStatus : derived.rampRateStatus,
   ] : [];
   if (derived) {
-    result.trainingState = derivedAvailability(statuses, !!training.state.label, 'No training data yet');
-    result.load = derivedAvailability(statuses, finite(context?.form) || finite(context?.rampRate), 'No load data yet');
+    result.trainingState = derivedAvailability(statuses, !!training.state.label, 'No training data');
+    result.load = derivedAvailability(statuses, finite(context?.form) || finite(context?.rampRate), 'No training load data');
     result.recovery = derivedAvailability([derived.recoveryNowStatus],
       derived.recoveryNowStatus === 'ready' && (resolveRemainingRecoverySeconds(derived.recoveryNow, input.nowMs) ?? 0) > 0,
       'No active recovery estimate');
   }
   if (input.sleepStatus === 'error') {
-    result.sleep = result.hrv = result['overnight-hr'] = result.readiness = availability('error', 'Could not check sleep data');
+    result.sleep = result.hrv = result['overnight-hr'] = result.readiness = availability('error', 'Unable to load sleep data');
     return result;
   }
   if (input.sleepStatus === 'loading') return result;
   const sleepDay = buildDashboardTodaySleepStatus(context?.latestSleepAtMs, { nowMs: input.nowMs });
   const sleepReading = () => sleepDay.awaitingSleep
-    ? availability('history', 'Last available night', true, sleepDay.contextText) : ready();
+    ? availability('history', 'Earlier sleep data available', true, sleepDay.contextText) : ready();
   result.sleep = finite(context?.sleepScore) || finite(context?.sleepDurationSeconds)
-    ? sleepReading() : noData('No eligible sleep reading');
+    ? sleepReading() : noData('No recent sleep data');
   const hrv = context?.hrvPersonalRange;
   result.hrv = finite(hrv?.currentAverage) ? ready() : hrv
-    ? availability('history', 'Needs more HRV history', true) : noData('No current HRV reading');
+    ? availability('history', 'More HRV history required', true) : noData('No current HRV reading');
   result['overnight-hr'] = finite(context?.averageHeartRateBpm) || finite(context?.minimumHeartRateBpm)
     ? sleepReading() : noData('No overnight heart rate reading');
   if (derived) result.readiness = sleepDay.awaitingSleep
     ? availability('no-data', 'Awaiting today’s sleep')
-    : derivedAvailability(statuses, finite(context?.score), 'Not enough readiness data');
+    : derivedAvailability(statuses, finite(context?.score), 'More data required for Readiness');
   return result;
 }

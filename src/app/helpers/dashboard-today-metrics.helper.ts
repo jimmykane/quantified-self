@@ -54,7 +54,7 @@ export function buildTodayActivityMetrics(
           hasData: unique.length > 0,
           value: number.format(unique.length),
           detail: !complete
-            ? 'Partial activity count'
+            ? 'Incomplete activity count'
             : unique.length
               ? 'Today · all sports'
               : 'No activities recorded today',
@@ -100,11 +100,11 @@ export function buildTodayActivityMetrics(
         : null;
     let detail = 'Today · all sports';
     if (!complete) {
-      detail = display ? `Partial total · ${number.format(count)} ${count === 1 ? 'activity' : 'activities'}` : 'Activity data is incomplete for today';
+      detail = display ? `Incomplete total · ${number.format(count)} ${count === 1 ? 'activity' : 'activities'}` : 'Activity data is incomplete for today';
     } else if (!display) {
       const ascentExcluded = id === 'ascent' && elevation.families.length > 0
         && elevation.families.every(family => family.metrics.ascent.eligibleEventCount === 0);
-      detail = ascentExcluded ? 'Ascent excluded by your settings' : 'No value recorded today';
+      detail = ascentExcluded ? 'Ascent is excluded in your settings' : 'No value recorded today';
     } else if (knownEmpty) {
       detail = 'No activities recorded today';
     } else if (count !== unique.length) {

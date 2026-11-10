@@ -60,14 +60,14 @@ describe('Customize Today', () => {
     expect(evidence.connect).toHaveBeenCalledExactlyOnceWith(user);
     expect(host.querySelector('#today-data-weight')?.textContent).toContain('Checking data');
     evidence.availability.update(current => ({ ...current,
-      load: { state: 'ready', hasData: true, label: 'Ready with your data', reason: '' },
+      load: { state: 'ready', hasData: true, label: 'Data available', reason: '' },
       weight: { state: 'no-data', hasData: false, label: 'No weigh-in recorded', reason: '' },
-      steps: { state: 'error', hasData: false, label: 'Could not check data', reason: '' },
-      hrv: { state: 'history', hasData: true, label: 'Needs more HRV history', reason: '' },
+      steps: { state: 'error', hasData: false, label: 'Unable to load data', reason: '' },
+      hrv: { state: 'history', hasData: true, label: 'More HRV history required', reason: '' },
     }));
     fixture.detectChanges();
     expect(host.querySelector('#today-data-load')?.getAttribute('data-state')).toBe('ready');
-    expect(host.querySelector('#today-data-hrv')?.textContent).toContain('Needs more HRV history');
+    expect(host.querySelector('#today-data-hrv')?.textContent).toContain('More HRV history required');
     expect(host.querySelector('#today-data-steps')?.getAttribute('data-state')).toBe('error');
     const weight = host.querySelector<HTMLInputElement>('#today-metric-weight input')!;
     expect(weight.getAttribute('aria-describedby')).toContain('today-data-weight');
@@ -160,7 +160,7 @@ describe('Customize Today', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('[role="alert"]')
         ?.textContent
-    ).toContain('Your dashboard changed elsewhere.');
+    ).toContain('Your dashboard settings have changed.');
     expect(user.settings.dashboardSettings.today).toBeUndefined();
     expect(haptics.success).not.toHaveBeenCalled();
     expect(haptics.error).toHaveBeenCalledTimes(1);
@@ -185,7 +185,7 @@ describe('Customize Today', () => {
     expect(editor.isDefault()).toBe(true);
     expect(save().disabled).toBe(false);
     expect(fixture.nativeElement.textContent).toContain(
-      'Defaults show Training state, Readiness and Load.'
+      'Defaults: Training state, Readiness and Load.'
     );
     const count = haptics.selection.mock.calls.length;
     editor.reset();
@@ -230,7 +230,7 @@ describe('Customize Today', () => {
     const error = (fixture.nativeElement as HTMLElement).querySelector(
       '[role="alert"]'
     );
-    expect(error?.textContent).toContain('Your changes are still here.');
+    expect(error?.textContent).toContain('Your selections have been retained.');
     expect(error?.closest('.today-editor-content')).toBeNull();
     expect(error?.textContent).not.toContain('Firebase');
     expect(editor.hasChanges()).toBe(true);

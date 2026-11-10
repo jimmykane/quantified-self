@@ -135,7 +135,7 @@ export class DashboardTodayDataService {
                     id,
                     {
                       value: '—',
-                      detail: 'Activities unavailable',
+                      detail: 'Unable to load activities',
                       status: 'error',
                     },
                   ])
@@ -231,13 +231,13 @@ export class DashboardTodayDataService {
                 ? [display.value, display.unit].filter(Boolean).join(' ')
                 : '—',
               detail: selected
-                ? `${selected.series.sourceLabel} · ${date}${value.complete ? '' : ' · Some history unavailable'}`
+                ? `${selected.series.sourceLabel} · ${date}${value.complete ? '' : ' · Some history is unavailable'}`
                 : !value.complete
-                  ? 'Some readings unavailable'
+                  ? 'Some readings are unavailable'
                   : preferred
                     ? id === 'weight'
-                      ? 'No weigh-in from your selected source'
-                      : 'No steps from your selected source today'
+                      ? 'No weigh-in recorded for the selected source'
+                      : 'No step count recorded for the selected source today'
                     : id === 'weight'
                       ? 'No weigh-in recorded'
                       : 'No steps recorded today',
@@ -252,8 +252,8 @@ export class DashboardTodayDataService {
                 value: '—',
                 detail:
                   id === 'weight'
-                    ? 'Couldn’t load weight'
-                    : 'Couldn’t load steps',
+                    ? 'Unable to load weight'
+                    : 'Unable to load steps',
                 status: 'error',
               },
             });

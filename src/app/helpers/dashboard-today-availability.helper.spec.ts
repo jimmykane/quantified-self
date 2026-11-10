@@ -34,7 +34,7 @@ describe('Today selector data availability', () => {
     expect(buildDashboardTodayAvailability({ ...input(), sleep: buildDashboardSleepTrendContext([night(3)]) }).sleep.hasData).toBe(false);
   });
   it('uses HRV evidence independently of a sleep score or provider connection', () => {
-    expect(buildDashboardTodayAvailability(input()).hrv.label).toBe('Needs more HRV history');
+    expect(buildDashboardTodayAvailability(input()).hrv.label).toBe('More HRV history required');
     const history = Array.from({ length: 20 }, (_, index) => night(index));
     expect(buildDashboardTodayAvailability({ ...input(), sleep: buildDashboardSleepTrendContext(history) }).hrv.state).toBe('ready');
     const noVitals = buildDashboardSleepTrendContext([night(0, {})]);
@@ -46,12 +46,12 @@ describe('Today selector data availability', () => {
     const availability = buildDashboardTodayAvailability({ ...input(), metrics: {
       ascent: { value: '0 m', detail: 'Today', status: 'ready', hasData: true },
       steps: { value: '0', detail: 'Today', status: 'ready', hasData: true },
-      weight: { value: '—', detail: 'No weigh-in from your selected source', status: 'empty', hasData: false },
-      tss: { value: '10', detail: 'Partial total', status: 'error', hasData: true },
+      weight: { value: '—', detail: 'No weigh-in recorded for the selected source', status: 'empty', hasData: false },
+      tss: { value: '10', detail: 'Incomplete total', status: 'error', hasData: true },
     } });
     expect(availability.ascent.state).toBe('ready'); expect(availability.steps.hasData).toBe(true);
     expect(availability.weight.label).toContain('selected source');
-    expect(availability.tss).toMatchObject({ state: 'error', hasData: true, label: 'Some data unavailable' });
+    expect(availability.tss).toMatchObject({ state: 'error', hasData: true, label: 'Partial data available' });
   });
   it('checks active recovery and derived state without exposing stale or expired estimates as ready', () => {
     expect(buildDashboardTodayAvailability(input()).recovery.state).toBe('no-data');
@@ -60,7 +60,7 @@ describe('Today selector data availability', () => {
     expect(buildDashboardTodayAvailability({ ...input(), nowMs: nowMs + 3_600_001, derived: active }).recovery.hasData).toBe(false);
     expect(buildDashboardTodayAvailability({ ...input(), derived: { ...active, recoveryNowStatus: 'stale' } }).recovery.state).toBe('updating');
     expect(buildDashboardTodayAvailability({ ...input(), derived: { ...derived, formNowStatus: 'failed' } }).trainingState)
-      .toMatchObject({ state: 'error', hasData: true, label: 'Some data unavailable' });
+      .toMatchObject({ state: 'error', hasData: true, label: 'Partial data available' });
   });
   it('does not let an unused Form snapshot override ready compact load evidence', () => {
     const availability = buildDashboardTodayAvailability({ ...input(), derived: { ...derived, formStatus: 'failed' } });

@@ -44,7 +44,7 @@ export class DashboardTodayEditorService {
       if (isCurrent()) {
         this.logger.error('[DashboardTodayEditor] Failed to open editor', error);
         this.snackBar.open(
-          'Couldn’t open Customize Today. Please try again.',
+          'Unable to open Customize Today. Please try again.',
           'Dismiss',
           { duration: 6000 }
         );

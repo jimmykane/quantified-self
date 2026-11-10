@@ -8,16 +8,16 @@ export const DASHBOARD_TODAY_METRICS: readonly {
   label: string;
   detail: string;
 }[] = [
-  { id: 'load', label: 'Load', detail: 'Form and your weekly fitness change' },
+  { id: 'load', label: 'Load', detail: 'Training balance and 7-day fitness change' },
   {
     id: 'sleep',
     label: 'Sleep',
-    detail: 'Recent sleep score and duration',
+    detail: 'Latest sleep score and duration',
   },
   {
     id: 'hrv',
     label: 'HRV',
-    detail: '7-day average compared with your usual range',
+    detail: '7-day heart rate variability average and usual range',
   },
   {
     id: 'overnight-hr',
@@ -27,7 +27,7 @@ export const DASHBOARD_TODAY_METRICS: readonly {
   {
     id: 'weight',
     label: 'Weight',
-    detail: 'Latest weigh-in, with its date and source',
+    detail: 'Most recent weigh-in, including its date and source',
   },
   {
     id: 'tss',
@@ -37,17 +37,17 @@ export const DASHBOARD_TODAY_METRICS: readonly {
   {
     id: 'ascent',
     label: 'Ascent',
-    detail: 'Elevation gained during activities',
+    detail: 'Total elevation gained in today’s activities',
   },
   {
     id: 'duration',
     label: 'Activity duration',
-    detail: 'Total recorded activity time',
+    detail: 'Total duration of today’s activities',
   },
   {
     id: 'distance',
     label: 'Distance',
-    detail: 'Total recorded activity distance',
+    detail: 'Total distance covered in today’s activities',
   },
   {
     id: 'activities',
@@ -57,7 +57,7 @@ export const DASHBOARD_TODAY_METRICS: readonly {
   {
     id: 'steps',
     label: 'Steps',
-    detail: 'Today’s step count, using your source choice in Health',
+    detail: 'Today’s step count from your selected Health source',
   },
 ];
 const ids = new Set(DASHBOARD_TODAY_METRICS.map((item) => item.id));

@@ -370,7 +370,8 @@ Steps displays the recorded calendar day independently of the daily interval's e
 its date still follows the account's regional formatting preference. Weight retains its actual measurement timestamp.
 Opening the editor starts one read-only availability scope for all candidate metrics. Selected and available rows use
 the dashboard manager's availability states, with text and icons for ready, checking, missing, updating, history and
-failed reads. These checks reuse Today’s activity and Health readers, the same eligible Sleep evidence and four existing
+failed reads. User-facing labels use concise, formal wording such as **Data available**, **Partial data available** and
+**More HRV history required**. These checks reuse Today’s activity and Health readers, the same eligible Sleep evidence and four existing
 load/recovery snapshots. They never ensure/rebuild snapshots or generate a suggestion. Selection and ordering do not
 restart checks; closing the editor or changing accounts releases its listeners and aborts pending Health reads. A minute
 clock updates expiry and the local activity day. Recorded zero is available evidence; the displayed zero for an empty
