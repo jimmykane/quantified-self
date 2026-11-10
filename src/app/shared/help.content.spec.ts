@@ -38,7 +38,8 @@ describe('help.content', () => {
       'same compact activity table', 'recorded-activity counts for partial coverage',
       'merged comparisons stay out of totals', 'unavailable value stays blank',
       'preset name for the current period', 'dates for shifted or custom ranges',
-      '**Custom dates** always shows its explicit dates', 'current preset button’s tooltip']) expect(content).toContain(phrase);
+      '**Custom dates** always shows its explicit dates', 'current preset button’s tooltip',
+      '**Next period** stops at the current window', 'arrows cannot navigate into future periods']) expect(content).toContain(phrase);
     expect(content).not.toContain('**View → Training log**');
   });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {

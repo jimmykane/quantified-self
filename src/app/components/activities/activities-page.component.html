@@ -29,7 +29,7 @@
         <div event-table-filters class="activity-explorer-filters">
           <app-table-date-filter [options]="periods" [value]="period()" customValue="custom" allValue="all"
             [rangeForm]="customDateForm" [startDate]="rangeDates()?.startDate || null" [endDate]="rangeDates()?.endDate || null"
-            [disabled]="loading()" [navigation]="true" [navigationEnabled]="!!historyRange()" [currentPeriod]="isCurrentPeriod()"
+            [disabled]="loading()" [navigation]="true" [navigationEnabled]="!!historyRange()" [nextPeriodEnabled]="nextPeriodEnabled()" [currentPeriod]="isCurrentPeriod()"
             (rangeShift)="navigateRange($event)" (currentPeriodRequested)="goToCurrentPeriod()"
             (selectionChange)="selectPeriod($event)" (applied)="applyCustomRange()" (cancelled)="cancelCustomRange()"
             (cleared)="clearCustomRange()" (calendarOpened)="onCustomPickerOpened()"></app-table-date-filter>

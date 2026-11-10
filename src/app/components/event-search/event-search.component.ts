@@ -91,6 +91,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public customRangeOpen = false;
   public toolbarRangePreset: ActivityDateRangePreset = 'month';
   public toolbarNavigationEnabled = false;
+  public toolbarNextPeriodEnabled = false;
   public toolbarIsCurrentPeriod = false;
   public toolbarRangeStart: Date | null = null;
   public toolbarRangeEnd: Date | null = null;
@@ -345,9 +346,9 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (this.isLoading) return;
     const navigation = this.resolveToolbarNavigation();
     const range = this.resolveToolbarRange();
-    const next = range && shiftActivityDateRange(navigation.preset, range, direction);
-    if (!next) return;
     const current = currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek);
+    const next = range && shiftActivityDateRange(navigation.preset, range, direction, current);
+    if (!next) return;
     const anchor = navigation.preset === 'custom' || sameActivityDateRange(next, current) ? null : activityDateRangeAnchor(navigation.preset, next);
     this.setToolbarRange({ preset: navigation.preset, anchor }, next);
     this.hapticsService?.selection();
@@ -390,7 +391,9 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.toolbarNavigationEnabled = !!range;
     this.toolbarRangeStart = range?.start ?? null;
     this.toolbarRangeEnd = range ? new Date(+range.end - 1) : null;
-    this.toolbarIsCurrentPeriod = !navigation.anchor && sameActivityDateRange(range, currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek));
+    const current = currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek);
+    this.toolbarIsCurrentPeriod = !navigation.anchor && sameActivityDateRange(range, current);
+    this.toolbarNextPeriodEnabled = !!range && !!shiftActivityDateRange(navigation.preset, range, 1, current);
   }
 
   onToolbarPickerOpened(): void { this.hapticsService?.selection(); }

@@ -85,8 +85,10 @@ export function resolveActivityDateRange(
   return undefined;
 }
 
-export function shiftActivityDateRange(preset: ActivityDateRangePreset, range: ActivityDateRangeWindow, direction: -1 | 1): ActivityDateRangeWindow | undefined {
+/** An optional latest window caps forward navigation without shortening its calendar-day length. */
+export function shiftActivityDateRange(preset: ActivityDateRangePreset, range: ActivityDateRangeWindow, direction: -1 | 1, latestRange?: ActivityDateRangeWindow | null): ActivityDateRangeWindow | undefined {
   if (preset === 'all' || !Number.isFinite(+range.start) || !Number.isFinite(+range.end) || range.end <= range.start) return undefined;
+  if (direction === 1 && latestRange && range.end >= latestRange.end) return undefined;
   let start: Date, end: Date;
   if (preset === 'year' || preset === 'calendar-month') {
     start = new Date(range.start); end = new Date(range.end);
@@ -97,6 +99,7 @@ export function shiftActivityDateRange(preset: ActivityDateRangePreset, range: A
     start = addDays(range.start, direction * days); end = addDays(range.end, direction * days);
   }
   start.setHours(0, 0, 0, 0); end.setHours(0, 0, 0, 0);
+  if (direction === 1 && latestRange && end > latestRange.end) return latestRange;
   return Number.isFinite(+start) && Number.isFinite(+end) && start.getFullYear() >= 0 && end.getFullYear() <= 10000 ? { start, end } : undefined;
 }
 

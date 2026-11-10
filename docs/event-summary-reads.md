@@ -131,7 +131,9 @@ bounded windows. The shared `activity-date-range.helper.ts` uses exclusive local
 steps for 7/30/90-day and custom windows, and complete calendar weeks/months/years. Custom dates are inclusive.
 DST changes never change a window's calendar-day count. The date control shows the preset name for a live current
 window and explicit dates for shifted or custom windows. Covered dates remain in the current preset's tooltip and
-accessible name. Current period restores the matching present window. Each destination boundary resolves its own
+accessible name. Next period stops at the matching current window and is disabled there or on fixed/future windows
+that end at or beyond it. An off-cycle historical step lands on the current window without shortening its duration.
+Current period restores the matching present window. Each destination boundary resolves its own
 start of day, including time zones where DST skips midnight; the source day's normalized hour must not carry into
 another date. All dates keeps the controls disabled and retains its existing confirmation.
 

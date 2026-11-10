@@ -85,6 +85,12 @@ export class ActivitiesPageComponent implements OnInit {
   readonly rangeDates = computed(() => { const range = this.historyRange(); return range ? activityRangeDates(range) : null; });
   readonly isCurrentPeriod = computed(() => !this.rangeAnchor() && sameActivityDateRange(this.historyRange(), currentActivityDateRange(
     this.period(), new Date(this.localDayStartMs()), this.historyRange(), this.user()?.settings?.unitSettings?.startOfTheWeek)));
+  readonly nextPeriodEnabled = computed(() => {
+    const range = this.historyRange();
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    return !!range && !!shiftActivityDateRange(this.period(), range, 1, current);
+  });
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
   readonly customDateForm = new FormGroup({
@@ -222,12 +228,12 @@ export class ActivitiesPageComponent implements OnInit {
   navigateRange(direction: -1 | 1): void {
     if (this.loading() || !this.user() || this.owner !== this.auth.currentUser) return;
     const range = this.historyRange();
-    const next = range && shiftActivityDateRange(this.period(), range, direction);
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    const next = range && shiftActivityDateRange(this.period(), range, direction, current);
     if (!next) return;
     if (this.period() === 'custom') this.customDates.set(activityRangeDates(next));
     else {
-      const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
-        this.user()?.settings?.unitSettings?.startOfTheWeek);
       this.rangeAnchor.set(sameActivityDateRange(next, current) ? null : activityDateRangeAnchor(this.period(), next));
     }
     this.loadHistory(true);

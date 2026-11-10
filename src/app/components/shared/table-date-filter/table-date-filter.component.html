@@ -17,7 +17,7 @@
   }
   </div>
   @if (navigation()) {
-    <button mat-icon-button type="button" class="table-date-period-step" aria-label="Next period" [disabled]="disabled() || !navigationEnabled()" (click)="shiftRange(1)"><mat-icon>chevron_right</mat-icon></button>
+    <button mat-icon-button type="button" class="table-date-period-step" aria-label="Next period" [disabled]="disabled() || !navigationEnabled() || currentPeriod() || !nextPeriodEnabled()" (click)="shiftRange(1)"><mat-icon>chevron_right</mat-icon></button>
     <button mat-button type="button" class="table-date-current-period" [disabled]="disabled() || !navigationEnabled() || currentPeriod()" (click)="showCurrentPeriod()">Current period</button>
   }
 

@@ -109,6 +109,22 @@ describe('TableDateFilterComponent', () => {
       expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.selected).not.toHaveBeenCalled();
     });
 
+  it.each(['current', 'fixed-current-or-future'])('keeps older navigation available but ignores Next for a %s window', async kind => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true);
+    c.fixture.componentRef.setInput('currentPeriod', kind === 'current');
+    c.fixture.componentRef.setInput('nextPeriodEnabled', kind === 'current');
+    await c.settle();
+    const shift = vi.fn(); c.fixture.componentInstance.rangeShift.subscribe(shift);
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+    c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click();
+    c.fixture.componentInstance.shiftRange(1);
+    expect(shift).not.toHaveBeenCalled();
+    c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
+    expect(shift).toHaveBeenCalledExactlyOnceWith(-1);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('keeps the date menu available while disabling navigation for an unbounded range', async () => {
     const c = await setup();
     c.fixture.componentRef.setInput('navigation', true);

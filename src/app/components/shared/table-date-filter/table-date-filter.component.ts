@@ -36,6 +36,7 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   readonly disabled = input(false);
   readonly navigation = input(false);
   readonly navigationEnabled = input(true);
+  readonly nextPeriodEnabled = input(true);
   readonly currentPeriod = input(false);
   readonly rangeShift = output<-1 | 1>();
   readonly currentPeriodRequested = output<void>();
@@ -72,7 +73,9 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   private applyClicked = false;
 
   shiftRange(direction: -1 | 1): void {
-    if (!this.disabled() && this.navigation() && this.navigationEnabled()) this.rangeShift.emit(direction);
+    if (this.disabled() || !this.navigation() || !this.navigationEnabled()) return;
+    if (direction === 1 && (this.currentPeriod() || !this.nextPeriodEnabled())) return;
+    this.rangeShift.emit(direction);
   }
 
   showCurrentPeriod(): void {

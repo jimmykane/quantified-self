@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Activity-table Help covers current preset names, shifted/custom dates and range navigation (2026-11-10).
+// Activity-table Help covers current preset names and navigation capped at the current window (2026-11-10).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);

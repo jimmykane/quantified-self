@@ -272,6 +272,9 @@ describe('ActivitiesPageComponent', () => {
       expect(c.component.isCurrentPeriod()).toBe(true);
       expect(dateButton.textContent).toContain(preset === 'custom' ? dateFilter.rangeLabel() : c.component.periodLabel());
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+      expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+      c.component.navigateRange(1); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
       expect(c.component.selectedTags()).toEqual(['Endurance']);
       expect(c.haptics.selection).toHaveBeenCalledTimes(2);
       c.params$.next(convertToParamMap(saved)); await render(c);
@@ -279,6 +282,25 @@ describe('ActivitiesPageComponent', () => {
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
       vi.setSystemTime(new Date(2026, 10, 11, 12)); c.component.refreshLocalDay(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each(['week', 'custom'] as const)('caps an off-cycle %s range at today and blocks further forward requests', async preset => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const c = await setup();
+      c.params$.next(convertToParamMap({ period: preset, ...(preset === 'custom'
+        ? { start: '2026-11-03', end: '2026-11-09' } : { anchor: '2026-11-09' }) }));
+      await render(c); c.haptics.selection.mockClear();
+      expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(false);
+      c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click(); await render(c);
+      expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: '2026-11-04', endDate: '2026-11-10' });
+      expect(c.component.rangeAnchor()).toBeNull();
+      expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      c.component.navigateRange(1); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(c.haptics.selection).toHaveBeenCalledOnce();
     } finally { vi.useRealTimers(); }
   });
 

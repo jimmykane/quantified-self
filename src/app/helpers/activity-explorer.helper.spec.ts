@@ -9,6 +9,29 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
 });
 
 describe('Activity explorer date-range filters', () => {
+  it.each(['week', 'month', 'quarter', 'calendar-week', 'calendar-month', 'year', 'custom'] as const)(
+    'caps %s forward navigation at its current window, including fixed current and future ranges', preset => {
+      const today = new Date(2026, 10, 10);
+      const current = resolveActivityDateRange(preset, today, { startDate: '2026-11-03', endDate: '2026-11-10' }, 0)!;
+      const previous = shiftActivityDateRange(preset, current, -1, current)!;
+      expect(shiftActivityDateRange(preset, previous, 1, current)).toEqual(current);
+      expect(shiftActivityDateRange(preset, current, 1, current)).toBeUndefined();
+      const future = shiftActivityDateRange(preset, current, 1)!;
+      expect(shiftActivityDateRange(preset, future, 1, current)).toBeUndefined();
+      expect(shiftActivityDateRange(preset, future, -1, current)).toEqual(current);
+    });
+  it.each(['week', 'month', 'quarter', 'custom'] as const)(
+    'lands an off-cycle %s window on the current period instead of overshooting it across DST', preset => {
+      const previousTimezone = process.env.TZ; process.env.TZ = 'Europe/Helsinki';
+      try {
+        const today = new Date(2026, 9, 26);
+        const range = resolveActivityDateRange(preset, today, { startDate: '2026-10-19', endDate: '2026-10-25' }, 1, '2026-10-25')!;
+        const current = currentActivityDateRange(preset, today, range)!;
+        expect(shiftActivityDateRange(preset, range, 1, current)).toEqual(current);
+        expect(activityRangeDates(current).endDate).toBe('2026-10-26');
+        expect(shiftActivityDateRange(preset, current, 1, current)).toBeUndefined();
+      } finally { if (previousTimezone === undefined) delete process.env.TZ; else process.env.TZ = previousTimezone; }
+    });
   it.each([['week', 7], ['month', 30], ['quarter', 90]] as const)('steps %s windows by their complete calendar-day length', (preset, days) => {
     const current = resolveActivityDateRange(preset, new Date(2026, 10, 10))!;
     const previous = shiftActivityDateRange(preset, current, -1)!;
