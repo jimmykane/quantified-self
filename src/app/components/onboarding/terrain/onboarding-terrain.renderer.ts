@@ -147,10 +147,13 @@ export function createTerrainRenderer(
       disposed = false,
       rendered = false;
     let reduced = options.reducedMotion;
-    // A single, bounded camera glide makes the depth visible without an idle loop.
+    // The entry glide eases into a small, seamless orbit rather than coming to rest.
     const entryDuration = 4500;
+    const driftDuration = 42000;
     let entryTime = reduced ? entryDuration : 0;
+    let driftTime = 0;
     let lastTime: number | undefined;
+    let lastPaint = -Infinity;
     let pointerX = 0,
       pointerY = 0,
       currentX = 0,
@@ -170,9 +173,11 @@ export function createTerrainRenderer(
       if (disposed || !visible || document.hidden) return;
       const dt = lastTime === undefined ? 0 : Math.max(0, time - lastTime);
       lastTime = time;
-      if (!reduced && entryTime < entryDuration) {
+      if (!reduced) {
         entryTime = Math.min(entryDuration, entryTime + dt);
-        dirty = true;
+        driftTime = (driftTime + dt) % driftDuration;
+        // Passive scenery needs only 30 paints per second; pointer input remains responsive.
+        if (time - lastPaint >= 1000 / 30 - 0.5) dirty = true;
       }
       const dx = pointerX - currentX,
         dy = pointerY - currentY;
@@ -186,14 +191,17 @@ export function createTerrainRenderer(
       if (dirty) {
         const progress = entryTime / entryDuration;
         const entryOffset = 1 - progress * progress * (3 - 2 * progress);
+        const phase = driftTime / driftDuration * Math.PI * 2;
+        const drift = Math.sin(phase);
         camera.position.set(
-          baseCamera.x + currentX - entryOffset * 2.2,
-          baseCamera.y + currentY + entryOffset * 0.22,
-          baseCamera.z + entryOffset * 0.45
+          baseCamera.x + currentX - entryOffset * 2.2 + drift * 1.2,
+          baseCamera.y + currentY + entryOffset * 0.22 + drift * 0.08,
+          baseCamera.z + entryOffset * 0.45 + (1 - Math.cos(phase)) * 0.2
         );
         camera.lookAt(target);
         try {
           renderer.render(scene, camera);
+          lastPaint = time;
         } catch {
           unavailable();
           return;
@@ -204,8 +212,7 @@ export function createTerrainRenderer(
           options.onReady();
         }
       }
-      // After the entry glide, the scenery rests between pointer interactions.
-      if ((!reduced && entryTime < entryDuration) || settling) schedule();
+      if (!reduced || settling) schedule();
     }
     function resize() {
       if (disposed) return;
@@ -260,14 +267,17 @@ export function createTerrainRenderer(
       if (disposed || reduced) return;
       cancel();
       entryTime = 0;
+      driftTime = 0;
       dirty = true;
       schedule();
     }
     function setReducedMotion(reduce: boolean) {
       if (disposed) return;
+      cancel();
       reduced = reduce;
       if (reduced) {
         entryTime = entryDuration;
+        driftTime = 0;
         pointerX = pointerY = currentX = currentY = 0;
         dirty = true;
       }

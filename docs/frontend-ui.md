@@ -81,13 +81,14 @@ occlusion, with no quantitative axes, tooltips or input data contract.
 Light and dark scenes follow `AppThemeService`. Material tokens control text and the blend into the card;
 the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
 procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
-A 4.5-second camera glide introduces depth on first display and when entering the optional intro, then
-the landscape rests with gentle pointer panning. Entering the intro replays the glide on the existing
-renderer so time spent on the starting-point screen cannot consume the intro's movement.
-There is no playback control or repeating idle loop. Touch input disables pointer panning; reduced-motion
-preferences disable both the entry glide and panning. Enabling reduced motion resets the camera and ends
-the entry glide without replaying it. Rendering runs for the initial glide, theme/size changes and pointer
-settling, and suspends offscreen and in hidden tabs without advancing the glide while hidden. Destroying the view releases frames, GPU
+A 4.5-second camera glide introduces depth on first display and when entering the optional intro, blending
+into a subtle continuous camera orbit with a 42-second cycle. Entering the intro replays the glide on the
+existing renderer so time spent on the starting-point screen cannot consume the intro's movement.
+Passive animation paints at up to 30 fps; pointer panning, theme and size changes can repaint immediately.
+There is no playback control. Touch input disables pointer panning; reduced-motion preferences disable
+all camera motion. Enabling reduced motion centers the camera and ends the entry glide without replaying
+it; disabling it resumes only the slow drift. Rendering suspends offscreen and in hidden tabs without
+advancing either animation while hidden. Destroying the view releases frames, GPU
 resources, listeners and observers, and a late module response cannot initialize a destroyed view.
 Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
 loss. Onboarding stays usable in all cases.

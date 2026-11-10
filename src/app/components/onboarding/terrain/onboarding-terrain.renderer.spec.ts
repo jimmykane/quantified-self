@@ -146,63 +146,76 @@ describe('onboarding terrain renderer lifecycle', () => {
     }));
   }
 
-  it('settles pointer parallax and does not keep repainting an idle scene', () => {
+  it('layers pointer parallax over the drift and returns to the same orbit after leaving', () => {
     options.reducedMotion = false;
     create();
     frame();
     const camera = graphics.render.mock.lastCall![1];
-    for (let i = 0; i < 300; i++) frame();
+    frame(frameTime + 4500);
     const initial = camera.position.clone();
-    expect(frames.size).toBe(0);
+    const initialTime = frameTime;
     move();
     frame();
-    expect(camera.position.x).toBeGreaterThan(initial.x);
-    expect(frames.size).toBe(1);
+    expect(camera.position.y - initial.y).toBeGreaterThan(0.01);
     for (let i = 0; i < 200; i++) frame();
-    expect(frames.size).toBe(0);
-    const count = graphics.render.mock.calls.length;
-    frame();
-    expect(graphics.render).toHaveBeenCalledTimes(count);
     stage.dispatchEvent(new Event('pointerleave'));
     for (let i = 0; i < 200; i++) frame();
+    frame(initialTime + 42000);
     expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
-    expect(frames.size).toBe(0);
+    expect(frames.size).toBe(1);
   });
 
   it('ignores touch parallax and resets the camera when reduced motion is enabled', () => {
-    options.reducedMotion = false;
     const controller = create();
     frame();
     const camera = graphics.render.mock.lastCall![1];
-    for (let i = 0; i < 300; i++) frame();
+    const still = camera.position.clone();
+    controller.setReducedMotion(false);
+    frame();
+    frame(frameTime + 5000);
     const initial = camera.position.clone();
     move('touch');
-    expect(frames.size).toBe(0);
+    frame(frameTime + 42000);
+    expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
     move();
     frame();
-    expect(camera.position.distanceTo(initial)).toBeGreaterThan(0);
+    expect(camera.position.y - initial.y).toBeGreaterThan(0.01);
     controller.setReducedMotion(true);
     frame();
-    expect(camera.position.equals(initial)).toBe(true);
+    expect(camera.position.equals(still)).toBe(true);
     expect(frames.size).toBe(0);
     move();
     expect(frames.size).toBe(0);
   });
 
-  it('glides the camera once, settles within five seconds and releases its frame loop', () => {
+  it('continues a bounded, seamless drift after the entry glide', () => {
     options.reducedMotion = false;
     create();
     frame();
     const camera = graphics.render.mock.lastCall![1];
     const start = camera.position.clone();
-    frame(frameTime + 2200);
-    const middle = camera.position.clone();
-    expect(middle.x).toBeGreaterThan(start.x);
+    frame(frameTime + 4500);
+    const afterEntry = camera.position.clone();
+    expect(afterEntry.x).toBeGreaterThan(start.x);
+    frame(frameTime + 5000);
+    expect(camera.position.x).toBeGreaterThan(afterEntry.x);
+    frame(frameTime + 16000);
+    expect(camera.position.x).toBeLessThan(afterEntry.x);
+    frame(frameTime + 21000);
+    expect(camera.position.distanceTo(afterEntry)).toBeLessThan(0.001);
     expect(frames.size).toBe(1);
-    frame(frameTime + 2300);
-    expect(camera.position.x).toBeGreaterThan(middle.x);
-    expect(frames.size).toBe(0);
     expect(options.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('limits passive rendering to thirty paints per second', () => {
+    options.reducedMotion = false;
+    create();
+    frame();
+    const before = graphics.render.mock.calls.length;
+    for (let i = 0; i < 120; i++) frame();
+    const paints = graphics.render.mock.calls.length - before;
+    expect(paints).toBeGreaterThan(50);
+    expect(paints).toBeLessThanOrEqual(61);
   });
 
   it('replays a completed glide when entering the intro, and still honors reduced motion', () => {
@@ -218,19 +231,20 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(camera.position.equals(start)).toBe(true);
     frame(frameTime + 4500);
     expect(camera.position.equals(end)).toBe(true);
-    expect(frames.size).toBe(0);
+    expect(frames.size).toBe(1);
     controller.setReducedMotion(true);
     frame();
+    const still = camera.position.clone();
     controller.replayEntry();
     expect(frames.size).toBe(0);
-    expect(camera.position.equals(end)).toBe(true);
+    expect(camera.position.equals(still)).toBe(true);
   });
 
-  it('pauses the entry glide offscreen and in hidden tabs without a jump on return', () => {
+  it.each([1000, 10000])('pauses motion at %i ms offscreen and in hidden tabs without a jump on return', (elapsed) => {
     options.reducedMotion = false;
     create();
     frame();
-    frame(frameTime + 1000);
+    frame(frameTime + elapsed);
     const camera = graphics.render.mock.lastCall![1];
     const before = camera.position.clone();
     hidden = true;
@@ -245,11 +259,11 @@ describe('onboarding terrain renderer lifecycle', () => {
     intersection(true);
     frame(frameTime + 10000);
     expect(camera.position.equals(before)).toBe(true);
-    frame();
-    expect(camera.position.x).toBeGreaterThan(before.x);
+    frame(frameTime + 40);
+    expect(camera.position.distanceTo(before)).toBeGreaterThan(0);
   });
 
-  it('cancels the entry glide when reduced motion is enabled and does not replay it', () => {
+  it('centers and stops for reduced motion, then resumes drift without replaying the entry', () => {
     options.reducedMotion = false;
     const controller = create();
     frame();
@@ -260,7 +274,9 @@ describe('onboarding terrain renderer lifecycle', () => {
     controller.setReducedMotion(false);
     frame();
     expect(graphics.render.mock.lastCall![1].position.equals(settled)).toBe(true);
-    expect(frames.size).toBe(0);
+    expect(frames.size).toBe(1);
+    frame(frameTime + 1000);
+    expect(graphics.render.mock.lastCall![1].position.x).toBeGreaterThan(settled.x);
   });
 
   it('stops all frames and observers on disposal and ignores later updates', () => {
