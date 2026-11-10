@@ -18,7 +18,7 @@
   }
   <app-processing-indicator class="right"></app-processing-indicator>
 
-  @if (authState !== null) {
+  @if (authState !== null || isUpdateAvailable()) {
   <button mat-icon-button class="right" (click)="openNotifications()" matTooltip="Updates &amp; notifications"
     [attr.aria-label]="notificationsLabel()">
     <span class="notification-badges" aria-hidden="true">

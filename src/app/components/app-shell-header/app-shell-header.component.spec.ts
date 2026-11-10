@@ -107,6 +107,29 @@ describe('AppShellHeaderComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
+  it('keeps an available app update reachable while authentication is pending', () => {
+    fixture.detectChanges();
+    expect(component.authState).toBeNull();
+    expect(fixture.nativeElement.querySelector('button[aria-label^="View updates"]')).toBeNull();
+
+    fixture.componentRef.setInput('isUpdateAvailable', true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button[aria-label^="View updates"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute('aria-label')).toContain('App update available');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const open = vi.spyOn(component.whatsNewClick, 'emit');
+    button?.click();
+    expect(open).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+
+    fixture.componentRef.setInput('isUpdateAvailable', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[aria-label^="View updates"]')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+
   it('should hide header when host hidden class is present', () => {
     fixture.detectChanges();
 
