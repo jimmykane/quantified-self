@@ -10,6 +10,10 @@ import {
     ActivityTypes,
     DataBeginningPotentialStamina,
     DataDistance,
+    DataAltitude,
+    DataAscent,
+    DataDescent,
+    ElevationUnits,
     DistanceUnits,
     DynamicDataLoader,
     SwimPaceUnits,
@@ -105,6 +109,20 @@ describe('EventCardStatsTableComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it.each([DataAltitude, DataAscent, DataDescent])('uses feet in detailed %s rows without rewriting canonical stats', Metric => {
+        const stat = new Metric(30.48);
+        component.userUnitSettings = { ...mockUserUnitSettings, elevationUnits: ElevationUnits.Feet };
+        component.selectedActivities = [{ ...mockActivity,
+            getStatsAsArray: () => [stat], getStat: type => type === Metric.type ? stat : undefined,
+        } as ActivityInterface];
+        component.ngOnChanges({});
+        expect(component.data.data[0][component.columns[1]]).toBe('100 ft');
+        expect(stat.getValue()).toBe(30.48);
+        component.userUnitSettings = { ...component.userUnitSettings, elevationUnits: ElevationUnits.Meters };
+        component.ngOnChanges({});
+        expect(component.data.data[0][component.columns[1]]).toBe('30 m');
     });
 
     it('shows swimming distances in yards in detailed statistics and copied rows', () => {
