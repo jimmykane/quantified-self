@@ -91,7 +91,7 @@ describe('Send file rejection diagnostics', () => {
   });
 
   it.each([
-    ['empty_body', () => Buffer.alloc(0), '.fit', 'Choose a FIT or FIT.gz file up to 20 MiB.'],
+    ['empty_body', () => Buffer.alloc(0), '.fit', 'No file data was received. Download the file to this device and select it again.'],
     ['invalid_gzip', () => Buffer.from('private-file-content'), '.fit.gz', 'FIT.gz cannot be expanded within 20 MiB.'],
     ['invalid_header_size', () => Buffer.from('private-file-content'), '.fit', 'The selected file is not a complete FIT recording.'],
     ['truncated_payload', () => {
