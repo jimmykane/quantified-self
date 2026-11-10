@@ -214,8 +214,14 @@ export class DashboardTodayDataService {
               )
             : null;
           const date = selected
-            ? getDateTimeFormatter(this.locale, { dateStyle: 'medium' }).format(
-                selected.point.timestampMs
+            ? getDateTimeFormatter(this.locale, {
+                dateStyle: 'medium',
+                timeZone: id === 'steps' ? 'UTC' : undefined,
+              }).format(
+                // Daily totals belong to a calendar day; their interval end can be the next day.
+                id === 'steps'
+                  ? Date.parse(`${selected.point.calendarDate}T12:00:00Z`)
+                  : selected.point.timestampMs
               )
             : '';
           this.patch({

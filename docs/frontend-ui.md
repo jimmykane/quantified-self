@@ -329,6 +329,8 @@ They do not follow event-table or chart filters. Weight uses a bounded newest-fi
 measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection
 from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
 report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
+Steps displays the recorded calendar day independently of the daily interval's end timestamp or browser time zone;
+its date still follows the account's regional formatting preference. Weight retains its actual measurement timestamp.
 Opening the editor does not start metric readers. Dashboard charts and picker previews resolve snapshot kinds through
 `dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
 must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
