@@ -583,8 +583,6 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 On your first sign-in, choose **Compare recordings**, **Connect my watch**, **Upload an activity file**, or **Let me look around**. For a quick introduction to the app, choose **Explore QS**. **Skip the intro** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
 
-Choose **Pause motion** for a still landscape or **Play motion** to animate it. The illustration starts still when your device requests reduced motion.
-
 Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. You can change your starting point or preferences before finishing. Your starting point is kept when you reload or return from checkout.
 
 **Start free or connect your watch.** Starter is free and includes manual uploads and comparisons; provider connections require Pro. General setup shows the available plans after you save your preferences. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.

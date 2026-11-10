@@ -7,19 +7,3 @@
 />
 <canvas #canvas aria-hidden="true" [class.is-ready]="ready()"></canvas>
 <div class="terrain-blend" aria-hidden="true"></div>
-@if (ready()) {
-  <button
-    mat-button
-    type="button"
-    class="motion-control"
-    (click)="toggleMotion()"
-    [attr.aria-label]="
-      playing() ? 'Pause terrain animation' : 'Play terrain animation'
-    "
-  >
-    <mat-icon aria-hidden="true">{{
-      playing() ? 'pause' : 'play_arrow'
-    }}</mat-icon>
-    {{ playing() ? 'Pause motion' : 'Play motion' }}
-  </button>
-}

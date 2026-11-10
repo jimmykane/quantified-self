@@ -78,14 +78,15 @@ is pure TypeScript; the renderer is imported after browser rendering and pins Th
 ECharts remains the product-chart renderer. This decorative WebGL exception needs lit 3D relief and contour
 occlusion, with no quantitative axes, tooltips or input data contract.
 
-Light and dark scenes follow `AppThemeService`, including while paused. Material tokens control text and the
-blend into the card; the terrain itself has separate light/dark illustration palettes. A short feathered
-highlight follows a connected terrain contour, with gentle pointer parallax. **Pause motion** stops both;
-reduced-motion preferences start it still and disable parallax. Users can explicitly play the contour animation.
-Rendering suspends offscreen and in hidden tabs. Destroying the view releases frames, GPU resources, listeners
-and observers, and a late module response cannot initialize a destroyed view. Static light/dark PNG renders
-of the approved native terrain cover loading, WebGL failure and context loss. Onboarding stays usable in all cases.
-The new motion action has one selection-haptic owner; automatic changes stay silent.
+Light and dark scenes follow `AppThemeService`. Material tokens control text and the blend into the card;
+the terrain itself has separate light/dark illustration palettes. A short feathered highlight marks a
+connected terrain contour. The landscape is still at rest, with gentle pointer parallax and no playback
+control or idle animation loop. Touch input and reduced-motion preferences disable parallax; enabling
+reduced motion also resets the camera. Rendering runs only for initial display, theme/size changes and
+pointer settling, and suspends offscreen and in hidden tabs. Destroying the view releases frames, GPU
+resources, listeners and observers, and a late module response cannot initialize a destroyed view.
+Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
+loss. Onboarding stays usable in all cases.
 
 The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
 (104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.

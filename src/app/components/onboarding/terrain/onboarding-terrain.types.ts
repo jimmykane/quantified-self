@@ -1,6 +1,5 @@
 export interface TerrainOptions {
   dark: boolean;
-  playing: boolean;
   reducedMotion: boolean;
   resizeObserver: boolean;
   intersectionObserver: boolean;
@@ -9,6 +8,6 @@ export interface TerrainOptions {
 }
 export interface TerrainController {
   setTheme(dark: boolean): void;
-  setMotion(playing: boolean, reducedMotion: boolean): void;
+  setReducedMotion(reducedMotion: boolean): void;
   dispose(): void;
 }

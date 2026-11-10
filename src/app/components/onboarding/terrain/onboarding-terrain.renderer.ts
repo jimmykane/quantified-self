@@ -123,20 +123,12 @@ export function createTerrainRenderer(
     });
     const profile = new THREE.Line(profileGeo, profileMaterial);
     terrain.add(profile);
-    function updateProfile(elapsed: number) {
-      profileMaterial.uniforms.center.value = model.closed
-        ? (model.startProgress + elapsed * 0.009) % 1
-        : 0.5 - 0.38 * Math.cos(elapsed * 0.035 + model.openPhase);
-    }
     resources.push(profileMaterial);
-    let elapsed = 0,
-      last = 0,
-      frame = 0,
+    let frame = 0,
       visible = true,
       disposed = false,
       rendered = false;
-    let playing = options.playing,
-      reduced = options.reducedMotion;
+    let reduced = options.reducedMotion;
     let pointerX = 0,
       pointerY = 0,
       currentX = 0,
@@ -145,22 +137,14 @@ export function createTerrainRenderer(
     const cancel = () => {
       cancelAnimationFrame(frame);
       frame = 0;
-      last = 0;
     };
     function schedule() {
       if (!frame && !disposed && visible && !document.hidden)
         frame = requestAnimationFrame(draw);
     }
-    function draw(t: number) {
+    function draw() {
       frame = 0;
       if (disposed || !visible || document.hidden) return;
-      const dt = last ? Math.min((t - last) / 1000, 0.05) : 0;
-      last = t;
-      if (playing) {
-        elapsed += dt;
-        updateProfile(elapsed);
-        dirty = true;
-      }
       const dx = pointerX - currentX,
         dy = pointerY - currentY;
       const settling = Math.abs(dx) + Math.abs(dy) > 0.0005;
@@ -188,7 +172,8 @@ export function createTerrainRenderer(
           options.onReady();
         }
       }
-      if (playing || settling) schedule();
+      // The scenery rests between pointer interactions; there is no idle animation.
+      if (settling) schedule();
     }
     function resize() {
       if (disposed) return;
@@ -239,19 +224,17 @@ export function createTerrainRenderer(
       dirty = true;
       schedule();
     }
-    function setMotion(value: boolean, reduce: boolean) {
+    function setReducedMotion(reduce: boolean) {
       if (disposed) return;
-      playing = value;
       reduced = reduce;
-      last = 0;
-      if (!playing || reduced) {
+      if (reduced) {
         pointerX = pointerY = currentX = currentY = 0;
         dirty = true;
       }
       schedule();
     }
     const move = (event: PointerEvent) => {
-      if (!playing || reduced || event.pointerType === 'touch') return;
+      if (reduced || event.pointerType === 'touch') return;
       const b = stage.getBoundingClientRect();
       if (!b.width || !b.height) return;
       pointerX = ((event.clientX - b.left) / b.width - 0.5) * 0.32;
@@ -305,10 +288,9 @@ export function createTerrainRenderer(
     if (resizer) resizer.observe(stage);
     else window.addEventListener('resize', resize);
     observer?.observe(stage);
-    updateProfile(0);
     setTheme(options.dark);
     resize();
-    return { setTheme, setMotion, dispose };
+    return { setTheme, setReducedMotion, dispose };
   } catch (error) {
     if (cleanup) cleanup();
     else for (const resource of resources) resource.dispose();

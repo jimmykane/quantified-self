@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   ONBOARDING_TERRAIN_LOADER,
   OnboardingTerrainComponent
@@ -14,10 +13,9 @@ describe('OnboardingTerrainComponent', () => {
   const theme = signal(AppThemes.Normal);
   const controller = {
     setTheme: vi.fn(),
-    setMotion: vi.fn(),
+    setReducedMotion: vi.fn(),
     dispose: vi.fn()
   };
-  const selection = vi.fn();
   let options: TerrainOptions;
   let change: (event: MediaQueryListEvent) => void;
   const removeListener = vi.fn();
@@ -49,7 +47,6 @@ describe('OnboardingTerrainComponent', () => {
       imports: [OnboardingTerrainComponent],
       providers: [
         { provide: AppThemeService, useValue: { appTheme: theme } },
-        { provide: AppHapticsService, useValue: { selection } },
         { provide: ONBOARDING_TERRAIN_LOADER, useValue: loader }
       ]
     });
@@ -66,7 +63,7 @@ describe('OnboardingTerrainComponent', () => {
     return fixture;
   }
 
-  it('keeps a themed fallback until rendering succeeds and repaints a paused scene on theme changes', async () => {
+  it('keeps a themed fallback until rendering succeeds and repaints the scene on theme changes', async () => {
     const fixture = await render();
     expect(options.dark).toBe(false);
     expect(fixture.nativeElement.querySelector('img').src).toContain(
@@ -75,9 +72,8 @@ describe('OnboardingTerrainComponent', () => {
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
     options.onReady();
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('button').click();
-    expect(controller.setMotion).toHaveBeenLastCalledWith(false, false);
-    expect(selection).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('canvas.is-ready')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
     theme.set(AppThemes.Dark);
     fixture.detectChanges();
     expect(controller.setTheme).toHaveBeenLastCalledWith(true);
@@ -86,7 +82,7 @@ describe('OnboardingTerrainComponent', () => {
     );
   });
 
-  it('starts still for reduced motion and silently responds to preference changes', async () => {
+  it('disables parallax for reduced motion and responds to preference changes', async () => {
     vi.mocked(window.matchMedia).mockReturnValue({
       matches: true,
       addListener: vi.fn(),
@@ -97,16 +93,14 @@ describe('OnboardingTerrainComponent', () => {
       removeEventListener: removeListener
     } as unknown as MediaQueryList);
     const fixture = await render();
-    expect(options.playing).toBe(false);
     expect(options.reducedMotion).toBe(true);
-    expect(selection).not.toHaveBeenCalled();
     options.onReady();
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('button').click();
-    expect(controller.setMotion).toHaveBeenLastCalledWith(true, true);
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    change({ matches: false } as MediaQueryListEvent);
+    expect(controller.setReducedMotion).toHaveBeenLastCalledWith(false);
     change({ matches: true } as MediaQueryListEvent);
-    expect(controller.setMotion).toHaveBeenLastCalledWith(false, true);
-    expect(selection).toHaveBeenCalledTimes(1);
+    expect(controller.setReducedMotion).toHaveBeenLastCalledWith(true);
     fixture.destroy();
     expect(removeListener).toHaveBeenCalledWith('change', change);
     expect(controller.dispose).toHaveBeenCalledTimes(1);
@@ -151,7 +145,6 @@ describe('OnboardingTerrainComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('img.is-hidden')).toBeNull();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
-    expect(selection).not.toHaveBeenCalled();
   });
 
   it('restores the fallback if the graphics context is lost', async () => {

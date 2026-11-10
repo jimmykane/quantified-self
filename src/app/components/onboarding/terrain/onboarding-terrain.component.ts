@@ -12,11 +12,8 @@ import {
   signal,
   viewChild
 } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppHapticsService } from '../../../services/app.haptics.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import type { TerrainController } from './onboarding-terrain.types';
 
@@ -31,14 +28,12 @@ export const ONBOARDING_TERRAIN_LOADER = new InjectionToken(
 @Component({
   selector: 'app-onboarding-terrain',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule],
   templateUrl: './onboarding-terrain.component.html',
   styleUrl: './onboarding-terrain.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OnboardingTerrainComponent {
   private readonly theme = inject(AppThemeService);
-  private readonly haptics = inject(AppHapticsService);
   private readonly load = inject(ONBOARDING_TERRAIN_LOADER);
   private readonly zone = inject(NgZone);
   private readonly destroyRef = inject(DestroyRef);
@@ -49,7 +44,6 @@ export class OnboardingTerrainComponent {
   private media?: MediaQueryList;
   private reducedMotion = false;
   readonly ready = signal(false);
-  readonly playing = signal(false);
   readonly dark = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly fallback = computed(
     () => `assets/onboarding/terrain-${this.dark() ? 'dark' : 'light'}.png`
@@ -63,7 +57,6 @@ export class OnboardingTerrainComponent {
     afterNextRender(() => {
       this.media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
       this.reducedMotion = this.media?.matches ?? true;
-      this.playing.set(!this.reducedMotion);
       this.media?.addEventListener('change', this.onReducedMotion);
       // External frame loop: rendering must not trigger Angular change detection on every frame.
       this.zone.runOutsideAngular(() => {
@@ -75,7 +68,6 @@ export class OnboardingTerrainComponent {
               this.stage.nativeElement,
               {
                 dark: this.dark(),
-                playing: this.playing(),
                 reducedMotion: this.reducedMotion,
                 resizeObserver:
                   BrowserCompatibilityService.checkResizeObserverSupport(),
@@ -85,7 +77,6 @@ export class OnboardingTerrainComponent {
                 onUnavailable: () =>
                   this.zone.run(() => {
                     this.ready.set(false);
-                    this.playing.set(false);
                   })
               }
             );
@@ -94,7 +85,6 @@ export class OnboardingTerrainComponent {
             if (!this.destroyRef.destroyed)
               this.zone.run(() => {
                 this.ready.set(false);
-                this.playing.set(false);
               });
           });
       });
@@ -105,20 +95,10 @@ export class OnboardingTerrainComponent {
     });
   }
 
-  toggleMotion(): void {
-    if (!this.ready()) return;
-    this.playing.update((value) => !value);
-    this.zone.runOutsideAngular(() =>
-      this.controller?.setMotion(this.playing(), this.reducedMotion)
-    );
-    this.haptics.selection();
-  }
-
   private readonly onReducedMotion = (event: MediaQueryListEvent): void => {
     this.reducedMotion = event.matches;
-    if (event.matches) this.playing.set(false);
     this.zone.runOutsideAngular(() =>
-      this.controller?.setMotion(this.playing(), this.reducedMotion)
+      this.controller?.setReducedMotion(this.reducedMotion)
     );
   };
 }

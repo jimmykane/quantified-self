@@ -42,6 +42,8 @@ describe('onboarding terrain renderer lifecycle', () => {
     canvas = document.createElement('canvas');
     stage.append(canvas);
     vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
       width: 500,
       height: 800
     } as DOMRect);
@@ -73,7 +75,6 @@ describe('onboarding terrain renderer lifecycle', () => {
     );
     options = {
       dark: false,
-      playing: false,
       reducedMotion: true,
       resizeObserver: true,
       intersectionObserver: true,
@@ -119,10 +120,10 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(graphics.render).toHaveBeenCalledTimes(3);
   });
 
-  it('suspends animation in a hidden tab and outside the viewport', () => {
-    options.playing = true;
-    create();
+  it('defers pending paints in a hidden tab and outside the viewport', () => {
+    const controller = create();
     frame();
+    controller.setTheme(true);
     expect(frames.size).toBe(1);
     hidden = true;
     document.dispatchEvent(new Event('visibilitychange'));
@@ -136,8 +137,54 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(frames.size).toBe(1);
   });
 
+  function move(pointerType = 'mouse') {
+    stage.dispatchEvent(Object.assign(new Event('pointermove'), {
+      pointerType, clientX: 450, clientY: 700
+    }));
+  }
+
+  it('settles pointer parallax and does not keep repainting an idle scene', () => {
+    options.reducedMotion = false;
+    create();
+    frame();
+    const camera = graphics.render.mock.lastCall![1];
+    const initial = camera.position.clone();
+    expect(frames.size).toBe(0);
+    move();
+    frame();
+    expect(camera.position.x).toBeGreaterThan(initial.x);
+    expect(frames.size).toBe(1);
+    for (let i = 0; i < 200; i++) frame();
+    expect(frames.size).toBe(0);
+    const count = graphics.render.mock.calls.length;
+    frame();
+    expect(graphics.render).toHaveBeenCalledTimes(count);
+    stage.dispatchEvent(new Event('pointerleave'));
+    for (let i = 0; i < 200; i++) frame();
+    expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
+    expect(frames.size).toBe(0);
+  });
+
+  it('ignores touch parallax and resets the camera when reduced motion is enabled', () => {
+    options.reducedMotion = false;
+    const controller = create();
+    frame();
+    const camera = graphics.render.mock.lastCall![1];
+    const initial = camera.position.clone();
+    move('touch');
+    expect(frames.size).toBe(0);
+    move();
+    frame();
+    expect(camera.position.distanceTo(initial)).toBeGreaterThan(0);
+    controller.setReducedMotion(true);
+    frame();
+    expect(camera.position.equals(initial)).toBe(true);
+    expect(frames.size).toBe(0);
+    move();
+    expect(frames.size).toBe(0);
+  });
+
   it('stops all frames and observers on disposal and ignores later updates', () => {
-    options.playing = true;
     const controller = create();
     controller.dispose();
     controller.dispose();
@@ -146,7 +193,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(disconnectIntersection).toHaveBeenCalledTimes(1);
     expect(graphics.dispose).toHaveBeenCalledTimes(1);
     controller.setTheme(true);
-    controller.setMotion(true, false);
+    controller.setReducedMotion(false);
     document.dispatchEvent(new Event('visibilitychange'));
     canvas.dispatchEvent(new Event('webglcontextlost'));
     expect(frames.size).toBe(0);

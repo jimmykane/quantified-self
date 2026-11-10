@@ -36,14 +36,6 @@ canvas.is-ready {
       transparent 65%
     );
 }
-.motion-control {
-  position: absolute;
-  z-index: 2;
-  inset-block-end: 12px;
-  inset-inline-start: 16px;
-  background: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface-variant);
-}
 @media (max-width: 959px) {
   .terrain-blend {
     background: linear-gradient(
@@ -52,10 +44,5 @@ canvas.is-ready {
       transparent 85%,
       var(--mat-sys-surface)
     );
-  }
-  .motion-control {
-    inset-inline-start: auto;
-    inset-inline-end: 12px;
-    inset-block-end: 8px;
   }
 }

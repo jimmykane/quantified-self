@@ -100,9 +100,6 @@ describe('help.content', () => {
     expect(content).toContain('**Skip the intro**');
     expect(content).toContain('**Compare recordings**');
     expect(content).toContain('**Explore QS**');
-    expect(content).toContain('**Pause motion**');
-    expect(content).toContain('**Play motion**');
-    expect(content).toContain('starts still when your device requests reduced motion');
     expect(content).toContain('without the tour, watch setup, or pricing step');
     expect(content).toContain('**Continue free**');
     expect(content).toContain('Your existing plan stays the same');
