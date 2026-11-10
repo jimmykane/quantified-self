@@ -88,6 +88,12 @@ resources, listeners and observers, and a late module response cannot initialize
 Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
 loss. Onboarding stays usable in all cases.
 
+The plan step uses a landscape header: copy and terrain occupy separate grid columns on desktop, then
+separate rows below 960px so scenery cannot sit behind a wrapped heading. Terrain fade variables adapt
+the same canvas/fallback masks to the short banner; every layout includes a bottom fade to transparency,
+with extra leading-edge blending where the banner meets its copy. Masking the artwork (rather than
+painting a translucent surface over it) avoids a residual rectangle or seam in either theme.
+
 The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
 (104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.
 The 1474 kB initial cap, 13000 kB total-script warning and public startup checks remain unchanged. The renderer

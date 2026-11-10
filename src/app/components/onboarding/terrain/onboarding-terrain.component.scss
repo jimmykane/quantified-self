@@ -2,6 +2,10 @@
   display: block;
   position: absolute;
   inset: 0;
+  --terrain-top-fade-start: 24%;
+  --terrain-top-fade-end: 65%;
+  --terrain-bottom-fade: 24%;
+  --terrain-leading-fade: 0%;
 }
 canvas,
 .terrain-fallback {
@@ -9,6 +13,24 @@ canvas,
   inset: 0;
   width: 100%;
   height: 100%;
+  // Fade the artwork itself: Material's translucent surface cannot fully hide an edge.
+  mask-image:
+    linear-gradient(
+      180deg,
+      transparent,
+      transparent var(--terrain-top-fade-start),
+      #000 var(--terrain-top-fade-end),
+      #000 calc(100% - var(--terrain-bottom-fade)),
+      transparent 96%
+    ),
+    linear-gradient(
+      90deg,
+      transparent,
+      #000 var(--terrain-leading-fade),
+      #000 88%,
+      transparent
+    );
+  mask-composite: intersect;
 }
 canvas {
   display: block;
@@ -23,26 +45,10 @@ canvas.is-ready {
 .terrain-fallback.is-hidden {
   visibility: hidden;
 }
-.terrain-blend {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, transparent 88%, var(--mat-sys-surface)),
-    linear-gradient(
-      180deg,
-      var(--mat-sys-surface) 0%,
-      color-mix(in srgb, var(--mat-sys-surface) 80%, transparent) 24%,
-      transparent 65%
-    );
-}
-@media (max-width: 959px) {
-  .terrain-blend {
-    background: linear-gradient(
-      180deg,
-      var(--mat-sys-surface),
-      transparent 85%,
-      var(--mat-sys-surface)
-    );
+@media (max-width: 959.98px) {
+  :host {
+    --terrain-top-fade-start: 0%;
+    --terrain-top-fade-end: 85%;
+    --terrain-bottom-fade: 18%;
   }
 }
