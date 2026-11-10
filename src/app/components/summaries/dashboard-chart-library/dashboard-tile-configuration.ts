@@ -1,4 +1,5 @@
 import { defaultDashboardTodaySettings } from '../../../helpers/dashboard-today-settings.helper';
+import { normalizeDashboardHiddenSections } from '../../../helpers/dashboard-tile-section.helper';
 import {
   isDashboardPerformanceChartType,
   DASHBOARD_CRITICAL_POWER_CHART_TYPE,
@@ -600,7 +601,8 @@ export class DashboardTileConfiguration {
   }
 
   get isAddAllDisabled(): boolean {
-    return this.isSaving || (this.showTodaySummary && this.getMissingAllDashboardTiles().length === 0);
+    return this.isSaving || (this.showTodaySummary && this.getMissingAllDashboardTiles().length === 0
+      && normalizeDashboardHiddenSections(this.data.user.settings.dashboardSettings.hiddenSections).length === 0);
   }
 
   get isRemoveAllDisabled(): boolean {
@@ -1017,7 +1019,8 @@ export class DashboardTileConfiguration {
     try {
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingAllDashboardTiles(clonedTiles);
-      if (!missingTiles.length && this.showTodaySummary) {
+      if (!missingTiles.length && this.showTodaySummary
+        && normalizeDashboardHiddenSections(dashboardSettings.hiddenSections).length === 0) {
         this.saveError = 'All available dashboard tiles are already on your dashboard.';
         this.stopSaving();
         return;

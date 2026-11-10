@@ -962,6 +962,75 @@ describe('HealthWorkspaceComponent', () => {
     expect(existing['healthMetric']).toEqual({ metric: 'steps', range: '14d', sourceKey: 'explicit-source' });
   });
 
+  it('reveals a hidden existing chart before navigating without announcing another chart addition', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    user.settings.dashboardSettings = { tiles: [existing], hiddenSections: ['kpi', 'section:health'] };
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    const save = TestBed.inject(DashboardConfigurationService).save;
+    await component.addToDashboard();
+    expect(save).toHaveBeenCalledOnce();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi']);
+    expect(user.settings.dashboardSettings.tiles).toEqual([existing]);
+    expect(navigate).toHaveBeenCalledWith(['/dashboard'], { queryParams: { healthMetric: 'steps' } });
+    expect(notice).not.toHaveBeenCalledWith('Chart added to dashboard', 'Undo', expect.anything());
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a hidden dashboard chart and the current page when revealing it fails', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    user.settings.dashboardSettings = { tiles: [existing], hiddenSections: ['section:health'] };
+    vi.mocked(TestBed.inject(DashboardConfigurationService).save).mockRejectedValueOnce(new Error('offline'));
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.addToDashboard();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:health']);
+    expect(notice).toHaveBeenCalledWith('offline', 'Dismiss', { duration: 6000 });
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it('shows busy feedback until an existing chart has been revealed and opened', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    user.settings.dashboardSettings = { tiles: [existing], hiddenSections: ['section:health'] };
+    component.dashboardLibrary.changed$.next(null); fixture.detectChanges();
+    let finish!: () => void;
+    vi.mocked(TestBed.inject(DashboardConfigurationService).save).mockReturnValueOnce(new Promise<void>(resolve => finish = resolve));
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const pending = component.addToDashboard(); await Promise.resolve(); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.health-dashboard-action') as HTMLButtonElement;
+    expect(button.disabled).toBe(true); expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Opening chart on dashboard');
+    expect(button.querySelector('mat-spinner')).not.toBeNull();
+    finish(); await pending; fixture.detectChanges();
+    expect(button.disabled).toBe(false); expect(button.querySelector('mat-spinner')).toBeNull();
+    expect(button.getAttribute('aria-label')).toBe('View on dashboard');
+  });
+
+  it('ignores repeated and late hidden-chart navigation after the Health account changes', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    user.settings.dashboardSettings = { tiles: [existing], hiddenSections: ['section:health'] };
+    let finish!: () => void;
+    const save = vi.mocked(TestBed.inject(DashboardConfigurationService).save);
+    save.mockReturnValueOnce(new Promise<void>(resolve => finish = resolve));
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const pending = component.addToDashboard(); await Promise.resolve();
+    await component.addToDashboard(); expect(save).toHaveBeenCalledOnce();
+    setCurrentUserID('user-2'); fixture.detectChanges(); await fixture.whenStable();
+    finish(); await pending;
+    expect(navigate).not.toHaveBeenCalledWith(['/dashboard'], expect.anything());
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:health']);
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
+
   it('does not reseed a retained draft when switching previews is cancelled', async () => {
     await createComponent(undefined, '90d', {}, 'steps');
     const user = component.dashboardUser()!;

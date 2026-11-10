@@ -175,10 +175,10 @@ export class DashboardChartLibraryState implements OnDestroy {
   }
 
   async bulk(user: AppUserInterface, action: 'today' | 'calendar' | 'reset' | 'all' | 'clear'): Promise<void> {
-    if (this.busy() || !(await this.canDiscard())) return;
+    const contextVersion = this.contextVersion;
+    if (!user?.uid || this.busy() || !(await this.canDiscard()) || this.busy() || contextVersion !== this.contextVersion) return;
     this.busy.set(true); this.error.set('');
     const mutationVersion = this.mutationVersion;
-    const contextVersion = this.contextVersion;
     const editor = this.makeController(user, action === 'calendar');
     try {
       if (action === 'today') await editor.onTodaySummaryVisibilityChange(user.settings.dashboardSettings.showTodaySummary === false);
@@ -202,13 +202,19 @@ export class DashboardChartLibraryState implements OnDestroy {
     const previous=resolveDashboardTileLaneKey(tile);
     if(previous===`section:${destination}`) return;
     tile['healthSection']=destination;
+    const patch: Partial<AppDashboardSettingsInterface> = { tiles: after.tiles };
+    const hidden = normalizeDashboardHiddenSections(before.hiddenSections);
+    const destinationLane: DashboardTileLaneKey = `section:${destination}`;
+    if (hidden.includes(destinationLane)) patch.hiddenSections = hidden.filter(lane => lane !== destinationLane);
     this.haptics.selection(); this.busy.set(true); this.error.set('');
     const version=this.contextVersion;
     try {
-      await this.persistence.save(user.uid,before,{tiles:after.tiles});
+      await this.persistence.save(user.uid,before,patch);
       if(version!==this.contextVersion) return;
-      user.settings.dashboardSettings={...user.settings.dashboardSettings,tiles:after.tiles};
-      this.undoState={uid:user.uid,before:cloneDashboardSettings({tiles:before.tiles}),after:cloneDashboardSettings({tiles:after.tiles})};
+      user.settings.dashboardSettings={...user.settings.dashboardSettings,...patch};
+      this.undoState={uid:user.uid,
+        before:cloneDashboardSettings(Object.fromEntries(Object.keys(patch).map(key => [key, before[key]]))),
+        after:cloneDashboardSettings(patch)};
       this.undoAvailable.set(true);this.changed$.next(order);this.haptics.success();
     } catch(error) { if(version===this.contextVersion) {this.error.set(error instanceof Error ? error.message : 'Could not move chart.');this.haptics.error();} }
     finally {this.busy.set(false);}

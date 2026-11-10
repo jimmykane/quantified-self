@@ -1771,7 +1771,9 @@ to the left of its add action; Calendar keeps its menu beside Open, including wh
 Show/Hide stores normalized lane keys in `dashboardSettings.hiddenSections` through the existing owner-scoped
 configuration transaction. Hidden sections retain their headers, saved tiles, ranges and layout; only their renderers
 unmount. Existing data acquisition remains keyed to configured tiles and Today. Visibility Undo owns only this field
-and cannot replace newer tiles or unrelated preferences. Adding or saving a chart reveals its destination section;
+and cannot replace newer tiles or unrelated preferences. Adding, saving or moving a chart reveals its destination section;
+Health's View on dashboard awaits an existing chart's visibility save before navigating, without an addition toast.
+That navigation is fenced by the current account and metric, and a failed save leaves the Health page open.
 Reset, Add all presets and Remove all clear the hidden lanes. Calendar's Show action can still add a missing tile.
 Shared/read-only dashboards expose no section controls and ignore the owner's private visibility choices.
 At phone widths the section add label shortens to Add; its full accessible label and hint remain available, keeping

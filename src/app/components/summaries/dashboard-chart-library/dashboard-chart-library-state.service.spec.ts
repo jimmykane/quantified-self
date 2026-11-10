@@ -407,11 +407,48 @@ describe('inline chart library state', () => {
     expect(state.undoAvailable()).toBe(true);
     await state.undo(user);expect(user.settings.dashboardSettings.tiles[0]).toEqual(previous);
   });
+  it('reveals a hidden destination when moving a chart and restores both changes with Undo', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile);
+    delete tile['healthSection'];
+    user.settings.dashboardSettings = { tiles: [tile], hiddenSections: ['kpi', 'section:health'] };
+    await state.moveHealthTile(user, tile.order, 'health');
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi']);
+    expect(user.settings.dashboardSettings.tiles[0]['healthSection']).toBe('health');
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi', 'section:health']);
+    expect(user.settings.dashboardSettings.tiles).toEqual([tile]);
+  });
+  it('reveals hidden sections with Add all on a fully configured dashboard', async () => {
+    user.settings.dashboardSettings = {
+      tiles: getDashboardChartCatalog().map((entry, order) => ({ ...structuredClone(entry.tile), order })),
+      showTodaySummary: true, hiddenSections: ['kpi', 'section:health'],
+    };
+    await state.bulk(user, 'all');
+    expect(persistence.save).toHaveBeenCalledOnce();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+  });
+  it('does not start a superseded Calendar restore after the context is destroyed', async () => {
+    const pending = state.bulk(user, 'calendar');
+    state.resetContext(); await pending;
+    expect(persistence.save).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+  it('accepts only one of two simultaneous Calendar restores', async () => {
+    let finish!: () => void;
+    persistence.save.mockReturnValue(new Promise<void>(resolve => finish = resolve));
+    const first = state.bulk(user, 'calendar'); const second = state.bulk(user, 'calendar');
+    await Promise.resolve();
+    try { expect(persistence.save).toHaveBeenCalledOnce(); }
+    finally { finish(); await Promise.all([first, second]); }
+  });
   it('leaves a failed move unchanged and reports the persistence error', async () => {
+    user.settings.dashboardSettings.hiddenSections = ['section:trainingState'];
     const tile=JSON.parse(JSON.stringify(getDashboardChartCatalog().find(item=>item.definition.id==='curated-sleep')!.tile));
     user.settings.dashboardSettings.tiles=[tile];persistence.save.mockRejectedValueOnce(new Error('offline'));
     await state.moveHealthTile(user,tile.order,'trainingState');
     expect(user.settings.dashboardSettings.tiles[0].healthSection).toBe('health');expect(state.error()).toBe('offline');expect(state.undoAvailable()).toBe(false);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:trainingState']);
   });
 
 });
