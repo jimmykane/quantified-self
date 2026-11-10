@@ -15,8 +15,10 @@ describe('Today activity metrics', () => {
     expect(values.distance.value).toBe('10.00 Km');
     expect(values.distance.detail).toBe('Recorded in 1 of 2 activities');
     expect(values.ascent.value).toBe('0 m');
+    expect(values.ascent.hasData).toBe(true);
     expect(values.tss.value).toBe('—');
     expect(buildTodayActivityMetrics([], true).distance.value).not.toBe('—');
+    expect(buildTodayActivityMetrics([], true).distance.hasData).toBe(false);
     expect(buildTodayActivityMetrics([], false).distance.value).toBe('—');
   });
   it('distinguishes partial totals from a completed day with missing metric values', () => {

@@ -226,6 +226,7 @@ export class DashboardTodayDataService {
             : '';
           this.patch({
             [id]: {
+              hasData: selected !== null && selected !== undefined,
               value: display
                 ? [display.value, display.unit].filter(Boolean).join(' ')
                 : '—',

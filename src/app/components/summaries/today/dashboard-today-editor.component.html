@@ -5,15 +5,20 @@
       Choose what appears in Today. Hiding individual metrics won’t change
       Readiness.
     </p>
+    <p class="today-editor-hint">Data checks use each metric’s own period. You can select items without data.</p>
     <h3>Summaries</h3>
     <p class="today-editor-hint">Larger panels, shown above your metrics.</p>
     @for (block of summaries; track block.id) {
+      <div class="today-editor-available">
       <mat-checkbox
+        [aria-describedby]="'today-data-' + block.id"
         [checked]="draft()[block.id]"
         [disabled]="saving()"
         (change)="toggleBlock(block.id, $event.checked)"
         >{{ block.label }}</mat-checkbox
       >
+      <ng-container [ngTemplateOutlet]="dataStatus" [ngTemplateOutletContext]="{ $implicit: block.id }" />
+      </div>
     }
     <h3>Metrics</h3>
     <p class="today-editor-hint">
@@ -36,13 +41,16 @@
           >
             <mat-icon>drag_indicator</mat-icon>
           </button>
+          <div class="today-editor-metric">
           <mat-checkbox
+            [aria-describedby]="'today-data-' + metric.id"
             [id]="'today-metric-' + metric.id"
             [checked]="true"
             [disabled]="saving()"
             (change)="toggleMetric(metric.id, $event.checked)"
             >{{ metric.label }}</mat-checkbox
           >
+          </div>
           <div class="today-editor-order">
             <button
               mat-icon-button
@@ -63,6 +71,7 @@
               <mat-icon>arrow_downward</mat-icon>
             </button>
           </div>
+          <ng-container [ngTemplateOutlet]="dataStatus" [ngTemplateOutletContext]="{ $implicit: metric.id }" />
         </div>
       } @empty {
         <p class="today-editor-hint">
@@ -80,12 +89,14 @@
       @if (!draft().metrics.includes(metric.id)) {
         <div class="today-editor-available">
           <mat-checkbox
+            [aria-describedby]="'today-data-' + metric.id"
             [id]="'today-metric-' + metric.id"
             [checked]="false"
             [disabled]="saving()"
             (change)="toggleMetric(metric.id, $event.checked)"
             >{{ metric.label }}</mat-checkbox
           ><small>{{ metric.detail }}</small>
+          <ng-container [ngTemplateOutlet]="dataStatus" [ngTemplateOutletContext]="{ $implicit: metric.id }" />
         </div>
       }
     }
@@ -93,12 +104,16 @@
     @for (block of context; track block.id) {
       <div class="today-editor-available">
         <mat-checkbox
+          [aria-describedby]="block.id === 'recovery' ? 'today-data-recovery' : null"
           [checked]="draft()[block.id]"
           [disabled]="saving()"
           (change)="toggleBlock(block.id, $event.checked)"
           >{{ block.label }}</mat-checkbox
         >
         <small>{{ block.detail }}</small>
+        @if (block.id === 'recovery') {
+          <ng-container [ngTemplateOutlet]="dataStatus" [ngTemplateOutletContext]="{ $implicit: block.id }" />
+        }
       </div>
     }
     <button
@@ -137,3 +152,11 @@
     </button>
   </div>
 </section>
+<ng-template #dataStatus let-id>
+  @if (evidence.availability()[id]; as availability) {
+    <small class="today-editor-availability" [id]="'today-data-' + id" [attr.data-state]="availability.state">
+      <mat-icon aria-hidden="true">{{ availabilityIcons[availability.state] }}</mat-icon>
+      <span>{{ availability.label }}</span>
+    </small>
+  }
+</ng-template>

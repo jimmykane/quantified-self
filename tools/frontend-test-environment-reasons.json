@@ -195,6 +195,10 @@
     "environment": "angular",
     "reason": "Uses TestBed injection for owner, Pro and Functions execution fences, queued preference writes and consent-aware analytics dependencies."
   },
+  "src/app/services/dashboard-today-availability.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses injected owner-scoped readers, Angular effects and toSignal teardown to verify read-only Today editor checks, account isolation, errors, midnight updates and listener cancellation."
+  },
   "src/app/services/dashboard-today-data.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses injected owner-scoped readers and DestroyRef to verify shared activity listeners, optional dependency gating, account changes and cancellation of pending Health reads."

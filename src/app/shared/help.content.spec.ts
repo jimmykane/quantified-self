@@ -1766,6 +1766,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
     expect(gettingStartedSection?.content).toContain('**Recovery left** is off by default');
+    expect(gettingStartedSection?.content).toContain('Data indicators beside selected and available metrics');
+    expect(gettingStartedSection?.content).toContain('You can select a metric without data');
   });
 
   it('should document My Tracks trip sorting and the inferred Home entry', () => {

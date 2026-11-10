@@ -19,6 +19,8 @@ export interface DashboardTodayMetricValue {
   value: string;
   detail: string;
   status: 'loading' | 'ready' | 'empty' | 'error';
+  /** Recorded evidence, distinct from the displayed zero for an empty day. */
+  hasData?: boolean;
 }
 export type DashboardTodayMetricValues = Partial<
   Record<DashboardTodayMetricId, DashboardTodayMetricValue>
@@ -49,6 +51,7 @@ export function buildTodayActivityMetrics(
   const result: DashboardTodayMetricValues = selected.includes('activities')
     ? {
         activities: {
+          hasData: unique.length > 0,
           value: number.format(unique.length),
           detail: !complete
             ? 'Partial activity count'
@@ -108,6 +111,7 @@ export function buildTodayActivityMetrics(
       detail = `Recorded in ${number.format(count)} of ${number.format(unique.length)} activities`;
     }
     result[id] = {
+      hasData: count > 0,
       value: display?.text ?? '—',
       status: !complete ? 'error' : display ? 'ready' : 'empty',
       detail,

@@ -85,6 +85,7 @@
     "src/app/helpers/dashboard-tile-presentation.helper.spec.ts",
     "src/app/helpers/dashboard-tile-section.helper.spec.ts",
     "src/app/helpers/dashboard-tile-view-model.helper.spec.ts",
+    "src/app/helpers/dashboard-today-availability.helper.spec.ts",
     "src/app/helpers/dashboard-today-metrics.helper.spec.ts",
     "src/app/helpers/dashboard-today-settings.helper.spec.ts",
     "src/app/helpers/dashboard-today-visuals.helper.spec.ts",

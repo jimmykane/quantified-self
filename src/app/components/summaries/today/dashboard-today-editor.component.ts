@@ -43,11 +43,15 @@ import {
 } from '../../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserService } from '../../../services/app.user.service';
+import { NgTemplateOutlet } from '@angular/common';
+import { DashboardTodayAvailabilityService } from '../../../services/dashboard-today-availability.service';
+import { DashboardTodayDataService } from '../../../services/dashboard-today-data.service';
 
 @Component({
   selector: 'app-dashboard-today-editor',
   standalone: true,
   imports: [
+    NgTemplateOutlet,
     MatDialogModule,
     MatButtonModule,
     MatCheckboxModule,
@@ -55,12 +59,15 @@ import { AppUserService } from '../../../services/app.user.service';
     MatProgressSpinnerModule,
     DragDropModule,
   ],
+  providers: [DashboardTodayAvailabilityService, DashboardTodayDataService],
   templateUrl: './dashboard-today-editor.component.html',
   styleUrl: './dashboard-today-editor.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardTodayEditorComponent {
   readonly user = inject<AppUserInterface>(MAT_DIALOG_DATA);
+  readonly evidence = inject(DashboardTodayAvailabilityService);
+  readonly availabilityIcons = { ready: 'check_circle', history: 'history', 'no-data': 'info_outline', loading: 'hourglass_top', updating: 'sync', error: 'error_outline' };
   private readonly ref = inject(
     MatDialogRef<DashboardTodayEditorComponent, boolean>
   );
@@ -103,6 +110,7 @@ export class DashboardTodayEditorComponent {
     },
   ] as const;
   constructor() {
+    this.evidence.connect(this.user);
     effect(() => {
       if (this.users.user()?.uid !== this.user.uid) this.ref.close(false);
     });

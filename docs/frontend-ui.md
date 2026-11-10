@@ -368,7 +368,14 @@ from one source. Both follow the saved Health metric source pin, never sum provi
 report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
 Steps displays the recorded calendar day independently of the daily interval's end timestamp or browser time zone;
 its date still follows the account's regional formatting preference. Weight retains its actual measurement timestamp.
-Opening the editor does not start metric readers. Dashboard charts and picker previews resolve snapshot kinds through
+Opening the editor starts one read-only availability scope for all candidate metrics. Selected and available rows use
+the dashboard manager's availability states, with text and icons for ready, checking, missing, updating, history and
+failed reads. These checks reuse Today’s activity and Health readers, the same eligible Sleep evidence and four existing
+load/recovery snapshots. They never ensure/rebuild snapshots or generate a suggestion. Selection and ordering do not
+restart checks; closing the editor or changing accounts releases its listeners and aborts pending Health reads. A minute
+clock updates expiry and the local activity day. Recorded zero is available evidence; the displayed zero for an empty
+activity day is not. Missing data never disables a choice. Status text describes its checkbox and wraps below the
+reorder controls at narrow widths. Dashboard charts and picker previews resolve snapshot kinds through
 `dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
 must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
 The manager waits for its overlay to finish closing before opening Customize Today, restores focus after the editor

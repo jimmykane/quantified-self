@@ -13,6 +13,8 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { defaultDashboardTodaySettings } from '../../../helpers/dashboard-today-settings.helper';
+import { DashboardTodayAvailabilityService } from '../../../services/dashboard-today-availability.service';
+import { buildDashboardTodayAvailability } from '../../../helpers/dashboard-today-availability.helper';
 
 describe('Customize Today', () => {
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
@@ -20,6 +22,8 @@ describe('Customize Today', () => {
   const announcer = { announce: vi.fn().mockResolvedValue(undefined) };
   const ref = { close: vi.fn(), disableClose: false };
   const users = { user: signal<AppUserInterface | null>(null) };
+  const emptyAvailability = () => buildDashboardTodayAvailability({ metrics: {}, derived: null, sleep: null, sleepStatus: 'loading', nowMs: Date.now() });
+  const evidence = { connect: vi.fn(), availability: signal(emptyAvailability()) };
   let user: AppUserInterface;
   beforeEach(() => {
     vi.clearAllMocks();
@@ -29,6 +33,7 @@ describe('Customize Today', () => {
       settings: { dashboardSettings: { tiles: [], showTodaySummary: true } },
     } as AppUserInterface;
     users.user.set(user);
+    evidence.availability.set(emptyAvailability());
     TestBed.configureTestingModule({
       imports: [DashboardTodayEditorComponent, NoopAnimationsModule],
       providers: [
@@ -40,12 +45,41 @@ describe('Customize Today', () => {
         { provide: LiveAnnouncer, useValue: announcer },
       ],
     });
+    TestBed.overrideComponent(DashboardTodayEditorComponent, { set: { providers: [
+      { provide: DashboardTodayAvailabilityService, useValue: evidence },
+    ] } });
   });
   const render = () => {
     const fixture = TestBed.createComponent(DashboardTodayEditorComponent);
     fixture.detectChanges();
     return fixture;
   };
+  it('shows live availability for selected and unselected metrics without disabling choices or restarting checks', () => {
+    const fixture = render(), editor = fixture.componentInstance;
+    const host = fixture.nativeElement as HTMLElement;
+    expect(evidence.connect).toHaveBeenCalledExactlyOnceWith(user);
+    expect(host.querySelector('#today-data-weight')?.textContent).toContain('Checking data');
+    evidence.availability.update(current => ({ ...current,
+      load: { state: 'ready', hasData: true, label: 'Ready with your data', reason: '' },
+      weight: { state: 'no-data', hasData: false, label: 'No weigh-in recorded', reason: '' },
+      steps: { state: 'error', hasData: false, label: 'Could not check data', reason: '' },
+      hrv: { state: 'history', hasData: true, label: 'Needs more HRV history', reason: '' },
+    }));
+    fixture.detectChanges();
+    expect(host.querySelector('#today-data-load')?.getAttribute('data-state')).toBe('ready');
+    expect(host.querySelector('#today-data-hrv')?.textContent).toContain('Needs more HRV history');
+    expect(host.querySelector('#today-data-steps')?.getAttribute('data-state')).toBe('error');
+    const weight = host.querySelector<HTMLInputElement>('#today-metric-weight input')!;
+    expect(weight.getAttribute('aria-describedby')).toContain('today-data-weight');
+    expect(weight.disabled).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    editor.toggleMetric('weight', true); fixture.detectChanges();
+    expect(host.querySelectorAll('#today-data-weight')).toHaveLength(1);
+    expect(host.querySelector('#today-data-weight')?.textContent).toContain('No weigh-in recorded');
+    expect(editor.draft().metrics).toContain('weight');
+    expect(evidence.connect).toHaveBeenCalledTimes(1);
+    expect(persistence.save).not.toHaveBeenCalled();
+  });
   it('opens silently, keeps edits in a draft and allows keyboard ordering without changing saved settings', () => {
     const fixture = render(),
       editor = fixture.componentInstance;

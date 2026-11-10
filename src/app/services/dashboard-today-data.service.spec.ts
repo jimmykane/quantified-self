@@ -106,5 +106,6 @@ describe('Today optional data', () => {
     service.connect(user, settings(['weight']), '2026-11-09');
     await vi.waitFor(() => expect(service.metrics().weight?.status).toBe('ready'));
     expect(service.metrics().weight.value).toBe(value);
+    expect(service.metrics().weight.hasData).toBe(true);
   });
 });

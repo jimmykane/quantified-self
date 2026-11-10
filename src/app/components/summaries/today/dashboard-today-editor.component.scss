@@ -22,15 +22,33 @@ mat-checkbox {
   display: block;
 }
 .today-editor-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   min-width: 0;
   background: var(--mat-sys-surface-container-low);
 }
-.today-editor-row mat-checkbox {
-  flex: 1;
+.today-editor-metric {
   min-width: 0;
 }
+.today-editor-availability {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding-inline-start: 44px;
+  margin-block-end: 6px;
+  overflow-wrap: anywhere;
+}
+.today-editor-available .today-editor-availability { display: flex; }
+.today-editor-row .today-editor-availability { grid-column: 2 / -1; }
+.today-editor-availability mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  flex: 0 0 16px;
+}
+.today-editor-availability[data-state="ready"] mat-icon { color: var(--mat-sys-primary); }
+.today-editor-availability[data-state="error"] { color: var(--mat-sys-error); }
 .today-editor-order {
   display: flex;
   flex-shrink: 0;
