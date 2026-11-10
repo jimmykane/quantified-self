@@ -82,7 +82,7 @@ Light and dark scenes follow `AppThemeService`. Material tokens control text and
 the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
 procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
 A 4.5-second camera glide introduces depth on first display and when entering the optional intro, blending
-into a subtle continuous camera orbit with a 42-second cycle. Entering the intro replays the glide on the
+into a gentle continuous camera orbit with a 24-second cycle. Entering the intro replays the glide on the
 existing renderer so time spent on the starting-point screen cannot consume the intro's movement.
 Passive animation paints at up to 30 fps; pointer panning, theme and size changes can repaint immediately.
 There is no playback control. Touch input disables pointer panning; reduced-motion preferences disable

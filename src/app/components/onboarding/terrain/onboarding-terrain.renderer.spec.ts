@@ -160,7 +160,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     for (let i = 0; i < 200; i++) frame();
     stage.dispatchEvent(new Event('pointerleave'));
     for (let i = 0; i < 200; i++) frame();
-    frame(initialTime + 42000);
+    frame(initialTime + 24000);
     expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
     expect(frames.size).toBe(1);
   });
@@ -175,7 +175,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     frame(frameTime + 5000);
     const initial = camera.position.clone();
     move('touch');
-    frame(frameTime + 42000);
+    frame(frameTime + 24000);
     expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
     move();
     frame();
@@ -197,11 +197,11 @@ describe('onboarding terrain renderer lifecycle', () => {
     frame(frameTime + 4500);
     const afterEntry = camera.position.clone();
     expect(afterEntry.x).toBeGreaterThan(start.x);
-    frame(frameTime + 5000);
+    frame(frameTime + 1500);
     expect(camera.position.x).toBeGreaterThan(afterEntry.x);
-    frame(frameTime + 16000);
+    frame(frameTime + 12000);
     expect(camera.position.x).toBeLessThan(afterEntry.x);
-    frame(frameTime + 21000);
+    frame(frameTime + 10500);
     expect(camera.position.distanceTo(afterEntry)).toBeLessThan(0.001);
     expect(frames.size).toBe(1);
     expect(options.onReady).toHaveBeenCalledTimes(1);
