@@ -1,4 +1,5 @@
-import { DataAltitude, DataHeartRate } from '@sports-alliance/sports-lib';
+import { DataAltitude, DataHeartRate, DynamicDataLoader, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { BenchmarkResult, BenchmarkStreamMetrics } from '@shared/app-event.interface';
 import {
   EVENT_TAG_LIMIT,
@@ -32,6 +33,7 @@ export function normalizeBenchmarkReviewTags(value: unknown): string[] {
 export function buildBenchmarkReviewerSummary(
   result: BenchmarkResult | null | undefined,
   tags: string[] = [],
+  unitSettings?: UserUnitSettingsInterface,
 ): BenchmarkReviewerSummary {
   if (!result) {
     return {
@@ -77,8 +79,8 @@ export function buildBenchmarkReviewerSummary(
     {
       key: 'altitude',
       label: 'Alt',
-      value: `MD ${formatNumber(altitudeMeanDeviation, 'm', 1, true)}`,
-      detail: `MAE ${formatNumber(altitude?.meanAbsoluteError, 'm', 1)} · Corr ${formatCorrelation(altitude?.pearsonCorrelation)}`,
+      value: `MD ${formatBenchmarkAltitudeError(altitudeMeanDeviation, unitSettings, true)}`,
+      detail: `MAE ${formatBenchmarkAltitudeError(altitude?.meanAbsoluteError, unitSettings)} · Corr ${formatCorrelation(altitude?.pearsonCorrelation)}`,
     },
     {
       key: 'quality',
@@ -102,7 +104,7 @@ export function buildBenchmarkReviewerSummary(
     result.requiresRegeneration ? 'Status: Previous report retained after reprocessing. Regenerate to compare the current recordings.' : '',
     gnss ? `GNSS: CEP50 ${formatNumber(gnss.cep50, 'm', 1)}, RMSE ${formatNumber(gnss.rmse, 'm', 1)}, MAE ${formatNumber(gnss.meanAbsoluteError, 'm', 1)}` : 'GNSS: No shared GPS data',
     `HR: MD ${formatNumber(heartRateMeanDeviation, 'bpm', 0, true)}, MAE ${formatNumber(heartRate?.meanAbsoluteError, 'bpm', 0)}, correlation ${formatCorrelation(heartRate?.pearsonCorrelation)}`,
-    `Alt: MD ${formatNumber(altitudeMeanDeviation, 'm', 1, true)}, MAE ${formatNumber(altitude?.meanAbsoluteError, 'm', 1)}, correlation ${formatCorrelation(altitude?.pearsonCorrelation)}`,
+    `Alt: MD ${formatBenchmarkAltitudeError(altitudeMeanDeviation, unitSettings, true)}, MAE ${formatBenchmarkAltitudeError(altitude?.meanAbsoluteError, unitSettings)}, correlation ${formatCorrelation(altitude?.pearsonCorrelation)}`,
     `Quality: ${qualityIssueCount === 0 ? 'No issues' : `${qualityIssueCount} issue${qualityIssueCount === 1 ? '' : 's'}`}${result.timeOffsetSeconds === undefined ? '' : `, offset ${result.timeOffsetSeconds}s`}`,
     normalizedTags.length > 0 ? `Tags: ${normalizedTags.join(', ')}` : '',
   ].filter(Boolean);
@@ -115,6 +117,23 @@ export function buildBenchmarkReviewerSummary(
     text: `${title}\n${lines.map(line => `- ${line}`).join('\n')}`,
     atAGlanceItems,
   };
+}
+
+export function isBenchmarkAltitudeStream(stream: string): boolean {
+  if (normalizeMetricKey(stream) === 'averagealtitude') return true;
+  try {
+    const dataClass = DynamicDataLoader.getDataClassFromDataType(stream);
+    return dataClass === DataAltitude || dataClass.prototype instanceof DataAltitude;
+  } catch {
+    return false;
+  }
+}
+
+/** Preserve the report's decimal precision while converting only its presentation. */
+export function formatBenchmarkAltitudeError(value: unknown, settings?: UserUnitSettingsInterface, signed = false): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  const data = new DataAltitude(value, normalizeUserUnitSettings(settings).elevationUnits);
+  return formatNumber(data.getDisplayNumericValue(), data.getDisplayUnit(), 1, signed);
 }
 
 function formatBenchmarkPair(result: BenchmarkResult): string {

@@ -1986,3 +1986,24 @@ renderers opt into the shared dashboard plot sizing/alignment contract; their no
 layouts retain their defaults. Durability fits the tile width, with compact weekly labels on narrow plots. Full manager
 previews grow with evidence text rather than clipping it. No raw streams, new calculations or per-tile snapshot
 listeners are introduced.
+
+### Independent elevation units
+
+`unitSettings.elevationUnits` selects `ElevationUnits.Meters` or `ElevationUnits.Feet` independently of distance and
+vertical-speed preferences. Shared normalization and legacy profile hydration retain metres when absent or invalid.
+Settings exposes Elevation under Units & formatting → Customize units; the kilometre/mile presets set metres/feet.
+An elevation override makes the preset Custom. Onboarding uses the same preset builder.
+
+All metric surfaces use the existing Sports Lib display boundary through `shared/unit-aware-display.ts`, including
+event/route chart axes, headers, tooltips, range stats, calendar period totals, tables, exports and canonical Health
+altitude. Raw chart samples, altitude-grade calculation inputs, canonical metric identities and stored JSON stay in
+metres. The elevation correction editor uses Sports Lib's unrounded display conversion and converts accepted feet
+input back to metres; an unchanged loaded value cannot become a correction merely from changing display units.
+Benchmark altitude-error cards and copied summaries convert presentation through the same library conversion, retaining
+their decimal precision. Grades, correlations, GNSS errors and stored benchmark results are unchanged. Their small
+display map refreshes only when the report or unit settings change.
+No activity rewrite, provider send, reparse, derived rebuild or data migration is required.
+
+The companion Sports Lib PR is https://github.com/sports-alliance/sports-lib/pull/171. Both root and Functions pin the
+same immutable Git commit until a registry release is approved. Git package preparation builds ESM/CJS outputs; no
+local adapters or node_modules patches are used. Replace both pins together with the published version after release.

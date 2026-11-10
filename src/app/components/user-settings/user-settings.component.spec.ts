@@ -41,7 +41,7 @@ import {
     SwimPaceUnits,
     User,
     VerticalSpeedUnits,
-    WeightUnits,
+    WeightUnits, ElevationUnits,
 } from '@sports-alliance/sports-lib';
 
 
@@ -1485,6 +1485,7 @@ describe('UserSettingsComponent', () => {
         component.onUnitPresetChange('miles');
 
         expect(component.selectedUnitPreset).toBe('miles');
+        expect(component.userSettingsFormGroup.get('elevationUnitsToUse').value).toBe(ElevationUnits.Feet);
         expect(component.userSettingsFormGroup.get('distanceUnitsToUse').value).toBe(DistanceUnits.Miles);
         expect(component.userSettingsFormGroup.get('speedUnitsToUse').value).toEqual([SpeedUnits.MilesPerHour]);
         expect(component.userSettingsFormGroup.get('paceUnitsToUse').value).toEqual([PaceUnits.MinutesPerMile]);
@@ -1493,6 +1494,18 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.dirty).toBe(true);
     });
 
+    it('saves a separate elevation preference while retaining kilometre distance', async () => {
+        await renderSettings();
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        component.onUnitPresetChange('kilometers');
+        component.userSettingsFormGroup.get('elevationUnitsToUse').setValue(ElevationUnits.Feet);
+        expect(component.selectedUnitPreset).toBeNull();
+        await component.onSubmit(new Event('submit'));
+        expect(userService.updateUserProperties).toHaveBeenCalledWith(component.user, expect.objectContaining({settings: expect.objectContaining({
+            unitSettings: expect.objectContaining({ distanceUnits: DistanceUnits.Kilometers, elevationUnits: ElevationUnits.Feet }),
+        })}));
+    });
     it('allows reapplying the same preset after customizing its unit choices', async () => {
         await renderSettings();
         component.activeSection = 'units';
@@ -1538,7 +1551,7 @@ describe('UserSettingsComponent', () => {
                     distanceUnits: expected.distance, speedUnits: [expected.speed], paceUnits: [expected.pace],
                     swimPaceUnits: [expected.swim], verticalSpeedUnits: [expected.vertical],
                     gradeAdjustedPaceUnits: [expected.gap], gradeAdjustedSpeedUnits: [expected.gas],
-                    weightUnits: WeightUnits.Pounds, startOfTheWeek: 0,
+                    weightUnits: WeightUnits.Pounds, elevationUnits: expected.preset === 'miles' ? ElevationUnits.Feet : ElevationUnits.Meters, startOfTheWeek: 0,
                 },
                 appSettings: expect.objectContaining({formatLocale: 'en-GB'}),
             })}),

@@ -26,6 +26,8 @@ import {
   SwimPaceUnits,
   VerticalSpeedUnits,
   WeightUnits,
+  ElevationUnits,
+  DataAltitude,
 } from '@sports-alliance/sports-lib';
 import {
   formatUnitAwareDataValue,
@@ -36,6 +38,16 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('formats elevation in feet independently of distance and preserves canonical metres', () => {
+    const feet = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Kilometers, elevationUnits: ElevationUnits.Feet });
+    for (const Metric of [DataAltitude, DataAscent, DataDescent]) {
+      const stat = new Metric(30.48);
+      expect(resolveUnitAwareDisplayStat(stat, feet)).toMatchObject({ value: '100', unit: 'ft' });
+      expect(stat.toJSON()).toEqual({ [Metric.type]: 30.48 });
+      expect(resolveUnitAwareDisplayStat(stat, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }))).toMatchObject({ unit: 'm' });
+    }
+    expect(normalizeUserUnitSettings({ elevationUnits: 'invalid' }).elevationUnits).toBe(ElevationUnits.Meters);
+  });
   it('rounds configured CSS only after unit conversion without changing the canonical stat or ordinary pace display', () => {
     for (const unit of [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard]) {
       const settings = normalizeUserUnitSettings({ swimPaceUnits: [unit] });
@@ -101,6 +113,7 @@ describe('unit-aware-display', () => {
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
       weightUnits: WeightUnits.Kilograms,
+      elevationUnits: ElevationUnits.Meters,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -122,6 +135,7 @@ describe('unit-aware-display', () => {
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
       weightUnits: WeightUnits.Kilograms,
+      elevationUnits: ElevationUnits.Meters,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });

@@ -183,7 +183,7 @@ describe('BenchmarkBottomSheetComponent', () => {
     it('copies the benchmark reviewer summary', () => {
         component.copyBenchmarkSummary();
 
-        expect(benchmarkReviewServiceMock.copySummary).toHaveBeenCalledWith(mockResult, ['firmware']);
+        expect(benchmarkReviewServiceMock.copySummary).toHaveBeenCalledWith(mockResult, ['firmware'], component.data.unitSettings);
         expect(snackBarMock.open).toHaveBeenCalledWith('Benchmark summary copied.', undefined, { duration: 2500 });
     });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataAscent, DataDistance, DataDuration, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAscent, DataDistance, DataDuration, DistanceUnits, ElevationUnits } from '@sports-alliance/sports-lib';
 import type { EventRead } from '@shared/event-read';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildActivityCalendarViewModel, resolveActivityCalendarPrimaryRange } from './activity-calendar.helper';
@@ -39,6 +39,15 @@ describe('calendar period totals', () => {
     expect(miles[4].value).toBe('80');
   });
 
+  it('uses feet for period ascent while keeping recorded totals and kilometre distance unchanged', () => {
+    const anchorDate = new Date(2026, 9, 15);
+    const model = buildActivityCalendarViewModel([event('ride', anchorDate, { [DataAscent.type]: 30.48, [DataDistance.type]: 1000 })], { view: 'month', anchorDate });
+    const feet = formatActivityCalendarPeriodTotals(model, normalizeUserUnitSettings({ elevationUnits: ElevationUnits.Feet }), 'en-US');
+    const metres = formatActivityCalendarPeriodTotals(model, normalizeUserUnitSettings({ elevationUnits: ElevationUnits.Meters }), 'en-US');
+    expect(feet.find(metric => metric.label === 'Ascent')?.value).toBe('100 ft');
+    expect(metres.find(metric => metric.label === 'Ascent')?.value).toBe('30 m');
+    expect(feet.find(metric => metric.label === 'Distance')?.value).toBe(metres.find(metric => metric.label === 'Distance')?.value);
+  });
   it('keeps loading/unavailable, empty, missing and recorded zero distinct', () => {
     const anchorDate = new Date(2026, 9, 15);
     const build = (events: EventRead[]) => buildActivityCalendarViewModel(events, { view: 'month', anchorDate });

@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { BehaviorSubject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DistanceUnits, type User } from '@sports-alliance/sports-lib';
+import { DistanceUnits, ElevationUnits, type User } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { ActivityAscentEditorComponent } from './activity-ascent-editor.component';
 import { ActivityAscentService, type ActivityAscentRow } from '../../services/activity-ascent.service';
@@ -21,8 +21,8 @@ describe('ActivityAscentEditorComponent', () => {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     ref = { close: vi.fn(), disableClose: false };
   });
-  async function render(distanceUnits = DistanceUnits.Kilometers) {
-    const user = { uid: 'owner', settings: { unitSettings: normalizeUserUnitSettings({ distanceUnits }) } } as User;
+  async function render(distanceUnits = DistanceUnits.Kilometers, elevationUnits = ElevationUnits.Meters) {
+    const user = { uid: 'owner', settings: { unitSettings: normalizeUserUnitSettings({ distanceUnits, elevationUnits }) } } as User;
     user$ = new BehaviorSubject(user);
     await TestBed.configureTestingModule({ imports: [ActivityAscentEditorComponent], providers: [
       { provide: MAT_DIALOG_DATA, useValue: { user, eventId: 'event' } },
@@ -41,6 +41,18 @@ describe('ActivityAscentEditorComponent', () => {
     expect(fixture.nativeElement.querySelector('input').value).toBe('75');
     expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
   });
+  it.each(['ascent', 'descent'] as const)('edits %s in feet but submits canonical metres and keeps unchanged data unsaved', async metric => {
+    const fixture = await render(DistanceUnits.Kilometers, ElevationUnits.Feet), component = fixture.componentInstance;
+    if (metric === 'descent') { component.selectMetric(metric); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); }
+    expect(component.unit()).toBe('ft');
+    expect(component.value()).toBeCloseTo(246.062992126, 8);
+    expect(component.canSave()).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    component.edit(NaN); expect(component.canSave()).toBe(false);
+    component.edit(500); await component.save();
+    expect(save).toHaveBeenCalledWith('owner', 'event', row, 152.4, metric);
+    expect(row.value).toBe(75);
+  });
   it('rejects negative/empty input and saves zero with one selection and success feedback', async () => {
     const saved = { activityId: 'hike', metric: 'ascent', value: 0, eventValue: 0, correction: { value: 0, sourceValue: 250 } };
     save.mockResolvedValueOnce(saved);
@@ -53,10 +65,11 @@ describe('ActivityAscentEditorComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
     expect(ref.close).toHaveBeenCalledWith(saved);
   });
-  it('reviews reset locally and restores the imported value only after Save', async () => {
-    const component = (await render()).componentInstance;
+  it.each([ElevationUnits.Meters, ElevationUnits.Feet])('reviews reset in %s and restores the imported value only after Save', async units => {
+    const component = (await render(DistanceUnits.Kilometers, units)).componentInstance;
     component.restore();
-    expect(component.value()).toBe(250); expect(save).not.toHaveBeenCalled();
+    expect(component.value()).toBeCloseTo(units === ElevationUnits.Feet ? 250 / 0.3048 : 250);
+    expect(save).not.toHaveBeenCalled();
     await component.save();
     expect(save).toHaveBeenCalledWith('owner', 'event', row, null, 'ascent');
   });

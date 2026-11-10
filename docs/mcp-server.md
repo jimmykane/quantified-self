@@ -3229,3 +3229,12 @@ Preview effects disclose the distinct previous/proposed windows and explicit rem
 step assignments. No existing registered schema, permission, apply boundary or provider-consent authority is widened.
 The pending digest requires backend release and developer rescan; bundled guidance requires the normal separately
 authorized plugin refresh. See [Training](training-workspace.md#garmin-execution-power-averaging).
+
+### Elevation display preference compatibility
+
+The separate metre/feet elevation preference changes presentation through Sports Lib and the shared unit-aware helper.
+Sports Lib retains `Altitude`, its variants, `Ascent` and `Descent` tokens, canonical metre units, numeric values and JSON.
+The MCP catalog and persisted-value availability remain unchanged; feet display never introduces an alternate event stat.
+No tools, fields, grants, scopes, consent, provider capability or registered schema are added. Stored activity/chart stream
+values stay canonical, so no reparse, derived schema bump or persisted-data migration is required. Root and Functions
+consume the same immutable Sports Lib preview commit for this integration; this is not a deployed package release.
