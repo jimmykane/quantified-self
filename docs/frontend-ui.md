@@ -2004,6 +2004,5 @@ their decimal precision. Grades, correlations, GNSS errors and stored benchmark 
 display map refreshes only when the report or unit settings change.
 No activity rewrite, provider send, reparse, derived rebuild or data migration is required.
 
-The companion Sports Lib PR is https://github.com/sports-alliance/sports-lib/pull/171. Both root and Functions pin the
-same immutable Git commit until a registry release is approved. Git package preparation builds ESM/CJS outputs; no
-local adapters or node_modules patches are used. Replace both pins together with the published version after release.
+Both root and Functions pin the published Sports Lib 23.11.0 package with matching lockfile integrity. The shared
+display boundary uses its public APIs; no local adapters or node_modules patches are used.

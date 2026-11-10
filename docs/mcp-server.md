@@ -3237,4 +3237,5 @@ Sports Lib retains `Altitude`, its variants, `Ascent` and `Descent` tokens, cano
 The MCP catalog and persisted-value availability remain unchanged; feet display never introduces an alternate event stat.
 No tools, fields, grants, scopes, consent, provider capability or registered schema are added. Stored activity/chart stream
 values stay canonical, so no reparse, derived schema bump or persisted-data migration is required. Root and Functions
-consume the same immutable Sports Lib preview commit for this integration; this is not a deployed package release.
+pin the same published Sports Lib 23.11.0 artifact. This package adoption does not deploy the backend or promote the
+existing pending MCP contract.
