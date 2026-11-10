@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Activity-table Help covers the searchable column dialog, saved ordering and failed-save recovery (2026-11-09).
+// Activity-table Help covers shared layouts, calendar-week navigation and aligned inline period totals (2026-11-09).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
@@ -364,6 +364,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
     // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
+    // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
   });
 

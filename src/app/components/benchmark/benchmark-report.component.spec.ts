@@ -11,7 +11,7 @@ import { SimpleChange } from '@angular/core';
 import {
     EventImporterJSON, ActivityTypes, DataRRRMSSD, DataRRCoverage, DataRRArtifactPercentage,
     DataRRArtifactCount, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median,
-    DataRRSuspectedEctopicPairCount, DataDistance, DistanceUnits,
+    DataRRSuspectedEctopicPairCount, DataDistance, DistanceUnits, ElevationUnits,
     type ActivityInterface, type DataInterface, type EventInterface,
 } from '@sports-alliance/sports-lib';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
@@ -97,6 +97,23 @@ describe('BenchmarkReportComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('refreshes altitude errors and summary units while retaining canonical values and GPS errors', () => {
+        const fixture = TestBed.createComponent(BenchmarkReportComponent);
+        const report = createMockResult(1, 0.99);
+        report.metrics.streamMetrics.Altitude = { rootMeanSquareError: 3.048, meanAbsoluteError: 1.524, pearsonCorrelation: 0.99 };
+        fixture.componentRef.setInput('result', report);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('RMSE: 3 m');
+        const units = { ...getDefaultUserUnitSettings(), elevationUnits: ElevationUnits.Feet };
+        fixture.componentRef.setInput('unitSettings', units);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('RMSE: 10 ft');
+        expect(fixture.nativeElement.textContent).toContain('MAE: 5 ft');
+        expect(report.metrics.streamMetrics.Altitude.rootMeanSquareError).toBe(3.048);
+        expect(report.metrics.gnss?.cep50).toBe(1);
+        expect(TestBed.inject(BenchmarkReviewService).buildSummary).toHaveBeenLastCalledWith(report, [], units);
     });
 
     it('excludes unavailable GPS from grades and insights', () => {
@@ -233,7 +250,7 @@ describe('BenchmarkReportComponent', () => {
         });
 
         const reviewService = TestBed.inject(BenchmarkReviewService) as unknown as { buildSummary: ReturnType<typeof vi.fn> };
-        expect(reviewService.buildSummary).toHaveBeenCalledWith(component.result, ['firmware']);
+        expect(reviewService.buildSummary).toHaveBeenCalledWith(component.result, ['firmware'], component.unitSettings);
         expect(component.atAGlanceItems).toEqual([
             { key: 'overall', label: 'Overall', value: 'Excellent agreement' },
         ]);

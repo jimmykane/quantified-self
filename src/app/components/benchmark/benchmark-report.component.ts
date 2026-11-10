@@ -14,7 +14,7 @@ import {
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
 import { BenchmarkQualityIssue, BenchmarkResult } from '@shared/app-event.interface';
-import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary, BenchmarkGrade, resolveBenchmarkGnssGrade, resolveBenchmarkCorrelationGrade, resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
+import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary, BenchmarkGrade, resolveBenchmarkGnssGrade, resolveBenchmarkCorrelationGrade, resolveBenchmarkOverallGrade, isBenchmarkAltitudeStream, formatBenchmarkAltitudeError } from '../../helpers/benchmark-review.helper';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { RR_METRICS } from '../../constants/rr-metrics';
 import { buildBenchmarkRRReportRows, type BenchmarkRRReportRow } from '../../helpers/benchmark-rr.helper';
@@ -316,8 +316,8 @@ interface InsightItem {
                     </span>
                 </div>
                 <div class="mini-stats">
-                    <span>RMSE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].rootMeanSquareError | number:'1.1-1' }}</span></span>
-                    <span>MAE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].meanAbsoluteError | number:'1.1-1' }}</span></span>
+                    <span>RMSE: <span class="stat-val">{{ altitudeErrors[stream]?.rmse ?? (result.metrics.streamMetrics[stream].rootMeanSquareError | number:'1.1-1') }}</span></span>
+                    <span>MAE: <span class="stat-val">{{ altitudeErrors[stream]?.mae ?? (result.metrics.streamMetrics[stream].meanAbsoluteError | number:'1.1-1') }}</span></span>
                 </div>
             </div>
         </section>
@@ -339,6 +339,7 @@ export class BenchmarkReportComponent implements OnChanges {
     objectKeys = Object.keys;
     diffChips: BenchmarkDiffChip[] = [];
     rrRows: BenchmarkRRReportRow[] = [];
+    altitudeErrors: Record<string, { rmse: string; mae: string }> = {};
     qualityIssueGroups: BenchmarkIssueGroup[] = [];
     expandedIssueGroups = new Set<string>();
     reviewerSummary: BenchmarkReviewerSummary | null = null;
@@ -355,13 +356,21 @@ export class BenchmarkReportComponent implements OnChanges {
             this.updateRRRows();
             this.updateQualityIssueGroups();
         }
-        if (changes['result'] || changes['benchmarkReviewTags']) {
+        if (changes['result'] || changes['unitSettings']) {
+            this.altitudeErrors = Object.fromEntries(Object.entries(this.result?.metrics?.streamMetrics ?? {})
+                .filter(([stream]) => isBenchmarkAltitudeStream(stream))
+                .map(([stream, metrics]) => [stream, {
+                    rmse: formatBenchmarkAltitudeError(metrics.rootMeanSquareError, this.unitSettings),
+                    mae: formatBenchmarkAltitudeError(metrics.meanAbsoluteError, this.unitSettings),
+                }]));
+        }
+        if (changes['result'] || changes['benchmarkReviewTags'] || changes['unitSettings']) {
             this.updateReviewerSummary();
         }
     }
 
     private updateReviewerSummary(): void {
-        this.reviewerSummary = this.benchmarkReviewService.buildSummary(this.result, this.benchmarkReviewTags);
+        this.reviewerSummary = this.benchmarkReviewService.buildSummary(this.result, this.benchmarkReviewTags, this.unitSettings);
         this.atAGlanceItems = this.reviewerSummary.atAGlanceItems;
         this.reviewerSummaryGrade = this.getOverallGrade();
         this.reviewerSummaryIcon = this.getGradeIcon(this.reviewerSummaryGrade);

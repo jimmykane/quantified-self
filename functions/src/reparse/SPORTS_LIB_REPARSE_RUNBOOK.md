@@ -1,5 +1,15 @@
 # Sports-Lib Reparse Runbook
 
+## Sports Lib 23.11.0: independent elevation units
+
+Root and Functions pin the same published 23.11.0 artifact with matching lockfile integrity. Runtime detection and
+strict activity/route reparse targets follow the installed package; version-mismatch checks remain unchanged.
+Metres/feet selection only affects display and the conversion of accepted elevation corrections
+back to canonical metres. Existing samples, summaries, raw activity exports and metric tokens keep their canonical values and units.
+No historical reparse, migration or Training rebuild is required. Before a separately authorized backend deployment,
+review already-enabled scanners: the version increase can make older records eligible. This adoption does not enable
+scanners, start a production reparse or change deployment configuration.
+
 ## Sports Lib 23.10.0: dated threshold calibration compatibility
 
 Root and Functions pin the same published 23.10.0 artifact with matching lockfile integrity. Runtime detection and

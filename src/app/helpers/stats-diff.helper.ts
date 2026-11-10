@@ -1,4 +1,4 @@
-import { ActivityInterface, DataDistance, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataAltitude, DataDistance, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolvePrimaryUnitAwareDisplayStat, resolveSummaryDisplayStat } from './summary-display.helper';
 
@@ -64,7 +64,7 @@ export const computeStatDiff = (
   const denom = (Math.abs(valueA) + Math.abs(valueB)) / 2;
   const percent = denom === 0 ? 0 : 100 * Math.abs((valueA - valueB) / denom);
   const diffStat = DynamicDataLoader.getDataInstanceFromDataType(displayStatType, diffValue);
-  const display = displayStatType === DataDistance.type
+  const display = displayStatType === DataDistance.type || diffStat instanceof DataAltitude
     ? resolvePrimaryUnitAwareDisplayStat(diffStat, unitSettings, displayStatType, [activityA.type, activityB.type])?.text ?? ''
     : `${diffStat.getDisplayValue()} ${diffStat.getDisplayUnit()}`.trim();
 

@@ -34,6 +34,10 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   readonly startDate = input<Date | string | null>(null);
   readonly endDate = input<Date | string | null>(null);
   readonly disabled = input(false);
+  readonly weekNavigation = input(false);
+  readonly currentWeek = input(false);
+  readonly weekShift = output<-1 | 1>();
+  readonly currentWeekRequested = output<void>();
   readonly invalidRangeMessage = input('Choose valid start and end dates.');
   readonly selectionChange = output<T>();
   readonly applied = output<void>();
@@ -51,7 +55,7 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
     const sameMonth = sameYear && this.adapter.getMonth(start) === this.adapter.getMonth(end);
     return `${this.adapter.format(start, sameMonth ? 'D' : sameYear ? 'D MMM' : 'D MMM YYYY')}${sameMonth ? '–' : ' – '}${this.adapter.format(end, 'D MMM YYYY')}`;
   });
-  readonly label = computed(() => this.customSelected() && this.rangeLabel()
+  readonly label = computed(() => (this.customSelected() || this.weekNavigation()) && this.rangeLabel()
     ? this.rangeLabel() : this.options().find(option => option.value === this.value())?.label || 'Date range');
   private readonly adapter = inject<DateAdapter<Dayjs>>(DateAdapter);
   private readonly haptics = inject(AppHapticsService);
@@ -61,6 +65,14 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   private readonly picker = viewChild.required<MatDateRangePicker<Dayjs>>('picker');
   private pendingChoice?: T;
   private applyClicked = false;
+
+  shiftWeek(direction: -1 | 1): void {
+    if (!this.disabled() && this.weekNavigation()) this.weekShift.emit(direction);
+  }
+
+  showCurrentWeek(): void {
+    if (!this.disabled() && this.weekNavigation() && !this.currentWeek()) this.currentWeekRequested.emit();
+  }
 
   open(): void {
     if (this.disabled() || this.pendingChoice !== undefined || this.trigger().menuOpen || this.picker().opened) return;

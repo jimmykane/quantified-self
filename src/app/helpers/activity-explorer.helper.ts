@@ -1,3 +1,4 @@
+import { resolveActivityCalendarPrimaryRange } from './activity-calendar.helper';
 import type { EventTagsContainer } from '@shared/event-tags';
 import { getEventTags } from '@shared/event-tags';
 import { CompatibleTrainingActivityTypes, resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
@@ -6,6 +7,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 export const ACTIVITY_EXPLORER_PERIODS = [
   { value: 'month', label: 'Last 30 days' },
   { value: 'week', label: 'Last 7 days' },
+  { value: 'calendar-week', label: 'This week' },
   { value: 'quarter', label: 'Last 90 days' },
   { value: 'year', label: 'This year' },
   { value: 'custom', label: 'Custom dates' },
@@ -34,9 +36,13 @@ export function normalizeActivityExplorerCustomDates(startDate: unknown, endDate
 }
 
 export function activityExplorerDateRange(
-  period: ActivityExplorerPeriod, now: Date, customDates?: ActivityExplorerCustomDates | null,
+  period: ActivityExplorerPeriod, now: Date, customDates?: ActivityExplorerCustomDates | null, startOfWeek = 1,
 ): { start: Date; end: Date } | null | undefined {
   if (period === 'all') return null;
+  if (period === 'calendar-week') {
+    const range = resolveActivityCalendarPrimaryRange('week', now, startOfWeek);
+    return { start: new Date(range.startMs), end: new Date(range.endExclusiveMs) };
+  }
   if (period === 'custom') {
     const dates = normalizeActivityExplorerCustomDates(customDates?.startDate, customDates?.endDate);
     if (!dates) return undefined;

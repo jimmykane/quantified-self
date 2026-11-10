@@ -18,6 +18,7 @@ class EventTableStubComponent {
   @Input() targetUser: User | null = null;
   @Input() events: unknown[] = [];
   @Input() showActions = true;
+  @Input() hideGeneratedNames = false;
   @Input() isLoading = false;
 }
 
@@ -69,6 +70,7 @@ describe('ActivityRangeTableSectionComponent', () => {
       .componentInstance as EventTableStubComponent;
     expect(table.presentation).toBe('dashboard');
     expect(table.showActions).toBe(true);
+    expect(table.hideGeneratedNames).toBe(true);
   });
 
   it('keeps the same shared table mounted from initial loading through a changed range without duplicate indicators or queries', async () => {

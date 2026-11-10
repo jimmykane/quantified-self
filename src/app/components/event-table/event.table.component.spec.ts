@@ -1,3 +1,4 @@
+import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { AppEventSummary } from '@shared/event-summary';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -642,8 +643,8 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it.each(['tag-library', 'training-log'] as const)('gives %s sorting and pagination feedback while keeping hydration and parent resets silent', async presentation => {
-        const pageSize = presentation === 'tag-library' ? 5 : 25;
+    it.each(['tag-library', 'dashboard'] as const)('gives %s sorting and pagination feedback while keeping hydration and parent resets silent', async presentation => {
+        const pageSize = presentation === 'tag-library' ? 5 : component.tablePageSize;
         component.presentation = presentation;
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', presentation, false) });
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
@@ -657,7 +658,7 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(2);
     });
 
-    it.each(['tag-library', 'training-log'] as const)('gives %s page feedback after a silent filtered-page clamp', async presentation => {
+    it.each(['tag-library'] as const)('gives %s page feedback after a silent filtered-page clamp', async presentation => {
         const pageSize = presentation === 'tag-library' ? 5 : 25;
         component.presentation = presentation;
         await component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize } as any);
@@ -668,7 +669,7 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it.each(['tag-library', 'training-log'] as const)('gives one %s tag-filter haptic when resetting the paginator', async presentation => {
+    it.each(['tag-library'] as const)('gives one %s tag-filter haptic when resetting the paginator', async presentation => {
         component.presentation = presentation;
         const pageSize = presentation === 'tag-library' ? 5 : 25;
         await component.pageChanges({ pageIndex: 1, pageSize } as any);
@@ -678,12 +679,6 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
-    it('keeps Training log page-size synchronization silent', () => {
-        component.presentation = 'training-log';
-        component.paginator._changePageSize = pageSize => { void component.pageChanges({ pageIndex: 1, previousPageIndex: 0, pageSize }); };
-        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'training-log', false) });
-        expect(mockHapticsService.selection).not.toHaveBeenCalled();
-    });
 
     it('keeps search focused after its clear button disappears and gives one feedback', () => {
         component.searchTerm = 'run';
@@ -1101,13 +1096,13 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
-    it('ignores a failed column save after switching to Training log', async () => {
+    it('ignores a failed column save after switching to Tag library', async () => {
         let reject!: (error: Error) => void;
         mockUserService.updateUserProperties.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
         const save = component.selectedColumnsChange(['Distance']);
         expect(mockUser.settings.dashboardSettings.tableSettings.selectedColumns).toEqual([]);
-        component.presentation = 'training-log';
-        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'training-log', false) });
+        component.presentation = 'tag-library';
+        component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', false) });
         const columns = [...component.selectedColumns];
         reject(new Error('offline')); await save;
         expect(component.selectedColumns).toEqual(columns);
@@ -2732,7 +2727,7 @@ async function setupColumnPicker(selected = ['Distance', 'Duration']) {
     const haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({
         declarations: [EventTableActionsComponent],
-        imports: [CommonModule, MatListModule, MatButtonModule, MatIconModule, MatCheckboxModule, MatDialogModule,
+        imports: [CompactSelectComponent, CommonModule, MatListModule, MatButtonModule, MatIconModule, MatCheckboxModule, MatDialogModule,
             MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatTooltipModule, NoopAnimationsModule],
         providers: [{ provide: AppHapticsService, useValue: haptics }],
         schemas: [NO_ERRORS_SCHEMA],
@@ -2770,6 +2765,22 @@ describe('EventTableActionsComponent Material dialog', () => {
         expect(document.activeElement).toBe(p.trigger);
         expect(p.changes).not.toHaveBeenCalled();
         expect(p.haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('offers Default and Running presets in the same dialog and applies their column order', async () => {
+        const p = await setupColumnPicker();
+        expect(p.dialog.querySelector('app-compact-select[label="Preset"]')).toBeTruthy();
+        expect(p.component.selectedPreset).toBe('custom');
+        p.component.selectPreset('running'); await p.settle();
+        expect(p.columns()).toEqual(['Duration', 'Distance', 'Ascent', 'Average Grade Adjusted Pace']);
+        expect(p.component.selectedPreset).toBe('running');
+        p.component.selectPreset('running'); await p.settle();
+        expect(p.changes).toHaveBeenCalledTimes(1);
+        p.component.selectPreset('default'); await p.settle();
+        expect(p.columns()).toEqual(['Duration', 'Distance', 'Ascent']);
+        expect(p.component.selectedPreset).toBe('default');
+        expect(p.changes).toHaveBeenCalledTimes(2);
+        expect(p.haptics.selection).toHaveBeenCalledTimes(3);
     });
 
     it('searches available columns by label without losing selected columns or giving typing feedback', async () => {

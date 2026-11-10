@@ -29,15 +29,15 @@ describe('help.content', () => {
   it('explains the searchable, ordered activity-table column dialog and save recovery', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',
-      '**Add columns**', 'failed save restores the previous choices and order', 'Training log and Tag library changes stay local',
-      'normal list also keeps Description fixed']) expect(content).toContain(phrase);
+      '**Add columns**', 'failed save restores the previous choices and order', 'share one column layout and order', '**Preset → Default**', '**Preset → Running**']) expect(content).toContain(phrase);
   });
-  it('explains the Activities Training log, local columns and filtered weekly totals', () => {
+  it('explains unified activity tables, weekly dates and inline period totals', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const phrase of ['**View → Training log**', '**Weekly totals by sport**', '**Columns → Running**',
+    for (const phrase of ['**Weekly activity browsing:**', '**This week**', '**Totals**', '**Preset → Running**',
       '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
-      'Log column, sort and page-size changes stay local', 'recorded-activity counts for partial coverage',
+      'same compact activity table', 'recorded-activity counts for partial coverage',
       'merged comparisons stay out of totals', 'unavailable value stays blank']) expect(content).toContain(phrase);
+    expect(content).not.toContain('**View → Training log**');
   });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
     const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
@@ -3216,6 +3216,7 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   const content = HELP_SECTIONS.map(section => section.content).join('\n');
   for (const text of ['/send-activities', '20 MiB compressed and expanded', '200 MiB', '24 hours', 'seven days', '30 days', 'Unknown acceptance', 'Stop unsent activities', 'rather than Basic', 'temporary storage cleanup continues in the background', 'Start a new send to add a file you removed']) expect(content).toContain(text);
   expect(content).not.toContain('upload rows are not retained across reloads');
+  expect(content).toContain('download it to this device and select it again');
   expect(content).toContain('A temporary file-read failure pauses the preview without excluding the recording');
   expect(content).toContain('If opening a new draft fails, reopen it from **Recent sends**');
   expect(content).toContain('If you switch destinations, sources or sends during preparation, reopen the original draft to continue');

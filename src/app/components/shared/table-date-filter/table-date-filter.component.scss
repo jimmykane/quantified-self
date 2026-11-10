@@ -29,3 +29,11 @@
 .table-date-warning { color: var(--qs-status-caution); }
 .table-date-error { color: var(--mat-sys-error); font: var(--mat-sys-body-small); }
 button.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent); }
+
+.table-date-filter-control.has-week-navigation { flex-wrap: wrap; }
+.table-date-week-return { font: var(--mat-sys-label-medium); }
+
+@media (max-width: 768px) {
+  .table-date-filter-control.has-week-navigation { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; }
+  .has-week-navigation .table-date-week-return { grid-column: 1 / -1; justify-self: center; }
+}

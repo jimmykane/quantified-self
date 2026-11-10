@@ -3,7 +3,7 @@ import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
 import { Firestore, collection, collectionData, doc, docData, limit, orderBy, query, where } from 'app/firebase/firestore';
 import { Subscription } from 'rxjs';
-import { ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow } from '@shared/activity-send';
+import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow } from '@shared/activity-send';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
@@ -100,9 +100,25 @@ export class ActivitySendService {
   async upload(batchId: string, rowId: string, file: File, progress: (value: number) => void, expectedUid?: string): Promise<void> {
     const owner = this.auth.currentUser;
     if (!owner) throw new Error('Sign in first.');
-    if (expectedUid && owner.uid !== expectedUid) throw new Error('The signed-in account changed.');
+    const uid = owner.uid;
+    if (expectedUid && uid !== expectedUid) throw new Error('The signed-in account changed.');
+    const readFailure = 'The file could not be read. Download it to this device and select it again.';
+    if (!file.size) throw new Error(readFailure);
+    if (file.size > ACTIVITY_SEND_LIMITS.fileBytes) throw new Error('Choose a FIT or FIT.gz file up to 20 MiB.');
+    const bytes = await new Promise<ArrayBuffer | null>(resolve => {
+      try {
+        const reader = new FileReader();
+        reader.onerror = reader.onabort = () => resolve(null);
+        reader.onload = () => resolve(reader.result instanceof ArrayBuffer ? reader.result : null);
+        reader.readAsArrayBuffer(file);
+      } catch { resolve(null); }
+    });
+    if (uid !== this.auth.currentUser?.uid) throw new Error('The signed-in account changed.');
+    if (!bytes || !bytes.byteLength || bytes.byteLength !== file.size) throw new Error(readFailure);
+    // A memory-backed Blob avoids WebKit sending an empty body for a disk-backed File.
+    const body = new Blob([bytes], { type: 'application/octet-stream' });
     const [token, appCheckToken] = await Promise.all([owner.getIdToken(), this.appCheck.getToken()]);
-    if (owner.uid !== this.auth.currentUser?.uid) throw new Error('The signed-in account changed.');
+    if (uid !== this.auth.currentUser?.uid) throw new Error('The signed-in account changed.');
     const config = FUNCTIONS_MANIFEST.uploadActivitySendFile;
     const projectId = this.app.options.projectId;
     const url = environment.localhost && environment.useFunctionsEmulator
@@ -118,16 +134,16 @@ export class ActivitySendService {
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.setRequestHeader('X-QS-Batch', batchId); xhr.setRequestHeader('X-QS-File', rowId);
       xhr.setRequestHeader('X-QS-Filename', encodeURIComponent(file.name));
-      xhr.upload.onprogress = event => { if (owner.uid === this.auth.currentUser?.uid && event.lengthComputable) progress(Math.round(event.loaded / event.total * 100)); };
+      xhr.upload.onprogress = event => { if (uid === this.auth.currentUser?.uid && event.lengthComputable) progress(Math.round(event.loaded / event.total * 100)); };
       xhr.onerror = () => reject(new Error('File transfer failed. Retry while this draft is open.'));
       xhr.onload = () => {
-        if (owner.uid !== this.auth.currentUser?.uid) { reject(new Error('The signed-in account changed.')); return; }
+        if (uid !== this.auth.currentUser?.uid) { reject(new Error('The signed-in account changed.')); return; }
         if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
         let message = 'Could not stage this file.';
         try { message = JSON.parse(xhr.responseText).message || message; } catch { /* Keep the safe generic message. */ }
         reject(new Error(message));
       };
-      xhr.send(file);
+      xhr.send(body);
     });
   }
   private syncJobs(batches: ActivitySendBatch[]): void {

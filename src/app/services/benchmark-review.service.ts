@@ -1,6 +1,6 @@
 import { Clipboard } from '@angular/cdk/clipboard';
 import { inject, Injectable } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib';
+import { User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 import {
   BenchmarkReviewerSummary,
@@ -32,11 +32,11 @@ export class BenchmarkReviewService {
     return this.eventTagService.saveTags(user, event, tags, expectedTags);
   }
 
-  buildSummary(result: BenchmarkResult | null | undefined, tags: unknown): BenchmarkReviewerSummary {
-    return buildBenchmarkReviewerSummary(result, this.normalizeTags(tags));
+  buildSummary(result: BenchmarkResult | null | undefined, tags: unknown, unitSettings?: UserUnitSettingsInterface): BenchmarkReviewerSummary {
+    return buildBenchmarkReviewerSummary(result, this.normalizeTags(tags), unitSettings);
   }
 
-  copySummary(result: BenchmarkResult | null | undefined, tags: unknown): boolean {
-    return this.clipboard.copy(this.buildSummary(result, tags).text);
+  copySummary(result: BenchmarkResult | null | undefined, tags: unknown, unitSettings?: UserUnitSettingsInterface): boolean {
+    return this.clipboard.copy(this.buildSummary(result, tags, unitSettings).text);
   }
 }

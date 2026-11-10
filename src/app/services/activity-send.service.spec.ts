@@ -10,6 +10,7 @@ import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppProcessingService } from './app.processing.service';
+import { ACTIVITY_SEND_LIMITS } from '@shared/activity-send';
 
 const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn() }));
 vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data }));
@@ -23,6 +24,14 @@ class FakeXHR {
   open = vi.fn(); send = vi.fn();
   constructor() { FakeXHR.latest = this; }
   setRequestHeader(key: string, value: string) { this.headers[key] = value; }
+}
+function blobBytes(blob: Blob): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.readAsArrayBuffer(blob);
+  });
 }
 describe('ActivitySendService owner and upload boundaries', () => {
   let service: ActivitySendService;
@@ -39,7 +48,7 @@ describe('ActivitySendService owner and upload boundaries', () => {
     TestBed.configureTestingModule({ providers: [ActivitySendService, { provide: Auth, useValue: auth }, { provide: FirebaseApp, useValue: { options: { projectId: 'demo-send' } } }, { provide: Firestore, useValue: {} }, { provide: AppUserService, useValue: user }, { provide: AppFunctionsService, useValue: functions }, { provide: AppCheckReadinessService, useValue: appCheck }, { provide: AppProcessingService, useValue: processing }] });
     service = TestBed.inject(ActivitySendService); TestBed.flushEffects();
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   it('reconciles global jobs from active batches separately from recent history', () => {
     streams.reads[1].next([{ id: 'batch', provider: 'suunto', state: 'confirmed', total: 2, finished: 1 }]);
     expect(processing.updateJob).toHaveBeenCalledWith('job', expect.objectContaining({ progress: undefined }));
@@ -81,12 +90,66 @@ describe('ActivitySendService owner and upload boundaries', () => {
     expect(appCheck.getToken).not.toHaveBeenCalled();
   });
   it('uses authenticated binary staging and reports measured transfer progress', async () => {
-    const progress = vi.fn(); const file = new File(['synthetic'], 'Workout.fit.gz');
+    const expected = new Uint8Array([0, 1, 31, 139, 128, 255]);
+    const progress = vi.fn(); const file = new File([expected], 'Workout.fit.gz');
     const upload = service.upload('batch', 'row', file, progress);
-    await vi.waitFor(() => expect(FakeXHR.latest.send).toHaveBeenCalledWith(file));
+    await vi.waitFor(() => expect(FakeXHR.latest?.send).toHaveBeenCalledOnce());
+    const body = FakeXHR.latest.send.mock.calls[0][0] as Blob;
+    expect(body).toBeInstanceOf(Blob); expect(body).not.toBeInstanceOf(File);
+    expect(body.type).toBe('application/octet-stream'); expect(body.size).toBe(file.size);
+    expect(await blobBytes(body)).toEqual(expected);
     expect(FakeXHR.latest.headers).toMatchObject({ Authorization: 'Bearer synthetic-id-token', 'X-Firebase-AppCheck': 'synthetic-app-check', 'X-QS-Batch': 'batch', 'X-QS-File': 'row', 'X-QS-Filename': 'Workout.fit.gz' });
     FakeXHR.latest.upload.onprogress!({ lengthComputable: true, loaded: 4, total: 10 }); expect(progress).toHaveBeenCalledWith(40);
     FakeXHR.latest.onload!(); await upload;
+  });
+  it('rejects an empty file before reading or requesting upload credentials', async () => {
+    const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+    await expect(service.upload('batch', 'row', new File([], 'empty.fit'), vi.fn())).rejects.toThrow('Download it to this device');
+    expect(read).not.toHaveBeenCalled(); expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
+    expect(appCheck.getToken).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
+  });
+  it('checks the size limit before allocating file bytes', async () => {
+    const file = new File(['x'], 'large.fit');
+    Object.defineProperty(file, 'size', { value: ACTIVITY_SEND_LIMITS.fileBytes + 1 });
+    const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+    await expect(service.upload('batch', 'row', file, vi.fn())).rejects.toThrow('20 MiB');
+    expect(read).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
+  });
+  it.each(['error', 'abort'])('gives recoverable guidance when reading the selected file emits %s', async event => {
+    vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) {
+      const handler = event === 'error' ? this.onerror : this.onabort;
+      queueMicrotask(() => handler?.call(this, new ProgressEvent(event) as ProgressEvent<FileReader>));
+    });
+    await expect(service.upload('batch', 'row', new File(['x'], 'private-name.fit'), vi.fn()))
+      .rejects.toThrow('The file could not be read. Download it to this device and select it again.');
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
+  });
+  it.each([0, 3, 12])('does not upload a %s-byte read that differs from the selected file size', async size => {
+    vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) {
+      Object.defineProperty(this, 'result', { value: new ArrayBuffer(size) });
+      this.dispatchEvent(new ProgressEvent('load'));
+    });
+    await expect(service.upload('batch', 'row', new File(['synthetic'], 'private-name.fit'), vi.fn())).rejects.toThrow('The file could not be read');
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
+  });
+  it('does not expose a synchronous native file-read exception', async () => {
+    vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementationOnce(() => { throw new Error('private-path-canary'); });
+    await expect(service.upload('batch', 'row', new File(['x'], 'one.fit'), vi.fn()))
+      .rejects.toThrow('The file could not be read. Download it to this device and select it again.');
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
+  });
+  it('rechecks account ownership after the asynchronous file read', async () => {
+    let finishRead!: () => void;
+    vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) {
+      finishRead = () => {
+        Object.defineProperty(this, 'result', { value: new ArrayBuffer(1) });
+        this.dispatchEvent(new ProgressEvent('load'));
+      };
+    });
+    const upload = service.upload('batch', 'row', new File(['x'], 'one.fit'), vi.fn(), 'owner');
+    const assertion = expect(upload).rejects.toThrow('account changed');
+    auth.currentUser.uid = 'another'; finishRead(); await assertion;
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled(); expect(FakeXHR.latest).toBeUndefined();
   });
   it('retains a recoverable timeout message without sending to the provider', async () => {
     const upload = service.upload('batch', 'row', new File(['x'], 'one.fit'), vi.fn());
