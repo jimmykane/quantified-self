@@ -11,23 +11,23 @@ export const FIELD_GUIDE_CHAPTERS = [
         ],
     },
     {
-        hero: 'Track your training.',
-        title: 'Review training load and recovery.',
-        description: 'Track training volume, review sleep and health trends, and schedule workouts.',
+        hero: 'Plan what comes next.',
+        title: 'Ask questions. Build workouts.',
+        description: 'Explore your data with AI, create structured workouts, and organize your training.',
         points: [
-            { icon: 'monitoring', title: 'Monitor training load', description: 'Open Training to track fitness, fatigue, form and weekly volume.' },
-            { icon: 'bedtime', title: 'Review sleep and health', description: 'Review sleep duration and health trends available from your connected services.' },
-            { icon: 'calendar_month', title: 'Schedule workouts', description: 'Create a training plan or add a structured workout to your calendar.' },
+            { icon: 'chat', title: 'Ask about your training', description: 'Ask Assistant about your data, or connect ChatGPT or Claude with access you choose.' },
+            { icon: 'auto_awesome', title: 'Build or generate a workout', description: 'Set intervals and targets, or use AI with your selected training and recovery data. Review the workout before adding it.' },
+            { icon: 'calendar_month', title: 'Organize your training', description: 'Save favorite workouts, schedule sessions and organize your plan into phases.' },
         ],
     },
     {
         hero: 'Add your first activity.',
         title: 'Connect a service or upload a file.',
-        description: 'Upload files for free, or use Pro to import from Garmin, Suunto, COROS or Wahoo.',
+        description: 'Start free with manual uploads, or use Pro to connect Garmin, Suunto, COROS or Wahoo.',
         points: [
-            { icon: 'watch', title: 'Connect with Pro', description: 'After setup, connect your watch service in Connections for automatic imports.' },
+            { icon: 'watch', title: 'Connect with Pro', description: 'After setup, open Connections for automatic imports and choose which supported services exchange activities.' },
             { icon: 'upload_file', title: 'Upload files for free', description: 'In Dashboard, select Upload and choose a FIT, GPX or TCX activity file.' },
-            { icon: 'explore', title: 'Add activities later', description: 'Choose Let me look around to open Dashboard and add activities later.' },
+            { icon: 'download', title: 'Keep your original files', description: 'Download your original activity files for a backup or analysis elsewhere.' },
         ],
     },
 ] as const;

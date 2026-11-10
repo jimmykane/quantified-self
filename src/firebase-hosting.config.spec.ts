@@ -322,7 +322,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
-    // Getting Started names Take a quick tour / Skip tour and explains Starter and next steps (2026-11-10).
+    // Getting Started introduces analysis, AI and workout planning, with Starter and next steps (2026-11-10).
     // Getting Started help covers intent-first setup and the compact Compare path with Continue free (2026-11-09).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
@@ -508,7 +508,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
+    // The hero preview now names the charts: Training load and recovery (2026-11-10).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');

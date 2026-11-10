@@ -581,7 +581,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 2. Choose what you want to do first, then review the required account policies.
 3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
 
-On your first sign-in, choose **Compare recordings**, **Connect my watch**, **Upload an activity file**, or **Let me look around**. For a quick introduction to the app, choose **Take a quick tour**. **Skip tour** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
+On your first sign-in, choose **Connect my watch**, **Upload an activity file**, **Compare recordings**, or **Let me look around**. **Take a quick tour** introduces training analysis, AI, workout planning and ways to add your data. **Skip tour** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
 
 Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. You can change your starting point or preferences before finishing. Your starting point is kept when you reload or return from checkout.
 

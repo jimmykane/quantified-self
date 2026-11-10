@@ -161,7 +161,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(true);
         clickButton('Take a quick tour');
         clickButton('Next');
-        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Review training load and recovery');
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Ask questions. Build workouts.');
         await fixture.whenStable();
         expect(document.activeElement).toBe(fixture.nativeElement.querySelector('h1'));
         clickButton('Back');
