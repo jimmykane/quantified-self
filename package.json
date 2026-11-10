@@ -94,7 +94,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/material-symbols-rounded": "^5.3.2",
     "@sentry/angular": "^10.56.0",
-    "@sports-alliance/sports-lib": "github:sports-alliance/sports-lib#fc985d264aefed809e3c603c0de2c2c677bf3d1c",
+    "@sports-alliance/sports-lib": "github:sports-alliance/sports-lib#553e27dedaaca6c7cb1773e0e74eeba39bdd9597",
     "@tiptap/core": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
