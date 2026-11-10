@@ -95,6 +95,27 @@ describe('help.content', () => {
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 
+  it('explains intent-first setup, the optional Field guide and existing handoffs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('**Skip the intro**');
+    expect(content).toContain('**Compare recordings**');
+    expect(content).toContain('**Explore QS**');
+    expect(content).toContain('**Pause motion**');
+    expect(content).toContain('**Play motion**');
+    expect(content).toContain('starts still when your device requests reduced motion');
+    expect(content).toContain('without the tour, watch setup, or pricing step');
+    expect(content).toContain('**Continue free**');
+    expect(content).toContain('Your existing plan stays the same');
+    expect(content).toContain('Opening a Saved comparisons link takes you back to that list after setup');
+    expect(content).toContain('**Explore more of QS**');
+    expect(content).toContain('not required account setup');
+    expect(content).toContain('optional and start unchecked');
+    expect(content).toContain('does not start a payment, upload, or provider connection');
+    expect(content).toContain('provider connections require Pro');
+    expect(content).toContain('**Upload an activity file** opens **Dashboard**');
+    expect(content).toContain('Your starting point is kept when you reload or return from checkout');
+    expect(content).toContain('canceling checkout returns you to the membership step');
+  });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
     for (const phrase of ['**Retry category settings**', '**Reload app**', 'Your saved category choices are retained',

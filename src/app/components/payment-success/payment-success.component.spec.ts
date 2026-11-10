@@ -42,7 +42,7 @@ describe('PaymentSuccessComponent', () => {
             providers: [
                 provideRouter([
                     { path: 'payment/success', component: PaymentSuccessComponent },
-                    ...['services', 'subscriptions', 'dashboard', 'help'].map(path => ({
+                    ...['services', 'subscriptions', 'dashboard', 'help', 'onboarding'].map(path => ({
                         path, component: MembershipDestinationStub, canActivate: [() => navigationAllowed],
                     })),
                 ]),
@@ -274,6 +274,39 @@ describe('PaymentSuccessComponent', () => {
         await harness.fixture.whenStable();
         expect(TestBed.inject(Router).url).toBe(destination);
         expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['basic', 'pro'])('returns confirmed %s checkout to the saved onboarding destination', async role => {
+        authUser.getIdTokenResult.mockResolvedValue({ claims: { stripeRole: role } });
+        paymentService.getUserSubscriptions.mockReturnValue(of([{ id: 'sub_ready', role, status: 'active' }]));
+        const resume = '/onboarding?start=upload&returnUrl=%2Fmcp%2Fauthorize&request_id=request_123';
+        const harness = await RouterTestingHarness.create(`/payment/success?onboarding=${encodeURIComponent(resume)}`);
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        const action = harness.routeNativeElement!.querySelector<HTMLButtonElement>('button[mat-flat-button]')!;
+        expect(action.textContent).toContain('Continue setup');
+        action.click();
+        await harness.fixture.whenStable();
+        const query = TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams;
+        expect(query).toEqual({ start: 'upload', returnUrl: '/mcp/authorize', request_id: 'request_123' });
+        expect(TestBed.inject(Router).url).toMatch(/^\/onboarding\?/);
+    });
+
+    it('does not offer setup continuation without confirmed membership', async () => {
+        auth.currentUser = null;
+        const harness = await RouterTestingHarness.create('/payment/success?onboarding=%2Fonboarding%3Fstart%3Dconnect');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        expect(harness.routeNativeElement!.textContent).not.toContain('Continue setup');
+        expect(harness.routeNativeElement!.textContent).toContain('Membership still syncing');
+    });
+
+    it('ignores an external onboarding destination', async () => {
+        const harness = await RouterTestingHarness.create('/payment/success?onboarding=https%3A%2F%2Fexample.com');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        expect(harness.routeNativeElement!.textContent).not.toContain('Continue setup');
+        expect(harness.routeNativeElement!.textContent).toContain('Connect your devices');
     });
 
     it('does not emit feedback when connection navigation is canceled', async () => {
