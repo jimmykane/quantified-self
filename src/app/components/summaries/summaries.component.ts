@@ -1,8 +1,11 @@
+import { dashboardTileMetricKinds } from '../../helpers/dashboard-derived-dependencies.helper';
 import { normalizeDashboardTodaySettings, dashboardTodayDependencies, dashboardTodaySignalVisible } from '../../helpers/dashboard-today-settings.helper';
 import { DashboardTodayEditorService } from '../../services/dashboard-today-editor.service';
 import type { DashboardTodayReadinessTone, DashboardTodayReadinessViewModel, DashboardTodayTrainingStateViewModel } from './today/dashboard-today-view';
 import {
   isDashboardPowerCapacityChartType,
+  isDashboardSleepBackedChartType,
+  isDashboardHrvTrendChartType,
   isDashboardPerformanceChartType,
   DASHBOARD_DURABILITY_CHART_TYPE,
   isDashboardAcwrKpiChartType,
@@ -75,6 +78,7 @@ import {
   ChangeDetectorRef,
   Component,
   computed,
+  DestroyRef,
   DoCheck,
   HostListener,
   Inject,
@@ -400,8 +404,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public showTodaySummary = true;
   public todaySettings = normalizeDashboardTodaySettings(undefined);
   private readonly todayEditor = inject(DashboardTodayEditorService);
+  private readonly destroyRef = inject(DestroyRef);
   async customizeToday(): Promise<void> {
-    if (this.isOwnerDashboard && await this.todayEditor.open(this.user as AppUserInterface)) await this.unsubscribeAndCreateCharts();
+    if (this.isOwnerDashboard
+      && await this.todayEditor.open(this.user as AppUserInterface, this.destroyRef)
+      && !this.destroyRef.destroyed) {
+      await this.unsubscribeAndCreateCharts();
+    }
   }
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
@@ -1085,33 +1094,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private resolveDashboardDerivedMetricKinds(): DerivedMetricKind[] {
-    const metricKinds: DerivedMetricKind[] = [];
-    const chartTypes = (this.user?.settings?.dashboardSettings?.tiles || [])
+    const metricKinds = (this.user?.settings?.dashboardSettings?.tiles || [])
       .filter(tile => tile.type === TileTypes.Chart)
-      .map(tile => (tile as TileChartSettingsInterface).chartType);
-    // Only selected displays request snapshots. A generic event chart has no derived dependency.
-    const derived: [((type: unknown) => boolean), DerivedMetricKind][] = [
-      [isDashboardFormChartType, DERIVED_METRIC_KINDS.Form], [isDashboardRecoveryNowChartType, DERIVED_METRIC_KINDS.RecoveryNow],
-      [isDashboardAcwrKpiChartType, DERIVED_METRIC_KINDS.Acwr], [isDashboardRampRateKpiChartType, DERIVED_METRIC_KINDS.RampRate],
-      [isDashboardMonotonyStrainKpiChartType, DERIVED_METRIC_KINDS.MonotonyStrain], [isDashboardFormNowKpiChartType, DERIVED_METRIC_KINDS.FormNow],
-      [isDashboardFormPlus7dKpiChartType, DERIVED_METRIC_KINDS.FormPlus7d], [isDashboardEasyPercentKpiChartType, DERIVED_METRIC_KINDS.EasyPercent],
-      [isDashboardHardPercentKpiChartType, DERIVED_METRIC_KINDS.HardPercent], [isDashboardEfficiencyDelta4wKpiChartType, DERIVED_METRIC_KINDS.EfficiencyDelta4w],
-      [isDashboardFreshnessForecastChartType, DERIVED_METRIC_KINDS.FreshnessForecast], [isDashboardIntensityDistributionChartType, DERIVED_METRIC_KINDS.IntensityDistribution],
-      [isDashboardEfficiencyTrendChartType, DERIVED_METRIC_KINDS.EfficiencyTrend], [isDashboardPowerCurveChartType, DERIVED_METRIC_KINDS.PowerCurve],
-    ];
-    for (const [matches, kind] of derived) if (chartTypes.some(matches)) metricKinds.push(kind);
+      .flatMap(dashboardTileMetricKinds);
     const needed = dashboardTodayDependencies(this.todaySettings);
-    if ((this.showTodaySummary && needed.load) || chartTypes.some(type => isDashboardFitnessCtlKpiChartType(type) || isDashboardFatigueAtlKpiChartType(type))) {
-      metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
-    }
+    if (this.showTodaySummary && needed.load) metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
     if (this.showTodaySummary && needed.recovery) metricKinds.push(DERIVED_METRIC_KINDS.RecoveryNow);
-    if (chartTypes.some(isDashboardAerobicCapacityKpiChartType)) {
-      metricKinds.push(DERIVED_METRIC_KINDS.TrainingCapacity);
-    }
-    if (chartTypes.some(isDashboardPowerCapacityChartType)) metricKinds.push(DERIVED_METRIC_KINDS.TrainingPowerSystems);
-    if (chartTypes.some(type => isDashboardAerobicDurabilityKpiChartType(type) || `${type}` === DASHBOARD_DURABILITY_CHART_TYPE)) {
-      metricKinds.push(DERIVED_METRIC_KINDS.TrainingDurability);
-    }
     return [...new Set(metricKinds)];
   }
 
@@ -1124,7 +1112,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private syncSleepSubscription(): void {
     const uid = `${this.user?.uid || ''}`.trim();
-    if (!uid) {
+    const hasSleepChart = (this.user?.settings?.dashboardSettings?.tiles || []).some(tile => tile.type === TileTypes.Chart && isDashboardSleepBackedChartType(tile['chartType']));
+    if (!uid || !hasSleepChart) {
       this.unsubscribeHrv();
       this.sleepSessions = [];
       this.sleepListenerKey = null;
@@ -1175,7 +1164,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private syncHrvSubscription(): void {
-    if (this.isOwnerDashboard) { this.unsubscribeHrv(); return; }
+    const hasHrvChart = (this.user?.settings?.dashboardSettings?.tiles || []).some(tile => tile.type === TileTypes.Chart && isDashboardHrvTrendChartType(tile['chartType']));
+    if (this.isOwnerDashboard || !hasHrvChart) { this.unsubscribeHrv(); return; }
     const uid = `${this.user?.uid || ''}`.trim();
     const range = normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
     if (this.hrvOwnerUID !== uid || range !== this.hrvTrendRange) this.hrvTrendAnchorEndMs = null;

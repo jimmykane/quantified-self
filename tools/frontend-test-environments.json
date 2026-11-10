@@ -56,6 +56,7 @@
     "src/app/helpers/dashboard-daily-briefing.helper.spec.ts",
     "src/app/helpers/dashboard-date-activity-segmentation.helper.spec.ts",
     "src/app/helpers/dashboard-derived-chart-range.helper.spec.ts",
+    "src/app/helpers/dashboard-derived-dependencies.helper.spec.ts",
     "src/app/helpers/dashboard-derived-metrics.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-cartesian.helper.spec.ts",
     "src/app/helpers/dashboard-echarts-yaxis.helper.spec.ts",

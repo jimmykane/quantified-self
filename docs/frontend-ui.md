@@ -329,7 +329,15 @@ They do not follow event-table or chart filters. Weight uses a bounded newest-fi
 measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection
 from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
 report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
-Opening the editor does not start metric readers.
+Opening the editor does not start metric readers. Dashboard charts and picker previews resolve snapshot kinds through
+`dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
+must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
+The manager waits for its overlay to finish closing before opening Customize Today, restores focus after the editor
+closes and publishes the normal configuration-change event after a save. This reconnects Today readers even when the
+profile observer receives the same already-updated settings object. A failed editor load gives actionable feedback;
+a subsequent explicit opening can retry. The launcher is fenced to the account and originating view: navigation during
+loading cannot open a late dialog, and destroying the originating view closes an already-open editor. Unsubmitted drafts
+remain unsaved; a save already in progress retains its existing account-safe completion checks.
 The Today reader/editor is accounted for by matching beta/production `allScript` caps of 14.27 MB, compared with
 14.25 MB on the feature base. The initial 1474 kB and warning budgets are unchanged. The editor stays lazy; the initial bundle remains 1.41 MB. This records bundle accounting only,
 not a device runtime speed claim.

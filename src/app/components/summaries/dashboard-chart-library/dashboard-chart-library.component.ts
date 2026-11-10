@@ -24,10 +24,26 @@ import { DashboardChartPreviewService } from '../../../services/dashboard-chart-
 @Component({ selector: 'app-dashboard-chart-library', standalone: false, templateUrl: './dashboard-chart-library.component.html', styleUrls: ['./dashboard-chart-library.component.css'], providers: [DashboardChartPreviewService] })
 export class DashboardChartLibraryComponent {
   private readonly todayEditor = inject(DashboardTodayEditorService);
+  private handingOffToday = false;
   async customizeToday(): Promise<void> {
-    if (this.state.busy()) return;
-    await this.state.close(false);
-    if (!this.expanded() && await this.todayEditor.open(this.user())) this.pickerClosed.emit();
+    if (this.state.busy() || this.handingOffToday) return;
+    const ownerUid = this.user().uid;
+    const previousOverlay = this.overlay;
+    this.handingOffToday = true;
+    try {
+      await this.state.close(false);
+      if (this.expanded()) return; // The user kept a changed chart draft.
+      await previousOverlay?.closed;
+      if (this.destroyRef.destroyed || this.user().uid !== ownerUid) return;
+      const saved = await this.todayEditor.open(this.user(), this.destroyRef);
+      if (saved && !this.destroyRef.destroyed && this.user().uid === ownerUid) this.state.changed$.next(null);
+    } finally {
+      this.handingOffToday = false;
+      if (!this.destroyRef.destroyed && !this.expanded()) {
+        this.entryButton()?.nativeElement.focus({ preventScroll: true });
+        this.pickerClosed.emit();
+      }
+    }
   }
   private readonly document = inject(DOCUMENT);
   private readonly dialog = inject(MatDialog);
@@ -36,11 +52,11 @@ export class DashboardChartLibraryComponent {
   private readonly viewContainerRef = inject(ViewContainerRef);
   private readonly destroyRef = inject(DestroyRef);
   private readonly picker = viewChild<TemplateRef<unknown>>('picker');
-  private readonly entryButton = viewChild<ElementRef<HTMLButtonElement>>('entryButton');
+  private readonly entryButton = viewChild<unknown, ElementRef<HTMLButtonElement>>('entryButton', { read: ElementRef });
   private readonly detail = viewChild<ElementRef<HTMLElement>>('detail');
   private readonly scrollContent = viewChild<ElementRef<HTMLElement>>('scrollContent');
   private readonly browser = viewChild<ElementRef<HTMLElement>>('browser');
-  private overlay: { close: () => void; subscriptions: Subscription } | null = null;
+  private overlay: { close: () => void; closed: Promise<void>; subscriptions: Subscription } | null = null;
   readonly pickerClosed = output<void>();
   readonly state = inject(DashboardChartLibraryState);
   readonly user = input.required<AppUserInterface>();
@@ -261,7 +277,11 @@ export class DashboardChartLibraryComponent {
       const ref = this.dialog.open(template, { ...options, width: '1180px', maxWidth: 'calc(100vw - 48px)', height: 'min(860px, 90dvh)', maxHeight: '90dvh' });
       close = () => ref.close(); closed$ = ref.afterClosed(); opened$ = ref.afterOpened(); backdrop$ = ref.backdropClick(); keydown$ = ref.keydownEvents();
     }
-    const overlay = { close, subscriptions: new Subscription() };
+    let finishClosing!: () => void;
+    const closed = new Promise<void>(resolve => { finishClosing = resolve; });
+    const overlay = { close, closed, subscriptions: new Subscription() };
+    // Resolve on normal dismissal or teardown so a pending handoff cannot outlive the view.
+    overlay.subscriptions.add(finishClosing);
     this.overlay = overlay;
     overlay.subscriptions.add(opened$.subscribe(() => {
       const mobileDetail = this.state.draft() && this.breakpoints.isMatched('(max-width: 959.98px)');
@@ -282,6 +302,7 @@ export class DashboardChartLibraryComponent {
       this.acknowledgedLanes.clear();
       if (this.destroyRef.destroyed) return;
       if (this.expanded()) this.state.resetContext();
+      if (this.handingOffToday) return;
       const target = returnFocus?.isConnected && returnFocus !== this.document.body ? returnFocus : this.entryButton()?.nativeElement;
       target?.focus({ preventScroll: true });
       this.pickerClosed.emit();

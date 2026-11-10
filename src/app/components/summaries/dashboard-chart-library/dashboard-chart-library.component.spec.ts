@@ -104,6 +104,61 @@ describe('responsive chart picker interactions', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
 
+  it('finishes closing the library before opening Today and publishes a saved settings change once', async () => {
+    fixture.componentRef.setInput('allSections', true); await settle();
+    await component.toggle(); await settle();
+    const editor = TestBed.inject(DashboardTodayEditorService);
+    const changed = vi.spyOn(component.state.changed$, 'next');
+    const closed = vi.spyOn(component.pickerClosed, 'emit');
+    let finish!: (saved: boolean) => void;
+    vi.mocked(editor.open).mockImplementation(() => {
+      expect(document.querySelector('.chart-library')).toBeNull();
+      return new Promise(resolve => { finish = resolve; });
+    });
+    const handoff = component.customizeToday();
+    await settle();
+    expect(editor.open).toHaveBeenCalledOnce();
+    expect(closed).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    finish(true); await handoff; await settle();
+    expect(changed).toHaveBeenCalledExactlyOnceWith(null);
+    expect(closed).toHaveBeenCalledOnce();
+  });
+  it.each([false, true])('restores focus without publishing changes when Today is cancelled (mobile: %s)', async isMobile => {
+    mobile = isMobile;
+    fixture.componentRef.setInput('allSections', true); await settle();
+    await component.toggle(); await settle();
+    const changed = vi.spyOn(component.state.changed$, 'next');
+    const closed = vi.spyOn(component.pickerClosed, 'emit');
+    const handoff = component.customizeToday();
+    await settle(); await handoff;
+    expect(TestBed.inject(DashboardTodayEditorService).open).toHaveBeenCalledOnce();
+    expect(changed).not.toHaveBeenCalled();
+    expect(closed).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('button'));
+  });
+  it('keeps the chart draft and overlay when the Today handoff is declined', async () => {
+    fixture.componentRef.setInput('allSections', true); await settle();
+    await component.openSection('section:health', true); await settle();
+    component.state.updateHealthSettings({ ...component.state.healthSettings()!, range: '90d' }, false);
+    const closed = vi.spyOn(component.pickerClosed, 'emit');
+    await component.customizeToday(); await settle();
+    expect(component.expanded()).toBe(true);
+    expect(component.state.healthSettings()?.range).toBe('90d');
+    expect(TestBed.inject(DashboardTodayEditorService).open).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+    expect(document.querySelector('.chart-library')).not.toBeNull();
+  });
+  it('does not open Today after the manager view is destroyed during the handoff', async () => {
+    fixture.componentRef.setInput('allSections', true); await settle();
+    await component.toggle(); await settle();
+    const editor = TestBed.inject(DashboardTodayEditorService);
+    const closed = vi.spyOn(component.pickerClosed, 'emit');
+    const handoff = component.customizeToday();
+    fixture.destroy(); await handoff;
+    expect(editor.open).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+  });
   it('starts global browsing in an available section when the preferred section is complete', async () => {
     fixture.componentRef.setInput('allSections', true); fixture.componentRef.setInput('lane', 'section:activityOverview');
     const catalog = getDashboardChartCatalog();

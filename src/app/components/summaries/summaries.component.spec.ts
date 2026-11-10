@@ -1,3 +1,4 @@
+import * as SpecialCharts from '../../helpers/dashboard-special-chart-types';
 import { defaultDashboardTodaySettings } from '../../helpers/dashboard-today-settings.helper';
 import { DailyWorkoutSuggestionComponent } from './daily-workout-suggestion/daily-workout-suggestion.component';
 import { DashboardTodayComponent } from './today/dashboard-today.component';
@@ -458,11 +459,11 @@ describe('SummariesComponent', () => {
     const rebuild = vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
     const endMs = new Date(2026, 8, 10, 12).getTime();
     const context = { charts: [], window: dashboardHrvWindows('14d', endMs).visible, loading: false, error: false };
-    component.user = { uid: 'first-owner' } as any;
+    component.user = { uid: 'first-owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as any;
     component['syncHrvSubscription']();
     first.next(context);
     expect(component['hrvTrend']).toBe(context);
-    component.user = { uid: 'second-owner' } as any;
+    component.user = { uid: 'second-owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as any;
     component['syncHrvSubscription']();
     expect(first.observed).toBe(false);
     expect(component['hrvTrend']).toMatchObject({ charts: [], loading: true });
@@ -577,7 +578,7 @@ describe('SummariesComponent', () => {
     vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
     const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
     const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
-    component.user = { uid: 'owner' } as SummariesComponent['user'];
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as SummariesComponent['user'];
     component['syncHrvSubscription'](); first$.next(context);
     component.onHrvTrendNavigate('older');
     expect(first$.observed).toBe(false);
@@ -600,7 +601,7 @@ describe('SummariesComponent', () => {
     vi.setSystemTime(nowMs);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = { uid: 'user-1', settings: { dashboardSettings: {
-      tiles: [], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
+      tiles: [{ type: TileTypes.Chart, chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE }, { type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
     } } } as any;
     component['syncSleepSubscription'](); component['syncHrvSubscription']();
     const hrv = TestBed.inject(DashboardHrvService);
@@ -629,7 +630,7 @@ describe('SummariesComponent', () => {
 
   it('restores only HRV settings when saving its range fails', async () => {
     component.user = { uid: 'user-1', settings: { dashboardSettings: {
-      tiles: [], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
+      tiles: [{ type: TileTypes.Chart, chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE }, { type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
     } } } as any;
     component['syncSleepSubscription'](); component['syncHrvSubscription']();
     vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
@@ -2159,10 +2160,11 @@ describe('SummariesComponent', () => {
       expect(host.querySelector('app-daily-workout-suggestion')).toBeNull();
       expect(component.dashboardGlanceSignals.map(signal => signal.id)).toEqual(['readiness', 'training-load']);
     });
-    it('releases unused Sleep and derived subscriptions for a measurement-only Today', () => {
+    it('releases unused Sleep and derived subscriptions for a measurement-only Today', async () => {
       component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight', 'steps'] };
       mockDashboardDerivedMetricsService.watch.mockClear(); mockSleepService.watchForDashboard.mockClear();
-      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      component.user.settings.dashboardSettings.today = component.todaySettings;
+      await component['unsubscribeAndCreateCharts']();
       component['syncDerivedMetricsSubscription']();
       expect(load$.observed).toBe(false); expect(sleep$.observed).toBe(false);
       expect(mockDashboardDerivedMetricsService.watch).not.toHaveBeenCalled();
@@ -2178,6 +2180,28 @@ describe('SummariesComponent', () => {
       vi.advanceTimersToNextFrame();
       expect(render().querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Recovery unavailable');
       expect(sleep$.observed).toBe(false);
+    });
+    it.each([
+      [SpecialCharts.DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE, ['form', 'form_now', 'ramp_rate']],
+      [SpecialCharts.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE, ['form']],
+      [SpecialCharts.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE, ['form']],
+      [SpecialCharts.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE, ['form_now', 'freshness_forecast', 'form_plus_7d']],
+      [SpecialCharts.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE, ['intensity_distribution', 'easy_percent', 'hard_percent']],
+    ])('retains every dependency for %s when Today needs no training data', (chartType, kinds) => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight'] };
+      component.user.settings.dashboardSettings.tiles = [{ type: TileTypes.Chart, chartType }] as never;
+      expect(component['resolveDashboardDerivedMetricKinds']().sort()).toEqual([...kinds].sort());
+    });
+    it('shows recorded sleep duration without a score, vitals or training data', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['sleep'] };
+      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      sleep$.next([{ ...nights[0], score: undefined, vitals: {} }]);
+      vi.advanceTimersToNextFrame();
+      const host = render();
+      expect(component.dashboardTodayReadiness.sleepDurationText).toBe('08h 00m');
+      expect(host.querySelector('.dashboard-today-sleep-duration')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-primary')).toBeNull();
+      expect(component.dashboardTodayReadiness.awaitingSleep).toBe(false);
     });
     it('retains the independent Form chart dependency when Today is empty', () => {
       component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: [] };
@@ -3675,7 +3699,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3712,7 +3736,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3734,7 +3758,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '30d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3765,7 +3789,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3959,7 +3983,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '1y' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;

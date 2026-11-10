@@ -195,6 +195,10 @@
     "environment": "angular",
     "reason": "Uses injected owner-scoped readers and DestroyRef to verify shared activity listeners, optional dependency gating, account changes and cancellation of pending Health reads."
   },
+  "src/app/services/dashboard-today-editor.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and DestroyRef teardown to verify the lazy Today dialog launcher, bounded Material options, single-open guard, account fencing and user feedback after opening failures, with mocked overlays."
+  },
   "src/app/services/day-workout.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses Angular dependency injection and DestroyRef with the dialog and router to verify single-use unsaved draft handoff, Firebase owner changes and the delayed callable execution fence."
