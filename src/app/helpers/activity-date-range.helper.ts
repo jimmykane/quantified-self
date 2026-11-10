@@ -32,7 +32,12 @@ export function normalizeActivityRangeNavigation(value: unknown): ActivityDateRa
 }
 
 function addDays(date: Date, days: number): Date {
-  const result = new Date(date); result.setDate(result.getDate() + days); return result;
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  // Midnight may not exist on the source day. Resolve the destination's own
+  // start of day rather than carrying the source's normalized 01:00 forward.
+  result.setHours(0, 0, 0, 0);
+  return result;
 }
 
 /** Calendar-day ordinal: use the local date fields, never elapsed hours across DST. */
@@ -67,12 +72,14 @@ export function resolveActivityDateRange(
   }
   if (preset === 'calendar-month') {
     date.setDate(1);
-    const end = new Date(date); end.setMonth(end.getMonth() + 1);
+    date.setHours(0, 0, 0, 0);
+    const end = new Date(date); end.setMonth(end.getMonth() + 1); end.setHours(0, 0, 0, 0);
     return { start: date, end };
   }
   if (preset === 'year') {
     date.setMonth(0, 1);
-    const end = new Date(date); end.setFullYear(end.getFullYear() + 1);
+    date.setHours(0, 0, 0, 0);
+    const end = new Date(date); end.setFullYear(end.getFullYear() + 1); end.setHours(0, 0, 0, 0);
     return { start: date, end };
   }
   return undefined;
@@ -89,13 +96,14 @@ export function shiftActivityDateRange(preset: ActivityDateRangePreset, range: A
     const days = dayNumber(range.end) - dayNumber(range.start);
     start = addDays(range.start, direction * days); end = addDays(range.end, direction * days);
   }
+  start.setHours(0, 0, 0, 0); end.setHours(0, 0, 0, 0);
   return Number.isFinite(+start) && Number.isFinite(+end) && start.getFullYear() >= 0 && end.getFullYear() <= 10000 ? { start, end } : undefined;
 }
 
 export function currentActivityDateRange(preset: ActivityDateRangePreset, now: Date, range: ActivityDateRangeWindow | null | undefined, startOfWeek = 1): ActivityDateRangeWindow | null | undefined {
   if (preset !== 'custom') return resolveActivityDateRange(preset, now, null, startOfWeek);
   if (!range) return undefined;
-  const end = new Date(now); end.setHours(0, 0, 0, 0); end.setDate(end.getDate() + 1);
+  const end = addDays(now, 1);
   return { start: addDays(end, -(dayNumber(range.end) - dayNumber(range.start))), end };
 }
 

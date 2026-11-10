@@ -130,17 +130,23 @@ host page: Calendar supplies its visible period; Activities and Dashboard offer 
 bounded windows. The shared `activity-date-range.helper.ts` uses exclusive local-midnight bounds, calendar-day
 steps for 7/30/90-day and custom windows, and complete calendar weeks/months/years. Custom dates are inclusive.
 DST changes never change a window's calendar-day count. The date control shows actual dates and Current period
-restores the matching present window. All dates keeps the controls disabled and retains its existing confirmation.
+restores the matching present window. Each destination boundary resolves its own start of day, including time zones
+where DST skips midnight; the source day's normalized hour must not carry into another date. All dates keeps the
+controls disabled and retains its existing confirmation.
 
 Activities retains the preset and a date-only `anchor` in its URL (plus `start`/`end` for custom ranges). Older
 `view=training-log` and `week` links normalize to the calendar-week preset. Dashboard retains `rangeNavigation`
 with its existing event-table preferences: the preset, an optional date-only anchor, and explicit calendar dates for
-custom windows. Existing numeric `DateRanges` and timestamp-only custom preferences remain readable. The resolver,
+custom windows. Navigation metadata must match its compatible numeric preset; conflicting metadata left by an older
+client is ignored. Existing numeric `DateRanges` and timestamp-only custom preferences remain readable. The resolver,
 live query and toolbar use the same window resolution. Dashboard retains its inclusive `<=` query using one millisecond
 before the exclusive end; Activities retains `< end`. Navigating back to a current preset clears its anchor so it
 stays live; custom and historical windows stay fixed. Clock/focus and timezone refreshes update only changed query
 bounds without saving preferences, changing drafts or producing haptics. Preference-save failures restore both the
-previous navigation state and live query. Existing owner guards, cancellation and complete-range reads remain in force.
+previous navigation state and live query. Dashboard keeps date, sport and merged filters disabled until their preference write settles,
+even if the activity query has already finished, and rejects overlapping filter events. The save lock is scoped to the
+viewer and target owner so an old account's completion cannot unlock or restore another account's filters.
+Existing owner guards, cancellation and complete-range reads remain in force.
 There is no separate table presentation or temporary log layout.
 
 Sport totals consume all filtered activity rows before pagination. `activity-training-log.helper.ts` reads only

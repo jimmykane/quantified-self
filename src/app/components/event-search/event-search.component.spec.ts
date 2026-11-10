@@ -382,6 +382,21 @@ describe('EventSearchComponent', () => {
     expect(hapticsService.selection).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    [DateRanges.lastWeek, 'calendar-week', '2026-11-02'],
+    [DateRanges.lastMonth, 'calendar-month', '2026-10-01'],
+    [DateRanges.lastYear, 'year', '2025-01-01'],
+  ] as const)('saves legacy previous-period selection %s with compatible fixed navigation metadata', async (legacy, preset, anchor) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; c.selectedDateRange = legacy; });
+      const emit = vi.spyOn(component.searchChange, 'emit');
+      await component.search();
+      expect(emit).toHaveBeenCalledWith(expect.objectContaining({ dateRange: DateRanges.custom,
+        rangeNavigation: { preset, anchor } }));
+    } finally { vi.useRealTimers(); }
+  });
+
   it('clears an explicit anchor when returning a matching current calendar year to live navigation', async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10));
     try {

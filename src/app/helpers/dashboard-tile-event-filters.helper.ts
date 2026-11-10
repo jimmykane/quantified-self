@@ -89,7 +89,7 @@ export function normalizeDashboardEventTableFilters(
       ? filters.searchTerm
       : (typeof legacyFilters.searchTerm === 'string' ? legacyFilters.searchTerm : null),
     dateRange,
-    ...(navigation && (navigation.preset === 'all') === (dateRange === DateRanges.all) ? { rangeNavigation: navigation } : {}),
+    ...(navigation && dashboardDateRangeForNavigation(navigation) === dateRange ? { rangeNavigation: navigation } : {}),
     startDate: finiteNumberOrNull(filters.startDate, finiteNumberOrNull(legacyFilters.startDate, null)),
     endDate: finiteNumberOrNull(filters.endDate, finiteNumberOrNull(legacyFilters.endDate, null)),
     activityTypes: normalizeActivityTypes(filters.activityTypes, normalizeActivityTypes(legacyFilters.activityTypes, [])),
@@ -102,7 +102,7 @@ export function normalizeDashboardEventTableFilters(
 /** Keep table navigation independent of chart/My Tracks date-range semantics. */
 export function resolveDashboardEventTableNavigation(filters: Partial<AppDashboardEventTableFiltersInterface>, now = new Date(), startOfWeek = 1): ActivityDateRangeNavigation {
   const saved = normalizeActivityRangeNavigation(filters.rangeNavigation);
-  if (saved && (saved.preset === 'all') === (filters.dateRange === DateRanges.all)) return saved;
+  if (saved && dashboardDateRangeForNavigation(saved) === filters.dateRange) return saved;
   const mapping = new Map<DateRanges, ActivityDateRangePreset>([
     [DateRanges.thisWeek, 'calendar-week'], [DateRanges.lastWeek, 'calendar-week'],
     [DateRanges.thisMonth, 'calendar-month'], [DateRanges.lastMonth, 'calendar-month'],

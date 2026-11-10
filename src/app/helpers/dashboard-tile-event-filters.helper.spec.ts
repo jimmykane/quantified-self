@@ -53,6 +53,13 @@ describe('dashboard-tile-event-filters.helper', () => {
       .toEqual({ start: new Date(2026, 10, 2), end: new Date(2026, 10, 10) });
     expect(normalizeDashboardEventTableFilters({ dateRange: DateRanges.thisWeek, rangeNavigation: { preset: 'all', anchor: null } }).rangeNavigation).toBeUndefined();
   });
+  it('ignores stale navigation metadata when a legacy client changes the selected date preset', () => {
+    const saved = { dateRange: DateRanges.thisWeek, rangeNavigation: { preset: 'quarter' as const, anchor: null } };
+    expect(normalizeDashboardEventTableFilters(saved).rangeNavigation).toBeUndefined();
+    expect(resolveDashboardEventTableNavigation(saved)).toEqual({ preset: 'calendar-week', anchor: null });
+    expect(resolveDashboardEventTableRange(saved, new Date(2026, 10, 10)))
+      .toEqual({ start: new Date(2026, 10, 9), end: new Date(2026, 10, 16) });
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

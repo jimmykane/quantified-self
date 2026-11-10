@@ -127,6 +127,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
   private manualSearchRefreshToken = 0;
   private tableFilterSaveVersion = 0;
+  private pendingTableFilterSave: { version: number; userID: string; targetID: string } | null = null;
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventRead[] = [];
   private initialResolvedEventsKeyForReconcile = '';
@@ -407,9 +408,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.user?.settings?.dashboardSettings) {
       return;
     }
+    if (this.isSavingEventTableFilters) {
+      // Re-acknowledge the accepted filters if another event arrived before
+      // Angular propagated the disabled state to the controlled toolbar.
+      this.eventTableFiltersCache = null;
+      return;
+    }
     const userID = this.user.uid;
     const targetID = this.targetUser?.uid || userID;
     const saveVersion = ++this.tableFilterSaveVersion;
+    this.pendingTableFilterSave = { version: saveVersion, userID, targetID };
 
     const previousSearchState = {
       searchTerm: this.searchTerm,
@@ -465,6 +473,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
       this.snackBar.open('Could not update event table filters');
       this.logger.error('[DashboardComponent] Failed to persist dashboard search filters', error);
+    } finally {
+      if (this.pendingTableFilterSave?.version === saveVersion) this.pendingTableFilterSave = null;
     }
   }
 
@@ -1546,6 +1556,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   public get eventTableFilters(): AppDashboardEventTableFiltersInterface {
     return this.getEventTableFilters(this.user);
+  }
+
+  public get isSavingEventTableFilters(): boolean {
+    return !!this.pendingTableFilterSave && this.pendingTableFilterSave.userID === this.user?.uid
+      && this.pendingTableFilterSave.targetID === (this.targetUser?.uid || this.user?.uid);
   }
 
   get eventTableEmptyMessage(): string {

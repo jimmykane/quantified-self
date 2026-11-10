@@ -186,6 +186,13 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
 
+    if (this.toolbarRangeLayout) {
+      // Legacy Last week/month/year choices become fixed historical navigation
+      // when saved through this toolbar, with a matching compatibility value.
+      this.rangeNavigation = this.resolveToolbarNavigation();
+      this.selectedDateRange = dashboardDateRangeForNavigation(this.rangeNavigation);
+    }
+
     const { startDate, endDate } = this.toolbarRangeLayout ? this.resolveCurrentRangeDates() : {
       startDate: this.coerceDate(this.startDateControl.value), endDate: this.coerceDate(this.endDateControl.value),
     };

@@ -41,6 +41,21 @@ describe('Activity explorer date-range filters', () => {
       }
     } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
   });
+  it('keeps each calendar boundary at the start of its own day when DST skips midnight', () => {
+    const previous = process.env.TZ; process.env.TZ = 'America/Santiago';
+    try {
+      const today = new Date(2026, 8, 6, 12);
+      const range = resolveActivityDateRange('week', today)!;
+      expect(range).toEqual({ start: new Date(2026, 7, 31), end: new Date(2026, 8, 7) });
+      const custom = resolveActivityDateRange('custom', today, { startDate: '2026-09-06', endDate: '2026-09-06' })!;
+      expect(custom).toEqual({ start: new Date(2026, 8, 6), end: new Date(2026, 8, 7) });
+      expect(shiftActivityDateRange('custom', custom, 1)).toEqual({ start: new Date(2026, 8, 7), end: new Date(2026, 8, 8) });
+      expect(currentActivityDateRange('custom', today, custom)).toEqual(custom);
+      const month = resolveActivityDateRange('calendar-month', today)!;
+      expect(month).toEqual({ start: new Date(2026, 8, 1), end: new Date(2026, 9, 1) });
+      expect(resolveActivityDateRange('year', today)).toEqual({ start: new Date(2026, 0, 1), end: new Date(2027, 0, 1) });
+    } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
+  });
   it('keeps calendar weeks separate from rolling seven-day ranges and honors the account week start', () => {
     const now = new Date(2026, 10, 4, 12);
     expect(activityExplorerDateRange('calendar-week', now, null, 0)).toEqual({ start: new Date(2026, 10, 1), end: new Date(2026, 10, 8) });
