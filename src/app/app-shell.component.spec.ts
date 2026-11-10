@@ -17,6 +17,7 @@ import { AppLocaleService } from './services/app.locale.service';
 import { AppWindowService } from './services/app.window.service';
 import { LoggerService } from './services/logger.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
+import { AppUpdateService } from './services/app.update.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
 
@@ -176,6 +177,7 @@ describe('AppShellComponent', () => {
                         setAdminMode: vi.fn()
                     }
                 },
+                { provide: AppUpdateService, useValue: { isUpdateAvailable: signal(false) } },
                 {
                     provide: MatDialog, useValue: {
                         open: vi.fn()
@@ -740,6 +742,20 @@ describe('AppShellComponent', () => {
     it('should return unread whats-new count from service signal', () => {
         renderShellFixture();
         expect(component.unreadWhatsNewCount).toBe(0);
+    });
+
+    it('passes live app update availability to the header independently of release notes', () => {
+        renderShellFixture();
+        const header = fixture.nativeElement.querySelector('app-shell-header');
+        const available = TestBed.inject(AppUpdateService).isUpdateAvailable;
+        expect(header.isUpdateAvailable).toBe(false);
+        available.set(true);
+        fixture.detectChanges();
+        expect(header.isUpdateAvailable).toBe(true);
+        expect(header.unreadWhatsNewCount).toBe(0);
+        available.set(false);
+        fixture.detectChanges();
+        expect(header.isUpdateAvailable).toBe(false);
     });
 
     it('should navigate to dashboard on logo click when authenticated', () => {

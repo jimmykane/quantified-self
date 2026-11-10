@@ -2047,6 +2047,8 @@ Select **Reload page** to start a new check. Reloading does not guarantee accept
 
 ## Device notifications
 
+The header bell shows **1** for unread release notes, regardless of how many you missed. Opening **Updates & notifications** marks them as read. A separate red **1** on the opposite side means an app update is ready. It stays visible after you open the tray; select **Reload** to apply the update.
+
 Open **Settings → Notifications** to enable notifications on this device or send a test. These controls are available to signed-in users when notifications are available. Enabling is optional and asks for browser permission only after you select **Enable on this device**. A test notification lets you check this device before choosing an import alert.
 
 You can also open the header’s **Updates & notifications** tray and turn **On** to enable this device and every notification category together: history imports, newly synced activities, activity delivery, and training sync. Category choices apply across your account, including beta and production. Turning the switch off silences only this device. Individual categories remain available in **Notification settings**. If a temporary device check fails, turn **On** to retry; use **Retry** to check availability again when shown. If your browser blocks notifications, select **Show instructions**. Release notes remain available in the same tray.

@@ -9,12 +9,17 @@ import { computed, signal } from '@angular/core';
 import { buildHistoryImportProgress } from '../../helpers/history-import-progress.helper';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatBadge, MatBadgeModule } from '@angular/material/badge';
+import { By } from '@angular/platform-browser';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('AppShellHeaderComponent', () => {
   let component: AppShellHeaderComponent;
   let fixture: ComponentFixture<AppShellHeaderComponent>;
+  const haptics = { selection: vi.fn() };
 
   beforeEach(async () => {
+    haptics.selection.mockClear();
     TestBed.overrideComponent(DashboardHeaderUploadComponent, {
       set: {
         imports: [],
@@ -23,8 +28,9 @@ describe('AppShellHeaderComponent', () => {
     });
     await TestBed.configureTestingModule({
       declarations: [AppShellHeaderComponent],
-      imports: [NgComponentOutlet],
+      imports: [NgComponentOutlet, MatBadgeModule],
       providers: [
+        {provide: AppHapticsService, useValue: haptics},
         {provide: HistoryImportProgressService, useValue: {owner: signal(null), view: computed(() => buildHistoryImportProgress([], Date.now())), refreshing: signal(false)}},
         {provide: MatDialog, useValue: {}}, {provide: MatBottomSheet, useValue: {}},
       ],
@@ -33,6 +39,72 @@ describe('AppShellHeaderComponent', () => {
 
     fixture = TestBed.createComponent(AppShellHeaderComponent);
     component = fixture.componentInstance;
+  });
+
+  it.each([1, 22])('groups %i unread releases into one badge', (unreadCount) => {
+    component.authState = false;
+    fixture.componentRef.setInput('unreadWhatsNewCount', unreadCount);
+    fixture.detectChanges();
+
+    const icon = fixture.debugElement.query(By.css('.qs-app-badge[matBadge]'));
+    expect(icon.injector.get(MatBadge).content).toBe('1');
+    expect(icon.injector.get(MatBadge).hidden).toBe(false);
+    expect(icon.nativeElement.querySelector('.mat-badge-content').textContent).toBe('1');
+    expect(fixture.nativeElement.querySelector('button[aria-label^="View updates"]').getAttribute('aria-label'))
+      .toContain('Unread release notes');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { unread: 0, update: false },
+    { unread: 22, update: false },
+    { unread: 0, update: true },
+    { unread: 22, update: true },
+  ])('renders independent release/update badges for $unread unread and update=$update', ({ unread, update }) => {
+    component.authState = false;
+    fixture.componentRef.setInput('unreadWhatsNewCount', unread);
+    fixture.componentRef.setInput('isUpdateAvailable', update);
+    fixture.detectChanges();
+
+    const badges = fixture.debugElement.queryAll(By.directive(MatBadge));
+    // Material hides all descendant badge contents when a badge host is hidden.
+    expect(badges[0].nativeElement.parentElement).toBe(badges[1].nativeElement.parentElement);
+    const updateBadge = badges[0].injector.get(MatBadge);
+    const releaseBadge = badges[1].injector.get(MatBadge);
+    expect(updateBadge.hidden).toBe(!update);
+    expect(updateBadge.position).toBe('above before');
+    expect(updateBadge.content).toBe('1');
+    expect(updateBadge.size).toBe('medium');
+    expect(releaseBadge.hidden).toBe(unread === 0);
+    expect(releaseBadge.position).toBe('above after');
+    expect(releaseBadge.size).toBe('medium');
+    const label = fixture.nativeElement.querySelector('button[aria-label^="View updates"]').getAttribute('aria-label');
+    expect(label.includes('Unread release notes')).toBe(unread > 0);
+    expect(label.includes('App update available')).toBe(update);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('keeps the update badge after opening the tray and marking releases as read', () => {
+    component.authState = false;
+    fixture.componentRef.setInput('unreadWhatsNewCount', 22);
+    fixture.componentRef.setInput('isUpdateAvailable', true);
+    const open = vi.spyOn(component.whatsNewClick, 'emit');
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('button[aria-label^="View updates"]').click();
+    expect(open).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('unreadWhatsNewCount', 0);
+    fixture.detectChanges();
+
+    const badges = fixture.debugElement.queryAll(By.directive(MatBadge));
+    expect(badges[0].injector.get(MatBadge).hidden).toBe(false);
+    expect(badges[1].injector.get(MatBadge).hidden).toBe(true);
+
+    fixture.componentRef.setInput('isUpdateAvailable', false);
+    fixture.detectChanges();
+    expect(badges[0].injector.get(MatBadge).hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('should hide header when host hidden class is present', () => {

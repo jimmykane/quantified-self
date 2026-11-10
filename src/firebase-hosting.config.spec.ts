@@ -369,6 +369,7 @@ describe('Firebase Hosting configuration', () => {
     // Today editor availability explains per-metric periods and keeps missing-data choices usable (2026-11-10).
     // Missing calculated values are distinct from an active availability refresh (2026-11-10).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
+    // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
   });
 

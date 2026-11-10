@@ -1,5 +1,26 @@
+@use '@angular/material' as mat;
+
 :host {
   display: block;
+}
+
+.notification-badges {
+  display: inline-flex;
+  position: relative;
+}
+
+.notification-badge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  @include mat.badge-overrides((container-overlap-offset: -8px));
+}
+
+.app-update-badge {
+  @include mat.badge-overrides((
+    background-color: var(--mat-sys-error),
+    text-color: var(--mat-sys-on-error),
+  ));
 }
 
 /* Top Navigation Bar Styling */
