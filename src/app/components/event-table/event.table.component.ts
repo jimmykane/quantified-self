@@ -70,6 +70,7 @@ import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/metrics';
 
 interface ActivityTableTotalRow {
   'Sport Total': TrainingLogSportTotal;
+  Color: string;
   Duration: string; Distance: string; Ascent: string;
   'Total Coverage': Record<string, string>;
 }
@@ -144,6 +145,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   readonly columnSaveError = signal<string | null>(null);
   private columnSaveGeneration = 0;
   sportTotals: TrainingLogSportTotal[] = [];
+  totalSportColumn = 'Start Date';
   private readonly totalRows = new BehaviorSubject<ActivityTableTotalRow[]>([]);
   readonly renderedRows$ = defer(() => combineLatest([this.data.connect(), this.totalRows]).pipe(
     map(([rows, totals]) => [...rows, ...totals]),
@@ -1122,6 +1124,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
         ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
       ];
+      this.totalSportColumn = 'Name';
       return;
     }
     const sortedSelectedColumns = (this.selectedColumns || [])
@@ -1153,6 +1156,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       return true;
     });
+    this.totalSportColumn = this.displayedColumns.includes('Activity Types') ? 'Activity Types' : 'Start Date';
   }
 
   async saveEventDescription(description: string, event: EventRead) {
@@ -1415,6 +1419,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.user?.settings?.unitSettings, this.user?.settings?.summariesSettings) : [];
     this.totalRows.next(this.sportTotals.map(total => ({
       'Sport Total': total,
+      Color: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+        ActivityTypesHelper.resolveActivityType(total.sport) || ActivityTypes.unknown),
       Duration: total.duration.value, Distance: total.distance.value, Ascent: total.ascent.value,
       'Total Coverage': { Duration: total.duration.coverage, Distance: total.distance.coverage, Ascent: total.ascent.coverage },
     })));

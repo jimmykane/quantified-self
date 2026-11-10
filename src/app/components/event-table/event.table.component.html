@@ -155,10 +155,21 @@
           </th>
           }
           <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
+            [class.activity-total-fallback-cell]="!!row?.['Sport Total'] && column === 'Start Date' && totalSportColumn === column"
             [class.event-activity-cell]="isLibraryPresentation && column === 'Name'">
             @if (row?.['Sport Total']; as total) {
-              @if (column === 'Start Date') {
-                <span class="activity-total-label" matTooltip="Period totals across all matching activities and pages; merged comparisons are excluded.">Totals · {{ total.sport }}<small>{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small></span>
+              @if (column === totalSportColumn) {
+                <span class="activity-total-sport" matTooltip="Period totals across all matching activities and pages; merged comparisons are excluded.">
+                  <app-activity-type-icon [activityType]="total.sport" size="20px" aria-hidden="true"></app-activity-type-icon>
+                  <span class="activity-total-copy">
+                    <span class="activity-total-name">{{ total.sport }}</span>
+                    @if (column === 'Start Date') {
+                      <small>Totals · {{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small>
+                    }
+                  </span>
+                </span>
+              } @else if (column === 'Start Date') {
+                <span class="activity-total-label" matTooltip="Period totals across all matching activities and pages; merged comparisons are excluded.">Totals<small>{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small></span>
               } @else if (column === 'Duration' || column === 'Distance' || column === 'Ascent') {
                 {{ row[column] }}
                 @if (row['Total Coverage'][column]) { <small class="activity-total-coverage">{{ row['Total Coverage'][column] }}</small> }
@@ -298,7 +309,7 @@
         <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
           [routerLink]="tableIsLoading || row?.['Sport Total'] ? null : ['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-          [class.merged]="!showInitialLoading && row['Merged Event']" [style.--row-gradient]="showInitialLoading ? null : row['Gradient']"
+          [class.merged]="!showInitialLoading && row['Merged Event']" [style.--row-gradient]="showInitialLoading ? null : row['Sport Total'] ? row.Color : row['Gradient']"
           [class.activity-row]="!showInitialLoading && !row?.['Sport Total']" [class.activity-total-row]="!!row?.['Sport Total']" [class.activity-table-skeleton-row]="showInitialLoading"
           [attr.aria-hidden]="showInitialLoading ? true : null" [class.normal-row]="!row?.['Sport Total']">
         </tr>

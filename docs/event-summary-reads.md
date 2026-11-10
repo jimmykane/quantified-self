@@ -136,8 +136,10 @@ Duration, Distance and eligible Ascent, formats through Sports Lib, and retains 
 elevation exclusions, exact sports and one Multisport group per recording. Generated comparisons are excluded.
 Totals are appended to the rendered page stream, outside the activity data source used for sorting, filtering,
 selection and exports. They share the table columns, have no event links/actions, and disappear while loading or
-failed. The shared table owns the underlying data-source connection and disconnects it on destruction. Neither row
-construction nor totals hydrate child activities or streams. GAP continues to use its persisted canonical stat and
+failed. Their sport icon and leading color mark reuse the activity palette. Sport names sit in the sport/name column,
+falling back to the date column when that column is hidden. Counts stay separate from the sport label. The shared
+table owns the underlying data-source connection and disconnects it on destruction. Neither row construction nor
+totals hydrate child activities or streams. GAP continues to use its persisted canonical stat and
 unit conversion; absent historical values remain unavailable.
 
 MCP impact review: these are presentations over existing recorded summaries. No numeric class, parser,

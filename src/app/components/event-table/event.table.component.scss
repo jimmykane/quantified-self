@@ -16,9 +16,16 @@
 .activity-total-row { background: var(--mat-sys-surface-container); cursor: default; }
 .activity-total-label, .activity-total-coverage { display: block; white-space: normal; }
 .activity-total-label { font: var(--mat-sys-label-medium); }
-.activity-total-label small, .activity-total-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
-.activity-total-label small { white-space: nowrap; }
+.activity-total-sport { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.activity-total-sport app-activity-type-icon { display: flex; flex-shrink: 0; }
+.activity-total-copy { min-width: 0; white-space: normal; }
+.activity-total-name { display: block; font: inherit; font-weight: 500; }
+.activity-total-label small, .activity-total-copy small, .activity-total-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
+.activity-total-label small, .activity-total-copy small { white-space: nowrap; }
 .activity-total-row td { border-top: 1px solid var(--mat-sys-outline-variant); }
+// The date cell carries the sport identity when its optional column is hidden.
+// Give that label room inside the existing horizontal table scroll on phones.
+.activity-total-row .activity-total-fallback-cell { min-width: 10rem !important; width: auto !important; max-width: none !important; }
 
 /* Consolidated and cleaned up styles for event table */
 
@@ -350,11 +357,13 @@
 
 
 /* Gradient strip on the left of the first cell */
-.activity-row td:first-child {
+.activity-row td:first-child,
+.activity-total-row td:first-child {
   position: relative;
 }
 
-.activity-row td:first-child::before {
+.activity-row td:first-child::before,
+.activity-total-row td:first-child::before {
   content: '';
   position: absolute;
   left: 0;

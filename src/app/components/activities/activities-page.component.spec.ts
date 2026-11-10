@@ -388,6 +388,11 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row')).toHaveLength(2);
     expect(c.fixture.nativeElement.querySelectorAll('table[mat-table]')).toHaveLength(1);
     expect(c.fixture.nativeElement.querySelector('tr.activity-total-row').textContent).toContain('Totals');
+    const totalNames = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-total-row .activity-total-name')]
+      .map((name: HTMLElement) => name.textContent?.trim());
+    expect(totalNames()).toEqual(['Cycling', 'Running']);
+    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row .mat-column-Activity-Types app-activity-type-icon')).toHaveLength(2);
+    expect(c.fixture.nativeElement.querySelector('tr.activity-total-row app-activity-type-icon mat-icon').style.color).toBe('rgb(18, 52, 86)');
     const gap = table.data.data.find(row => row.Event.getID() === 'log-0')[DataGradeAdjustedPaceAvg.type];
     expect(gap).toBe(imperial ? '07:30 min/m' : '04:40 min/km');
     expect(table.data.data.find(row => row.Event.getID() === 'log-26')[DataGradeAdjustedPaceAvg.type]).toBe('');
@@ -404,6 +409,8 @@ describe('ActivitiesPageComponent', () => {
     expect(table.data.sortData(table.data.filteredData, table.sort)
       .filter(row => row[DataGradeAdjustedPaceAvg.type] !== '')[0].Event.getID()).toBe('log-0');
     await table.selectedColumnsChange(['Distance']); await render(c);
+    expect(totalNames()).toEqual(['Cycling', 'Running']);
+    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row .mat-column-Start-Date app-activity-type-icon')).toHaveLength(2);
     await table.selectedColumnsChange(savedColumns); await render(c);
     expect(table.displayedColumns).toContain(DataGradeAdjustedPaceAvg.type);
     expect(c.user$.value.settings.dashboardSettings.tableSettings.selectedColumns).toEqual(savedColumns);
