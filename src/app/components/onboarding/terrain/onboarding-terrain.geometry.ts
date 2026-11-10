@@ -190,7 +190,6 @@ export function createTerrainGeometry() {
     if (distance(selected[i]) < distance(selected[closest])) closest = i;
   }
   const startProgress = distances[closest] / total;
-  const openPhase = Math.acos(clamp((0.5 - startProgress) / 0.38, -1, 1));
   return {
     vertices: new Float32Array(vertices),
     indices: new Uint32Array(indices),
@@ -201,7 +200,6 @@ export function createTerrainGeometry() {
     progress: new Float32Array(distances.map((d) => d / total)),
     closed,
     startProgress,
-    openPhase,
     span: Math.min(0.15, 5 / total)
   };
 }
