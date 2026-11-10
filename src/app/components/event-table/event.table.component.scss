@@ -329,6 +329,7 @@
 
 .mat-mdc-header-cell,
 .mat-mdc-cell {
+  font-family: 'Barlow Condensed', sans-serif;
   white-space: nowrap !important;
   padding: 0 16px !important;
   border-bottom-color: var(--mat-sys-outline-variant) !important;
@@ -336,14 +337,10 @@
 
 .mat-mdc-header-cell {
   color: var(--mat-sys-on-surface-variant) !important;
-  font-weight: 500 !important;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-}
-
-.mat-mdc-cell {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600 !important;
+  text-transform: none;
+  font-size: 0.95rem !important;
+  letter-spacing: normal;
 }
 
 .mat-mdc-row {
@@ -439,9 +436,9 @@
 
   .mat-column-Tags,
   .cdk-column-Tags {
-    min-width: 52px !important;
-    width: 52px !important;
-    max-width: 52px !important;
+    min-width: 72px !important;
+    width: 72px !important;
+    max-width: 72px !important;
   }
 
   .event-tags-cell-button {

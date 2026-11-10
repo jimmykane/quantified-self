@@ -1537,7 +1537,7 @@ describe('EventTableComponent', () => {
         expect(template).toContain("[attr.aria-label]=\"row['Tags Accessible Label']\"");
         expect(styles).toMatch(/\.table-toolbar-filters\s*{[^}]*flex-wrap:\s*wrap;/);
         expect(styles).toMatch(/@include bp\.handset-or-tablet-portrait[\s\S]*?\.table-toolbar-main \.qs-search-field\s*{\s*flex-basis:\s*100%;/);
-        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.mat-column-Tags[\s\S]*width:\s*52px !important;/);
+        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.mat-column-Tags[\s\S]*width:\s*72px !important;/);
     });
 
     it('should save tags from a row dialog without navigating the row', async () => {
