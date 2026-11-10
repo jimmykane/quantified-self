@@ -28,10 +28,9 @@
         (eventsChange)="onEventsChange($event)">
         <div event-table-filters class="activity-explorer-filters">
           <app-table-date-filter [options]="periods" [value]="period()" customValue="custom" allValue="all"
-            [rangeForm]="customDateForm" [startDate]="isCalendarWeek() ? calendarWeek().start : customDates()?.startDate || null"
-            [endDate]="isCalendarWeek() ? calendarWeek().lastDay : customDates()?.endDate || null"
-            [disabled]="loading()" [weekNavigation]="isCalendarWeek()" [currentWeek]="isCurrentWeek()"
-            (weekShift)="navigateWeek($event)" (currentWeekRequested)="goToCurrentWeek()"
+            [rangeForm]="customDateForm" [startDate]="rangeDates()?.startDate || null" [endDate]="rangeDates()?.endDate || null"
+            [disabled]="loading()" [navigation]="true" [navigationEnabled]="!!historyRange()" [currentPeriod]="isCurrentPeriod()"
+            (rangeShift)="navigateRange($event)" (currentPeriodRequested)="goToCurrentPeriod()"
             (selectionChange)="selectPeriod($event)" (applied)="applyCustomRange()" (cancelled)="cancelCustomRange()"
             (cleared)="clearCustomRange()" (calendarOpened)="onCustomPickerOpened()"></app-table-date-filter>
           <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports" [textButton]="true" triggerIcon="directions_run"

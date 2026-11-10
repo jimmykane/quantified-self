@@ -1,15 +1,16 @@
-import { resolveActivityCalendarPrimaryRange } from './activity-calendar.helper';
+import { resolveActivityDateRange } from './activity-date-range.helper';
+export { normalizeActivityRangeDates as normalizeActivityExplorerCustomDates } from './activity-date-range.helper';
 import type { EventTagsContainer } from '@shared/event-tags';
 import { getEventTags } from '@shared/event-tags';
 import { CompatibleTrainingActivityTypes, resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 export const ACTIVITY_EXPLORER_PERIODS = [
-  { value: 'month', label: 'Last 30 days' },
-  { value: 'week', label: 'Last 7 days' },
-  { value: 'calendar-week', label: 'This week' },
-  { value: 'quarter', label: 'Last 90 days' },
-  { value: 'year', label: 'This year' },
+  { value: 'month', label: '30 days' },
+  { value: 'week', label: '7 days' },
+  { value: 'calendar-week', label: 'Week' },
+  { value: 'quarter', label: '90 days' },
+  { value: 'year', label: 'Year' },
   { value: 'custom', label: 'Custom dates' },
   { value: 'all', label: 'All dates' },
 ] as const;
@@ -20,44 +21,10 @@ export interface ActivityExplorerCustomDates {
   endDate: string;
 }
 
-function parseLocalDate(value: unknown): Date | null {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(0);
-  date.setFullYear(year, month - 1, day);
-  date.setHours(0, 0, 0, 0);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
-}
-
-export function normalizeActivityExplorerCustomDates(startDate: unknown, endDate: unknown): ActivityExplorerCustomDates | null {
-  const start = parseLocalDate(startDate);
-  const end = parseLocalDate(endDate);
-  return start && end && start <= end ? { startDate: startDate as string, endDate: endDate as string } : null;
-}
-
 export function activityExplorerDateRange(
-  period: ActivityExplorerPeriod, now: Date, customDates?: ActivityExplorerCustomDates | null, startOfWeek = 1,
+  period: ActivityExplorerPeriod, now: Date, customDates?: ActivityExplorerCustomDates | null, startOfWeek = 1, anchor?: string | null,
 ): { start: Date; end: Date } | null | undefined {
-  if (period === 'all') return null;
-  if (period === 'calendar-week') {
-    const range = resolveActivityCalendarPrimaryRange('week', now, startOfWeek);
-    return { start: new Date(range.startMs), end: new Date(range.endExclusiveMs) };
-  }
-  if (period === 'custom') {
-    const dates = normalizeActivityExplorerCustomDates(customDates?.startDate, customDates?.endDate);
-    if (!dates) return undefined;
-    const start = parseLocalDate(dates.startDate)!;
-    const end = parseLocalDate(dates.endDate)!;
-    end.setDate(end.getDate() + 1);
-    return { start, end };
-  }
-  const end = new Date(now);
-  end.setHours(0, 0, 0, 0);
-  end.setDate(end.getDate() + 1);
-  const start = new Date(end);
-  if (period === 'year') start.setFullYear(now.getFullYear(), 0, 1);
-  else start.setDate(start.getDate() - (period === 'week' ? 7 : period === 'quarter' ? 90 : 30));
-  return { start, end };
+  return resolveActivityDateRange(period, now, customDates, startOfWeek, anchor);
 }
 
 interface ActivityExplorerEvent extends EventTagsContainer {

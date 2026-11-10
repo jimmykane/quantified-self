@@ -80,8 +80,8 @@
         [emptyMessage]="eventTableEmptyMessage" [emptyHint]="eventTableEmptyHint"
         [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events">
         <app-event-search #eventTableSearch event-table-filters class="table-toolbar-layout compact-filter-layout"
-          [isLoading]="isLoading" [compact]="true" [selectedDateRange]="eventTableFilters.dateRange"
-          [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+          [isLoading]="isLoading" [compact]="true" [dateSelection]="eventTableFilters"
+          [dateContext]="eventTableDateContext" [startOfTheWeek]="startOfTheWeek"
           [selectedActivityTypes]="eventTableFilters.activityTypes"
           [toolbarRangeLayout]="true"
           [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"

@@ -2013,6 +2013,18 @@ Health thumbnails reuse completed browser evidence for the same owner, metric, r
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
 
 
+## Activity table date navigation
+
+Activities and Dashboard share bounded date navigation and actual date labels. Presets retain their identity while
+browsing history; Current period restores the live window. All dates retains the existing confirmation and disables
+period navigation. Custom dates use inclusive calendar days, including across DST. Activities stores history anchors
+in the URL; Dashboard stores validated navigation metadata alongside its compatible numeric date-range preference.
+See [event summary reads](event-summary-reads.md) for query boundaries, rollover and save-failure recovery.
+
+The additional controls and shared date resolution measure 14.81 MB of total production scripts. Beta and production
+therefore share a 14.82 MB `allScript` error cap. Initial and warning budgets remain unchanged; this is bundle accounting,
+not a runtime performance claim.
+
 ## Empty activity tables
 
 The Dashboard table's projected date/sport toolbar uses a content-sized flex basis at the same small-screen breakpoint

@@ -1,4 +1,5 @@
 import type { WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
+import type { ActivityDateRangeNavigation } from '../helpers/activity-date-range.helper';
 import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
   User,
@@ -169,6 +170,7 @@ export interface AppDashboardEventTableFiltersInterface {
     dateRange: DateRanges;
     startDate: number | null;
     endDate: number | null;
+    rangeNavigation?: ActivityDateRangeNavigation | null;
     activityTypes: ActivityTypes[];
     includeMergedEvents: boolean;
 }

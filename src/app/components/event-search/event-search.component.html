@@ -2,10 +2,10 @@
   @if (toolbarRangeLayout) {
     <div class="toolbar-controls">
       @if (showDatePicker) {
-        <app-table-date-filter [options]="toolbarDateRangeOptions" [value]="selectedDateRange"
-          [customValue]="dateRanges.custom" [allValue]="dateRanges.all" [rangeForm]="searchFormGroup"
-          startControlName="startDate" endControlName="endDate" [startDate]="toolbarWeekNavigation ? toolbarWeekStart : selectedStartDate" [endDate]="toolbarWeekNavigation ? toolbarWeekEnd : selectedEndDate"
-          [weekNavigation]="toolbarWeekNavigation" [currentWeek]="toolbarIsCurrentWeek" (weekShift)="shiftToolbarWeek($event)" (currentWeekRequested)="showToolbarCurrentWeek()" [disabled]="isLoading"
+        <app-table-date-filter [options]="toolbarDateRangeOptions" [value]="toolbarRangePreset"
+          customValue="custom" allValue="all" [rangeForm]="searchFormGroup"
+          startControlName="startDate" endControlName="endDate" [startDate]="toolbarRangeStart" [endDate]="toolbarRangeEnd"
+          [navigation]="true" [navigationEnabled]="toolbarNavigationEnabled" [currentPeriod]="toolbarIsCurrentPeriod" (rangeShift)="shiftToolbarRange($event)" (currentPeriodRequested)="showToolbarCurrentPeriod()" [disabled]="isLoading"
           invalidRangeMessage="Choose valid dates, up to 5 years, with the end on or after the start."
           (selectionChange)="onToolbarDateRangeChange($event)" (applied)="applyToolbarCustomRange()"
           (cancelled)="cancelToolbarCustomRange()" (cleared)="clearToolbarCustomRange()" (calendarOpened)="onToolbarPickerOpened()"></app-table-date-filter>

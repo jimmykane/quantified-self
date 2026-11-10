@@ -1,3 +1,4 @@
+import { activityRangeDates } from '../../helpers/activity-date-range.helper';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -206,7 +207,7 @@ describe('ActivitiesPageComponent', () => {
       { fieldPath: 'startDate', opStr: '<', value: new Date(2026, 10, 8).getTime() },
     ], 'startDate', false, 0);
     expect(c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance.presentation).toBe('dashboard');
-    expect(c.fixture.nativeElement.querySelector('[aria-label="Previous week"]')).toBeTruthy();
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Previous period"]')).toBeTruthy();
     expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeTruthy();
     expect(c.fixture.nativeElement.querySelector('app-compact-select[label=View]')).toBeNull();
     expect(c.dialog.open).not.toHaveBeenCalled();
@@ -220,26 +221,59 @@ describe('ActivitiesPageComponent', () => {
       c.component.selectPeriod('calendar-week'); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       c.haptics.selection.mockClear();
-      c.fixture.nativeElement.querySelector('[aria-label="Previous week"]').click(); await render(c);
-      expect(c.component.calendarWeek().dates).toEqual({ startDate: '2026-10-26', endDate: '2026-11-01' });
-      expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'calendar-week', week: '2026-10-26', tag: ['Endurance'] });
+      c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click(); await render(c);
+      expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: '2026-10-26', endDate: '2026-11-01' });
+      expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ view: null, period: 'calendar-week', anchor: '2026-10-26', tag: ['Endurance'] });
       expect(c.haptics.selection).toHaveBeenCalledOnce();
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
       c.params$.next(convertToParamMap(Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams)
         .filter(([, value]) => value !== null)))); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
-      c.fixture.nativeElement.querySelector('[aria-label="Next week"]').click(); await render(c);
-      expect(c.component.isCurrentWeek()).toBe(true);
-      c.component.goToCurrentWeek(); await render(c);
+      c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click(); await render(c);
+      expect(c.component.isCurrentPeriod()).toBe(true);
+      c.component.goToCurrentPeriod(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
       c.params$.next(convertToParamMap({ view: 'training-log', week: '2026-10-26', tag: 'Endurance' })); await render(c);
-      expect(c.component.isCurrentWeek()).toBe(false);
-      c.component.goToCurrentWeek(); await render(c);
-      expect(c.component.isCurrentWeek()).toBe(true);
-      expect(c.router.navigate.mock.lastCall[1].queryParams.week).toBeNull();
+      expect(c.component.isCurrentPeriod()).toBe(false);
+      c.component.goToCurrentPeriod(); await render(c);
+      expect(c.component.isCurrentPeriod()).toBe(true);
+      expect(c.router.navigate.mock.lastCall[1].queryParams.anchor).toBeNull();
       c.component.selectPeriod('month'); await render(c);
       expect(c.fixture.nativeElement.querySelector('app-table-date-filter')).toBeTruthy();
       expect(c.component.selectedTags()).toEqual(['Endurance']);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([
+    { preset: 'week', start: '2026-10-28', end: '2026-11-03' },
+    { preset: 'month', start: '2026-09-12', end: '2026-10-11' },
+    { preset: 'quarter', start: '2026-05-15', end: '2026-08-12' },
+    { preset: 'calendar-week', start: '2026-11-02', end: '2026-11-08' },
+    { preset: 'year', start: '2025-01-01', end: '2025-12-31' },
+    { preset: 'custom', start: '2026-10-26', end: '2026-10-29' },
+  ] as const)('navigates $preset ranges once, retains URL history and returns to the current period', async ({ preset, start, end }) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const c = await setup('Endurance');
+      c.params$.next(convertToParamMap({ period: preset, tag: 'Endurance', ...(preset === 'custom' ? { start: '2026-10-30', end: '2026-11-02' } : {}) }));
+      await render(c); c.haptics.selection.mockClear();
+      c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click(); await render(c);
+      expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: start, endDate: end });
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(c.haptics.selection).toHaveBeenCalledOnce();
+      const saved = Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams).filter(([, value]) => value !== null));
+      c.params$.next(convertToParamMap(saved)); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      c.component.goToCurrentPeriod(); await render(c);
+      expect(c.component.isCurrentPeriod()).toBe(true);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+      expect(c.component.selectedTags()).toEqual(['Endurance']);
+      expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+      c.params$.next(convertToParamMap(saved)); await render(c);
+      expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: start, endDate: end });
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
+      vi.setSystemTime(new Date(2026, 10, 11, 12)); c.component.refreshLocalDay(); await render(c);
+      expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
     } finally { vi.useRealTimers(); }
   });
 
@@ -250,7 +284,7 @@ describe('ActivitiesPageComponent', () => {
       c.user$.value.settings = AppUserUtilities.fillMissingAppSettings(c.user$.value);
       c.params$.next(convertToParamMap({ view: 'training-log' })); await render(c);
       vi.setSystemTime(new Date(2026, 10, 9, 0, 1)); c.component.refreshLocalDay(); await render(c);
-      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-09');
+      expect(activityRangeDates(c.component.historyRange()!).startDate).toBe('2026-11-09');
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       vi.setSystemTime(new Date(2026, 10, 10, 0, 1)); c.component.refreshLocalDay(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
@@ -258,12 +292,12 @@ describe('ActivitiesPageComponent', () => {
         ...c.user$.value.settings, unitSettings: { ...c.user$.value.settings.unitSettings, startOfTheWeek: 0 },
       } });
       c.user$.next(profile); await render(c);
-      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-08');
+      expect(activityRangeDates(c.component.historyRange()!).startDate).toBe('2026-11-08');
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
-      c.component.navigateWeek(-1); await render(c);
+      c.component.navigateRange(-1); await render(c);
       vi.setSystemTime(new Date(2026, 10, 15, 0, 1)); c.component.refreshLocalDay(); await render(c);
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
-      expect(c.component.calendarWeek().dates.startDate).toBe('2026-11-01');
+      expect(activityRangeDates(c.component.historyRange()!).startDate).toBe('2026-11-01');
     } finally { vi.useRealTimers(); }
   });
 
@@ -295,7 +329,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.params$.next(convertToParamMap(Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams)
       .filter(([, value]) => value !== null)))); await render(c);
-    expect(c.component.weekAnchor()).toBeNull();
+    expect(c.component.rangeAnchor()).toBeNull();
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
@@ -307,7 +341,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.dialogs[0].closed$.next(false); await render(c);
     expect(c.component.period()).toBe('calendar-week');
-    expect(c.component.weekAnchor()).toBe('2026-11-04');
+    expect(c.component.rangeAnchor()).toBe('2026-11-04');
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
   });
 
@@ -337,8 +371,8 @@ describe('ActivitiesPageComponent', () => {
         { fieldPath: 'startDate', opStr: '>=', value: +new Date(after[0]) },
         { fieldPath: 'startDate', opStr: '<', value: +new Date(after[1]) },
       ]);
-      expect(c.component.weekAnchor()).toBe(anchor);
-      expect(c.component.calendarWeek().dates).toEqual({ startDate: dates[0], endDate: dates[1] });
+      expect(c.component.rangeAnchor()).toBe(anchor);
+      expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: dates[0], endDate: dates[1] });
       expect(c.haptics.selection).not.toHaveBeenCalled();
     } finally {
       if (originalTimezone === undefined) delete process.env.TZ; else process.env.TZ = originalTimezone;
@@ -437,7 +471,7 @@ describe('ActivitiesPageComponent', () => {
       const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
       expect(table.events).toEqual(data); expect(table.presentation).toBe('dashboard');
       expect(table.hideGeneratedNames).toBe(true);
-      expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
+      expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('22 Sep – 21 Oct 2026');
       expect(c.haptics.selection).not.toHaveBeenCalled();
       expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
       expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
@@ -552,7 +586,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).not.toHaveBeenCalled();
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.showCustomRange()).toBe(false);
-    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain(c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance.rangeLabel());
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
   });
 
@@ -609,7 +643,7 @@ describe('ActivitiesPageComponent', () => {
     clear.focus(); clear.click(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
-    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain(c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance.rangeLabel());
     expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('.table-date-filter-button'));
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'month', start: null, end: null });
   });
@@ -1055,13 +1089,13 @@ describe('ActivitiesPageComponent', () => {
     expect(presets.menuOpen).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
     c.component.openDateFilter(); expect(c.haptics.selection).toHaveBeenCalledOnce();
     presets.closeMenu(); await settle();
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
+    expect(document.activeElement?.classList.contains('table-date-filter-button')).toBe(true);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     await openCustomDates(c); c.haptics.selection.mockClear();
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
     expect(picker.opened).toBe(true); c.component.openDateFilter(); await settle();
     expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
-    picker.close(); await settle(); expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
+    picker.close(); await settle(); expect(document.activeElement?.classList.contains('table-date-filter-button')).toBe(true);
     const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(),
       srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
     record.setID('empty-notice-example'); record.addStat(new DataActivityTypes([ActivityTypes.Cycling]));

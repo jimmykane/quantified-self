@@ -16,6 +16,8 @@ import {
   navigateDashboardTileEventWindow,
   resolveDashboardTileEventWindow,
   resolveLegacyDashboardTileEventFilterRange,
+  resolveDashboardEventTableRange,
+  resolveDashboardEventTableNavigation,
 } from './dashboard-tile-event-filters.helper';
 
 function makeEvent(activityTypes: ActivityTypes[]): any {
@@ -25,6 +27,32 @@ function makeEvent(activityTypes: ActivityTypes[]): any {
 }
 
 describe('dashboard-tile-event-filters.helper', () => {
+  it('preserves explicitly saved custom calendar dates across timezone changes', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'Europe/Helsinki';
+      const saved = { dateRange: DateRanges.custom, startDate: +new Date(2026, 9, 30), endDate: +new Date(2026, 10, 2, 23, 59, 59, 999),
+        rangeNavigation: { preset: 'custom' as const, anchor: null, customDates: { startDate: '2026-10-30', endDate: '2026-11-02' } } };
+      process.env.TZ = 'America/New_York';
+      expect(resolveDashboardEventTableRange(normalizeDashboardEventTableFilters(saved)))
+        .toEqual({ start: new Date(2026, 9, 30), end: new Date(2026, 10, 3) });
+    } finally { if (original === undefined) delete process.env.TZ; else process.env.TZ = original; }
+  });
+  it('restores fixed table windows and keeps live 90-day windows moving independently of stored date bounds', () => {
+    const historical = { dateRange: DateRanges.custom, rangeNavigation: { preset: 'month' as const, anchor: '2026-10-11' } };
+    expect(resolveDashboardEventTableRange(historical, new Date(2026, 10, 10))).toEqual({ start: new Date(2026, 8, 12), end: new Date(2026, 9, 12) });
+    const live = { dateRange: DateRanges.custom, rangeNavigation: { preset: 'quarter' as const, anchor: null } };
+    expect(resolveDashboardEventTableRange(live, new Date(2026, 10, 10))?.end).toEqual(new Date(2026, 10, 11));
+    expect(resolveDashboardEventTableRange(live, new Date(2026, 10, 11))?.end).toEqual(new Date(2026, 10, 12));
+    expect(normalizeDashboardEventTableFilters(historical).rangeNavigation).toEqual(historical.rangeNavigation);
+  });
+  it('restores legacy last-period choices and distinguishes them from inclusive custom ranges', () => {
+    expect(resolveDashboardEventTableNavigation({ dateRange: DateRanges.lastWeek }, new Date(2026, 10, 10), 0))
+      .toEqual({ preset: 'calendar-week', anchor: '2026-11-01' });
+    expect(resolveDashboardEventTableRange({ dateRange: DateRanges.custom, startDate: +new Date(2026, 10, 2), endDate: +new Date(2026, 10, 9) }))
+      .toEqual({ start: new Date(2026, 10, 2), end: new Date(2026, 10, 10) });
+    expect(normalizeDashboardEventTableFilters({ dateRange: DateRanges.thisWeek, rangeNavigation: { preset: 'all', anchor: null } }).rangeNavigation).toBeUndefined();
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

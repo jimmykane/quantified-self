@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIVITY_EXPLORER_PERIODS, activityExplorerDateRange, activityExplorerSports, filterActivityExplorerEvents, normalizeActivityExplorerCustomDates, normalizeActivityExplorerSports, type ActivityExplorerFilters } from './activity-explorer.helper';
+import { activityRangeDates, currentActivityDateRange, resolveActivityDateRange, shiftActivityDateRange } from './activity-date-range.helper';
 
 const now = new Date(2026, 9, 21, 12);
 const filters: ActivityExplorerFilters = { tags: [], untagged: false, sports: [], period: 'all' };
@@ -8,6 +9,38 @@ const event = (tags: string[], sports = ['Running'], date = new Date(2026, 9, 20
 });
 
 describe('Activity explorer date-range filters', () => {
+  it.each([['week', 7], ['month', 30], ['quarter', 90]] as const)('steps %s windows by their complete calendar-day length', (preset, days) => {
+    const current = resolveActivityDateRange(preset, new Date(2026, 10, 10))!;
+    const previous = shiftActivityDateRange(preset, current, -1)!;
+    expect(previous.end).toEqual(current.start);
+    expect(shiftActivityDateRange(preset, previous, 1)).toEqual(current);
+    const start = new Date(current.start); start.setDate(start.getDate() - days);
+    expect(previous.start).toEqual(start);
+  });
+  it('navigates complete calendar years and months across leap years', () => {
+    const year = resolveActivityDateRange('year', new Date(2024, 5, 10))!;
+    expect(year).toEqual({ start: new Date(2024, 0, 1), end: new Date(2025, 0, 1) });
+    expect(shiftActivityDateRange('year', year, -1)).toEqual({ start: new Date(2023, 0, 1), end: new Date(2024, 0, 1) });
+    const march = resolveActivityDateRange('calendar-month', new Date(2024, 2, 31))!;
+    expect(shiftActivityDateRange('calendar-month', march, -1)).toEqual({ start: new Date(2024, 1, 1), end: new Date(2024, 2, 1) });
+  });
+  it('keeps custom navigation inclusive and returns the same window length to today', () => {
+    const range = resolveActivityDateRange('custom', now, { startDate: '2026-10-01', endDate: '2026-10-08' })!;
+    expect(activityRangeDates(shiftActivityDateRange('custom', range, -1)!)).toEqual({ startDate: '2026-09-23', endDate: '2026-09-30' });
+    expect(activityRangeDates(currentActivityDateRange('custom', new Date(2026, 10, 10), range)!)).toEqual({ startDate: '2026-11-03', endDate: '2026-11-10' });
+  });
+  it.each(['Europe/Helsinki', 'America/New_York'])('keeps adjacent windows and exact round trips across DST in %s', timezone => {
+    const previous = process.env.TZ; process.env.TZ = timezone;
+    try {
+      for (const day of ['2026-03-30', '2026-11-02']) {
+        const range = resolveActivityDateRange('week', now, null, 1, day)!;
+        const before = shiftActivityDateRange('week', range, -1)!;
+        expect(before.end).toEqual(range.start);
+        expect(before.start.getHours()).toBe(0);
+        expect(shiftActivityDateRange('week', before, 1)).toEqual(range);
+      }
+    } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
+  });
   it('keeps calendar weeks separate from rolling seven-day ranges and honors the account week start', () => {
     const now = new Date(2026, 10, 4, 12);
     expect(activityExplorerDateRange('calendar-week', now, null, 0)).toEqual({ start: new Date(2026, 10, 1), end: new Date(2026, 10, 8) });

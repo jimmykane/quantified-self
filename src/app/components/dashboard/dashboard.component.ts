@@ -1,5 +1,5 @@
 import type { EventRead } from '@shared/event-read';
-import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnDestroy, OnInit, afterNextRender, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
 import { combineLatest, from, merge, of, Subject } from 'rxjs';
@@ -23,7 +23,6 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 
-import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
 import {
   buildUnitSettingsForUnitSetupPreset,
@@ -35,6 +34,7 @@ import {
 import {
   eventMatchesDashboardActivityTypes,
   normalizeDashboardEventTableFilters,
+  resolveDashboardEventTableRange,
 } from '../../helpers/dashboard-tile-event-filters.helper';
 import {
   buildDashboardActionPromptViewModels,
@@ -89,6 +89,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public searchStartDate: Date | null;
   public searchEndDate: Date | null;
   public startOfTheWeek: DaysOfTheWeek;
+  public eventTableDateContext = '';
   public isLoading: boolean;
   public showUpload = false;
   public isInitialized = false;
@@ -125,6 +126,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private shouldSearch: boolean;
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
   private manualSearchRefreshToken = 0;
+  private tableFilterSaveVersion = 0;
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventRead[] = [];
   private initialResolvedEventsKeyForReconcile = '';
@@ -160,6 +162,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private userService: AppUserService,
     private route: ActivatedRoute,
     private snackBar: MatSnackBar) {
+    afterNextRender(() => {
+      this.refreshEventTableDates();
+      const clock = globalThis.setInterval(() => this.refreshEventTableDates(), 60_000);
+      this.destroyRef.onDestroy(() => globalThis.clearInterval(clock));
+    });
+  }
+
+  @HostListener('window:focus')
+  refreshEventTableDates(): void {
+    if (this.destroyRef.destroyed) return;
+    this.eventTableDateContext = `${new Date().setHours(0, 0, 0, 0)}:${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+    if (!this.user || !this.isInitialized || this.isLoading) return;
+    const range = resolveDashboardEventTableRange(this.eventTableFilters, new Date(), this.user.settings.unitSettings?.startOfTheWeek);
+    if (!range || (+range.start === +this.searchStartDate && +range.end - 1 === +this.searchEndDate)) return;
+    this.shouldSearch = true;
+    this.manualSearchRefreshToken += 1;
+    this.manualSearchTrigger$.next({ user: this.user, refreshToken: this.manualSearchRefreshToken });
   }
 
   async ngOnInit() {
@@ -388,6 +407,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.user?.settings?.dashboardSettings) {
       return;
     }
+    const userID = this.user.uid;
+    const targetID = this.targetUser?.uid || userID;
+    const saveVersion = ++this.tableFilterSaveVersion;
 
     const previousSearchState = {
       searchTerm: this.searchTerm,
@@ -410,6 +432,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         searchTerm: search.searchTerm || null,
         includeMergedEvents: search.includeMergedEvents !== false,
         dateRange: search.dateRange,
+        rangeNavigation: search.rangeNavigation ?? null,
         startDate: search.startDate ? search.startDate.getTime() : null,
         endDate: search.endDate ? search.endDate.getTime() : null,
         activityTypes: search.activityTypes || [],
@@ -424,12 +447,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
         eventTableFilters: this.user.settings.dashboardSettings.eventTableFilters,
       });
     } catch (error) {
+      if (this.destroyRef.destroyed || saveVersion !== this.tableFilterSaveVersion || this.user?.uid !== userID
+        || (this.targetUser?.uid || this.user.uid) !== targetID) return;
       this.searchTerm = previousSearchState.searchTerm;
       this.searchStartDate = previousSearchState.searchStartDate;
       this.searchEndDate = previousSearchState.searchEndDate;
       this.user.settings.dashboardSettings.eventTableFilters = previousDashboardSettings.eventTableFilters;
       this.shouldSearch = false;
       this.isLoading = false;
+      // The optimistic request already changed the live listener. Restore its
+      // query as well as the visible controls when a preference save fails.
+      if (this.isInitialized) {
+        this.shouldSearch = true;
+        this.isLoading = true;
+        this.manualSearchRefreshToken += 1;
+        this.manualSearchTrigger$.next({ user: this.user, refreshToken: this.manualSearchRefreshToken });
+      }
       this.snackBar.open('Could not update event table filters');
       this.logger.error('[DashboardComponent] Failed to persist dashboard search filters', error);
     }
@@ -1501,6 +1534,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return JSON.stringify({
       queryUserID: this.targetUser?.uid || user.uid,
       dateRange: eventTableFilters?.dateRange ?? null,
+      rangeNavigation: eventTableFilters?.rangeNavigation ?? null,
       startDate: eventTableFilters?.startDate ?? null,
       endDate: eventTableFilters?.endDate ?? null,
       includeMergedEvents: eventTableFilters?.includeMergedEvents !== false,
@@ -1555,6 +1589,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return JSON.stringify({
       searchTerm: filters.searchTerm || null,
       dateRange: filters.dateRange,
+      rangeNavigation: filters.rangeNavigation ?? null,
       startDate: filters.startDate,
       endDate: filters.endDate,
       includeMergedEvents: filters.includeMergedEvents !== false,
@@ -1564,15 +1599,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private applyEventTableFilterDates(filters: AppDashboardEventTableFiltersInterface, user: AppUserInterface): void {
     this.searchTerm = filters.searchTerm || '';
-    if (filters.dateRange === DateRanges.custom && filters.startDate !== null && filters.endDate !== null) {
-      this.searchStartDate = new Date(filters.startDate);
-      this.searchEndDate = new Date(filters.endDate);
-      return;
-    }
-
     const startOfTheWeek = user.settings.unitSettings?.startOfTheWeek ?? DaysOfTheWeek.Monday;
-    const range = getDatesForDateRange(filters.dateRange, startOfTheWeek);
-    this.searchStartDate = range.startDate ?? null;
-    this.searchEndDate = range.endDate ?? null;
+    const range = resolveDashboardEventTableRange(filters, new Date(), startOfTheWeek);
+    this.searchStartDate = range?.start ?? null;
+    this.searchEndDate = range ? new Date(+range.end - 1) : null;
   }
 }

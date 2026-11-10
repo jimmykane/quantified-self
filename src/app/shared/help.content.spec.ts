@@ -33,7 +33,7 @@ describe('help.content', () => {
   });
   it('explains unified activity tables, weekly dates and inline period totals', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const phrase of ['**Weekly activity browsing:**', '**This week**', '**Totals**', '**Preset → Running**',
+    for (const phrase of ['**Activity date ranges:**', '**Week**', '**Current period**', '**Previous period**', '**90 days**', '**Totals**', '**Preset → Running**',
       '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
       'same compact activity table', 'recorded-activity counts for partial coverage',
       'merged comparisons stay out of totals', 'unavailable value stays blank']) expect(content).toContain(phrase);
@@ -439,14 +439,14 @@ describe('help.content', () => {
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
       '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
       'Searching keeps checked choices selected', '**Clear selection**',
-      '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
+      '**Untagged**', '**7 days**', 'previous six local calendar days', 'selected-row bulk actions',
       '**Next** and **Previous**', 'matching total within that date range', 'do not start new event queries', 'shared table preferences',
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
       '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
       'Saved All dates links also require confirmation', '**Custom dates**', 'Both dates are included',
       'compact date button opens the presets', 'The button shows your selected dates', '**×** clear button',
       '**Cancel** keeps the previous range',
-      'only applying a valid changed range starts a new date-range query', 'Custom dates stay fixed as days pass',
+      'only applying a valid changed custom range starts a new date-range query', 'Custom dates stay fixed as days pass',
       'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });
   it('explains unavailable pool timing without losing rests or inventing replacements', () => {

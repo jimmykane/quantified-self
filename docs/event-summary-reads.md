@@ -126,10 +126,22 @@ existing [MCP workflow](../.agent/skills/mcp-metric-surface/SKILL.md) for any af
 
 Dashboard, Calendar and Activities use the same compact table, column icons alongside text labels, account-backed column selection/order,
 sort and page-size settings. Default/Running presets live inside the shared column dialog. Date ranges belong to the
-host page: Dashboard keeps its selected range, Calendar supplies its visible period, and Activities offers a
-`calendar-week` date preset alongside rolling ranges. Older `view=training-log` links normalize to a calendar week;
-there is no separate table presentation or temporary log layout. Local calendar boundaries retain saved week starts,
-DST and timezone refreshes, owner guards, query cancellation and the complete selected-range summary query.
+host page: Calendar supplies its visible period; Activities and Dashboard offer previous/next navigation for their
+bounded windows. The shared `activity-date-range.helper.ts` uses exclusive local-midnight bounds, calendar-day
+steps for 7/30/90-day and custom windows, and complete calendar weeks/months/years. Custom dates are inclusive.
+DST changes never change a window's calendar-day count. The date control shows actual dates and Current period
+restores the matching present window. All dates keeps the controls disabled and retains its existing confirmation.
+
+Activities retains the preset and a date-only `anchor` in its URL (plus `start`/`end` for custom ranges). Older
+`view=training-log` and `week` links normalize to the calendar-week preset. Dashboard retains `rangeNavigation`
+with its existing event-table preferences: the preset, an optional date-only anchor, and explicit calendar dates for
+custom windows. Existing numeric `DateRanges` and timestamp-only custom preferences remain readable. The resolver,
+live query and toolbar use the same window resolution. Dashboard retains its inclusive `<=` query using one millisecond
+before the exclusive end; Activities retains `< end`. Navigating back to a current preset clears its anchor so it
+stays live; custom and historical windows stay fixed. Clock/focus and timezone refreshes update only changed query
+bounds without saving preferences, changing drafts or producing haptics. Preference-save failures restore both the
+previous navigation state and live query. Existing owner guards, cancellation and complete-range reads remain in force.
+There is no separate table presentation or temporary log layout.
 
 Sport totals consume all filtered activity rows before pagination. `activity-training-log.helper.ts` reads only
 Duration, Distance and eligible Ascent, formats through Sports Lib, and retains missing/zero/partial coverage,

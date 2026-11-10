@@ -28,8 +28,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
-import { resolveTrainingLogWeek } from '../../helpers/activity-training-log.helper';
-import { formatActivityCalendarDateParam, navigateActivityCalendarDate } from '../../helpers/activity-calendar.helper';
+import { activityDateRangeAnchor, activityRangeDates, currentActivityDateRange, sameActivityDateRange, shiftActivityDateRange } from '../../helpers/activity-date-range.helper';
 
 
 @Component({
@@ -63,7 +62,7 @@ export class ActivitiesPageComponent implements OnInit {
   private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
   private loadedWeekStart = 1;
   readonly isCalendarWeek = computed(() => this.period() === 'calendar-week');
-  readonly weekAnchor = signal<string | null>(null);
+  readonly rangeAnchor = signal<string | null>(null);
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<EventRead[]>([]);
@@ -78,16 +77,14 @@ export class ActivitiesPageComponent implements OnInit {
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
-  readonly calendarWeek = computed(() => {
-    // Historical offsets can change between zones that share today's offset.
+  readonly historyRange = computed(() => {
     this.calendarTimeZone();
-    return resolveTrainingLogWeek(this.weekAnchor(), new Date(this.localDayStartMs()),
-      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    return activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates(),
+      this.user()?.settings?.unitSettings?.startOfTheWeek, this.rangeAnchor());
   });
-  readonly isCurrentWeek = computed(() => +this.calendarWeek().start === +resolveTrainingLogWeek(null,
-    new Date(this.localDayStartMs()), this.user()?.settings?.unitSettings?.startOfTheWeek).start);
-  readonly historyRange = computed(() => this.isCalendarWeek() ? this.calendarWeek()
-    : activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates()));
+  readonly rangeDates = computed(() => { const range = this.historyRange(); return range ? activityRangeDates(range) : null; });
+  readonly isCurrentPeriod = computed(() => !this.rangeAnchor() && sameActivityDateRange(this.historyRange(), currentActivityDateRange(
+    this.period(), new Date(this.localDayStartMs()), this.historyRange(), this.user()?.settings?.unitSettings?.startOfTheWeek)));
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
   readonly customDateForm = new FormGroup({
@@ -115,11 +112,11 @@ export class ActivitiesPageComponent implements OnInit {
     .map(family => ({ label: family.label, values: family.activityTypes })));
   readonly filters = computed(() => ({
     tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(),
-    period: this.isCalendarWeek() ? 'custom' as const : this.period(),
-    customDates: this.isCalendarWeek() ? this.calendarWeek().dates : this.period() === 'custom' ? this.customDates() : null,
+    period: this.period() === 'all' ? 'all' as const : 'custom' as const,
+    customDates: this.rangeDates(),
   }));
   readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), merged: this.includeMergedEvents() }));
-  readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
+  readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod || !!this.rangeAnchor());
   readonly filteredEvents = computed(() => this.user()
     ? filterActivityExplorerEvents(this.events().filter(event => this.includeMergedEvents() || !event.isMerge), this.filters(), new Date(this.localDayStartMs())) : []);
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
@@ -143,17 +140,11 @@ export class ActivitiesPageComponent implements OnInit {
   refreshLocalDay(): void {
     const next = new Date().setHours(0, 0, 0, 0);
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (next === this.localDayStartMs() && (!this.isCalendarWeek() || timeZone === this.calendarTimeZone())) return;
-    const previousWeek = this.calendarWeek();
+    if (next === this.localDayStartMs() && timeZone === this.calendarTimeZone()) return;
+    const previous = this.historyRange();
     this.localDayStartMs.set(next);
     this.calendarTimeZone.set(timeZone);
-    if (this.isCalendarWeek()) {
-      const week = this.calendarWeek();
-      // A fixed calendar week can gain different query bounds after a timezone change.
-      if (this.user() && (+previousWeek.start !== +week.start || +previousWeek.end !== +week.end)) this.loadHistory();
-      return;
-    }
-    if (this.user() && this.period() !== 'all' && this.period() !== 'custom') this.loadHistory();
+    if (this.user() && !sameActivityDateRange(previous, this.historyRange())) this.loadHistory();
   }
 
   @HostListener('document:visibilitychange')
@@ -170,7 +161,7 @@ export class ActivitiesPageComponent implements OnInit {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
-      const previousAnchor = this.weekAnchor();
+      const previousAnchor = this.rangeAnchor();
       const legacyWeek = params.get('view') === 'training-log';
       const requestedPeriod = legacyWeek ? 'calendar-week' : this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
@@ -182,9 +173,9 @@ export class ActivitiesPageComponent implements OnInit {
       this.urlPeriod = period;
       if (period === 'all' && this.period() !== 'all') { this.confirmAllDates(); return; }
       this.closeAllDatesWarning();
-      const week = params.get('week');
-      this.weekAnchor.set(period === 'calendar-week' ? normalizeActivityExplorerCustomDates(week, week)?.startDate || null : null);
-      const rangeChanged = previousAnchor !== this.weekAnchor() || previousPeriod !== period || (period === 'custom'
+      const anchor = params.get('anchor') || (period === 'calendar-week' ? params.get('week') : null);
+      this.rangeAnchor.set(period !== 'custom' && period !== 'all' ? normalizeActivityExplorerCustomDates(anchor, anchor)?.startDate || null : null);
+      const rangeChanged = previousAnchor !== this.rangeAnchor() || previousPeriod !== period || (period === 'custom'
         && (customDates?.startDate !== this.customDates()?.startDate || customDates?.endDate !== this.customDates()?.endDate));
       this.customDates.set(customDates);
       this.period.set(period);
@@ -194,7 +185,7 @@ export class ActivitiesPageComponent implements OnInit {
       }
       if (rangeChanged && this.user()) this.loadHistory();
       else this.refreshLocalDay();
-      if (legacyWeek || (requestedPeriod === 'custom' && !customDates)) this.updateUrl(true);
+      if (legacyWeek || params.has('week') || (requestedPeriod === 'custom' && !customDates)) this.updateUrl(true);
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
@@ -228,16 +219,28 @@ export class ActivitiesPageComponent implements OnInit {
       });
   }
 
-  navigateWeek(direction: -1 | 1): void {
-    if (!this.isCalendarWeek() || this.loading()) return;
-    this.weekAnchor.set(formatActivityCalendarDateParam(navigateActivityCalendarDate(this.calendarWeek().start, 'week', direction)));
+  navigateRange(direction: -1 | 1): void {
+    if (this.loading() || !this.user() || this.owner !== this.auth.currentUser) return;
+    const range = this.historyRange();
+    const next = range && shiftActivityDateRange(this.period(), range, direction);
+    if (!next) return;
+    if (this.period() === 'custom') this.customDates.set(activityRangeDates(next));
+    else {
+      const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
+        this.user()?.settings?.unitSettings?.startOfTheWeek);
+      this.rangeAnchor.set(sameActivityDateRange(next, current) ? null : activityDateRangeAnchor(this.period(), next));
+    }
     this.loadHistory(true);
     this.filtersChanged();
   }
 
-  goToCurrentWeek(): void {
-    if (!this.isCalendarWeek() || this.loading() || this.isCurrentWeek()) return;
-    this.weekAnchor.set(null);
+  goToCurrentPeriod(): void {
+    if (this.loading() || this.isCurrentPeriod() || !this.user() || this.owner !== this.auth.currentUser) return;
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), this.historyRange(),
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    if (!current) return;
+    if (this.period() === 'custom') this.customDates.set(activityRangeDates(current));
+    this.rangeAnchor.set(null);
     this.loadHistory(true);
     this.filtersChanged();
   }
@@ -286,7 +289,7 @@ export class ActivitiesPageComponent implements OnInit {
       this.customRangeOpen.set(true);
       return;
     }
-    if (period === this.period() && !(period === 'calendar-week' && this.weekAnchor())) {
+    if (period === this.period() && !this.rangeAnchor()) {
       if (this.customRangeOpen()) this.cancelCustomRange();
       return;
     }
@@ -299,7 +302,7 @@ export class ActivitiesPageComponent implements OnInit {
     }
     this.closeAllDatesWarning();
     this.period.set(period);
-    this.weekAnchor.set(null);
+    this.rangeAnchor.set(null);
     this.customDates.set(null);
     this.loadHistory(true);
     this.filtersChanged();
@@ -313,9 +316,9 @@ export class ActivitiesPageComponent implements OnInit {
     this.untagged.set(false);
     this.selectedSports.set([]);
     this.includeMergedEvents.set(false);
-    const periodChanged = this.period() !== this.defaultPeriod;
+    const periodChanged = this.period() !== this.defaultPeriod || !!this.rangeAnchor();
     this.period.set(this.defaultPeriod);
-    this.weekAnchor.set(null);
+    this.rangeAnchor.set(null);
     this.customDates.set(null);
     if (periodChanged) this.loadHistory(true);
     this.filtersChanged();
@@ -333,7 +336,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.closeAllDatesWarning();
     this.customDates.set(dates);
     this.period.set('custom');
-    this.weekAnchor.set(null);
+    this.rangeAnchor.set(null);
     this.loadHistory(true);
     this.filtersChanged();
   }
@@ -401,7 +404,7 @@ export class ActivitiesPageComponent implements OnInit {
       if (this.user()?.uid !== user.uid || this.owner !== owner || owner !== this.auth.currentUser) return;
       if (confirmed === true) {
         this.period.set('all');
-        this.weekAnchor.set(null);
+        this.rangeAnchor.set(null);
         this.customDates.set(null);
         this.loadHistory(true);
         // ConfirmationDialogComponent owns feedback for its confirmation button.
@@ -431,7 +434,8 @@ export class ActivitiesPageComponent implements OnInit {
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
         view: null,
-        week: this.isCalendarWeek() ? this.weekAnchor() : null,
+        week: null,
+        anchor: this.period() !== 'custom' && this.period() !== 'all' ? this.rangeAnchor() : null,
       },
       queryParamsHandling: 'merge',
       replaceUrl,
