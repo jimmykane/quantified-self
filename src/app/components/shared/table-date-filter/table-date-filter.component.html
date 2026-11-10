@@ -5,7 +5,8 @@
   <div class="table-date-choice">
   <button mat-button type="button" class="table-date-filter-button" #rangeTrigger="matMenuTrigger"
     [matMenuTriggerFor]="rangeMenu" [disabled]="disabled()" [class.is-active]="customSelected()"
-    [class.is-open]="menuOpen()" [attr.aria-label]="'Date range: ' + label()"
+    [class.is-open]="menuOpen()" [attr.aria-label]="accessibleLabel()"
+    [matTooltip]="rangeLabel()" [matTooltipDisabled]="!rangeLabel() || label() === rangeLabel()"
     (menuOpened)="onMenuOpened()" (menuClosed)="onMenuClosed()">
     <span class="table-filter-button-content"><mat-icon aria-hidden="true">calendar_today</mat-icon><span>{{ label() }}</span>
       <mat-icon class="table-filter-chevron" aria-hidden="true">{{ menuOpen() ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</mat-icon></span>

@@ -257,8 +257,12 @@ describe('ActivitiesPageComponent', () => {
       const c = await setup('Endurance');
       c.params$.next(convertToParamMap({ period: preset, tag: 'Endurance', ...(preset === 'custom' ? { start: '2026-10-30', end: '2026-11-02' } : {}) }));
       await render(c); c.haptics.selection.mockClear();
+      const dateFilter = c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance as TableDateFilterComponent;
+      const dateButton = c.fixture.nativeElement.querySelector('.table-date-filter-button');
+      if (preset !== 'custom') expect(dateButton.textContent).toContain(c.component.periodLabel());
       c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click(); await render(c);
       expect(activityRangeDates(c.component.historyRange()!)).toEqual({ startDate: start, endDate: end });
+      expect(dateButton.textContent).toContain(dateFilter.rangeLabel());
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       expect(c.haptics.selection).toHaveBeenCalledOnce();
       const saved = Object.fromEntries(Object.entries(c.router.navigate.mock.lastCall[1].queryParams).filter(([, value]) => value !== null));
@@ -266,6 +270,7 @@ describe('ActivitiesPageComponent', () => {
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
       c.component.goToCurrentPeriod(); await render(c);
       expect(c.component.isCurrentPeriod()).toBe(true);
+      expect(dateButton.textContent).toContain(preset === 'custom' ? dateFilter.rangeLabel() : c.component.periodLabel());
       expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
       expect(c.component.selectedTags()).toEqual(['Endurance']);
       expect(c.haptics.selection).toHaveBeenCalledTimes(2);
@@ -471,7 +476,7 @@ describe('ActivitiesPageComponent', () => {
       const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
       expect(table.events).toEqual(data); expect(table.presentation).toBe('dashboard');
       expect(table.hideGeneratedNames).toBe(true);
-      expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('22 Sep – 21 Oct 2026');
+      expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('30 days');
       expect(c.haptics.selection).not.toHaveBeenCalled();
       expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
       expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
@@ -586,7 +591,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).not.toHaveBeenCalled();
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.showCustomRange()).toBe(false);
-    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain(c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance.rangeLabel());
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('30 days');
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
   });
 
@@ -643,7 +648,7 @@ describe('ActivitiesPageComponent', () => {
     clear.focus(); clear.click(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
-    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain(c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance.rangeLabel());
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('30 days');
     expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('.table-date-filter-button'));
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'month', start: null, end: null });
   });

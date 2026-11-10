@@ -56,8 +56,12 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
     const sameMonth = sameYear && this.adapter.getMonth(start) === this.adapter.getMonth(end);
     return `${this.adapter.format(start, sameMonth ? 'D' : sameYear ? 'D MMM' : 'D MMM YYYY')}${sameMonth ? '–' : ' – '}${this.adapter.format(end, 'D MMM YYYY')}`;
   });
-  readonly label = computed(() => (this.customSelected() || this.navigation()) && this.rangeLabel()
+  readonly label = computed(() => (this.customSelected() || (this.navigation() && !this.currentPeriod())) && this.rangeLabel()
     ? this.rangeLabel() : this.options().find(option => option.value === this.value())?.label || 'Date range');
+  readonly accessibleLabel = computed(() => {
+    const label = this.label(), dates = this.rangeLabel();
+    return `Date range: ${label}${dates && dates !== label ? `, ${dates}` : ''}`;
+  });
   private readonly adapter = inject<DateAdapter<Dayjs>>(DateAdapter);
   private readonly haptics = inject(AppHapticsService);
   private readonly injector = inject(Injector);

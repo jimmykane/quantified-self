@@ -2030,8 +2030,10 @@ The shared Health projection includes recorded Sleep duration/score, average/min
 
 ## Activity table date navigation
 
-Activities and Dashboard share bounded date navigation and actual date labels. Presets retain their identity while
-browsing history; Current period restores the live window. All dates retains the existing confirmation and disables
+Activities and Dashboard share bounded date navigation: current presets show their names, while shifted and custom
+ranges show their dates. The current preset's tooltip and accessible name retain its covered dates. Presets retain
+their identity while browsing history; Current period restores the live window. All dates retains the existing
+confirmation and disables
 period navigation. Custom dates use inclusive calendar days, including across DST. Activities stores history anchors
 in the URL; Dashboard stores validated navigation metadata alongside its compatible numeric date-range preference.
 See [event summary reads](event-summary-reads.md) for query boundaries, rollover and save-failure recovery.

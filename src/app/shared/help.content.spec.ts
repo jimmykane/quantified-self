@@ -31,12 +31,14 @@ describe('help.content', () => {
     for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',
       '**Add columns**', 'failed save restores the previous choices and order', 'share one column layout and order', '**Preset → Default**', '**Preset → Running**']) expect(content).toContain(phrase);
   });
-  it('explains unified activity tables, weekly dates and inline period totals', () => {
+  it('explains unified activity tables, adaptive date labels and inline period totals', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const phrase of ['**Activity date ranges:**', '**Week**', '**Current period**', '**Previous period**', '**90 days**', '**Totals**', '**Preset → Running**',
       '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
       'same compact activity table', 'recorded-activity counts for partial coverage',
-      'merged comparisons stay out of totals', 'unavailable value stays blank']) expect(content).toContain(phrase);
+      'merged comparisons stay out of totals', 'unavailable value stays blank',
+      'preset name for the current period', 'dates for shifted or custom ranges',
+      '**Custom dates** always shows its explicit dates', 'current preset button’s tooltip']) expect(content).toContain(phrase);
     expect(content).not.toContain('**View → Training log**');
   });
   it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {

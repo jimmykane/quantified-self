@@ -98,7 +98,9 @@ describe('Merged toolbar filter rendering', () => {
       const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
       const previous = fixture.nativeElement.querySelector('[aria-label="Previous period"]') as HTMLButtonElement;
       expect(previous).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Week');
       previous.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('26 Oct – 1 Nov 2026');
       expect(fixture.componentInstance.requests.at(-1)).toMatchObject({ dateRange: DateRanges.custom,
         startDate: new Date(2026, 9, 26), endDate: new Date(2026, 10, 1, 23, 59, 59, 999) });
       expect(search.toolbarNavigationEnabled).toBe(true);
@@ -106,6 +108,7 @@ describe('Merged toolbar filter rendering', () => {
       fixture.nativeElement.querySelector('.table-date-current-period').click();
       fixture.detectChanges(); await fixture.whenStable();
       expect(fixture.componentInstance.requests.at(-1)?.dateRange).toBe(DateRanges.thisWeek);
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Week');
       expect(haptics.selection).toHaveBeenCalledTimes(2);
       await search.onToolbarDateRangeChange(DateRanges.lastSevenDays);
       fixture.detectChanges();
@@ -227,7 +230,7 @@ describe('Merged toolbar filter rendering', () => {
     expect(dialog).toBeTruthy();
     expect(dialog.contains(document.activeElement)).toBe(true);
     [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === action)!.click(); await settle();
-    expect(fixture.componentInstance.requests).toEqual(action === 'Cancel' ? [] : [expect.objectContaining({ dateRange: DateRanges.all })]);
+    await vi.waitFor(() => expect(fixture.componentInstance.requests).toEqual(action === 'Cancel' ? [] : [expect.objectContaining({ dateRange: DateRanges.all })]));
     expect(haptics.selection).toHaveBeenCalledTimes(action === 'Cancel' ? 3 : 2);
     expect(haptics.warning).toHaveBeenCalledTimes(action === 'Cancel' ? 0 : 1);
     expect(document.activeElement).toBe(trigger);

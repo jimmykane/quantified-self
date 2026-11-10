@@ -129,10 +129,11 @@ sort and page-size settings. Default/Running presets live inside the shared colu
 host page: Calendar supplies its visible period; Activities and Dashboard offer previous/next navigation for their
 bounded windows. The shared `activity-date-range.helper.ts` uses exclusive local-midnight bounds, calendar-day
 steps for 7/30/90-day and custom windows, and complete calendar weeks/months/years. Custom dates are inclusive.
-DST changes never change a window's calendar-day count. The date control shows actual dates and Current period
-restores the matching present window. Each destination boundary resolves its own start of day, including time zones
-where DST skips midnight; the source day's normalized hour must not carry into another date. All dates keeps the
-controls disabled and retains its existing confirmation.
+DST changes never change a window's calendar-day count. The date control shows the preset name for a live current
+window and explicit dates for shifted or custom windows. Covered dates remain in the current preset's tooltip and
+accessible name. Current period restores the matching present window. Each destination boundary resolves its own
+start of day, including time zones where DST skips midnight; the source day's normalized hour must not carry into
+another date. All dates keeps the controls disabled and retains its existing confirmation.
 
 Activities retains the preset and a date-only `anchor` in its URL (plus `start`/`end` for custom ranges). Older
 `view=training-log` and `week` links normalize to the calendar-week preset. Dashboard retains `rangeNavigation`
