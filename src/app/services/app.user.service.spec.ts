@@ -1133,6 +1133,7 @@ describe('AppUserService', () => {
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
         expect(mergedUser.acceptedDataPolicy).toBe(false);
         expect(mergedUser.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mergedUser.settings.dashboardSettings.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: false, suggestion: false, metrics: ['load'] });
         expect(service.profileReadState()).toEqual({
             status: 'ready',
             uid: 'u1',

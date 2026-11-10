@@ -364,6 +364,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
     // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
+    // Today customization help explains Add metrics, Save/Cancel and the three-block starter (2026-11-09).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
   });
@@ -707,7 +708,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.77mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.80mb',
     });
   });
 

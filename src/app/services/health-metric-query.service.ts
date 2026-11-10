@@ -54,6 +54,9 @@ export class HealthMetricQueryService {
     loadMetricRange(uid: string, request: HealthWorkspaceRangeRequest, priority = 10, signal?: AbortSignal): Promise<HealthWorkspaceRangeLoad> {
         return this.read(uid, ['metric', request.metricId, request.startDate, request.endDate, request.includeSamples], () => this.health.loadMetricRange(uid, request), priority, signal);
     }
+    loadLatestMeasurement(uid: string, preferred: string | null, signal?: AbortSignal) {
+        return this.read(uid, ['latest-measurement', preferred], isCurrent => this.health.loadLatestMeasurement(uid, preferred, isCurrent), 10, signal);
+    }
     loadActivityRange(uid: string, request: ActivityHealthRangeRequest, priority = 10, signal?: AbortSignal): Promise<ActivityHealthRangeResult> {
         return this.read(uid, ['activity', request.metricId, request.startTimeMs, request.endTimeMs], () => this.activities.loadRange(request), priority, signal);
     }

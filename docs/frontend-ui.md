@@ -325,9 +325,49 @@ and tablets place the four drivers below the primary summaries instead of squeez
 minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
 geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
 
-Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, four drivers,
+Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, selected compact metrics,
 and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
 with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
+
+Today configuration is stored in the versioned `dashboardSettings.today` field. The owner opens the same lazy Material
+editor from **Dashboard options → Customize Today** or the global dashboard chart manager. The editor keeps a local
+draft until Save, writes only that field through `DashboardConfigurationService`, and uses its conflict checks. Cancel
+and dismissal do not persist. Training state and Readiness retain their larger top views; a single summary fills that
+row. Compact metrics follow the saved order, with at most four columns on desktop and two on phones; the last row
+expands to use the available width. The editor separates shown metrics from Add metrics. Reordering uses handles plus
+accessible up/down buttons, announces the resulting position and keeps focus on the moved metric. Checkbox focus is
+also retained when a metric moves between the shown and available lists. Recovery left and Today's suggestion remain optional full-width
+context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
+An empty Today explains that no items are selected, offers Customize Today and retains the existing title, date and
+calendar action. Save is enabled only for a changed draft. Restore defaults explains the three-block layout before
+saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
+
+New profiles explicitly start with Training state, Readiness and Load. Hydrating an existing profile without the field
+preserves the full legacy card. Restore defaults and Reset to starter dashboard explicitly select the three-block
+layout. Readiness still uses all its existing drivers when a driver cell is hidden. The greeting uses only displayed
+assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
+
+Today scopes its derived and Sleep subscriptions to enabled consumers, independently of visible charts' dependencies.
+`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals share Calendar's bounded
+summary listener for the current browser-local day, across all sports, using the same exclusions/TSS/ascent rules.
+They do not follow event-table or chart filters. Weight uses a bounded newest-first query for actual Health point
+measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection
+from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
+report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
+Steps displays the recorded calendar day independently of the daily interval's end timestamp or browser time zone;
+its date still follows the account's regional formatting preference. Weight retains its actual measurement timestamp.
+Opening the editor does not start metric readers. Dashboard charts and picker previews resolve snapshot kinds through
+`dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
+must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
+The manager waits for its overlay to finish closing before opening Customize Today, restores focus after the editor
+closes and publishes the normal configuration-change event after a save. This reconnects Today readers even when the
+profile observer receives the same already-updated settings object. A failed editor load gives actionable feedback;
+a subsequent explicit opening can retry. The launcher is fenced to the account and originating view: navigation during
+loading cannot open a late dialog, and destroying the originating view closes an already-open editor. Unsubmitted drafts
+remain unsaved; a save already in progress retains its existing account-safe completion checks.
+The combined feature uses matching beta/production `allScript` caps of 14.80 MB: its measured total is 26.45 kB above
+develop's 14.77 MB cap. The initial 1474 kB and warning budgets are unchanged. The editor stays lazy. This records
+bundle accounting only, not a device runtime speed claim.
 
 Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the
 Readiness score, confidence and signal indicators until the latest eligible completed main night ends on the current

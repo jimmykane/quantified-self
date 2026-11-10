@@ -210,12 +210,23 @@ export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInt
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
     showTodaySummary?: boolean;
+    today?: AppDashboardTodaySettings;
     dismissedCuratedRecoveryNowTile?: boolean;
     calendarDayContextLayoutVersion?: number;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
     hrvTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
+}
+
+export type DashboardTodayMetricId = 'load' | 'sleep' | 'hrv' | 'overnight-hr' | 'weight' | 'tss' | 'ascent' | 'duration' | 'distance' | 'activities' | 'steps';
+export interface AppDashboardTodaySettings {
+    version: 1;
+    trainingState: boolean;
+    readiness: boolean;
+    recovery: boolean;
+    suggestion: boolean;
+    metrics: DashboardTodayMetricId[];
 }
 
 export type AppEventLapSportFamily = 'running' | 'cycling' | 'swimming' | 'other';

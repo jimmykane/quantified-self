@@ -1,3 +1,4 @@
+import { defaultDashboardTodaySettings } from '../helpers/dashboard-today-settings.helper';
 import { supportsHistoryNotification, isHistoryNotificationTarget, type HistoryNotificationTarget } from '@shared/history-import-notifications';
 import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
 import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
@@ -470,6 +471,7 @@ export class AppUserService implements OnDestroy {
 
     const settingsUtilities = await loadUserSettingsUtilities();
     const defaultNewUserSettings = settingsUtilities.fillMissingAppSettings({} as any);
+    defaultNewUserSettings.dashboardSettings.today = defaultDashboardTodaySettings();
     defaultNewUserSettings.appSettings = {
       ...defaultNewUserSettings.appSettings,
       unitSetupCompleted: false,

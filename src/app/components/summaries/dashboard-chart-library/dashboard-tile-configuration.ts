@@ -1,3 +1,4 @@
+import { defaultDashboardTodaySettings } from '../../../helpers/dashboard-today-settings.helper';
 import {
   isDashboardPerformanceChartType,
   DASHBOARD_CRITICAL_POWER_CHART_TYPE,
@@ -216,6 +217,7 @@ interface IconOption<TValue> {
 }
 
 interface DashboardManagerSettingsSnapshot {
+  today?: import('../../../models/app-user.interface').AppDashboardTodaySettings;
   tiles: TileSettingsInterface[];
   showTodaySummary?: boolean;
   dismissedCuratedRecoveryNowTile?: boolean;
@@ -1062,6 +1064,7 @@ export class DashboardTileConfiguration {
 
     try {
       const starterTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+      dashboardSettings.today = defaultDashboardTodaySettings();
       dashboardSettings.tiles = starterTiles;
       this.setTodaySummaryVisibility(dashboardSettings, true);
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, starterTiles);
@@ -1231,6 +1234,7 @@ export class DashboardTileConfiguration {
     return {
       tiles: this.cloneTiles(dashboardSettings.tiles || []),
       showTodaySummary: dashboardSettings.showTodaySummary,
+      today: dashboardSettings.today ? { ...dashboardSettings.today, metrics: [...dashboardSettings.today.metrics] } : undefined,
       dismissedCuratedRecoveryNowTile: dashboardSettings.dismissedCuratedRecoveryNowTile,
       autoTiles: dashboardSettings.autoTiles === undefined
         ? undefined
@@ -1243,6 +1247,10 @@ export class DashboardTileConfiguration {
     previousSettings: DashboardManagerSettingsSnapshot,
   ): void {
     dashboardSettings.tiles = this.cloneTiles(previousSettings.tiles);
+    if (this.savingAction === 'resetToDefault') {
+      if (previousSettings.today) dashboardSettings.today = previousSettings.today;
+      else delete dashboardSettings.today;
+    }
     if (previousSettings.showTodaySummary === undefined) {
       delete dashboardSettings.showTodaySummary;
     } else {
@@ -1290,6 +1298,7 @@ export class DashboardTileConfiguration {
       tiles,
       showTodaySummary: dashboardSettings.showTodaySummary !== false,
     };
+    if (this.savingAction === 'resetToDefault') dashboardSettingsPatch.today = dashboardSettings.today;
     if (dashboardSettings.autoTiles !== undefined) {
       dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
     }

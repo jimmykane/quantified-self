@@ -55,9 +55,9 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.activeLane.set(next);
   }
 
-  async close(): Promise<void> {
+  async close(feedback = true): Promise<void> {
     if (this.busy() || !(await this.canDiscard())) return;
-    this.haptics.selection();
+    if (feedback) this.haptics.selection();
     this.clearSelection();
     this.activeLane.set(null);
   }

@@ -14,6 +14,7 @@
     @if (!state.configuring() && !state.pinnedFromHealth()) {
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       @if (allSections()) {
+      <button mat-button type="button" [disabled]="state.busy()" (click)="customizeToday()"><mat-icon>tune</mat-icon>Customize Today</button>
         <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Dashboard section</mat-label>
           <mat-select [value]="browseLane()" [disabled]="state.busy()" (selectionChange)="openSection($event.value, true)">
             @for (section of sections(); track section.lane) { <mat-option [value]="section.lane">{{ section.label }}{{ section.unseen.length ? ' · New' : '' }}</mat-option> }

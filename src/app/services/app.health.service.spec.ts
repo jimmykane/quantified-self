@@ -34,6 +34,7 @@ import {
 } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { AppHealthService } from './app.health.service';
+import { selectLatestHealthReading } from '../helpers/health-latest-reading.helper';
 
 vi.mock('app/firebase/firestore', () => {
     class MockFirestore { }
@@ -180,6 +181,50 @@ describe('AppHealthService', () => {
             ],
         });
         service = TestBed.inject(AppHealthService);
+    });
+
+    function weighIn(date: string, account = 'scale', value = 70): HealthSourceRecord {
+        const record = healthSourceRecord();
+        const timestamp = Date.parse(date + 'T08:00:00Z');
+        return { ...record, id: date + account, calendarDate: date, kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+            startTimeMs: timestamp, endTimeMs: timestamp,
+            source: { ...record.source, accountKey: account, sourceRecordType: 'weigh-in', sourceRecordKey: date },
+            metrics: [{ ...record.metrics[0], metricId: HEALTH_METRIC_IDS.BodyWeight, aggregation: 'measurement',
+                semanticVariant: 'recorded', canonical: { value, unit: HEALTH_UNITS.Kilogram } }],
+            metricIds: [HEALTH_METRIC_IDS.BodyWeight] } as HealthSourceRecord;
+    }
+    function measurementPage(records: HealthSourceRecord[]) {
+        return { size: records.length, docs: records.map(record => ({ id: record.id, data: () => record })) } as never;
+    }
+    it('loads actual weigh-ins without a recent date cutoff, using the existing newest-first index', async () => {
+        vi.mocked(getDocsFromServer).mockResolvedValue(measurementPage([weighIn('2024-01-01')]));
+        const result = await service.loadLatestMeasurement('user-1', null, () => true);
+        expect(result.complete).toBe(true);
+        expect(selectLatestHealthReading(result.results)?.point.value).toBe(70);
+        expect(where).toHaveBeenCalledWith('kind', '==', HEALTH_SOURCE_RECORD_KINDS.PointMeasurement);
+        expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.BodyWeight);
+        expect(vi.mocked(where).mock.calls.some(call => call[1] === '>=' )).toBe(false);
+        expect(orderBy).toHaveBeenCalledWith('endTimeMs', 'desc');
+        expect(orderBy).toHaveBeenCalledWith('__name__', 'desc');
+    });
+    it('continues paging for an exact pinned measurement source and does not replace it', async () => {
+        const pinned = weighIn('2024-01-01', 'old-scale', 68);
+        vi.mocked(getDocsFromServer).mockResolvedValueOnce(measurementPage([pinned]));
+        const key = selectLatestHealthReading((await service.loadLatestMeasurement('user-1', null, () => true)).results)!.series.id;
+        vi.mocked(getDocsFromServer).mockClear();
+        const newer = Array.from({ length: 33 }, (_, index) => ({ ...weighIn('2026-01-01'), id: 'recent-' + index }));
+        vi.mocked(getDocsFromServer).mockResolvedValueOnce(measurementPage(newer)).mockResolvedValueOnce(measurementPage([pinned]));
+        const result = await service.loadLatestMeasurement('user-1', key, () => true);
+        expect(getDocsFromServer).toHaveBeenCalledTimes(2);
+        expect(startAfter).toHaveBeenCalled();
+        expect(selectLatestHealthReading(result.results, key)?.point.value).toBe(68);
+        expect(selectLatestHealthReading(result.results, 'missing-pin')).toBeNull();
+    });
+    it('stops a latest measurement read after cancellation without accepting its result', async () => {
+        let current = true;
+        vi.mocked(getDocsFromServer).mockImplementationOnce(async () => { current = false; return measurementPage([weighIn('2026-01-01')]); });
+        await expect(service.loadLatestMeasurement('user-1', null, () => current)).rejects.toThrow('cancelled');
+        expect(getDocsFromServer).toHaveBeenCalledTimes(1);
     });
 
     it('returns the typed empty projection without creating listeners when the user is absent', async () => {
