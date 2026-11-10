@@ -20,6 +20,7 @@ import {
   type UserUnitSettingsInterface,
   VerticalSpeedUnits,
   WeightUnits,
+  ElevationUnits,
 } from '@sports-alliance/sports-lib/metrics';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -149,6 +150,7 @@ export function getDefaultUserUnitSettings(): UserUnitSettingsInterface {
     verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
     distanceUnits: DistanceUnits.Kilometers,
     weightUnits: WeightUnits.Kilograms,
+    elevationUnits: ElevationUnits.Meters,
     startOfTheWeek: DaysOfTheWeek.Monday,
   };
 }
@@ -202,6 +204,7 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
       getValidEnumValues(WeightUnits),
       WeightUnits.Kilograms,
     ),
+    elevationUnits: normalizeEnumValue(rawSettings.elevationUnits, getValidEnumValues(ElevationUnits), ElevationUnits.Meters),
     startOfTheWeek,
   };
 }

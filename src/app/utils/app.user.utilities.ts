@@ -33,6 +33,7 @@ import {
     UserExportToCsvSettingsInterface,
     VerticalSpeedUnits,
     WeightUnits,
+    ElevationUnits,
     XAxisTypes,
     MapThemes,
     MapTypes,
@@ -342,6 +343,7 @@ export class AppUserUtilities extends AppUserAccess {
         unitSettings.verticalSpeedUnits = AppUserUtilities.getDefaultVerticalSpeedUnits();
         unitSettings.distanceUnits = AppUserUtilities.getDefaultDistanceUnits();
         unitSettings.weightUnits = WeightUnits.Kilograms;
+        unitSettings.elevationUnits = ElevationUnits.Meters;
         unitSettings.startOfTheWeek = AppUserUtilities.getDefaultStartOfTheWeek();
         return unitSettings;
     }
@@ -537,6 +539,8 @@ export class AppUserUtilities extends AppUserAccess {
         settings.unitSettings.verticalSpeedUnits = Array.isArray(settings.unitSettings.verticalSpeedUnits) && settings.unitSettings.verticalSpeedUnits.length > 0
             ? settings.unitSettings.verticalSpeedUnits
             : AppUserUtilities.getDefaultVerticalSpeedUnits();
+        settings.unitSettings.elevationUnits = settings.unitSettings.elevationUnits === ElevationUnits.Feet
+            ? ElevationUnits.Feet : ElevationUnits.Meters;
         settings.unitSettings.distanceUnits = normalizeDistanceUnits(
             settings.unitSettings.distanceUnits,
             AppUserUtilities.getDefaultDistanceUnits(),

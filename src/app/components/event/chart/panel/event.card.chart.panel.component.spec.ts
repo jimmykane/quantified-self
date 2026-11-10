@@ -24,6 +24,7 @@ import {
   DataStamina,
   DistanceUnits,
   WeightUnits,
+  ElevationUnits,
   SpeedUnits,
   DynamicDataLoader,
   LapTypes,
@@ -3426,6 +3427,13 @@ describe('EventCardChartPanelComponent', () => {
     expect(component.selectedRangeSpanLabel).toBe('6.22mi');
   });
 
+  it('formats altitude axis and tooltip values in feet while leaving recorded samples in metres', () => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), elevationUnits: ElevationUnits.Feet };
+    expect((component as any).formatDataValue(DataAltitude.type, 30.48)).toBe('100ft');
+    expect((component as any).formatDataValue(DataAltitude.type, -30.48, false)).toBe('-100');
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), elevationUnits: ElevationUnits.Meters };
+    expect((component as any).formatDataValue(DataAltitude.type, 30.48)).toBe('30m');
+  });
   it('formats distance data values with the user distance preference', () => {
     component.userUnitSettings = { distanceUnits: DistanceUnits.Miles } as any;
 

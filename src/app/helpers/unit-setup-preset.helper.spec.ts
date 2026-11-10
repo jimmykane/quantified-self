@@ -17,6 +17,7 @@ import {
   SwimPaceUnits,
   VerticalSpeedUnits,
   WeightUnits,
+  ElevationUnits,
 } from '@sports-alliance/sports-lib';
 
 describe('unit setup preset helper', () => {
@@ -80,6 +81,7 @@ describe('unit setup preset helper', () => {
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
       weightUnits: WeightUnits.Kilograms,
+      elevationUnits: ElevationUnits.Meters,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -94,6 +96,7 @@ describe('unit setup preset helper', () => {
       verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
       distanceUnits: DistanceUnits.Miles,
       weightUnits: WeightUnits.Kilograms,
+      elevationUnits: ElevationUnits.Feet,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -104,6 +107,12 @@ describe('unit setup preset helper', () => {
       .toBe(preset);
   });
 
+  it('recognizes independent elevation overrides as custom', () => {
+    const miles = buildUnitSettingsForUnitSetupPreset('miles', null);
+    expect(resolveUnitSetupPreset({ ...miles, elevationUnits: ElevationUnits.Meters })).toBeNull();
+    const kilometres = buildUnitSettingsForUnitSetupPreset('kilometers', null);
+    expect(resolveUnitSetupPreset({ ...kilometres, elevationUnits: ElevationUnits.Feet })).toBeNull();
+  });
   it('recognizes mixed, multiple, or missing unit choices as custom', () => {
     const settings = buildUnitSettingsForUnitSetupPreset('kilometers', null);
     expect(resolveUnitSetupPreset({ ...settings, paceUnits: [PaceUnits.MinutesPerMile] })).toBeNull();

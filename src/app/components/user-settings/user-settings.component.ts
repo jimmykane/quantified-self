@@ -35,6 +35,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits,
   WeightUnits,
+  ElevationUnits,
 } from '@sports-alliance/sports-lib';
 import { ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
 import { AppDashboardSettingsInterface } from '../../models/app-user.interface';
@@ -202,6 +203,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     { label: 'Kilometers', value: DistanceUnits.Kilometers },
     { label: 'Miles', value: DistanceUnits.Miles },
   ];
+  public readonly elevationUnitOptions = [
+    { label: 'Metres (m)', value: ElevationUnits.Meters },
+    { label: 'Feet (ft)', value: ElevationUnits.Feet },
+  ];
   public readonly weightUnitOptions: Array<{ label: string; value: WeightUnits }> = [
     { label: 'Kilograms (kg)', value: WeightUnits.Kilograms },
     { label: 'Pounds (lb)', value: WeightUnits.Pounds },
@@ -249,6 +254,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     startOfTheWeek: 'Start of the Week',
     distanceUnitsToUse: 'Distance Units',
     weightUnitsToUse: 'Weight Units',
+    elevationUnitsToUse: 'Elevation Units',
     speedUnitsToUse: 'Preferred Speed Units',
     paceUnitsToUse: 'Preferred Pace Units',
     swimPaceUnitsToUse: 'Swim Pace Preference',
@@ -436,6 +442,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       distanceUnitsToUse: new UntypedFormControl(settings.unitSettings.distanceUnits, [
         Validators.required,
       ]),
+      elevationUnitsToUse: new UntypedFormControl(settings.unitSettings.elevationUnits, [Validators.required]),
       weightUnitsToUse: new UntypedFormControl(settings.unitSettings.weightUnits, [
         Validators.required,
       ]),
@@ -543,6 +550,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
     this.userSettingsFormGroup.patchValue({
       distanceUnitsToUse: presetSettings.distanceUnits,
+      elevationUnitsToUse: presetSettings.elevationUnits,
       speedUnitsToUse: presetSettings.speedUnits,
       paceUnitsToUse: presetSettings.paceUnits,
       swimPaceUnitsToUse: presetSettings.swimPaceUnits,
@@ -723,6 +731,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             distanceUnits: this.userSettingsFormGroup.get('distanceUnitsToUse').value,
             weightUnits: this.userSettingsFormGroup.get('weightUnitsToUse').value,
+            elevationUnits: this.userSettingsFormGroup.get('elevationUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <AppDashboardSettingsInterface>{
@@ -849,19 +858,21 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     if (!this.userSettingsFormGroup) return;
     const value = this.userSettingsFormGroup.getRawValue();
     const distance = this.distanceUnitOptions.find(option => option.value === value.distanceUnitsToUse)?.label;
+    const elevation = this.elevationUnitOptions.find(option => option.value === value.elevationUnitsToUse)?.label;
     const weight = this.weightUnitOptions.find(option => option.value === value.weightUnitsToUse)?.label;
     const metrics = Array.isArray(value.dataTypesToUse) ? value.dataTypesToUse.length : 0;
     const map = Object.entries(this.mapTypes).find(([, type]) => type === value.mapType)?.[0]?.replace(/([a-z])([A-Z])/g, '$1 $2');
     const plan = this.isProUser ? 'Pro plan' : this.isBasicUser ? 'Basic plan' : 'Free plan';
     this.selectedUnitPreset = resolveUnitSetupPreset({
       distanceUnits: value.distanceUnitsToUse,
+      elevationUnits: value.elevationUnitsToUse,
       speedUnits: value.speedUnitsToUse,
       paceUnits: value.paceUnitsToUse,
       swimPaceUnits: value.swimPaceUnitsToUse,
       verticalSpeedUnits: value.verticalSpeedUnitsToUse,
     });
     this.sectionSummaries.set({
-      units: [distance, weight, this.selectedFormatLocaleLabel].filter(Boolean).join(' · '),
+      units: [distance, elevation, weight, this.selectedFormatLocaleLabel].filter(Boolean).join(' · '),
       dashboard: `${value.eventsPerPage} activities per page`,
       charts: `${metrics} default ${metrics === 1 ? 'metric' : 'metrics'} · ${value.xAxisType} axis`,
       map: [map, value.showMapArrows ? 'Direction arrows on' : 'Direction arrows off'].filter(Boolean).join(' · '),
@@ -878,6 +889,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     const unitSettings = settings.unitSettings;
     return this.userSettingsFormGroup.get('startOfTheWeek')?.value !== unitSettings.startOfTheWeek
       || this.userSettingsFormGroup.get('distanceUnitsToUse')?.value !== unitSettings.distanceUnits
+      || this.userSettingsFormGroup.get('elevationUnitsToUse')?.value !== unitSettings.elevationUnits
       || this.userSettingsFormGroup.get('weightUnitsToUse')?.value !== unitSettings.weightUnits
       || !this.areFormArraysEqual(this.userSettingsFormGroup.get('speedUnitsToUse')?.value, unitSettings.speedUnits)
       || !this.areFormArraysEqual(this.userSettingsFormGroup.get('paceUnitsToUse')?.value, unitSettings.paceUnits)

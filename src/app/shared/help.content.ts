@@ -1807,9 +1807,15 @@ The section summaries reflect your current choices, including unsaved edits. Ope
 edits. A **Save changes** bar appears when you make changes and stays available as you scroll; it applies edits
 across all sections. Failed saves keep your choices so you can retry. Privacy & emails is immediately before Account.
 
+**Elevation** independently selects metres or feet for altitude, ascent and descent across charts, summaries, calendars
+and tables. Kilometre and mile presets choose metres and feet respectively; **Customize units** can mix either elevation
+unit with either distance choice. Existing accounts keep metres until they change it. The ascent/descent editor accepts
+the selected unit and converts it back to metres when saved. Original recordings and stored activity values are unchanged.
+Vertical speed keeps its own rate preference.
+
 **Units & formatting** contains the unit preset, regional format, and start of week. Select **Customize units** to
-change individual preferences such as weight or swim pace. Mixed choices are labelled **Custom unit choices**.
-Choosing a preset replaces the individual distance, speed, pace, swim pace, and vertical speed choices; weight,
+change individual preferences such as elevation, weight or swim pace. Mixed choices are labelled **Custom unit choices**.
+Choosing a preset replaces the individual distance, elevation, speed, pace, swim pace, and vertical speed choices; weight,
 week start, and regional format remain independent. Presets require **Save changes**. Your name and identity details are in **Account**;
 custom watermark text is in **Charts**. Account deletion remains separate at the bottom of Account.
 

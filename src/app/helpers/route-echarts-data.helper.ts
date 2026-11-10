@@ -13,6 +13,7 @@ import {
 import { TrackChartPanelModel, TrackChartPanelSeries } from './track-chart-panel.model';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { RouteSegmentDetailView } from './route-detail.helper';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 export const ROUTE_CHART_POINT_INDEX_X_AXIS_TYPE = 'PointIndex' as XAxisTypes;
 
@@ -88,10 +89,11 @@ function buildRouteChartPanel(
   unitSettings: UserUnitSettingsInterface | null,
 ): TrackChartPanelModel | null {
   const dataClass = DynamicDataLoader.getDataClassFromDataType(target.panelDataType);
+  const unit = resolveUnitAwareDisplayFromValue(target.panelDataType, 0, unitSettings)?.unit ?? dataClass.unit ?? '';
   const panel: TrackChartPanelModel = {
     dataType: target.panelDataType,
     displayName: normalizeUnitDerivedTypeLabel(target.panelDataType, target.displayName || dataClass.displayType || dataClass.type),
-    unit: dataClass.unit || '',
+    unit,
     colorGroupKey: target.panelDataType,
     series: [],
     minX: Number.POSITIVE_INFINITY,
@@ -99,7 +101,7 @@ function buildRouteChartPanel(
   };
 
   segments.forEach((segment) => {
-    const result = buildRouteSeries(segment, target, xAxisType, unitSettings);
+    const result = buildRouteSeries(segment, target, xAxisType, unit);
     if (!result.series) {
       return;
     }
@@ -123,7 +125,7 @@ function buildRouteSeries(
   segment: RouteSegmentDetailView,
   target: RouteChartTarget,
   xAxisType: XAxisTypes,
-  _unitSettings: UserUnitSettingsInterface | null,
+  unit: string,
 ): RouteSeriesBuildResult {
   const streamType = target.streamTypes.find(type => getRouteStream(segment.route, type));
   if (!streamType) {
@@ -178,7 +180,7 @@ function buildRouteSeries(
     streamType,
     lineGapPolicy: 'adjacent',
     displayName: normalizeUnitDerivedTypeLabel(target.panelDataType, target.displayName || dataClass.displayType || dataClass.type),
-    unit: dataClass.unit || '',
+    unit,
     lineValues: pointCount * 2 === lineValues.length ? lineValues : lineValues.slice(0, pointCount * 2),
     timeValues: pointCount === timeValues.length ? timeValues : timeValues.slice(0, pointCount),
     pointCount,

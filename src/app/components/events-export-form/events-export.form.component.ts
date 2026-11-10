@@ -248,11 +248,11 @@ export class EventsExportFormComponent extends FormsAbstract {
       }
       if (this.user.settings.exportToCSVSettings.ascent) {
         const stat = event.getStat(DataAscent.type);
-        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
+        row.push(`"${stat ? resolveUnitAwareDisplayStat(stat, this.user.settings.unitSettings)?.text ?? '' : ''}"`);
       }
       if (this.user.settings.exportToCSVSettings.descent) {
         const stat = event.getStat(DataDescent.type);
-        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
+        row.push(`"${stat ? resolveUnitAwareDisplayStat(stat, this.user.settings.unitSettings)?.text ?? '' : ''}"`);
       }
 
       if (this.user.settings.exportToCSVSettings.calories) {

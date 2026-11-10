@@ -4,6 +4,8 @@ import {
   DataDistance,
   DataGrade,
   DataGradeSmooth,
+  DistanceUnits,
+  ElevationUnits,
   RouteInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -16,8 +18,37 @@ import {
   routeHasDistanceXAxis,
 } from './route-echarts-data.helper';
 import { getEventChartSeriesX, getEventChartSeriesY } from './event-echarts-data.helper';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('route echarts data helper', () => {
+  it.each([
+    [DistanceUnits.Kilometers, ElevationUnits.Meters, 'm'],
+    [DistanceUnits.Miles, ElevationUnits.Meters, 'm'],
+    [DistanceUnits.Kilometers, ElevationUnits.Feet, 'ft'],
+    [DistanceUnits.Miles, ElevationUnits.Feet, 'ft'],
+  ] as const)('uses %s / %s preferences for route chart labels without converting recorded samples', (distanceUnits, elevationUnits, expectedUnit) => {
+    const streams = {
+      [DataDistance.type]: [0, 1000, 2000],
+      [DataAltitudeSmooth.type]: [30.48, null, 123.456789],
+      [DataGradeSmooth.type]: [1, 2, 3],
+    };
+    const original = structuredClone(streams);
+    const segment = createSegment('segment-1', createRoute(streams));
+    const result = buildRouteChartPanels([segment], normalizeUserUnitSettings({ distanceUnits, elevationUnits }));
+    const [altitude, grade] = result.panels;
+    expect(altitude.unit).toBe(expectedUnit);
+    expect(altitude.series[0].unit).toBe(expectedUnit);
+    expect(altitude.series[0].streamType).toBe(DataAltitudeSmooth.type);
+    expect(getEventChartSeriesY(altitude.series[0], 0)).toBe(30.48);
+    expect(getEventChartSeriesY(altitude.series[0], 1)).toBeNull();
+    expect(getEventChartSeriesY(altitude.series[0], 2)).toBe(123.456789);
+    expect(getEventChartSeriesX(altitude.series[0], 1)).toBe(1000);
+    expect(grade.unit).toBe('%');
+    expect(grade.series[0].unit).toBe('%');
+    expect(altitude.series[0].gradeColorValues?.[1]).toBe(2);
+    expect(streams).toEqual(original);
+  });
+
   it('builds elevation and grade panels using distance as the x-axis when available', () => {
     const segment = createSegment('segment-1', createRoute({
       [DataDistance.type]: [0, 1000, 2000],
