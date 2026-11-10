@@ -36,10 +36,10 @@ export function createTerrainRenderer(
     const hemisphere = new THREE.HemisphereLight();
     scene.add(hemisphere);
     const key = new THREE.DirectionalLight();
-    key.position.set(-15, 18, 8);
+    key.position.set(-18, 18, 8);
     scene.add(key);
     const fill = new THREE.DirectionalLight();
-    fill.position.set(14, 6, -14);
+    fill.position.set(14, 8, -10);
     scene.add(fill);
     const terrain = new THREE.Group();
     scene.add(terrain);
@@ -47,16 +47,34 @@ export function createTerrainRenderer(
     const geo = new THREE.BufferGeometry();
     resources.push(geo);
     geo.setAttribute('position', new THREE.BufferAttribute(model.vertices, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(model.uvs, 2));
     geo.setAttribute(
       'color',
       new THREE.BufferAttribute(new Float32Array(model.vertices.length), 3)
     );
     geo.setIndex(new THREE.BufferAttribute(model.indices, 1));
     geo.computeVertexNormals();
+    // Small deterministic bump texture adds stone grain without changing the silhouette.
+    const grain = new Uint8Array(256 * 256);
+    let seed = 7621;
+    for (let i = 0; i < grain.length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      grain[i] = 96 + (seed >>> 26);
+    }
+    const surface = new THREE.DataTexture(grain, 256, 256, THREE.RedFormat);
+    resources.push(surface);
+    surface.wrapS = surface.wrapT = THREE.RepeatWrapping;
+    surface.repeat.set(6, 9);
+    surface.magFilter = THREE.LinearFilter;
+    surface.minFilter = THREE.LinearMipmapLinearFilter;
+    surface.generateMipmaps = true;
+    surface.needsUpdate = true;
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      metalness: 0,
-      roughness: 0.98
+      metalness: 0.04,
+      roughness: 0.88,
+      bumpMap: surface,
+      bumpScale: 0.12
     });
     resources.push(material);
     terrain.add(new THREE.Mesh(geo, material));
@@ -129,6 +147,10 @@ export function createTerrainRenderer(
       disposed = false,
       rendered = false;
     let reduced = options.reducedMotion;
+    // A single, bounded camera glide makes the depth visible without an idle loop.
+    const entryDuration = 4500;
+    let entryTime = reduced ? entryDuration : 0;
+    let lastTime: number | undefined;
     let pointerX = 0,
       pointerY = 0,
       currentX = 0,
@@ -137,27 +159,37 @@ export function createTerrainRenderer(
     const cancel = () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      lastTime = undefined;
     };
     function schedule() {
       if (!frame && !disposed && visible && !document.hidden)
         frame = requestAnimationFrame(draw);
     }
-    function draw() {
+    function draw(time: number) {
       frame = 0;
       if (disposed || !visible || document.hidden) return;
+      const dt = lastTime === undefined ? 0 : Math.max(0, time - lastTime);
+      lastTime = time;
+      if (!reduced && entryTime < entryDuration) {
+        entryTime = Math.min(entryDuration, entryTime + dt);
+        dirty = true;
+      }
       const dx = pointerX - currentX,
         dy = pointerY - currentY;
       const settling = Math.abs(dx) + Math.abs(dy) > 0.0005;
       if (settling) {
-        currentX += dx * 0.045;
-        currentY += dy * 0.045;
+        const ease = 1 - Math.exp(-Math.min(dt, 50) * 0.006);
+        currentX += dx * ease;
+        currentY += dy * ease;
         dirty = true;
       }
       if (dirty) {
+        const progress = entryTime / entryDuration;
+        const entryOffset = 1 - progress * progress * (3 - 2 * progress);
         camera.position.set(
-          baseCamera.x + currentX,
-          baseCamera.y + currentY,
-          baseCamera.z
+          baseCamera.x + currentX - entryOffset * 1.35,
+          baseCamera.y + currentY + entryOffset * 0.14,
+          baseCamera.z + entryOffset * 0.22
         );
         camera.lookAt(target);
         try {
@@ -172,8 +204,8 @@ export function createTerrainRenderer(
           options.onReady();
         }
       }
-      // The scenery rests between pointer interactions; there is no idle animation.
-      if (settling) schedule();
+      // After the entry glide, the scenery rests between pointer interactions.
+      if ((!reduced && entryTime < entryDuration) || settling) schedule();
     }
     function resize() {
       if (disposed) return;
@@ -191,8 +223,8 @@ export function createTerrainRenderer(
       // These colors belong to the illustration; UI foregrounds and seams use Material tokens.
       const light = !dark,
         palette = light
-          ? ['#9baea7', '#bec6b7', '#e0dfcf']
-          : ['#26363e', '#697776', '#b6b7ad'];
+          ? ['#98a8b1', '#b9c4ca', '#dde4e8']
+          : ['#242c32', '#65737b', '#bdc8cc'];
       const low = new THREE.Color(palette[0]),
         mid = new THREE.Color(palette[1]),
         high = new THREE.Color(palette[2]);
@@ -208,19 +240,19 @@ export function createTerrainRenderer(
         attribute.setXYZ(i, color.r, color.g, color.b);
       }
       attribute.needsUpdate = true;
-      fog.color.set(light ? 0xedf1e9 : 0x223239);
-      hemisphere.color.set(light ? 0xf5f8ef : 0xc6d4dc);
-      hemisphere.groundColor.set(light ? 0xa8b8ae : 0x18232b);
-      hemisphere.intensity = light ? 1.7 : 1.65;
-      key.color.set(light ? 0xfff4df : 0xffefd8);
-      key.intensity = light ? 1.9 : 2.5;
-      fill.color.set(light ? 0xc1d4de : 0xa3b7c3);
-      fill.intensity = light ? 0.75 : 0.65;
-      contourMaterial.color.set(light ? 0x6a8179 : 0xd1d1ba);
-      contourMaterial.opacity = light ? 0.23 : 0.19;
-      profileMaterial.uniforms.accent.value.set(light ? 0x627f78 : 0x92b2bc);
-      profileMaterial.uniforms.strength.value = light ? 0.48 : 0.52;
-      renderer.toneMappingExposure = light ? 1.06 : 1.02;
+      fog.color.set(light ? 0xecf1f5 : 0x1a2932);
+      hemisphere.color.set(light ? 0xf2f6fa : 0xd4dde2);
+      hemisphere.groundColor.set(light ? 0xa3b2be : 0x182128);
+      hemisphere.intensity = light ? 1.5 : 1.2;
+      key.color.set(light ? 0xeef6fc : 0xe6ecee);
+      key.intensity = light ? 2.2 : 2.8;
+      fill.color.set(light ? 0xc9d6df : 0x91a4af);
+      fill.intensity = light ? 0.6 : 0.45;
+      contourMaterial.color.set(light ? 0x778e9a : 0x93aab7);
+      contourMaterial.opacity = light ? 0.09 : 0.06;
+      profileMaterial.uniforms.accent.value.set(light ? 0x6a899b : 0x9ec3d4);
+      profileMaterial.uniforms.strength.value = light ? 0.18 : 0.22;
+      renderer.toneMappingExposure = light ? 1.03 : 1.0;
       dirty = true;
       schedule();
     }
@@ -228,6 +260,7 @@ export function createTerrainRenderer(
       if (disposed) return;
       reduced = reduce;
       if (reduced) {
+        entryTime = entryDuration;
         pointerX = pointerY = currentX = currentY = 0;
         dirty = true;
       }
@@ -237,8 +270,8 @@ export function createTerrainRenderer(
       if (reduced || event.pointerType === 'touch') return;
       const b = stage.getBoundingClientRect();
       if (!b.width || !b.height) return;
-      pointerX = ((event.clientX - b.left) / b.width - 0.5) * 0.32;
-      pointerY = ((event.clientY - b.top) / b.height - 0.5) * 0.16;
+      pointerX = ((event.clientX - b.left) / b.width - 0.5) * 1.4;
+      pointerY = ((event.clientY - b.top) / b.height - 0.5) * 0.5;
       schedule();
     };
     const leave = () => {

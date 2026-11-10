@@ -79,11 +79,13 @@ ECharts remains the product-chart renderer. This decorative WebGL exception need
 occlusion, with no quantitative axes, tooltips or input data contract.
 
 Light and dark scenes follow `AppThemeService`. Material tokens control text and the blend into the card;
-the terrain itself has separate light/dark illustration palettes. A short feathered highlight marks a
-connected terrain contour. The landscape is still at rest, with gentle pointer parallax and no playback
-control or idle animation loop. Touch input and reduced-motion preferences disable parallax; enabling
-reduced motion also resets the camera. Rendering runs only for initial display, theme/size changes and
-pointer settling, and suspends offscreen and in hidden tabs. Destroying the view releases frames, GPU
+the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
+procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
+A single 4.5-second camera glide introduces depth, then the landscape rests with gentle pointer panning.
+There is no playback control or repeating idle loop. Touch input disables pointer panning; reduced-motion
+preferences disable both the entry glide and panning. Enabling reduced motion resets the camera and ends
+the entry glide without replaying it. Rendering runs for the initial glide, theme/size changes and pointer
+settling, and suspends offscreen and in hidden tabs without advancing the glide while hidden. Destroying the view releases frames, GPU
 resources, listeners and observers, and a late module response cannot initialize a destroyed view.
 Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
 loss. Onboarding stays usable in all cases.

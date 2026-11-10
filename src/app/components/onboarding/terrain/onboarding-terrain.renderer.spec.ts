@@ -29,6 +29,7 @@ describe('onboarding terrain renderer lifecycle', () => {
   let intersect: IntersectionObserverCallback;
   let hidden: boolean;
   let nextFrame: number;
+  let frameTime: number;
   const disconnectResize = vi.fn(),
     disconnectIntersection = vi.fn();
   let options: TerrainOptions;
@@ -38,6 +39,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     frames = new Map();
     hidden = false;
     nextFrame = 0;
+    frameTime = 0;
     stage = document.createElement('div');
     canvas = document.createElement('canvas');
     stage.append(canvas);
@@ -92,7 +94,8 @@ describe('onboarding terrain renderer lifecycle', () => {
     controllers.push(controller);
     return controller;
   }
-  function frame(time = 16) {
+  function frame(time = frameTime + 1000 / 60) {
+    frameTime = time;
     const callbacks = [...frames.values()];
     frames.clear();
     callbacks.forEach((callback) => callback(time));
@@ -148,6 +151,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     create();
     frame();
     const camera = graphics.render.mock.lastCall![1];
+    for (let i = 0; i < 300; i++) frame();
     const initial = camera.position.clone();
     expect(frames.size).toBe(0);
     move();
@@ -170,6 +174,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     const controller = create();
     frame();
     const camera = graphics.render.mock.lastCall![1];
+    for (let i = 0; i < 300; i++) frame();
     const initial = camera.position.clone();
     move('touch');
     expect(frames.size).toBe(0);
@@ -181,6 +186,59 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(camera.position.equals(initial)).toBe(true);
     expect(frames.size).toBe(0);
     move();
+    expect(frames.size).toBe(0);
+  });
+
+  it('glides the camera once, settles within five seconds and releases its frame loop', () => {
+    options.reducedMotion = false;
+    create();
+    frame();
+    const camera = graphics.render.mock.lastCall![1];
+    const start = camera.position.clone();
+    frame(frameTime + 2200);
+    const middle = camera.position.clone();
+    expect(middle.x).toBeGreaterThan(start.x);
+    expect(frames.size).toBe(1);
+    frame(frameTime + 2300);
+    expect(camera.position.x).toBeGreaterThan(middle.x);
+    expect(frames.size).toBe(0);
+    expect(options.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauses the entry glide offscreen and in hidden tabs without a jump on return', () => {
+    options.reducedMotion = false;
+    create();
+    frame();
+    frame(frameTime + 1000);
+    const camera = graphics.render.mock.lastCall![1];
+    const before = camera.position.clone();
+    hidden = true;
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(frames.size).toBe(0);
+    hidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    frame(frameTime + 10000);
+    expect(camera.position.equals(before)).toBe(true);
+    intersection(false);
+    expect(frames.size).toBe(0);
+    intersection(true);
+    frame(frameTime + 10000);
+    expect(camera.position.equals(before)).toBe(true);
+    frame();
+    expect(camera.position.x).toBeGreaterThan(before.x);
+  });
+
+  it('cancels the entry glide when reduced motion is enabled and does not replay it', () => {
+    options.reducedMotion = false;
+    const controller = create();
+    frame();
+    controller.setReducedMotion(true);
+    frame();
+    const settled = graphics.render.mock.lastCall![1].position.clone();
+    expect(frames.size).toBe(0);
+    controller.setReducedMotion(false);
+    frame();
+    expect(graphics.render.mock.lastCall![1].position.equals(settled)).toBe(true);
     expect(frames.size).toBe(0);
   });
 

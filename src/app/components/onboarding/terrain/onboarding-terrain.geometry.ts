@@ -93,12 +93,14 @@ export function createTerrainGeometry() {
   const nx = 240,
     nz = 280,
     vertices: number[] = [],
+    uvs: number[] = [],
     indices: number[] = [];
   for (let j = 0; j <= nz; j++)
     for (let i = 0; i <= nx; i++) {
       const x = -35 + (i / nx) * 70,
         z = -73 + (j / nz) * 99;
       vertices.push(x, height(x, z), z);
+      uvs.push(i / nx, j / nz);
     }
   for (let j = 0; j < nz; j++)
     for (let i = 0; i < nx; i++) {
@@ -133,8 +135,8 @@ export function createTerrainGeometry() {
       }
     }
   }
-  // Join an existing terrain contour. Only a short, feathered highlight travels
-  // along it; no separate cross-section cuts across the mountain's contours.
+  // Join an existing terrain contour. A short, feathered highlight sits
+  // on it; no separate cross-section cuts across the mountain's contours.
   const nodes = new Map<string, { p: number[]; neighbors: Set<string> }>();
   const pointKey = (p: number[]) =>
     `${Math.round(p[0] * 1e5)},${Math.round(p[2] * 1e5)}`;
@@ -192,6 +194,7 @@ export function createTerrainGeometry() {
   const startProgress = distances[closest] / total;
   return {
     vertices: new Float32Array(vertices),
+    uvs: new Float32Array(uvs),
     indices: new Uint32Array(indices),
     contours: new Float32Array(contourVertices),
     highlight: new Float32Array(

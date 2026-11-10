@@ -7,6 +7,8 @@ describe('onboarding terrain geometry', () => {
   it('creates a finite, indexed landscape and contours', () => {
     expect(geometry.vertices.length).toBeGreaterThan(100_000);
     expect(geometry.vertices.every(Number.isFinite)).toBe(true);
+    expect(geometry.uvs.length).toBe(geometry.vertices.length / 3 * 2);
+    expect(geometry.uvs.every(value => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true);
     expect(geometry.contours.every(Number.isFinite)).toBe(true);
     expect(
       geometry.indices.every((index) => index < geometry.vertices.length / 3)
