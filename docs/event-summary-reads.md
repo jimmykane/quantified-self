@@ -124,7 +124,7 @@ existing [MCP workflow](../.agent/skills/mcp-metric-surface/SKILL.md) for any af
 
 ## Shared activity tables
 
-Dashboard, Calendar and Activities use the same compact table, text headings, account-backed column selection/order,
+Dashboard, Calendar and Activities use the same compact table, column icons alongside text labels, account-backed column selection/order,
 sort and page-size settings. Default/Running presets live inside the shared column dialog. Date ranges belong to the
 host page: Dashboard keeps its selected range, Calendar supplies its visible period, and Activities offers a
 `calendar-week` date preset alongside rolling ranges. Older `view=training-log` links normalize to a calendar week;

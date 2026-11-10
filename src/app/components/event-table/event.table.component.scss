@@ -10,8 +10,9 @@
     @include mat.checkbox-overrides((state-layer-size: 32px, touch-target-display: none));
   }
   .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 8px !important; }
-  .event-table-header app-data-type-icon { display: none; }
 }
+.event-table-column-heading { display: flex; align-items: center; gap: 6px; }
+.event-table-column-heading app-data-type-icon { display: flex; flex-shrink: 0; }
 .activity-total-row { background: var(--mat-sys-surface-container); cursor: default; }
 .activity-total-label, .activity-total-coverage { display: block; white-space: normal; }
 .activity-total-label { font: var(--mat-sys-label-medium); }
