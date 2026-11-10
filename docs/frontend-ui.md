@@ -81,7 +81,9 @@ occlusion, with no quantitative axes, tooltips or input data contract.
 Light and dark scenes follow `AppThemeService`. Material tokens control text and the blend into the card;
 the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
 procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
-A single 4.5-second camera glide introduces depth, then the landscape rests with gentle pointer panning.
+A 4.5-second camera glide introduces depth on first display and when entering the optional intro, then
+the landscape rests with gentle pointer panning. Entering the intro replays the glide on the existing
+renderer so time spent on the starting-point screen cannot consume the intro's movement.
 There is no playback control or repeating idle loop. Touch input disables pointer panning; reduced-motion
 preferences disable both the entry glide and panning. Enabling reduced motion resets the camera and ends
 the entry glide without replaying it. Rendering runs for the initial glide, theme/size changes and pointer

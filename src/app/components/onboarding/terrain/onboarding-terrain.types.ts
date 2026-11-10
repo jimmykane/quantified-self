@@ -9,5 +9,6 @@ export interface TerrainOptions {
 export interface TerrainController {
   setTheme(dark: boolean): void;
   setReducedMotion(reducedMotion: boolean): void;
+  replayEntry(): void;
   dispose(): void;
 }

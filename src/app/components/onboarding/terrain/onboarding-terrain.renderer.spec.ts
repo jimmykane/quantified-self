@@ -205,6 +205,27 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(options.onReady).toHaveBeenCalledTimes(1);
   });
 
+  it('replays a completed glide when entering the intro, and still honors reduced motion', () => {
+    options.reducedMotion = false;
+    const controller = create();
+    frame();
+    const camera = graphics.render.mock.lastCall![1];
+    const start = camera.position.clone();
+    frame(frameTime + 4500);
+    const end = camera.position.clone();
+    controller.replayEntry();
+    frame();
+    expect(camera.position.equals(start)).toBe(true);
+    frame(frameTime + 4500);
+    expect(camera.position.equals(end)).toBe(true);
+    expect(frames.size).toBe(0);
+    controller.setReducedMotion(true);
+    frame();
+    controller.replayEntry();
+    expect(frames.size).toBe(0);
+    expect(camera.position.equals(end)).toBe(true);
+  });
+
   it('pauses the entry glide offscreen and in hidden tabs without a jump on return', () => {
     options.reducedMotion = false;
     create();
@@ -253,6 +274,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     controller.setTheme(true);
     controller.setReducedMotion(false);
     document.dispatchEvent(new Event('visibilitychange'));
+    controller.replayEntry();
     canvas.dispatchEvent(new Event('webglcontextlost'));
     expect(frames.size).toBe(0);
     expect(options.onUnavailable).not.toHaveBeenCalled();

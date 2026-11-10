@@ -14,6 +14,7 @@ describe('OnboardingTerrainComponent', () => {
   const controller = {
     setTheme: vi.fn(),
     setReducedMotion: vi.fn(),
+    replayEntry: vi.fn(),
     dispose: vi.fn()
   };
   let options: TerrainOptions;
@@ -80,6 +81,23 @@ describe('OnboardingTerrainComponent', () => {
     expect(fixture.nativeElement.querySelector('img').src).toContain(
       'terrain-dark.png'
     );
+  });
+
+  it('replays the glide when entering the intro, without replaying for theme changes or leaving', async () => {
+    const fixture = await render();
+    expect(controller.replayEntry).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('introVisible', true);
+    fixture.detectChanges();
+    expect(controller.replayEntry).toHaveBeenCalledTimes(1);
+    theme.set(AppThemes.Dark);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('introVisible', false);
+    fixture.detectChanges();
+    expect(controller.replayEntry).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('introVisible', true);
+    fixture.detectChanges();
+    expect(controller.replayEntry).toHaveBeenCalledTimes(2);
+    expect(createTerrainRenderer).toHaveBeenCalledTimes(1);
   });
 
   it('disables parallax for reduced motion and responds to preference changes', async () => {

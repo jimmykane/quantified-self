@@ -3,7 +3,7 @@
         [class.field-guide--compact]="isCompareFlow() && stage() === 'privacy'" [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
         @if (!isCompareFlow() || stage() !== 'privacy') {
         <aside class="field-guide-hero" aria-label="Mountain landscape">
-            <app-onboarding-terrain></app-onboarding-terrain>
+            <app-onboarding-terrain [introVisible]="stage() === 'intro'"></app-onboarding-terrain>
             <div class="hero-copy">
                 <span class="eyebrow">Get started with Quantified Self</span>
                 <p>{{ heroTitle() }}</p>

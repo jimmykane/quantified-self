@@ -7,6 +7,7 @@ import {
   effect,
   ElementRef,
   inject,
+  input,
   InjectionToken,
   NgZone,
   signal,
@@ -43,6 +44,7 @@ export class OnboardingTerrainComponent {
   private controller?: TerrainController;
   private media?: MediaQueryList;
   private reducedMotion = false;
+  readonly introVisible = input(false);
   readonly ready = signal(false);
   readonly dark = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly fallback = computed(
@@ -50,6 +52,11 @@ export class OnboardingTerrainComponent {
   );
 
   constructor() {
+    effect(() => {
+      if (this.introVisible()) {
+        this.zone.runOutsideAngular(() => this.controller?.replayEntry());
+      }
+    });
     effect(() => {
       const dark = this.dark();
       this.zone.runOutsideAngular(() => this.controller?.setTheme(dark));

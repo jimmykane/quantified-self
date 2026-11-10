@@ -187,9 +187,9 @@ export function createTerrainRenderer(
         const progress = entryTime / entryDuration;
         const entryOffset = 1 - progress * progress * (3 - 2 * progress);
         camera.position.set(
-          baseCamera.x + currentX - entryOffset * 1.35,
-          baseCamera.y + currentY + entryOffset * 0.14,
-          baseCamera.z + entryOffset * 0.22
+          baseCamera.x + currentX - entryOffset * 2.2,
+          baseCamera.y + currentY + entryOffset * 0.22,
+          baseCamera.z + entryOffset * 0.45
         );
         camera.lookAt(target);
         try {
@@ -253,6 +253,13 @@ export function createTerrainRenderer(
       profileMaterial.uniforms.accent.value.set(light ? 0x6a899b : 0x9ec3d4);
       profileMaterial.uniforms.strength.value = light ? 0.18 : 0.22;
       renderer.toneMappingExposure = light ? 1.03 : 1.0;
+      dirty = true;
+      schedule();
+    }
+    function replayEntry() {
+      if (disposed || reduced) return;
+      cancel();
+      entryTime = 0;
       dirty = true;
       schedule();
     }
@@ -323,7 +330,7 @@ export function createTerrainRenderer(
     observer?.observe(stage);
     setTheme(options.dark);
     resize();
-    return { setTheme, setReducedMotion, dispose };
+    return { setTheme, setReducedMotion, replayEntry, dispose };
   } catch (error) {
     if (cleanup) cleanup();
     else for (const resource of resources) resource.dispose();
