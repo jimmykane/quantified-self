@@ -65,7 +65,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
         : this.stage() === 'privacy' ? '02 / Policies and preferences' : '03 / Your plan');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
-        : this.stage() === 'start' ? 'Choose your first step.'
+        : this.stage() === 'start' ? 'Analyze your training.'
         : this.stage() === 'privacy' ? 'Set up your account.' : 'Start free or connect with Pro.');
     readonly completionHint = computed(() => this.hasReturnDestination()
         ? `After setup, you’ll return to ${this.returnTarget().label}.`

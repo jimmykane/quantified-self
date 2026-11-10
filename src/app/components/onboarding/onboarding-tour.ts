@@ -1,13 +1,13 @@
 /** The optional Field guide introduces existing workspaces, without granting consent or starting imports. */
 export const FIELD_GUIDE_CHAPTERS = [
     {
-        hero: 'Analyze your workouts.',
-        title: 'Review routes, laps and performance.',
-        description: 'Review activities from your devices and uploaded files in one place.',
+        hero: 'Analyze your training.',
+        title: 'Track your progress.',
+        description: 'Explore your workouts in detail, follow changes in performance, and review training load and recovery.',
         points: [
-            { icon: 'dashboard', title: 'Browse your activity history', description: 'Find runs, rides, swims and other activities in Dashboard.' },
-            { icon: 'route', title: 'Inspect an activity', description: 'Review its route, laps, pace, heart rate, power and other recorded metrics.' },
-            { icon: 'compare_arrows', title: 'Compare device recordings', description: 'Use Compare to check GPS tracks and measurements from devices used in the same workout.' },
+            { icon: 'route', title: 'Workout analysis', description: 'Explore pace, power, heart rate and laps. Compare recordings to check device differences.' },
+            { icon: 'trending_up', title: 'Performance trends', description: 'Review your activity history and see how your performance changes over time.' },
+            { icon: 'monitoring', title: 'Training and recovery', description: 'Track fitness, fatigue and volume alongside available sleep and health data.' },
         ],
     },
     {

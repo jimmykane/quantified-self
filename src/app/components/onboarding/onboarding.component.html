@@ -49,13 +49,8 @@
                     @switch (stage()) {
                         @case ('start') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">What would you like to do first?</h1>
-                            <p class="lead">Upload and compare activity files for free, or connect your watch with Pro.</p>
+                            <p class="lead">Connect your watch with Pro or upload activity files for free to start analyzing your training.</p>
                             <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
-                                <mat-radio-button value="compare">
-                                    <span class="choice-title">Compare recordings</span>
-                                    <span class="choice-description">Upload recordings from the same workout to compare GPS tracks and measurements.</span>
-                                    <span class="choice-detail">Free with Starter</span>
-                                </mat-radio-button>
                                 <mat-radio-button value="connect">
                                     <span class="choice-title">Connect my watch</span>
                                     <span class="choice-description">Import activities from Garmin, Suunto, COROS or Wahoo.</span>
@@ -64,6 +59,11 @@
                                 <mat-radio-button value="upload">
                                     <span class="choice-title">Upload an activity file</span>
                                     <span class="choice-description">Add FIT, GPX, TCX and other supported files to your activity history.</span>
+                                    <span class="choice-detail">Free with Starter</span>
+                                </mat-radio-button>
+                                <mat-radio-button value="compare">
+                                    <span class="choice-title">Compare recordings</span>
+                                    <span class="choice-description">Upload recordings from the same workout to compare GPS tracks and measurements.</span>
                                     <span class="choice-detail">Free with Starter</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="explore">
