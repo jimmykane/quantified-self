@@ -1,33 +1,33 @@
 /** The optional Field guide introduces existing workspaces, without granting consent or starting imports. */
 export const FIELD_GUIDE_CHAPTERS = [
     {
-        hero: 'Your activities, together.',
-        title: 'See more in every workout.',
-        description: 'Bring your activities together to explore each session and compare recordings from your devices.',
+        hero: 'Analyze your workouts.',
+        title: 'Review routes, laps and performance.',
+        description: 'Review activities from your devices and uploaded files in one place.',
         points: [
-            { icon: 'dashboard', title: 'Find your activities', description: 'Browse workouts from different sports and devices in your Dashboard.' },
-            { icon: 'route', title: 'Explore each workout', description: 'Open an activity to inspect its route, laps and performance charts.' },
-            { icon: 'compare_arrows', title: 'Compare recordings', description: 'Compare GPS tracks and measurements from devices used in the same workout.' },
+            { icon: 'dashboard', title: 'Browse your activity history', description: 'Find runs, rides, swims and other activities in Dashboard.' },
+            { icon: 'route', title: 'Inspect an activity', description: 'Review its route, laps, pace, heart rate, power and other recorded metrics.' },
+            { icon: 'compare_arrows', title: 'Compare device recordings', description: 'Use Compare to check GPS tracks and measurements from devices used in the same workout.' },
         ],
     },
     {
-        hero: 'Your training, in context.',
-        title: 'See how your training adds up.',
-        description: 'Follow your training load, review recovery trends and plan your next week.',
+        hero: 'Track your training.',
+        title: 'Review training load and recovery.',
+        description: 'Track training volume, review sleep and health trends, and schedule workouts.',
         points: [
-            { icon: 'monitoring', title: 'Follow your training load', description: 'Use Training to track fitness, fatigue, form and weekly volume.' },
-            { icon: 'bedtime', title: 'Explore your recovery', description: 'See sleep and health trends when your connected services provide them.' },
-            { icon: 'calendar_month', title: 'Plan your workouts', description: 'Create training plans and structured workouts in your calendar.' },
+            { icon: 'monitoring', title: 'Monitor training load', description: 'Open Training to track fitness, fatigue, form and weekly volume.' },
+            { icon: 'bedtime', title: 'Review sleep and health', description: 'Review sleep duration and health trends available from your connected services.' },
+            { icon: 'calendar_month', title: 'Schedule workouts', description: 'Create a training plan or add a structured workout to your calendar.' },
         ],
     },
     {
-        hero: 'Start your way.',
-        title: 'Bring your training into QS.',
-        description: 'Connect your watch or upload an activity file. You can also explore first and add your data later.',
+        hero: 'Add your first activity.',
+        title: 'Connect a service or upload a file.',
+        description: 'Upload files for free, or use Pro to import from Garmin, Suunto, COROS or Wahoo.',
         points: [
-            { icon: 'watch', title: 'Connect your watch', description: 'With Pro, connect Garmin, Suunto, COROS or Wahoo to import your activities.' },
-            { icon: 'upload_file', title: 'Upload an activity file', description: 'Upload activity files such as FIT, GPX or TCX with free Starter.' },
-            { icon: 'explore', title: 'Take a look around', description: 'Open your Dashboard with free Starter and add activities when you’re ready.' },
+            { icon: 'watch', title: 'Connect with Pro', description: 'After setup, connect your watch service in Connections for automatic imports.' },
+            { icon: 'upload_file', title: 'Upload files for free', description: 'In Dashboard, select Upload and choose a FIT, GPX or TCX activity file.' },
+            { icon: 'explore', title: 'Add activities later', description: 'Choose Let me look around to open Dashboard and add activities later.' },
         ],
     },
 ] as const;

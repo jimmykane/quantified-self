@@ -16,7 +16,7 @@
             <header class="field-guide-header">
                 <div class="brand"><img src="assets/logos/app/logo-100x100.png" width="32" height="32" alt=""><span>Quantified Self</span></div>
                 @if (stage() === 'intro') {
-                    <button mat-button type="button" (click)="skipIntro()">Skip the intro <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
+                    <button mat-button type="button" (click)="skipIntro()">Skip tour <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                 } @else {
                     <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="logout()">Sign out</button>
                 }
@@ -49,11 +49,11 @@
                     @switch (stage()) {
                         @case ('start') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">What would you like to do first?</h1>
-                            <p class="lead">Start free with uploads and comparisons, or connect your watch with Pro.</p>
+                            <p class="lead">Upload and compare activity files for free, or connect your watch with Pro.</p>
                             <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
                                 <mat-radio-button value="compare">
                                     <span class="choice-title">Compare recordings</span>
-                                    <span class="choice-description">See how different devices recorded the same workout.</span>
+                                    <span class="choice-description">Upload recordings from the same workout to compare GPS tracks and measurements.</span>
                                     <span class="choice-detail">Free with Starter</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="connect">
@@ -63,23 +63,23 @@
                                 </mat-radio-button>
                                 <mat-radio-button value="upload">
                                     <span class="choice-title">Upload an activity file</span>
-                                    <span class="choice-description">Import FIT, GPX, TCX and other supported activity files.</span>
+                                    <span class="choice-description">Add FIT, GPX, TCX and other supported files to your activity history.</span>
                                     <span class="choice-detail">Free with Starter</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="explore">
                                     <span class="choice-title">Let me look around</span>
-                                    <span class="choice-description">Explore your workspace and add your data when you’re ready.</span>
+                                    <span class="choice-description">Finish setup and open Dashboard. You can add activities later.</span>
                                     <span class="choice-detail">Start free</span>
                                 </mat-radio-button>
                             </mat-radio-group>
                             <div class="onboarding-actions">
-                                <button mat-button type="button" (click)="showIntro()">Explore QS</button>
+                                <button mat-button type="button" (click)="showIntro()">Take a quick tour</button>
                                 <button mat-flat-button type="button" class="qs-mat-primary" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                             </div>
                         }
                         @case ('privacy') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Finish account setup' : 'Review policies and preferences' }}</h1>
-                            <p class="lead">{{ isCompareFlow() ? 'Review the policies below. Next, add recordings from the same workout to compare GPS tracks and measurements.' : 'Review the required policies and choose whether to allow analytics and marketing emails.' }}</p>
+                            <p class="lead">{{ isCompareFlow() ? 'Review the required policies and optional preferences. Then open Compare to upload recordings from the same workout.' : 'Accept the required policies to continue. Analytics and marketing emails are optional.' }}</p>
                             @if (isCompareFlow()) {
                                 <p class="setup-note">@if (!hasPaidMembership()) { Starter is free. } Uploads and new comparisons count toward your activity limit.</p>
                             }

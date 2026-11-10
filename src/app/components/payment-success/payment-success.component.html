@@ -32,18 +32,18 @@
           </div>
 
           @if (onboardingResume) {
-            <p class="description">Your membership is ready. Continue setup to open your workspace.</p>
+            <p class="description">Your membership is ready. Continue setup to complete your account.</p>
           } @else {
           @switch (assignedRole) {
             @case ('pro') {
               <p class="description">
-                Your Pro access is ready. Connect Garmin, Suunto, COROS, or Wahoo to bring your activities together.
+                Your Pro access is ready. Connect Garmin, Suunto, COROS or Wahoo to import activities automatically.
               </p>
               <p class="description">Choose a provider and review its permissions in Connections.</p>
             }
             @case ('basic') {
               <p class="description">
-                Your Basic access is ready. Open your Dashboard to explore your history and analysis.
+                Your Basic access is ready. Open Dashboard to review your activities or upload a file.
               </p>
             }
           }
@@ -63,7 +63,7 @@
       <button mat-flat-button class="qs-mat-primary" [routerLink]="onboardingResume">Continue setup</button>
       } @else if (assignedRole === 'pro') {
       <button mat-flat-button class="qs-mat-primary" routerLink="/services">
-        Connect your devices
+        Open Connections
       </button>
       } @else if (assignedRole === 'basic') {
       <button mat-flat-button class="qs-mat-primary" routerLink="/dashboard">

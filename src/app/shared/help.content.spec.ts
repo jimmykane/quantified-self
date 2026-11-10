@@ -97,9 +97,9 @@ describe('help.content', () => {
 
   it('explains intent-first setup, the optional Field guide and existing handoffs', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    expect(content).toContain('**Skip the intro**');
+    expect(content).toContain('**Skip tour**');
     expect(content).toContain('**Compare recordings**');
-    expect(content).toContain('**Explore QS**');
+    expect(content).toContain('**Take a quick tour**');
     expect(content).toContain('without the tour, watch setup, or pricing step');
     expect(content).toContain('**Continue free**');
     expect(content).toContain('Your existing plan stays the same');

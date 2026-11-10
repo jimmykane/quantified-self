@@ -87,7 +87,7 @@ describe('PaymentSuccessComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('trial dates, renewal terms, and invoices');
         expect(fixture.nativeElement.querySelector('.checkmark')).toBeTruthy();
         const buttons = fixture.nativeElement.querySelectorAll('mat-card-actions button');
-        expect(buttons[0].textContent).toContain('Connect your devices');
+        expect(buttons[0].textContent).toContain('Open Connections');
         expect(buttons[1].textContent).toContain('Manage membership');
         expect(fixture.nativeElement.textContent).not.toContain('purchase');
         expect(haptics.selection).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe('PaymentSuccessComponent', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.textContent).toContain('Welcome to Basic!');
         expect(fixture.nativeElement.querySelector('button[mat-flat-button]').textContent).toContain('Go to Dashboard');
-        expect(fixture.nativeElement.textContent).not.toContain('Connect your devices');
+        expect(fixture.nativeElement.textContent).not.toContain('Open Connections');
     });
 
     it('stops after ten unconfirmed checks and offers recovery without asserting payment success', async () => {
@@ -306,7 +306,7 @@ describe('PaymentSuccessComponent', () => {
         await harness.fixture.whenStable();
         harness.detectChanges();
         expect(harness.routeNativeElement!.textContent).not.toContain('Continue setup');
-        expect(harness.routeNativeElement!.textContent).toContain('Connect your devices');
+        expect(harness.routeNativeElement!.textContent).toContain('Open Connections');
     });
 
     it('does not emit feedback when connection navigation is canceled', async () => {

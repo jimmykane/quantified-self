@@ -149,7 +149,7 @@ describe('OnboardingComponent', () => {
         component.showIntro();
         component.chapterIndex.set(chapter);
         fixture.detectChanges();
-        clickButton('Skip the intro');
+        clickButton('Skip tour');
         expect(component.stage()).toBe('start');
         expect(component.termsFormGroup.invalid).toBe(true);
         expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
@@ -159,9 +159,9 @@ describe('OnboardingComponent', () => {
 
     it('takes the full tour forward and back with focus on the new heading', async () => {
         await setupComponent(true);
-        clickButton('Explore QS');
+        clickButton('Take a quick tour');
         clickButton('Next');
-        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('See how your training adds up');
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Review training load and recovery');
         await fixture.whenStable();
         expect(document.activeElement).toBe(fixture.nativeElement.querySelector('h1'));
         clickButton('Back');

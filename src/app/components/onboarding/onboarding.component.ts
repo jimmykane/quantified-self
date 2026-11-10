@@ -65,15 +65,15 @@ export class OnboardingComponent implements OnInit, OnChanges {
     readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
         : this.stage() === 'privacy' ? '02 / Policies and preferences' : '03 / Your plan');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
-        : this.stage() === 'start' ? 'Start your way.'
-        : this.stage() === 'privacy' ? 'Set up your account.' : 'Choose a plan that fits.');
+        : this.stage() === 'start' ? 'Choose your first step.'
+        : this.stage() === 'privacy' ? 'Set up your account.' : 'Start free or connect with Pro.');
     readonly completionHint = computed(() => this.hasReturnDestination()
         ? `After setup, you’ll return to ${this.returnTarget().label}.`
         : this.startChoice() === 'connect'
-            ? 'Connect Garmin, Suunto, COROS or Wahoo with Pro. After setup, choose your service in Connections.'
+            ? 'Automatic imports require Pro. After setup, choose Garmin, Suunto, COROS or Wahoo in Connections.'
             : this.startChoice() === 'upload'
-                ? 'Uploads are included with Starter. After setup, choose Upload in Dashboard to add your first activity.'
-                : 'Start free with Starter. Add activities from your Dashboard when you’re ready.');
+                ? 'Starter includes file uploads. After setup, select Upload in Dashboard to add an activity.'
+                : 'Start with the free Starter plan. You can upload activities from Dashboard later.');
 
     policies: PolicyItem[] = POLICY_CONTENT.filter(p => !!p.checkboxLabel)
         .map(policy => ({
