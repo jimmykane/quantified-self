@@ -153,6 +153,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   readonly columnLabels: Record<string, string> = {
     'Start Date': 'Date', 'Activity Types': 'Activity', 'Average Speed': 'Pace / speed',
     [DataGradeAdjustedPaceAvg.type]: 'GAP', 'Average Heart Rate': 'Avg HR', 'Recovery Time': 'Recovery',
+    'Average Power': 'Avg power', 'Aerobic Training Effect': 'Aerobic TE', 'Device Names': 'Devices',
   };
   private libraryColumns = ['Distance', 'Duration'];
   private libraryPageSize = 5;

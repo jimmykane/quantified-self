@@ -10,6 +10,8 @@
     @include mat.checkbox-overrides((state-layer-size: 32px, touch-target-display: none));
   }
   .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 8px !important; }
+  // Size to visible content rather than stretching a short column selection.
+  table.mat-mdc-table { width: max-content; min-width: 0; }
 }
 .event-table-column-heading { display: flex; align-items: center; gap: 6px; }
 .event-table-column-heading app-data-type-icon { display: flex; flex-shrink: 0; }
@@ -218,14 +220,14 @@
 
 .mat-column-Tags,
 .cdk-column-Tags {
-  min-width: 190px;
-  width: 190px;
-  max-width: 190px;
+  min-width: 72px;
+  width: 1px;
 }
 
 .event-tags-cell-button {
   justify-content: flex-start;
   min-width: 0;
+  padding-inline: 4px;
   width: 100%;
 }
 
@@ -243,9 +245,15 @@
   --mat-chip-container-height: 28px;
   --mat-chip-label-text-size: 0.78rem;
   display: block;
+  width: max-content;
   max-width: 170px;
   overflow: hidden;
 }
+
+// Keep two tag previews and their extra-tag count on one compact row.
+.event-tag-label { display: block; max-width: 146px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-tags-chip-set:has(mat-chip:nth-child(2)) .event-tag-label { max-width: 56px; }
+.event-tags-chip-set:has(mat-chip:nth-child(3)) .event-tag-label { max-width: 32px; }
 
 /* Responsive width for the Start Date column */
 .mat-column-Start-Date,
@@ -388,7 +396,6 @@
 .mat-mdc-cell.cdk-column-Activity-Types,
 .mat-mdc-cell.mat-column-activity-types,
 .mat-mdc-cell.cdk-column-activity-types {
-  width: 120px;
   max-width: 140px;
 }
 
@@ -397,7 +404,6 @@
 .mat-mdc-cell.cdk-column-Description,
 .mat-mdc-cell.mat-column-description,
 .mat-mdc-cell.cdk-column-description {
-  width: 120px;
   max-width: 140px;
 }
 
@@ -406,7 +412,6 @@
 .mat-mdc-cell.cdk-column-Device-Names,
 .mat-mdc-cell.mat-column-device-names,
 .mat-mdc-cell.cdk-column-device-names {
-  width: 160px;
   max-width: 160px;
 }
 
@@ -419,8 +424,8 @@
 /* Mobile Adjustments for Overall Table Compactness */
 @include bp.handset-or-tablet-portrait {
 
-  .mat-mdc-header-cell,
-  .mat-mdc-cell {
+  .activity-table .mat-mdc-header-cell,
+  .activity-table .mat-mdc-cell {
     padding: 0 4px !important;
   }
 }

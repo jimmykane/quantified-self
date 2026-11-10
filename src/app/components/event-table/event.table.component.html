@@ -150,7 +150,7 @@
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
             <span class="event-table-column-heading">
               <app-data-type-icon [dataType]="column" size="18px" aria-hidden="true"></app-data-type-icon>
-              <span>{{ isLibraryPresentation && column === 'Name' ? 'Activity' : columnLabels[column] || column }}</span>
+              <span [matTooltip]="column" [matTooltipDisabled]="!columnLabels[column]">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : columnLabels[column] || column }}</span>
             </span>
           </th>
           }
@@ -211,7 +211,7 @@
             </span>
             }
             @if (column === 'Activity Types') {
-            <span class="activity-type-cell">
+            <span class="activity-type-cell" [matTooltip]="row[column]">
               @if (row['Merged Event']) {
                 <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
                   (click)="openBenchmarkFlow($event, row.Event)">
@@ -251,7 +251,7 @@
                 <span>{{ row['Tag Values'].length }}</span>
               </span>
               <mat-chip-set class="event-tags-chip-set" aria-hidden="true">
-                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip [highlighted]="isLibraryPresentation && tag.toLowerCase() === filterContext">{{ tag }}</mat-chip> }
+                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip [highlighted]="isLibraryPresentation && tag.toLowerCase() === filterContext"><span class="event-tag-label">{{ tag }}</span></mat-chip> }
                 @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
               </mat-chip-set>
               } @else {
@@ -266,7 +266,7 @@
             </span>
             <mat-chip-set class="event-tags-chip-set" [matTooltip]="row['Tags Title']"
               [attr.aria-label]="row['Tags Accessible Label']">
-              @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
+              @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip><span class="event-tag-label">{{ tag }}</span></mat-chip> }
               @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
             </mat-chip-set>
             } @else { <span aria-label="No tags">-</span> }
@@ -274,7 +274,7 @@
             @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy' && !(isLibraryPresentation && column === 'Name')) {
             <span class="data-cell" [class.description-cell]="column === 'Description'" [class.device-names-cell]="column === 'Device Names'">
               @if (column === 'Description') {
-              <span class="description-text">{{ row[column] }}</span>
+              <span class="description-text" [matTooltip]="row[column]" [matTooltipDisabled]="!row[column]">{{ row[column] }}</span>
               }
               @if (column === 'Device Names') {
               <span class="device-names-list" [matTooltip]="row[column]" [matTooltipDisabled]="!row[column]">
