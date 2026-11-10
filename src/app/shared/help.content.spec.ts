@@ -1765,6 +1765,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('estimated local recovery day and time as Training');
     expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
+    expect(gettingStartedSection?.content).toContain('**Recovery left** is off by default');
   });
 
   it('should document My Tracks trip sorting and the inferred Home entry', () => {

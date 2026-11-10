@@ -263,7 +263,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.dashboardSettings?.showTodaySummary).toBe(true);
-            expect(settings.dashboardSettings?.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: true, suggestion: true, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
+            expect(settings.dashboardSettings?.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: false, suggestion: true, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
                 searchTerm: null,
                 dateRange: DateRanges.thisWeek,

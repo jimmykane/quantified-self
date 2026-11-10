@@ -355,7 +355,7 @@ calendar action. Save is enabled only for a changed draft. Restore defaults expl
 saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
 
 New profiles explicitly start with Training state, Readiness and Load. Hydrating an existing profile without the field
-preserves the full legacy card. Restore defaults and Reset to starter dashboard explicitly select the three-block
+preserves its legacy summaries and metrics, with Recovery off unless explicitly saved as enabled. Restore defaults and Reset to starter dashboard explicitly select the three-block
 layout. Readiness still uses all its existing drivers when a driver cell is hidden. The greeting uses only displayed
 assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
 

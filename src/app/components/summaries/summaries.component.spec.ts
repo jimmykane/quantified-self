@@ -1862,6 +1862,8 @@ describe('SummariesComponent', () => {
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
+    component.todaySettings = { ...component.todaySettings, recovery: true };
+    component.user = { settings: { dashboardSettings: { today: component.todaySettings } } } as SummariesComponent['user'];
     const nowMs = Date.UTC(2026, 6, 18, 12);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -2143,6 +2145,16 @@ describe('SummariesComponent', () => {
       component['syncReadinessSleepSubscription']();
     });
 
+    it('leaves Recovery hidden and unsubscribed until it is selected', () => {
+      expect(component.user.settings.dashboardSettings.today).toBeUndefined();
+      expect(component.todaySettings.recovery).toBe(false);
+      expect(component['resolveDashboardDerivedMetricKinds']()).not.toContain('recovery_now');
+      load$.next({ ...loadState, recoveryNow: { totalSeconds: 7_200, endTimeMs: nowMs }, recoveryNowStatus: 'ready' });
+      sleep$.next(nights); vi.advanceTimersToNextFrame();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')).toBeNull();
+      expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
     it('keeps Readiness unchanged when its individual sleep drivers are hidden', () => {
       load$.next(loadState); sleep$.next(nights); vi.advanceTimersToNextFrame();
       const score = component.dashboardTodayReadiness.score;
@@ -2350,6 +2362,8 @@ describe('SummariesComponent', () => {
     });
 
     it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, recovery: true };
+      component['syncDerivedMetricsSubscription']();
       const host = render();
       // The unit runner does not attach external component CSS. Check its stable
       // sizing contract here; real viewport geometry is verified in the browser.
@@ -4307,6 +4321,10 @@ describe('SummariesComponent', () => {
     expect(component.derivedMetricsBanner).toBeNull();
 
     (component as any).derivedRecoveryNowContext = { totalSeconds: 3_600, endTimeMs: nowMs };
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner).toBeNull();
+
+    component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, recovery: true };
     (component as any).refreshDerivedMetricsBannerState();
     expect(component.derivedMetricsBanner?.type).toBe('warning');
   });

@@ -73,7 +73,7 @@ export function defaultDashboardTodaySettings(): AppDashboardTodaySettings {
   };
 }
 
-/** An absent field belongs to an existing account, not a new-account reset. */
+/** Preserve legacy summaries and metrics, but keep Recovery opt-in. */
 export function normalizeDashboardTodaySettings(
   value: unknown
 ): AppDashboardTodaySettings {
@@ -81,7 +81,7 @@ export function normalizeDashboardTodaySettings(
     version: 1,
     trainingState: true,
     readiness: true,
-    recovery: true,
+    recovery: false,
     suggestion: true,
     metrics: ['load', 'sleep', 'hrv', 'overnight-hr'],
   };
