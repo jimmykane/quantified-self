@@ -23,12 +23,14 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { of } from 'rxjs';
+import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.component';
 
 @Component({
     selector: 'app-onboarding',
     standalone: true,
     imports: [
         CommonModule,
+        OnboardingTerrainComponent,
         MatButtonModule,
         ReactiveFormsModule,
         MatCheckboxModule,

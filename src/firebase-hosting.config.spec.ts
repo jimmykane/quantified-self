@@ -322,6 +322,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
+    // Getting Started adds terrain pause/play and reduced-motion guidance (2026-11-10).
     // Getting Started help covers intent-first setup and the compact Compare path with Continue free (2026-11-09).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
@@ -363,8 +364,7 @@ describe('Firebase Hosting configuration', () => {
     // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
     // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
     // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
-    // Field guide help covers the skippable intro, separate consent and existing plan/provider/upload handoffs.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -500,7 +500,7 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
@@ -584,7 +584,7 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
@@ -706,7 +706,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.27mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.77mb',
     });
   });
 

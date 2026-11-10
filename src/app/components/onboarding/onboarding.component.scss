@@ -21,15 +21,12 @@
 .field-guide-hero {
     position: relative;
     min-width: 0;
-    // The photographic artwork needs a fixed white foreground and dark scrim in both app themes.
-    color: white;
-    background: var(--mat-sys-scrim);
+    color: var(--mat-sys-on-surface);
+    background: var(--mat-sys-surface);
 }
-.hero-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 48% center; }
-.field-guide-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--mat-sys-scrim) 50%, transparent), transparent 70%); }
-.hero-copy { position: relative; z-index: 1; padding: clamp(28px, 4vw, 56px); }
+.hero-copy { position: relative; z-index: 1; padding: clamp(28px, 4vw, 56px); padding-bottom: 72px; pointer-events: none; }
 .hero-copy p { font: var(--mat-sys-display-medium); font-weight: 500; letter-spacing: -1.5px; max-width: 330px; margin: 24px 0; text-wrap: balance; }
-.hero-caption { font: var(--mat-sys-body-medium); }
+.hero-caption { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
 .eyebrow { font: var(--mat-sys-label-medium); text-transform: uppercase; letter-spacing: 1.5px; }
 .guide-content { margin: 42px auto 0; max-width: 600px; }
 .guide-content > .eyebrow { color: var(--mat-sys-on-primary-container); font-weight: 700; margin: 0 0 16px; }
@@ -92,21 +89,19 @@ h1:focus { outline: none; }
 // Keep the existing three-plan comparison at its full usable width.
 .field-guide--plan { grid-template-columns: minmax(0, 1fr); }
 .field-guide--plan .field-guide-hero { min-height: 150px; }
-.field-guide--plan .hero-image { object-position: center 38%; }
-.field-guide--plan .hero-copy { padding: 24px 40px; }
+.field-guide--plan .hero-copy { padding: 24px 40px 72px; }
 .field-guide--plan .hero-copy p { font: var(--mat-sys-headline-medium); margin: 12px 0 0; max-width: none; }
 .field-guide--plan .hero-caption { display: none; }
 .plan-content { max-width: none; }
 
 @include bp.handset-or-tablet-portrait {
     .field-guide, .field-guide--intro { grid-template-columns: minmax(0, 1fr); }
-    .field-guide-hero { min-height: 140px; }
-    .field-guide--intro .field-guide-hero { min-height: 280px; }
-    .hero-copy { padding: 24px; }
+    .field-guide-hero { min-height: 220px; }
+    .field-guide--intro .field-guide-hero { min-height: 320px; }
+    .hero-copy { padding: 24px 24px 72px; }
     .hero-copy p { font: var(--mat-sys-headline-large); max-width: 300px; margin: 12px 0; }
     .field-guide:not(.field-guide--intro) .hero-caption { display: none; }
     .field-guide:not(.field-guide--intro) .hero-copy p { font: var(--mat-sys-headline-small); }
-    .hero-image { object-position: center 43%; }
     .field-guide-body { padding: 20px 24px 28px; }
     .guide-content { margin-top: 32px; }
 }
@@ -117,7 +112,7 @@ h1:focus { outline: none; }
     .field-guide-header { gap: 8px; }
     h1 { font: var(--mat-sys-headline-medium); font-weight: 700; }
     .field-guide--intro .hero-copy .eyebrow { font: var(--mat-sys-label-small); }
-    .field-guide--plan .hero-copy { padding: 24px; }
+    .field-guide--plan .hero-copy { padding: 24px 24px 72px; }
     .onboarding-actions > button { min-height: 44px; }
     .onboarding-actions > button[mat-flat-button] { flex: 1; }
     .intro-actions .next-action { flex: 0 1 auto; }

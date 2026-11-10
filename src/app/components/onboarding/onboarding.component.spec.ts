@@ -1,3 +1,6 @@
+import { signal } from '@angular/core';
+import { AppThemeService } from '../../services/app.theme.service';
+import { ONBOARDING_TERRAIN_LOADER } from './terrain/onboarding-terrain.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OnboardingComponent } from './onboarding.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -101,6 +104,8 @@ describe('OnboardingComponent', () => {
                 NoopAnimationsModule
             ],
             providers: [
+                { provide: AppThemeService, useValue: { appTheme: signal('normal') } },
+                { provide: ONBOARDING_TERRAIN_LOADER, useValue: () => Promise.reject(new Error('Static artwork in onboarding tests')) },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: ShellNavigationEffectsService, useValue: navigationEffects },
                 { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },

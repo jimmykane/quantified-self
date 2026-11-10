@@ -2,8 +2,8 @@
     <mat-card appearance="outlined" class="field-guide qs-glass-card-panel" [class.field-guide--intro]="stage() === 'intro'"
         [class.field-guide--compact]="isCompareFlow() && stage() === 'privacy'" [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
         @if (!isCompareFlow() || stage() !== 'privacy') {
-        <aside class="field-guide-hero" aria-label="A runner on a mountain trail">
-            <img class="hero-image" src="assets/onboarding/field-guide.jpg" alt="" width="1024" height="1536" fetchpriority="high">
+        <aside class="field-guide-hero" aria-label="Mountain landscape">
+            <app-onboarding-terrain></app-onboarding-terrain>
             <div class="hero-copy">
                 <span class="eyebrow">Get started with Quantified Self</span>
                 <p>{{ heroTitle() }}</p>

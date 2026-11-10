@@ -69,13 +69,30 @@ The optimized production build with recovery/build tags exceeded the preceding t
 Matching beta/production `allScript` error caps move from 14.20 to 14.21 MB for this addition; the 1474 kB initial cap
 and warning budgets remain unchanged. This is bundle accounting, not a runtime speed measurement.
 
-## Field guide onboarding bundle allowance
+## Field guide onboarding terrain and bundle allowance
 
-The optional Field guide, intent-first setup and compact Compare flow integrated with `develop` at `17528a20e`
-exceed the 14.25 MB total-script cap by 13.51 kB in the production build. Production and beta use a matching
-14.27 MB `allScript` error cap for this onboarding, checkout-resume and Help integration. No new runtime
-library dependency is introduced. The 1474 kB initial cap, 13000 kB total-script warning and public startup
-checks remain unchanged. This is bundle accounting, not a runtime performance measurement.
+The optional Field guide and general account setup use `OnboardingTerrainComponent`. Its native 3D mountain
+illustration uses fictional sample loads reshaped into scenery; it does not visualize an account or expose
+readable Training metrics. The compact Compare account step never mounts this component. The geometry helper
+is pure TypeScript; the renderer is imported after browser rendering and pins Three.js to 0.180.0.
+ECharts remains the product-chart renderer. This decorative WebGL exception needs lit 3D relief and contour
+occlusion, with no quantitative axes, tooltips or input data contract.
+
+Light and dark scenes follow `AppThemeService`, including while paused. Material tokens control text and the
+blend into the card; the terrain itself has separate light/dark illustration palettes. A short feathered
+highlight follows a connected terrain contour, with gentle pointer parallax. **Pause motion** stops both;
+reduced-motion preferences start it still and disable parallax. Users can explicitly play the contour animation.
+Rendering suspends offscreen and in hidden tabs. Destroying the view releases frames, GPU resources, listeners
+and observers, and a late module response cannot initialize a destroyed view. Static light/dark PNG renders
+of the approved native terrain cover loading, WebGL failure and context loss. Onboarding stays usable in all cases.
+The new motion action has one selection-haptic owner; automatic changes stay silent.
+
+The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
+(104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.
+The 1474 kB initial cap, 13000 kB total-script warning and public startup checks remain unchanged. The renderer
+is outside the startup import graph; the existing service worker still precaches JavaScript chunks. This is
+bundle accounting, not a runtime performance measurement. There are no new account reads, writes, provider
+operations, Training calculations or MCP contracts.
 
 ## Frontend build identification
 

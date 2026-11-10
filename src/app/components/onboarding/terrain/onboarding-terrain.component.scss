@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+canvas,
+.terrain-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+canvas {
+  display: block;
+  opacity: 0;
+}
+canvas.is-ready {
+  opacity: 1;
+}
+.terrain-fallback {
+  object-fit: cover;
+}
+.terrain-fallback.is-hidden {
+  visibility: hidden;
+}
+.terrain-blend {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 88%, var(--mat-sys-surface)),
+    linear-gradient(
+      180deg,
+      var(--mat-sys-surface) 0%,
+      color-mix(in srgb, var(--mat-sys-surface) 80%, transparent) 24%,
+      transparent 65%
+    );
+}
+.motion-control {
+  position: absolute;
+  z-index: 2;
+  inset-block-end: 12px;
+  inset-inline-start: 16px;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface-variant);
+}
+@media (max-width: 959px) {
+  .terrain-blend {
+    background: linear-gradient(
+      180deg,
+      var(--mat-sys-surface),
+      transparent 85%,
+      var(--mat-sys-surface)
+    );
+  }
+  .motion-control {
+    inset-inline-start: auto;
+    inset-inline-end: 12px;
+    inset-block-end: 8px;
+  }
+}
