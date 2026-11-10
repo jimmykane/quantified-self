@@ -5,9 +5,11 @@
     <p>Verifying subscription...</p>
   </div>
   } @else {
+  @if (!isOnboarding) {
   <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
   @if (currentRole !== 'pro' && currentRole !== 'basic') {
   <p class="pricing-intro">Analysis, training plans, workouts, and manual uploads are included with Starter. AI workout generation uses your shared Assistant allowance. Pro also includes an opt-in daily workout suggestion, separately from that allowance, alongside connected provider services.</p>
+  }
   }
 
   @if (currentRole === 'pro' || currentRole === 'basic') {

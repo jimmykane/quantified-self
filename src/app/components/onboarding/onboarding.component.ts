@@ -63,17 +63,17 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly isCompareFlow = computed(() => this.completionTarget().path === '/tools/compare' || this.completionTarget().path === '/tools/compare/saved');
     readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
-        : this.stage() === 'privacy' ? '02 / Account preferences' : '03 / Your membership');
+        : this.stage() === 'privacy' ? '02 / Policies and preferences' : '03 / Your plan');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
-        : this.stage() === 'start' ? 'Choose your first step.'
+        : this.stage() === 'start' ? 'Start your way.'
         : this.stage() === 'privacy' ? 'Set up your account.' : 'Choose a plan that fits.');
     readonly completionHint = computed(() => this.hasReturnDestination()
         ? `After setup, you’ll return to ${this.returnTarget().label}.`
         : this.startChoice() === 'connect'
-            ? 'Provider connections require Pro. Choose and authorize your provider in Connections after setup.'
+            ? 'Connect Garmin, Suunto, COROS or Wahoo with Pro. After setup, choose your service in Connections.'
             : this.startChoice() === 'upload'
-                ? 'Starter includes manual uploads. Choose Upload on your Dashboard to add your first activity.'
-                : 'Start with Starter and explore your Dashboard. You can add activities or change your plan later.');
+                ? 'Uploads are included with Starter. After setup, choose Upload in Dashboard to add your first activity.'
+                : 'Start free with Starter. Add activities from your Dashboard when you’re ready.');
 
     policies: PolicyItem[] = POLICY_CONTENT.filter(p => !!p.checkboxLabel)
         .map(policy => ({

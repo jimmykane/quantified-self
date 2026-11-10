@@ -20,7 +20,7 @@ export function onboardingReturnTarget(params: QueryParams) {
                 : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
                     ? '/mcp/authorize' : '/dashboard';
     const label = path === '/tools/compare' || path === '/tools/compare/saved' ? 'Compare'
-        : path === '/subscriptions' ? 'Subscriptions'
+        : path === '/subscriptions' ? 'Membership'
             : path === '/services' ? 'Connections'
                 : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
     return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null };

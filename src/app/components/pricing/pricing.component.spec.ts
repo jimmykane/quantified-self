@@ -187,6 +187,9 @@ describe('PricingComponent', () => {
         component.isOnboarding = isOnboarding;
         await component.ngOnInit();
         fixture.detectChanges();
+        // Embedded pricing uses the onboarding page's heading and next-step guidance.
+        expect(fixture.nativeElement.querySelectorAll('h1').length).toBe(isOnboarding ? 0 : 1);
+        expect(!!fixture.nativeElement.querySelector('.pricing-intro')).toBe(!isOnboarding);
         expect(Array.from(fixture.nativeElement.querySelectorAll('.plan-title') as NodeListOf<HTMLElement>)
             .map(heading => heading.textContent?.trim())).toEqual(['Pro', 'Basic', 'Starter']);
         const firstCard = fixture.nativeElement.querySelector('.product-card') as HTMLElement;

@@ -161,7 +161,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(true);
         clickButton('Explore QS');
         clickButton('Next');
-        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Track your training');
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('See how your training adds up');
         await fixture.whenStable();
         expect(document.activeElement).toBe(fixture.nativeElement.querySelector('h1'));
         clickButton('Back');
@@ -1174,7 +1174,7 @@ describe('OnboardingComponent', () => {
         await returningComponent.finishOnboarding();
 
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
-        expect(returningComponent.completionLabel).toBe('Subscriptions');
+        expect(returningComponent.completionLabel).toBe('Membership');
     });
 
     it('preserves the chosen membership price after account setup without starting checkout', async () => {
@@ -1186,13 +1186,13 @@ describe('OnboardingComponent', () => {
         await returningComponent.finishOnboarding();
 
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions'], { queryParams: { priceId: 'price_pro_yearly' } });
-        expect(returningComponent.completionLabel).toBe('Subscriptions');
+        expect(returningComponent.completionLabel).toBe('Membership');
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
     it.each([
-        { returnUrl: '/subscriptions?priceId=price_pro_yearly', path: '/subscriptions', label: 'Subscriptions', queryParams: { priceId: 'price_pro_yearly' } },
-        { returnUrl: '/subscriptions', path: '/subscriptions', label: 'Subscriptions', queryParams: null },
+        { returnUrl: '/subscriptions?priceId=price_pro_yearly', path: '/subscriptions', label: 'Membership', queryParams: { priceId: 'price_pro_yearly' } },
+        { returnUrl: '/subscriptions', path: '/subscriptions', label: 'Membership', queryParams: null },
         { returnUrl: '//example.com/subscriptions?priceId=price_pro_yearly', path: '/dashboard', label: 'Dashboard', queryParams: null },
     ])('uses the latest safe membership return URL when onboarding is reused: $returnUrl', async ({ returnUrl, path, label, queryParams }) => {
         await setupComponent(false);

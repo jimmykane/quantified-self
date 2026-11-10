@@ -715,7 +715,7 @@ describe('ToolsComparePageComponent', () => {
     const input = fixture.nativeElement.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input.disabled).toBe(true);
     const setupButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
-      .find(button => button.textContent?.includes('Complete account setup'));
+      .find(button => button.textContent?.includes('Finish account setup'));
     expect(setupButton).toBeTruthy();
     setupButton.click();
     await fixture.whenStable();
@@ -751,10 +751,10 @@ describe('ToolsComparePageComponent', () => {
     await Promise.resolve();
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Add two or more recordings of the same workout');
-    expect(fixture.nativeElement.textContent).not.toContain('For benchmark reports, use recordings with timestamps that overlap.');
+    expect(fixture.nativeElement.textContent).not.toContain('For benchmark reports, choose recordings that overlap in time.');
     component.selectedFiles.set([new File(['a'], 'watch.fit'), new File(['b'], 'reference.fit')]);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('For benchmark reports, use recordings with timestamps that overlap.');
+    expect(fixture.nativeElement.textContent).toContain('For benchmark reports, choose recordings that overlap in time.');
   });
 
   it('does not upload or stage files for a missing profile even if the disabled controls are bypassed', async () => {

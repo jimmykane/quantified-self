@@ -49,22 +49,22 @@
                     @switch (stage()) {
                         @case ('start') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">What would you like to do first?</h1>
-                            <p class="lead">Choose your first step in QS. After account setup, we’ll take you there.</p>
+                            <p class="lead">Start free with uploads and comparisons, or connect your watch with Pro.</p>
                             <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
                                 <mat-radio-button value="compare">
                                     <span class="choice-title">Compare recordings</span>
-                                    <span class="choice-description">Compare two or more recordings of the same workout.</span>
-                                    <span class="choice-detail">Included with Starter</span>
+                                    <span class="choice-description">See how different devices recorded the same workout.</span>
+                                    <span class="choice-detail">Free with Starter</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="connect">
                                     <span class="choice-title">Connect my watch</span>
-                                    <span class="choice-description">Bring activities in from Garmin, Suunto, COROS or Wahoo.</span>
-                                    <span class="choice-detail">Provider connections require Pro</span>
+                                    <span class="choice-description">Import activities from Garmin, Suunto, COROS or Wahoo.</span>
+                                    <span class="choice-detail">Requires Pro</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="upload">
-                                    <span class="choice-title">Start with an activity file</span>
-                                    <span class="choice-description">Upload a FIT, GPX or TCX file from your Dashboard.</span>
-                                    <span class="choice-detail">Included with Starter</span>
+                                    <span class="choice-title">Upload an activity file</span>
+                                    <span class="choice-description">Import FIT, GPX, TCX and other supported activity files.</span>
+                                    <span class="choice-detail">Free with Starter</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="explore">
                                     <span class="choice-title">Let me look around</span>
@@ -78,8 +78,8 @@
                             </div>
                         }
                         @case ('privacy') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Finish account setup' : 'Review your account preferences.' }}</h1>
-                            <p class="lead">{{ isCompareFlow() ? 'Review the policies below. Next, add recordings from the same workout to compare GPS tracks and measurements.' : 'Accept the required policies, then choose whether to enable analytics and marketing.' }}</p>
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">{{ isCompareFlow() ? 'Finish account setup' : 'Review policies and preferences' }}</h1>
+                            <p class="lead">{{ isCompareFlow() ? 'Review the policies below. Next, add recordings from the same workout to compare GPS tracks and measurements.' : 'Review the required policies and choose whether to allow analytics and marketing emails.' }}</p>
                             @if (isCompareFlow()) {
                                 <p class="setup-note">@if (!hasPaidMembership()) { Starter is free. } Uploads and new comparisons count toward your activity limit.</p>
                             }
@@ -108,7 +108,7 @@
                             </form>
                         }
                         @case ('plan') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">Choose your membership.</h1>
+                            <h1 id="field-guide-title" #stepHeading tabindex="-1">Choose your plan</h1>
                             <p class="lead">{{ completionHint() }}</p>
                             <app-pricing [isOnboarding]="true" [onboardingUser]="user" [onboardingBusy]="isLoading" [onboardingResumeUrl]="checkoutResumeUrl()"
                                 (loadingStateChange)="onPricingLoadingChange($event)" (planSelected)="onPlanSelected()"></app-pricing>
