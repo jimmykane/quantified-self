@@ -1736,7 +1736,11 @@ Owners use a compact **Add to dashboard +** action in the dashboard header (an a
 One dashboard-scoped `DashboardChartLibraryComponent` with `allSections=true` owns the overlay and handles section
 add actions and existing-tile editing. Its Material section selector exposes every lane, including hidden ones. Opening
 from the top prioritizes unseen additions, then an available section; it avoids landing on a completed preset list.
-Empty KPI/main sections are omitted from the dashboard. Populated sections retain right-aligned Add KPI, Add chart,
+Empty KPI/chart/map sections are omitted from the dashboard. Owners retain the compact Calendar header when its tile
+is hidden. Calendar options sits to the left of the Open route link and reuses the existing Calendar bulk action,
+including pending-save disabling, failure handling, haptics and Undo. The empty header mounts no tile or data reader;
+shared/read-only dashboards retain only populated sections and expose no Calendar controls.
+Populated sections retain right-aligned Add KPI, Add chart,
 Add map, or mixed Add tile actions, delegated to the same picker. A section action is hidden when no presets remain;
 Activity Overview retains custom creation and its direct action opens properties when complete. Adding a first tile
 reveals its section, removing the last hides it, and restoring the tile restores the section. The global picker remains

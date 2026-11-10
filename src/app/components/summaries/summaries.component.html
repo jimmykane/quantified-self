@@ -34,7 +34,6 @@
       <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
         <button mat-menu-item (click)="customizeToday()"><mat-icon>tune</mat-icon><span>Customize Today</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
-        <button mat-menu-item [disabled]="library.busy()" (click)="library.bulk($any(user), 'calendar')"><mat-icon>{{ showCalendar ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showCalendar ? 'Hide Calendar' : 'Show Calendar' }}</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to starter dashboard</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'all')"><mat-icon>library_add</mat-icon><span>Add all presets</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'clear')"><mat-icon>delete_sweep</mat-icon><span>Remove all</span></button>
@@ -88,7 +87,7 @@
       </div>
     </section>
   }
-  @if (calendarGridSection; as calendarSection) {
+  @if (calendarGridSection || (showActions && isOwnerDashboard ? hiddenCalendarSection : null); as calendarSection) {
     <div class="dashboard-main-sections dashboard-calendar-section">
       <ng-container [ngTemplateOutlet]="dashboardSection" [ngTemplateOutletContext]="{ $implicit: calendarSection }" />
     </div>
@@ -188,9 +187,21 @@
         </div>
       @if (section.id === 'calendar') {
         @if (showActions && isOwnerDashboard) {
-          <a mat-button appHapticTap routerLink="/calendar" [queryParams]="calendarNavigationState || { view: 'month', date: calendarSelectedDateKey }" aria-label="Open calendar for the selected day">
-            Open calendar<mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
-          </a>
+          <div class="dashboard-section-actions">
+            <button mat-icon-button type="button" appHapticTap aria-label="Calendar options" matTooltip="Calendar options"
+              [matMenuTriggerFor]="calendarOptions" [disabled]="library.busy()">
+              <mat-icon aria-hidden="true">more_horiz</mat-icon>
+            </button>
+            <mat-menu #calendarOptions="matMenu" class="qs-menu-panel">
+              <button mat-menu-item [disabled]="library.busy()" (click)="library.bulk($any(user), 'calendar')">
+                <mat-icon>{{ showCalendar ? 'visibility_off' : 'visibility' }}</mat-icon>
+                <span>{{ showCalendar ? 'Hide Calendar' : 'Show Calendar' }}</span>
+              </button>
+            </mat-menu>
+            <a mat-button appHapticTap routerLink="/calendar" [queryParams]="calendarNavigationState || { view: 'month', date: calendarSelectedDateKey }" aria-label="Open calendar for the selected day">
+              <span>Open</span><mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+            </a>
+          </div>
         }
       } @else if (showActions && isOwnerDashboard) {
         <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" />

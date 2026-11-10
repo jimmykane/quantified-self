@@ -733,7 +733,7 @@ describe('SummariesComponent', () => {
     expect(calendarIndex).toBeLessThan(kpiIndex);
     const calendarSection = root.querySelector('[aria-labelledby="dashboard-section-calendar"]');
     expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
-    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"] span')?.textContent).toBe('Open');
     expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
 
     fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
@@ -752,7 +752,8 @@ describe('SummariesComponent', () => {
     component.tiles = [kpi, activity];
     (component as any).refreshTileLanes();
     fixture.detectChanges();
-    expect(root.querySelector('.dashboard-calendar-section')).toBeNull();
+    expect(root.querySelector('.dashboard-calendar-section [aria-label="Calendar options"]')).not.toBeNull();
+    expect(root.querySelector('.dashboard-calendar-section app-dashboard-tile-board')).toBeNull();
   });
 
   it('migrates an owner calendar once and preserves a later manual resize', async () => {
@@ -1186,9 +1187,9 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    expect(sectionHeadings).toEqual(['Calendar', 'Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(2);
+    expect(sectionTitleBlocks).toHaveLength(3);
     expect(dashboardHeader?.querySelector('app-dashboard-chart-library')).not.toBeNull();
     expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
     expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
@@ -1572,7 +1573,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it('keeps one global picker and hides all empty sections on an editable dashboard', () => {
+  it('keeps one global picker and only Calendar restoration controls when sections are empty', () => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [];
@@ -1591,7 +1592,8 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
     expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
     expect(component.mainGridSections).toEqual([]);
-    expect(nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(nativeElement.querySelectorAll('.dashboard-main-section')).toHaveLength(1);
+    expect(nativeElement.querySelector('[aria-labelledby="dashboard-section-calendar"]')).not.toBeNull();
   });
 
   it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {
@@ -1631,22 +1633,64 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it.each([true, false])('offers the saved Calendar visibility in Dashboard options before tile rendering (visible: %s)', visible => {
+  it.each([true, false])('offers saved Calendar visibility beside Open before tile rendering (visible: %s)', visible => {
     const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!.tile;
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: visible ? [tile] : [], showTodaySummary: false } } } as any;
     component.showActions = true; component.isOwnerDashboard = true;
     component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
     fixture.detectChanges();
+    component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
     const bulk = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
-    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    const root = fixture.nativeElement as HTMLElement;
+    const options = root.querySelector<HTMLButtonElement>('[aria-label="Calendar options"]')!;
+    const open = root.querySelector('.dashboard-calendar-section a')!;
+    expect(options.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(root.querySelector('.dashboard-calendar-section app-tile-chart')).toBeNull();
+    const selection = TestBed.inject(AppHapticsService).selection;
+    vi.mocked(selection).mockClear();
+    options.click();
     fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
     const menu = document.body.querySelector('[role="menu"]')!;
-    expect(menu.textContent).toContain('Show Today summary');
+    expect(menu.textContent).not.toContain('Today');
     const calendarAction = Array.from(menu.querySelectorAll<HTMLButtonElement>('button'))
       .find(button => button.textContent?.includes(visible ? 'Hide Calendar' : 'Show Calendar'))!;
     expect(calendarAction).toBeDefined();
     calendarAction.click(); fixture.detectChanges();
     expect(bulk).toHaveBeenCalledWith(component.user, 'calendar');
+  });
+
+  it('keeps Calendar visibility out of Dashboard options', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    fixture.detectChanges();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Show Today summary');
+    expect(menu.textContent).not.toContain('Calendar');
+  });
+
+  it('disables Calendar options while dashboard settings are saving', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.library.busy.set(true);
+    fixture.detectChanges();
+    const options = fixture.nativeElement.querySelector('[aria-label="Calendar options"]');
+    expect(options.disabled).toBe(true);
+    options.click(); fixture.detectChanges();
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it.each([[false, true], [true, false]])('does not offer hidden Calendar controls with showActions=%s and owner=%s', (showActions, owner) => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.eventUser = { uid: owner ? 'owner' : 'shared-owner' } as any;
+    component.showActions = showActions; component.isOwnerDashboard = owner;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.dashboard-calendar-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Calendar options"]')).toBeNull();
   });
 
   it('does not call a saved dashboard empty while its tiles are still being prepared', () => {
@@ -1672,7 +1716,7 @@ describe('SummariesComponent', () => {
     component.tiles = []; component.mainGridTiles = [];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
     expect(component.mainGridSections).toEqual([]);
-    expect(fixture.nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-labelledby="dashboard-section-health"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
     component.tiles = [tile]; component.mainGridTiles = [tile];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();

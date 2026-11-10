@@ -352,6 +352,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public mainGridTiles: DashboardTileViewModel[] = [];
   public mainGridSections: DashboardTileSectionViewModel[] = [];
   public calendarGridSection: DashboardTileSectionViewModel | null = null;
+  public readonly hiddenCalendarSection: Pick<DashboardTileSectionViewModel, 'id' | 'label' | 'icon' | 'tiles'> = {
+    ...getDashboardTileSectionDefinition('calendar'), tiles: [],
+  };
   public otherGridSections: DashboardTileSectionViewModel[] = [];
 
   get showCalendar(): boolean {

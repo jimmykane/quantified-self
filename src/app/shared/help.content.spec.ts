@@ -1835,7 +1835,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
-    expect(gettingStartedSection?.content).toContain('Empty sections stay hidden');
+    expect(gettingStartedSection?.content).toContain('Empty chart, KPI, and map sections stay hidden');
+    expect(gettingStartedSection?.content).toContain('The Calendar header remains available so you can show the calendar again');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
@@ -1852,6 +1853,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');
     expect(calendarSection?.content).toContain('without changing their saved settings');
+    expect(calendarSection?.content).toContain('**Calendar options** to its left');
+    expect(calendarSection?.content).toContain('The header remains available when the calendar is hidden');
+    expect(calendarSection?.content).not.toContain('**Dashboard options**');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('show overlapping activity-group circles');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
