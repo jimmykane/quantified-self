@@ -1839,6 +1839,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
     expect(gettingStartedSection?.content).toContain('Empty chart, KPI, and map sections stay hidden');
+    expect(gettingStartedSection?.content).toContain('**Show or hide a section.**');
+    expect(gettingStartedSection?.content).toContain('Hiding a section keeps its charts, date ranges, and layout');
+    expect(gettingStartedSection?.content).toContain('Adding or saving a chart through the manager shows its section automatically');
     expect(gettingStartedSection?.content).toContain('The Calendar header remains available so you can show the calendar again');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');

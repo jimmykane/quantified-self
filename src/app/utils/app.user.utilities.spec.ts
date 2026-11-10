@@ -38,6 +38,15 @@ import { getDashboardPowerCurveActivityTypes } from '../helpers/dashboard-power-
 describe('AppUserUtilities', () => {
     const mockUser = { uid: 'u1', settings: {} } as any;
 
+    it('defaults dashboard sections to visible and retains only valid hidden sections on hydration', () => {
+        expect(AppUserUtilities.fillMissingAppSettings({ settings: {} } as any).dashboardSettings.hiddenSections).toEqual([]);
+        const settings = AppUserUtilities.fillMissingAppSettings({ settings: { dashboardSettings: {
+            tiles: [], hiddenSections: ['section:health', 'section:health', 'unknown', 'kpi'],
+        } } } as any);
+        expect(settings.dashboardSettings.hiddenSections).toEqual(['kpi', 'section:health']);
+        expect(settings.dashboardSettings.tiles).toEqual([]);
+    });
+
     it('should default chart fill opacity to zero', () => {
         expect(AppUserUtilities.getDefaultChartFillOpacity()).toBe(0);
     });

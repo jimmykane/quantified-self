@@ -214,6 +214,9 @@
   margin-left: auto;
 }
 
+.dashboard-section-add-label-compact {
+  display: none;
+}
 
 .dashboard-section-divider {
   margin: 0 0 1.25rem;
@@ -346,6 +349,14 @@ section {
 }
 
 @media (max-width: 767px) {
+  .dashboard-section-add-label {
+    display: none;
+  }
+
+  .dashboard-section-add-label-compact {
+    display: inline;
+  }
+
   .dashboard-section-header {
     gap: 0.75rem;
   }

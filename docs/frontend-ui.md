@@ -1736,10 +1736,16 @@ Owners use a compact **Add to dashboard +** action in the dashboard header (an a
 One dashboard-scoped `DashboardChartLibraryComponent` with `allSections=true` owns the overlay and handles section
 add actions and existing-tile editing. Its Material section selector exposes every lane, including hidden ones. Opening
 from the top prioritizes unseen additions, then an available section; it avoids landing on a completed preset list.
-Empty KPI/chart/map sections are omitted from the dashboard. Owners retain the compact Calendar header when its tile
-is hidden. Calendar options sits to the left of the Open route link and reuses the existing Calendar bulk action,
-including pending-save disabling, failure handling, haptics and Undo. The empty header mounts no tile or data reader;
-shared/read-only dashboards retain only populated sections and expose no Calendar controls.
+Empty KPI/chart/map sections are omitted from the dashboard. Each populated section has an owner-only options menu
+to the left of its add action; Calendar keeps its menu beside Open, including when no Calendar tile is configured.
+Show/Hide stores normalized lane keys in `dashboardSettings.hiddenSections` through the existing owner-scoped
+configuration transaction. Hidden sections retain their headers, saved tiles, ranges and layout; only their renderers
+unmount. Existing data acquisition remains keyed to configured tiles and Today. Visibility Undo owns only this field
+and cannot replace newer tiles or unrelated preferences. Adding or saving a chart reveals its destination section;
+Reset, Add all presets and Remove all clear the hidden lanes. Calendar's Show action can still add a missing tile.
+Shared/read-only dashboards expose no section controls and ignore the owner's private visibility choices.
+At phone widths the section add label shortens to Add; its full accessible label and hint remain available, keeping
+long section titles clear of both actions at 320px.
 Populated sections retain right-aligned Add KPI, Add chart,
 Add map, or mixed Add tile actions, delegated to the same picker. A section action is hidden when no presets remain;
 Activity Overview retains custom creation and its direct action opens properties when complete. Adding a first tile

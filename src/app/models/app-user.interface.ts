@@ -210,6 +210,7 @@ export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInt
 }
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
+    hiddenSections?: import('../helpers/dashboard-tile-section.helper').DashboardTileLaneKey[];
     includeMergedEvents?: boolean;
     showTodaySummary?: boolean;
     today?: AppDashboardTodaySettings;

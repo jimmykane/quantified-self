@@ -1641,7 +1641,7 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
     component['changeDetector'].markForCheck(); fixture.detectChanges();
-    const bulk = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
+    const visibility = vi.spyOn(component.library, 'setSectionVisibility').mockResolvedValue(undefined);
     const root = fixture.nativeElement as HTMLElement;
     const options = root.querySelector<HTMLButtonElement>('[aria-label="Calendar options"]')!;
     const open = root.querySelector('.dashboard-calendar-section a')!;
@@ -1658,7 +1658,58 @@ describe('SummariesComponent', () => {
       .find(button => button.textContent?.includes(visible ? 'Hide Calendar' : 'Show Calendar'))!;
     expect(calendarAction).toBeDefined();
     calendarAction.click(); fixture.detectChanges();
-    expect(bulk).toHaveBeenCalledWith(component.user, 'calendar');
+    expect(visibility).toHaveBeenCalledWith(component.user, 'section:calendar', !visible);
+  });
+
+  it.each([
+    ['kpi', 'KPIs', 'kpi-acwr', '.dashboard-kpi-section', '.dashboard-kpi-lane'],
+    ['section:health', 'Health', 'health:steps', '[aria-labelledby="dashboard-section-health"]', 'app-dashboard-tile-board'],
+    ['section:trainingState', 'Training State', 'curated-form', '[aria-labelledby="dashboard-section-trainingState"]', 'app-dashboard-tile-board'],
+    ['section:performancePower', 'Performance & Power', 'curated-power-curve', '[aria-labelledby="dashboard-section-performancePower"]', 'app-dashboard-tile-board'],
+    ['section:activityOverview', 'Activity Overview', 'custom', '[aria-labelledby="dashboard-section-activityOverview"]', 'app-dashboard-tile-board'],
+    ['section:routesMaps', 'Routes & Maps', 'map-routes-preview', '[aria-labelledby="dashboard-section-routesMaps"]', 'app-dashboard-tile-board'],
+  ])('keeps a menu and saved tiles when %s is hidden', (lane, label, catalogId, sectionSelector, boardSelector) => {
+    const catalog = getDashboardChartCatalog();
+    const entry = catalog.find(item => item.definition.id === catalogId
+      || (catalogId === 'custom' && item.definition.category === 'custom'))!;
+    expect(entry, catalogId).toBeDefined();
+    const tile = { ...structuredClone(entry.tile), order: 0, data: [] } as DashboardChartTileViewModel;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [tile], showTodaySummary: false } } } as any;
+    component.eventUser = component.user;
+    component.showActions = true; component.isOwnerDashboard = true; component.tiles = [tile];
+    component['refreshTileLanes'](); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const section = root.querySelector(sectionSelector)!;
+    expect(section.querySelector(boardSelector)).not.toBeNull();
+    const visibility = vi.spyOn(component.library, 'setSectionVisibility').mockResolvedValue(undefined);
+    const options = section.querySelector<HTMLButtonElement>('.dashboard-section-actions > button')!;
+    expect(options.getAttribute('aria-label')).toBe(`${label} options`);
+    options.click(); fixture.detectChanges();
+    const hide = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button'))
+      .find(button => button.textContent?.includes(`Hide ${label}`))!;
+    hide.click(); fixture.detectChanges();
+    expect(visibility).toHaveBeenLastCalledWith(component.user, lane, false);
+    component.user.settings.dashboardSettings.hiddenSections = [lane as never];
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(section.querySelector(boardSelector)).toBeNull();
+    expect(section.querySelector('h2')?.textContent).toContain(label);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([tile]);
+    options.click(); fixture.detectChanges();
+    const show = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button'))
+      .find(button => button.textContent?.includes(`Show ${label}`))!;
+    show.click(); fixture.detectChanges();
+    expect(visibility).toHaveBeenLastCalledWith(component.user, lane, true);
+  });
+
+  it('keeps shared sections visible without exposing their owner visibility controls', () => {
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'curated-power-curve')!;
+    const tile = { ...structuredClone(entry.tile), order: 0, data: [] } as DashboardChartTileViewModel;
+    component.user = { uid: 'viewer', settings: { dashboardSettings: { tiles: [tile], hiddenSections: ['section:performancePower'], showTodaySummary: false } } } as any;
+    component.eventUser = { uid: 'shared-owner' } as any; component.showActions = false;
+    component.tiles = [tile]; component['refreshTileLanes'](); fixture.detectChanges();
+    const section = fixture.nativeElement.querySelector('[aria-labelledby="dashboard-section-performancePower"]');
+    expect(section.querySelector('app-dashboard-tile-board')).not.toBeNull();
+    expect(section.querySelector('.dashboard-section-actions')).toBeNull();
   });
 
   it('keeps Calendar visibility out of Dashboard options', () => {

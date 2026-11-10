@@ -233,6 +233,7 @@ import {
   DASHBOARD_TILE_SECTION_ORDER,
   type DashboardTileSectionId,
   getDashboardTileSectionDefinition,
+  normalizeDashboardHiddenSections,
   orderDashboardTilesByIntentSections,
   resolveDashboardTileSection,
 } from '../../helpers/dashboard-tile-section.helper';
@@ -356,9 +357,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     ...getDashboardTileSectionDefinition('calendar'), tiles: [],
   };
   public otherGridSections: DashboardTileSectionViewModel[] = [];
+  public hiddenSectionLanes: readonly string[] = [];
 
   get showCalendar(): boolean {
-    return (this.user?.settings?.dashboardSettings?.tiles || []).some(isDashboardActivityCalendarTile);
+    return (this.user?.settings?.dashboardSettings?.tiles || []).some(isDashboardActivityCalendarTile)
+      && !this.hiddenSectionLanes.includes('section:calendar');
   }
 
   public tileTypes = TileTypes;
@@ -2412,6 +2415,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private syncTodaySummaryVisibility(): void {
     const appUser = this.user as AppUserInterface | null | undefined;
+    const hiddenSections = this.isOwnerDashboard ? normalizeDashboardHiddenSections(appUser?.settings?.dashboardSettings?.hiddenSections) : [];
+    if (!equal(hiddenSections, this.hiddenSectionLanes)) this.hiddenSectionLanes = hiddenSections;
     const today = normalizeDashboardTodaySettings(appUser?.settings?.dashboardSettings?.today);
     if (!equal(today, this.todaySettings)) this.todaySettings = today;
     const showTodaySummary = appUser?.settings?.dashboardSettings?.showTodaySummary !== false;

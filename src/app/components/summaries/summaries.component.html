@@ -97,10 +97,13 @@
     @if (showActions && isOwnerDashboard) {
     <div class="dashboard-section-header dashboard-main-section-header">
       <h2>KPIs</h2>
-      <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'kpi' }" />
+      <div class="dashboard-section-actions">
+        <ng-container [ngTemplateOutlet]="sectionVisibilityAction" [ngTemplateOutletContext]="{ lane: 'kpi', label: 'KPIs', visible: !hiddenSectionLanes.includes('kpi') }" />
+        <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'kpi' }" />
+      </div>
     </div>
     }
-    @if (kpiLaneTiles.length) {
+    @if (kpiLaneTiles.length && !hiddenSectionLanes.includes('kpi')) {
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
       cdkDropList
@@ -188,26 +191,20 @@
       @if (section.id === 'calendar') {
         @if (showActions && isOwnerDashboard) {
           <div class="dashboard-section-actions">
-            <button mat-icon-button type="button" appHapticTap aria-label="Calendar options" matTooltip="Calendar options"
-              [matMenuTriggerFor]="calendarOptions" [disabled]="library.busy()">
-              <mat-icon aria-hidden="true">more_horiz</mat-icon>
-            </button>
-            <mat-menu #calendarOptions="matMenu" class="qs-menu-panel">
-              <button mat-menu-item [disabled]="library.busy()" (click)="library.bulk($any(user), 'calendar')">
-                <mat-icon>{{ showCalendar ? 'visibility_off' : 'visibility' }}</mat-icon>
-                <span>{{ showCalendar ? 'Hide Calendar' : 'Show Calendar' }}</span>
-              </button>
-            </mat-menu>
+            <ng-container [ngTemplateOutlet]="sectionVisibilityAction" [ngTemplateOutletContext]="{ lane: 'section:calendar', label: section.label, visible: showCalendar }" />
             <a mat-button appHapticTap routerLink="/calendar" [queryParams]="calendarNavigationState || { view: 'month', date: calendarSelectedDateKey }" aria-label="Open calendar for the selected day">
               <span>Open</span><mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
             </a>
           </div>
         }
       } @else if (showActions && isOwnerDashboard) {
-        <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" />
+        <div class="dashboard-section-actions">
+          <ng-container [ngTemplateOutlet]="sectionVisibilityAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id, label: section.label, visible: !hiddenSectionLanes.includes('section:' + section.id) }" />
+          <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" />
+        </div>
       }
       </div>
-      @if (section.tiles.length) {
+      @if (section.tiles.length && !hiddenSectionLanes.includes('section:' + section.id)) {
       <app-dashboard-tile-board
         cdkDropList
         cdkDropListOrientation="mixed"
@@ -311,12 +308,25 @@
     </section>
 </ng-template>
 
+<ng-template #sectionVisibilityAction let-lane="lane" let-label="label" let-visible="visible">
+  <button mat-icon-button type="button" appHapticTap [attr.aria-label]="label + ' options'" [matTooltip]="label + ' options'"
+    [matMenuTriggerFor]="sectionOptions" [disabled]="library.busy()">
+    <mat-icon aria-hidden="true">more_horiz</mat-icon>
+  </button>
+  <mat-menu #sectionOptions="matMenu" class="qs-menu-panel">
+    <button mat-menu-item [disabled]="library.busy()" (click)="library.setSectionVisibility($any(user), lane, !visible)">
+      <mat-icon>{{ visible ? 'visibility_off' : 'visibility' }}</mat-icon>
+      <span>{{ visible ? 'Hide ' : 'Show ' }}{{ label }}</span>
+    </button>
+  </mat-menu>
+</ng-template>
+
 <ng-template #sectionAddAction let-lane="lane">
   @if (dashboardPicker(); as picker) {
     @let action = picker.sectionActions()[lane];
     @if (action.canAdd) {
       <button mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="action.actionLabel" [attr.aria-expanded]="library.activeLane() === lane" [matTooltip]="action.hint" [disabled]="library.busy()" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!action.unseen.length" [matBadgeDescription]="action.badgeDescription" (click)="picker.openSection(lane)">
-        {{ action.presentation.add }}<mat-icon iconPositionEnd>add</mat-icon>
+        <span class="dashboard-section-add-label">{{ action.presentation.add }}</span><span class="dashboard-section-add-label-compact">Add</span><mat-icon iconPositionEnd>add</mat-icon>
       </button>
     }
   }

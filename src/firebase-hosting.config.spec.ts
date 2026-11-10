@@ -370,6 +370,7 @@ describe('Firebase Hosting configuration', () => {
     // Missing calculated values are distinct from an active availability refresh (2026-11-10).
     // Today customization uses concise, formal guidance and availability labels (2026-11-10).
     // Calendar visibility moves to its own header beside Open, including restoration while hidden (2026-11-10).
+    // Every dashboard section has an independent visibility menu that preserves its configured tiles (2026-11-10).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');

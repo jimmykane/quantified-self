@@ -30,12 +30,22 @@ import {
   DASHBOARD_TILE_SECTION_DEFINITIONS,
   DASHBOARD_TILE_SECTION_ORDER,
   getDashboardTileSectionDefinition,
+  normalizeDashboardHiddenSections,
   orderDashboardTilesByIntentSections,
   resolveDashboardTileLaneKey,
   resolveDashboardTileSection,
 } from './dashboard-tile-section.helper';
 
 describe('dashboard tile section metadata', () => {
+  it('normalizes hidden sections without accepting unknown or repeated lanes', () => {
+    const input = ['section:health', 'kpi', 'section:health', 'today', null, 'section:routesMaps'];
+    expect(normalizeDashboardHiddenSections(input)).toEqual(['kpi', 'section:health', 'section:routesMaps']);
+    expect(input).toHaveLength(6);
+    for (const malformed of [undefined, null, 'section:health', { 'section:health': true }]) {
+      expect(normalizeDashboardHiddenSections(malformed)).toEqual([]);
+    }
+  });
+
   it('keeps the fixed section order aligned with section definitions', () => {
     expect(DASHBOARD_TILE_SECTION_ORDER).toEqual([
       'calendar',
