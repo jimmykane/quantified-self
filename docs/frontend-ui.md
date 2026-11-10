@@ -69,6 +69,31 @@ The optimized production build with recovery/build tags exceeded the preceding t
 Matching beta/production `allScript` error caps move from 14.20 to 14.21 MB for this addition; the 1474 kB initial cap
 and warning budgets remain unchanged. This is bundle accounting, not a runtime speed measurement.
 
+## Goal-based account setup
+
+Onboarding offers **Analyze my training**, **Sync between services**, and **Compare device recordings**,
+with **Let me look around** as a secondary action. All paths retain the required account policies and
+unchecked optional consent. Saving valid preferences initializes Starter only for an unpaid account,
+marks onboarding complete and opens the chosen workspace; onboarding no longer mounts Pricing or
+requires a membership selection. Existing paid access is preserved. Failures keep consent and allow retry.
+
+Analysis and exploration open Dashboard, whose empty state already offers file upload and provider selection.
+Sync opens `/services?setup=sync`: a display-only hint that expands the existing data-flow panel and shows
+contextual Pro benefits for unpaid accounts. Provider tabs retain this hint, while MCP and OAuth callback,
+connect or reconnect navigation take precedence. It never connects providers, enables a sync path or starts
+checkout. After source and destination connections are established, the existing matrix and sync controls
+own path selection and explicit opt-in. Connection offers and provider entitlement checks remain in Connections.
+
+The compact Compare path, explicit service/price/MCP return destinations and legacy `start=connect` /
+`start=upload` URLs still work. Return URLs allow only curated destinations and the exact sync display hint;
+they never accept provider actions or external redirects. Reloading saved consent with a remembered goal
+resumes the consent screen for explicit continuation. A deliberate tour or step change wins over late account
+checks. Training calculations, planning behavior and MCP permissions/contracts are unchanged.
+
+Initial goal-based setup verification exceeded the preceding 14.82 MB total-script cap by 3.96 kB.
+The final production build passes matching beta/production `allScript` error caps of 14.83 MB; initial
+and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
+
 ## Field guide onboarding terrain and bundle allowance
 
 The optional Field guide and general account setup use `OnboardingTerrainComponent`. Its native 3D mountain
@@ -92,12 +117,6 @@ advancing either animation while hidden. Destroying the view releases frames, GP
 resources, listeners and observers, and a late module response cannot initialize a destroyed view.
 Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
 loss. Onboarding stays usable in all cases.
-
-The plan step uses a landscape header: copy and terrain occupy separate grid columns on desktop, then
-separate rows below 960px so scenery cannot sit behind a wrapped heading. Terrain fade variables adapt
-the same canvas/fallback masks to the short banner; every layout includes a bottom fade to transparency,
-with extra leading-edge blending where the banner meets its copy. Masking the artwork (rather than
-painting a translucent surface over it) avoids a residual rectangle or seam in either theme.
 
 The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
 (104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.

@@ -1,6 +1,6 @@
 <main class="qs-workspace-page field-guide-page" aria-labelledby="field-guide-title">
     <mat-card appearance="outlined" class="field-guide qs-glass-card-panel" [class.field-guide--intro]="stage() === 'intro'"
-        [class.field-guide--compact]="isCompareFlow() && stage() === 'privacy'" [class.field-guide--plan]="stage() === 'plan'" [attr.aria-busy]="isLoading">
+        [class.field-guide--compact]="isCompareFlow() && stage() === 'privacy'" [attr.aria-busy]="isLoading">
         @if (!isCompareFlow() || stage() !== 'privacy') {
         <aside class="field-guide-hero" aria-label="Mountain landscape">
             <app-onboarding-terrain [introVisible]="stage() === 'intro'"></app-onboarding-terrain>
@@ -18,7 +18,7 @@
                 @if (stage() === 'intro') {
                     <button mat-button type="button" (click)="skipIntro()">Skip tour <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                 } @else {
-                    <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="logout()">Sign out</button>
+                    <button mat-button type="button" [disabled]="isLoading" (click)="logout()">Sign out</button>
                 }
             </header>
 
@@ -44,36 +44,32 @@
                     </div>
                 </section>
             } @else {
-                <section class="guide-content" [class.plan-content]="stage() === 'plan'">
+                <section class="guide-content">
                     <p class="eyebrow">{{ setupProgress() }}</p>
                     @switch (stage()) {
                         @case ('start') {
                             <h1 id="field-guide-title" #stepHeading tabindex="-1">What would you like to do first?</h1>
-                            <p class="lead">Connect your watch with Pro or upload activity files for free to start analyzing your training.</p>
-                            <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="startChoice()" (change)="chooseStart($event.value)">
-                                <mat-radio-button value="connect">
-                                    <span class="choice-title">Connect my watch</span>
-                                    <span class="choice-description">Import activities from Garmin, Suunto, COROS or Wahoo.</span>
-                                    <span class="choice-detail">Requires Pro</span>
+                            <p class="lead">Choose your first step. You can explore the other tools later.</p>
+                            <mat-radio-group class="starting-points" aria-label="Your starting point" [value]="visibleStartChoice()" (change)="chooseStart($event.value)">
+                                <mat-radio-button value="analyze">
+                                    <span class="choice-title">Analyze my training</span>
+                                    <span class="choice-description">Explore your workouts, performance trends and recovery.</span>
+                                    <span class="choice-detail">Free uploads · Pro connections</span>
                                 </mat-radio-button>
-                                <mat-radio-button value="upload">
-                                    <span class="choice-title">Upload an activity file</span>
-                                    <span class="choice-description">Add FIT, GPX, TCX and other supported files to your activity history.</span>
-                                    <span class="choice-detail">Free with Starter</span>
+                                <mat-radio-button value="sync">
+                                    <span class="choice-title">Sync between services</span>
+                                    <span class="choice-description">Move activities between supported services automatically.</span>
+                                    <span class="choice-detail">Pro feature</span>
                                 </mat-radio-button>
                                 <mat-radio-button value="compare">
-                                    <span class="choice-title">Compare recordings</span>
+                                    <span class="choice-title">Compare device recordings</span>
                                     <span class="choice-description">Upload recordings from the same workout to compare GPS tracks and measurements.</span>
                                     <span class="choice-detail">Free with Starter</span>
-                                </mat-radio-button>
-                                <mat-radio-button value="explore">
-                                    <span class="choice-title">Let me look around</span>
-                                    <span class="choice-description">Finish setup and open Dashboard. You can add activities later.</span>
-                                    <span class="choice-detail">Start free</span>
                                 </mat-radio-button>
                             </mat-radio-group>
                             <div class="onboarding-actions">
                                 <button mat-button type="button" (click)="showIntro()">Take a quick tour</button>
+                                <button mat-button type="button" (click)="lookAround()">Let me look around</button>
                                 <button mat-flat-button type="button" class="qs-mat-primary" (click)="continueFromStart()" [disabled]="!startChoice()">Continue <mat-icon iconPositionEnd>arrow_forward</mat-icon></button>
                             </div>
                         }
@@ -102,22 +98,10 @@
                                 <div class="onboarding-actions">
                                     <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
                                     <button mat-flat-button type="submit" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading || !user">
-                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Open Compare' : 'Continue free') : 'Save and continue' }}</span></span>
+                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Open Compare' : 'Continue free') : 'Continue to ' + completionLabel }}</span></span>
                                     </button>
                                 </div>
                             </form>
-                        }
-                        @case ('plan') {
-                            <h1 id="field-guide-title" #stepHeading tabindex="-1">Choose your plan</h1>
-                            <p class="lead">{{ completionHint() }}</p>
-                            <app-pricing [isOnboarding]="true" [onboardingUser]="user" [onboardingBusy]="isLoading" [onboardingResumeUrl]="checkoutResumeUrl()"
-                                (loadingStateChange)="onPricingLoadingChange($event)" (planSelected)="onPlanSelected()"></app-pricing>
-                            <div class="onboarding-actions">
-                                <button mat-button type="button" [disabled]="isLoading || isPricingLoading" (click)="back()">Back</button>
-                                <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="isLoading || isPricingLoading || !user" (click)="finishOnboarding()">
-                                    <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Finishing setup…' : 'Continue to ' + completionLabel }}</span></span>
-                                </button>
-                            </div>
                         }
                     }
                 </section>

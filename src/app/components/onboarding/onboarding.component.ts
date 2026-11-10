@@ -9,7 +9,6 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { PricingComponent } from '../pricing/pricing.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,7 +20,7 @@ import { LoggerService } from '../../services/logger.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
+import { onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { of } from 'rxjs';
 import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.component';
 
@@ -34,7 +33,6 @@ import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.compone
         MatButtonModule,
         ReactiveFormsModule,
         MatCheckboxModule,
-        PricingComponent,
         MatCardModule,
         MatDividerModule,
         MatIconModule,
@@ -46,11 +44,12 @@ import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.compone
 })
 export class OnboardingComponent implements OnInit, OnChanges {
     @Input() user!: User;
-    readonly stage = signal<'intro' | 'start' | 'privacy' | 'plan'>('start');
+    readonly stage = signal<'intro' | 'start' | 'privacy'>('start');
     readonly chapterIndex = signal(0);
     readonly chapters = FIELD_GUIDE_CHAPTERS;
     readonly chapter = computed(() => this.chapters[this.chapterIndex()]);
     readonly startChoice = signal<OnboardingStart | null>(null);
+    readonly visibleStartChoice = computed(() => this.startChoice() === 'upload' || this.startChoice() === 'connect' ? 'analyze' : this.startChoice());
     readonly errorMessage = signal('');
     readonly stepHeading = viewChild<ElementRef<HTMLElement>>('stepHeading');
     private readonly injector = inject(Injector);
@@ -63,17 +62,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly isCompareFlow = computed(() => this.completionTarget().path === '/tools/compare' || this.completionTarget().path === '/tools/compare/saved');
     readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
-        : this.stage() === 'privacy' ? '02 / Policies and preferences' : '03 / Your plan');
+        : '02 / Policies and preferences');
     readonly heroTitle = computed(() => this.stage() === 'intro' ? this.chapter().hero
         : this.stage() === 'start' ? 'Analyze your training.'
-        : this.stage() === 'privacy' ? 'Set up your account.' : 'Start free or connect with Pro.');
-    readonly completionHint = computed(() => this.hasReturnDestination()
-        ? `After setup, you’ll return to ${this.returnTarget().label}.`
-        : this.startChoice() === 'connect'
-            ? 'Automatic imports require Pro. After setup, choose Garmin, Suunto, COROS or Wahoo in Connections.'
-            : this.startChoice() === 'upload'
-                ? 'Starter includes file uploads. After setup, select Upload in Dashboard to add an activity.'
-                : 'Start with the free Starter plan. You can upload activities from Dashboard later.');
+        : 'Set up your account.');
 
     policies: PolicyItem[] = POLICY_CONTENT.filter(p => !!p.checkboxLabel)
         .map(policy => ({
@@ -101,12 +93,12 @@ export class OnboardingComponent implements OnInit, OnChanges {
         { initialValue: this.route.snapshot.queryParamMap },
     );
     private readonly returnTarget = computed(() => onboardingReturnTarget(this.completionQueryParams()));
-    readonly checkoutResumeUrl = computed(() => onboardingResumeUrl(this.completionQueryParams(), this.startChoice()));
 
     private readonly completionTarget = computed(() => {
         const target = this.returnTarget();
         if (this.hasReturnDestination()) return target;
         if (this.startChoice() === 'compare') return { ...target, path: '/tools/compare', label: 'Compare' };
+        if (this.startChoice() === 'sync') return { ...target, path: '/services', label: 'Connections', syncSetup: true };
         return this.startChoice() === 'connect'
             ? { ...target, path: '/services', label: 'Connections' } : target;
     });
@@ -207,7 +199,6 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     canFinish = false;
-    isPricingLoading = false;
     expandedPolicyId: string | null = null;
 
     private async checkAndAdvance() {
@@ -225,15 +216,15 @@ export class OnboardingComponent implements OnInit, OnChanges {
             if (!termsAccepted) return;
             // Resume saved setup on arrival, but never interrupt a deliberate
             // step change or tour with a late/background account check.
-            if (this.hasNavigatedSetup && this.stage() !== 'plan') return;
+            if (this.hasNavigatedSetup) return;
             if (this.canFinish) {
                 await this.finishOnboarding();
-            } else if (!this.isCompareFlow()) {
-                this.moveTo('plan');
+            } else if (this.hasReturnDestination() || this.startChoice()) {
+                this.moveTo('privacy');
             }
         } catch (error) {
             this.logger.error('Error checking onboarding status:', error);
-            this.errorMessage.set('We couldn’t check your membership. You can retry when you choose your plan.');
+            this.errorMessage.set('We couldn’t check your account. Continue to try again.');
         } finally {
             this.advancing = false;
             if (!this.destroyRef.destroyed && this.user !== user) void this.checkAndAdvance();
@@ -272,7 +263,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     chooseStart(choice: OnboardingStart) {
-        if (this.startChoice() === choice) return;
+        if (this.isLoading || this.startChoice() === choice) return;
         this.hasNavigatedSetup = true;
         this.startChoice.set(choice);
         void this.router.navigate([], {
@@ -287,19 +278,26 @@ export class OnboardingComponent implements OnInit, OnChanges {
         this.moveTo('privacy');
     }
 
+    lookAround() {
+        if (this.isLoading) return;
+        const alreadySelected = this.startChoice() === 'explore';
+        this.chooseStart('explore');
+        if (alreadySelected) this.haptics.selection();
+        this.moveTo('privacy');
+    }
+
     back() {
-        if (this.isLoading || this.isPricingLoading) return;
+        if (this.isLoading) return;
         if (this.stage() === 'privacy' && this.hasReturnDestination() && this.isCompareFlow()) {
             void this.navigateAfterOnboarding();
             return;
         }
         this.haptics.selection();
-        const previous = this.stage() === 'plan' ? 'privacy'
-            : this.stage() === 'privacy' && !this.hasReturnDestination() ? 'start' : 'intro';
+        const previous = this.stage() === 'privacy' && !this.hasReturnDestination() ? 'start' : 'intro';
         this.moveTo(previous);
     }
 
-    private moveTo(stage: 'intro' | 'start' | 'privacy' | 'plan') {
+    private moveTo(stage: 'intro' | 'start' | 'privacy') {
         if (this.stage() === stage) return;
         this.hasNavigatedSetup = true;
         this.errorMessage.set('');
@@ -334,6 +332,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             return;
         }
         this.isLoading = true;
+        this.hasNavigatedSetup = true;
         this.errorMessage.set('');
         this.haptics.selection();
         const user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user) as AppUserInterface;
@@ -349,7 +348,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             await this.userService.createOrUpdateUser(user);
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
             // Auth may emit an older profile while the consent write is in flight.
-            // Pricing must receive the choices that have just been saved.
+            // Starter initialization must receive the choices that have just been saved.
             this.savedConsent = Object.entries(submittedValues).every(([key, value]) =>
                 (this.user as AppUserInterface)[key] === value) ? null : { uid: user.uid, values: submittedValues };
             this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, submittedValues);
@@ -358,13 +357,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
             const isSubscribed = await this.userService.hasPaidAccess();
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
             this.hasPaidMembership.set(isSubscribed);
-            if (!this.isCompareFlow()) this.haptics.success();
+            this.canFinish = isSubscribed;
             this.isLoading = false;
-            if (isSubscribed || this.isCompareFlow()) {
-                await this.finishOnboarding();
-            } else {
-                this.moveTo('plan');
-            }
+            await this.finishOnboarding();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error updating user terms:', error);
@@ -394,13 +389,13 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 await this.navigateAfterOnboarding();
                 return;
             }
-            // Reuse Starter setup for either the explicit Compare action or
-            // Continue on pricing. Existing paid membership always takes precedence.
+            // Complete the free account without a pricing step. Existing paid
+            // membership always takes precedence; connection/sync offers live in Connections.
             if (!this.canFinish) {
                 const isPro = await this.userService.hasPaidAccess();
                 if (!this.isCurrentUser(user.uid)) return;
                 if (!isPro) {
-                    this.logger.log('[OnboardingComponent] Implicitly selecting Free Tier via Continue button.');
+                    this.logger.log('[OnboardingComponent] Initializing Starter after account consent.');
                     await this.userService.setFreeTier(user);
                 }
             }
@@ -414,7 +409,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.analyticsService.logEvent('tutorial_complete');
 
             const navigated = await this.navigateAfterOnboarding();
-            if (navigated && this.isCompareFlow()) this.haptics.success();
+            if (navigated) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error completing onboarding:', error);
@@ -438,8 +433,11 @@ export class OnboardingComponent implements OnInit, OnChanges {
         if (target.path === '/mcp/authorize') {
             return this.router.navigate([target.path], { queryParams: { request_id: target.requestId } });
         }
-        if (target.serviceName) {
-            return this.router.navigate(['/services'], { queryParams: { serviceName: target.serviceName } });
+        if (target.serviceName || target.syncSetup) {
+            return this.router.navigate(['/services'], { queryParams: {
+                ...(target.serviceName ? { serviceName: target.serviceName } : {}),
+                ...(target.syncSetup ? { setup: 'sync' } : {}),
+            } });
         }
         return this.router.navigate([target.path]);
     }
@@ -463,18 +461,4 @@ export class OnboardingComponent implements OnInit, OnChanges {
         }
     }
 
-    onPricingLoadingChange(isLoading: boolean) {
-        this.isPricingLoading = isLoading;
-    }
-
-    onPlanSelected() {
-        this.logger.log('[OnboardingComponent] Plan selected event received from child component.');
-        this.canFinish = true;
-        if (this.isLoading) {
-            this.logger.log('[OnboardingComponent] Ignoring plan selected event because onboarding completion is already in progress.');
-            return;
-        }
-        // Attempt to finish immediately if on the right step
-        this.finishOnboarding();
-    }
 }

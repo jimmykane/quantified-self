@@ -133,6 +133,51 @@ describe('ServicesComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each([false, true])('opens sync setup with contextual access, without an automatic action (Pro: %s)', async isPro => {
+        const params = convertToParamMap({setup:'sync'});
+        mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData:{user:{uid:'owner', stripeRole:isPro ? 'pro' : 'free'}, isPro}};
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(component.isSyncSetup).toBe(true);
+        expect(component.isDataFlowExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('h1').textContent).toBe('Sync between services');
+        expect(fixture.nativeElement.querySelectorAll('.service-data-flow').length).toBe(1);
+        expect(fixture.nativeElement.textContent.includes('Sync activities with Pro')).toBe(!isPro);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        if (!isPro) {
+            (fixture.nativeElement.querySelector('.service-data-flow__upgrade') as HTMLButtonElement).click();
+            expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+            expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+            expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
+        }
+    });
+
+    it('keeps sync context across provider tabs and leaves it for MCP', async () => {
+        mockActivatedRoute.queryParamMap = of(convertToParamMap({setup:'sync'}));
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('a[href*="serviceName=Suunto"]').getAttribute('href')).toContain('&setup=sync');
+        await component.selectService('suunto');
+        expect(mockRouter.navigate).toHaveBeenLastCalledWith([], {relativeTo:mockActivatedRoute,
+            queryParams:{serviceName:ServiceNames.SuuntoApp, setup:'sync'}, queryParamsHandling:''});
+        await component.selectService('mcp');
+        expect(mockRouter.navigate).toHaveBeenLastCalledWith([], {relativeTo:mockActivatedRoute,
+            queryParams:{serviceName:'mcp'}, queryParamsHandling:''});
+    });
+
+    it.each([{connect:'1'}, {reconnect:'1'}, {code:'code'}, {state:'state'}, {error:'access_denied'}, {serviceName:'mcp'}])(
+        'does not reinterpret auth or MCP navigation %j as sync setup', async other => {
+            mockActivatedRoute.queryParamMap = of(convertToParamMap({setup:'sync', ...other}));
+            fixture.detectChanges(); await fixture.whenStable();
+            expect(component.isSyncSetup).toBe(false);
+            expect(component.isDataFlowExpanded).toBe(false);
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            expect(mockDialog.open).not.toHaveBeenCalled();
+        },
+    );
+
     it.each([
         ['garmin', ServiceNames.GarminAPI], ['suunto', ServiceNames.SuuntoApp],
         ['coros', ServiceNames.COROSAPI], ['wahoo', ServiceNames.WahooAPI],

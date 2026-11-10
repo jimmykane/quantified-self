@@ -346,6 +346,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
   public dataFlowSummary = createEmptyProviderDataFlowSummary();
   public isDataFlowExpanded = false;
+  public isSyncSetup = false;
 
 
   private userSubscription!: Subscription;
@@ -406,10 +407,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
-      this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
       // Callback/connection intent wins over a display-only history link, even
       // for incomplete or denied callbacks. Do not consume or rewrite that URL.
       const authNavigation = ['connect', 'code', 'state', 'error', 'reconnect'].some(key => params.get(key) != null);
+      const syncSetup = !authNavigation && params.get('setup') === 'sync' && params.get('serviceName') !== 'mcp';
+      if (syncSetup && !this.isSyncSetup) this.isDataFlowExpanded = true;
+      this.isSyncSetup = syncSetup;
+      this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
       this.requestedHistoryProvider = !authNavigation && params.get('tool') === 'history'
         ? this.serviceSectionOptions.find(option => option.serviceName === params.get('serviceName'))?.providerId ?? null : null;
       if (this.serviceToolsDialogRef && (this.managedService !== this.activeSection || authNavigation)) this.serviceToolsDialogRef.close();
@@ -456,7 +460,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
     await this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { serviceName: serviceName },
+      queryParams: { serviceName: serviceName, ...(this.isSyncSetup && section !== 'mcp' ? { setup: 'sync' } : {}) },
       queryParamsHandling: '',
     });
   }
@@ -512,6 +516,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     source: 'capability_card' | 'data_flow',
     feature: string,
   ): void {
+    this.hapticsService.selection();
     this.analyticsService.logEvent('upsell_triggered', {
       service_name: this.serviceNameBySection[section],
       source,
@@ -623,7 +628,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     if (serviceName === ServiceNames.WahooAPI) {
       return 'wahoo';
     }
-    return this.hasProAccess ? 'garmin' : 'mcp';
+    return this.hasProAccess || this.isSyncSetup ? 'garmin' : 'mcp';
   }
 
   private refreshDataFlowSummary(): void {

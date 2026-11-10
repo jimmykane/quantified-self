@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onboardingResumeUrl, onboardingReturnTarget, onboardingStart, safeOnboardingResumeUrl } from './onboarding-navigation.helper';
 
 describe('onboarding navigation', () => {
-    it.each(['compare', 'connect', 'upload', 'explore'])('preserves %s across checkout and reload', start => {
+    it.each(['analyze', 'sync', 'compare', 'connect', 'upload', 'explore'])('preserves %s across checkout and reload', start => {
         const url = onboardingResumeUrl(new URLSearchParams({ start }));
         expect(url).toBe(`/onboarding?start=${start}`);
         expect(safeOnboardingResumeUrl(url)).toBe(url);
@@ -10,6 +10,7 @@ describe('onboarding navigation', () => {
     });
 
     it.each([
+        { returnUrl: '/services?setup=sync', path: '/services', syncSetup: true },
         { returnUrl: '/services?serviceName=Suunto%20app', path: '/services', serviceName: 'Suunto app' },
         { returnUrl: '/subscriptions?priceId=price_pro_monthly', path: '/subscriptions', priceId: 'price_pro_monthly' },
         { returnUrl: '/mcp/authorize', request_id: 'request_123', path: '/mcp/authorize', requestId: 'request_123' },

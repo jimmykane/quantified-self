@@ -574,22 +574,22 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'getting-started',
     icon: 'rocket_launch',
     title: 'Getting Started',
-    summary: 'Sign in, pick a plan, and learn where key features and workflows live.',
+    summary: 'Sign in, choose your first task, and find the tools you need.',
     content: `## Start in three steps
 
 1. Sign in with an email magic link, Google, or GitHub.
 2. Choose what you want to do first, then review the required account policies.
-3. Start with manual uploads, or upgrade to Pro if you want service connections and history imports.
+3. Open your chosen workspace. Uploads and analysis are free; connected services and sync require Pro.
 
-On your first sign-in, choose **Connect my watch**, **Upload an activity file**, **Compare recordings**, or **Let me look around**. **Take a quick tour** introduces training analysis, AI, workout planning and ways to add your data. **Skip tour** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
+On your first sign-in, choose **Analyze my training**, **Sync between services**, or **Compare device recordings**. The secondary **Let me look around** action opens Dashboard after account setup. **Take a quick tour** introduces training analysis, AI, workout planning and ways to add your data. **Skip tour** skips the tour, not required account setup. Choosing how to start does not start a payment, upload, or provider connection.
 
 Review Privacy, Data Availability, and Terms & Subscription separately. Analytics and marketing are optional and start unchecked for a new account. Use **Read more** for the full policy details. You can change your starting point or preferences before finishing. Your starting point is kept when you reload or return from checkout.
 
-**Start free or connect your watch.** Starter is free and includes manual uploads and comparisons; provider connections require Pro. General setup shows the available plans after you save your preferences. After payment is confirmed, choose **Continue setup**; canceling checkout returns you to the membership step.
+**Start free. Upgrade when you need connected services.** After you save your account preferences, QS opens your chosen workspace without a plan-selection screen. New accounts start on Starter; existing paid memberships stay unchanged. Starter includes manual uploads, analysis and comparisons; provider connections require Pro. Connections shows the relevant Pro offer when you choose to connect or sync. Trial offers appear only when eligible. Choosing an offer opens Membership to review billing terms before checkout.
 
-**Just comparing files?** Enter through [Compare](/tools/compare), or choose **Compare recordings** during setup. You’ll review your account policies without the tour, watch setup, or pricing step. Choose **Continue free** to open Compare, or **Open Compare** if you already have a paid membership. Your existing plan stays the same. Uploads and new comparisons use your activity allowance. Opening a Saved comparisons link takes you back to that list after setup. Add two or more recordings of the same workout; benchmark reports need recordings that overlap in time. Available measurements depend on your files. After you save a comparison, **Explore more of QS** opens Getting Started help.
+**Just comparing files?** Enter through [Compare](/tools/compare), or choose **Compare device recordings** during setup. You’ll review your account policies without the tour, watch setup, or pricing step. Choose **Continue free** to open Compare, or **Open Compare** if you already have a paid membership. Your existing plan stays the same. Uploads and new comparisons use your activity allowance. Opening a Saved comparisons link takes you back to that list after setup. Add two or more recordings of the same workout; benchmark reports need recordings that overlap in time. Available measurements depend on your files. After you save a comparison, **Explore more of QS** opens Getting Started help.
 
-After setup, **Connect my watch** opens **Connections**, where you choose a service and review its permissions. **Upload an activity file** opens **Dashboard**; choose **Upload** to select your file. **Let me look around** also opens Dashboard so you can add data later.
+After setup, **Analyze my training** opens **Dashboard**. With no activities yet, choose **Upload activity** to add a file for free, or **Connect service** to choose a provider and see its Pro offer. **Sync between services** opens **Connections** with **Set up activity sync** expanded. Connect your source and destination services, then explicitly enable a supported sync path. Choosing the sync goal does not connect a service or enable delivery. **Let me look around** opens Dashboard so you can add data later.
 
 The sync guides' **Start Setup** action opens Connections. If sign-in or onboarding is required, complete it and choose **Continue to Connections** to resume setup. Provider connections require Pro. Opening setup does not connect a provider or enable automatic sync; you choose those actions in Connections.
 

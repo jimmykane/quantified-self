@@ -2,17 +2,17 @@
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <main class="settings-content services-content">
         <header class="services-page-header">
-          <h1>Connections</h1>
-          <p>{{ hasProAccess ? 'Manage provider connections, imports and sync. MCP access is free.' : 'Choose a provider to see what Pro adds. MCP access is free.' }}</p>
+          <h1>{{ isSyncSetup ? 'Sync between services' : 'Connections' }}</h1>
+          <p>{{ isSyncSetup ? 'Connect your source and destination services below, then choose a supported activity sync path.' : hasProAccess ? 'Manage provider connections, imports and sync. MCP access is free.' : 'Choose a provider to see what Pro adds. MCP access is free.' }}</p>
         </header>
 
-        @if (hasProAccess) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
+        @if (hasProAccess || isSyncSetup) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
 
 
         <nav mat-tab-nav-bar class="provider-selector" [tabPanel]="providerPanel" [mat-stretch-tabs]="false" aria-label="Connection categories">
           @for (section of serviceSectionOptions; track section.id) {
           <a mat-tab-link [active]="activeSection === section.id"
-            [href]="section.href"
+            [href]="section.href + (isSyncSetup && section.id !== 'mcp' ? '&setup=sync' : '')"
             [attr.aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')"
             (click)="onProviderTabClick($event, section.id)">
             <span class="provider-selector__option">
@@ -121,7 +121,7 @@
         </section>
 
         </mat-tab-nav-panel>
-        @if (!hasProAccess) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
+        @if (!hasProAccess && !isSyncSetup) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
         <ng-template #providerDataFlow>
         <mat-expansion-panel
           class="service-data-flow"
@@ -133,7 +133,7 @@
             <mat-panel-title class="service-data-flow__panel-title">
               <mat-icon aria-hidden="true">account_tree</mat-icon>
               <span class="service-data-flow__panel-copy">
-                <span id="service-data-flow-title">Your data flow</span>
+                <span id="service-data-flow-title">{{ isSyncSetup ? 'Set up activity sync' : 'Your data flow' }}</span>
                 <span>Compatible provider delivery routes through Quantified Self</span>
               </span>
             </mat-panel-title>
@@ -143,8 +143,8 @@
             <div class="service-data-flow__empty">
               <mat-icon aria-hidden="true">workspace_premium</mat-icon>
               <div>
-                <h2>Unlock provider data flow with Pro</h2>
-                <p>Connect activity providers and manage automatic activity or route delivery through Quantified Self.</p>
+                <h2>{{ isSyncSetup ? 'Sync activities with Pro' : 'Unlock provider data flow with Pro' }}</h2>
+                <p>{{ isSyncSetup ? 'Keep new activities moving between compatible services. Connect both services, then choose which sync paths to enable.' : 'Connect activity providers and manage automatic activity or route delivery through Quantified Self.' }}</p>
                 <button
                   mat-flat-button
                   type="button"

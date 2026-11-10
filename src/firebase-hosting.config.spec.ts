@@ -322,7 +322,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
-    // Getting Started introduces analysis, AI and workout planning, with Starter and next steps (2026-11-10).
+    // Getting Started covers three goal choices, direct completion and contextual Pro offers (2026-11-10).
     // Getting Started help covers intent-first setup and the compact Compare path with Continue free (2026-11-09).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
@@ -716,7 +716,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.82mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.83mb',
     });
   });
 

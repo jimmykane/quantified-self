@@ -1,11 +1,12 @@
 import { membershipPriceIdFromReturnUrl } from './membership-selection.helper';
 import { serviceSetupFromReturnUrl } from './service-setup-redirect.helper';
 
-export type OnboardingStart = 'compare' | 'connect' | 'upload' | 'explore';
+// Keep connect/upload for existing bookmarks and checkout returns.
+export type OnboardingStart = 'analyze' | 'sync' | 'compare' | 'connect' | 'upload' | 'explore';
 type QueryParams = { get(name: string): string | null };
 
 export function onboardingStart(value: string | null): OnboardingStart | null {
-    return value === 'compare' || value === 'connect' || value === 'upload' || value === 'explore' ? value : null;
+    return value === 'analyze' || value === 'sync' || value === 'compare' || value === 'connect' || value === 'upload' || value === 'explore' ? value : null;
 }
 
 export function onboardingReturnTarget(params: QueryParams) {
@@ -23,7 +24,7 @@ export function onboardingReturnTarget(params: QueryParams) {
         : path === '/subscriptions' ? 'Membership'
             : path === '/services' ? 'Connections'
                 : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
-    return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null };
+    return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null, syncSetup: serviceSetup?.setup === 'sync' };
 }
 
 /** Navigation intent only: never grants consent, access, or onboarding completion. */
@@ -35,6 +36,7 @@ export function onboardingResumeUrl(params: QueryParams, start = onboardingStart
         const destinationQuery = new URLSearchParams();
         if (target.priceId) destinationQuery.set('priceId', target.priceId);
         if (target.serviceName) destinationQuery.set('serviceName', target.serviceName);
+        if (target.syncSetup) destinationQuery.set('setup', 'sync');
         query.set('returnUrl', target.path + (destinationQuery.size ? `?${destinationQuery}` : ''));
         if (target.path === '/mcp/authorize') query.set('request_id', target.requestId);
     }

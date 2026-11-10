@@ -107,7 +107,9 @@ describe('help.content', () => {
   it('explains intent-first setup, the optional Field guide and existing handoffs', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(content).toContain('**Skip tour**');
-    expect(content).toContain('**Compare recordings**');
+    expect(content).toContain('**Analyze my training**');
+    expect(content).toContain('**Sync between services**');
+    expect(content).toContain('**Compare device recordings**');
     expect(content).toContain('**Take a quick tour**');
     expect(content).toContain('without the tour, watch setup, or pricing step');
     expect(content).toContain('**Continue free**');
@@ -118,9 +120,12 @@ describe('help.content', () => {
     expect(content).toContain('optional and start unchecked');
     expect(content).toContain('does not start a payment, upload, or provider connection');
     expect(content).toContain('provider connections require Pro');
-    expect(content).toContain('**Upload an activity file** opens **Dashboard**');
+    expect(content).toContain('**Analyze my training** opens **Dashboard**');
+    expect(content).toContain('**Set up activity sync** expanded');
+    expect(content).toContain('does not connect a service or enable delivery');
     expect(content).toContain('Your starting point is kept when you reload or return from checkout');
-    expect(content).toContain('canceling checkout returns you to the membership step');
+    expect(content).toContain('without a plan-selection screen');
+    expect(content).toContain('Connections shows the relevant Pro offer');
   });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;

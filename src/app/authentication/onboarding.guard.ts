@@ -10,7 +10,7 @@ import { LoggerService } from '../services/logger.service';
 import { serviceSetupFromReturnUrl } from '../helpers/service-setup-redirect.helper';
 
 /**
- * Guard to ensure user has completed onboarding (terms + subscription).
+ * Guard to ensure user has completed account setup (terms + Starter or existing membership).
  * Redirects to /onboarding if any step is missing.
  */
 export const onboardingGuard: CanMatchFn = (route, segments) => {

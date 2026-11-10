@@ -85,40 +85,6 @@ h1:focus { outline: none; }
 .action-content mat-spinner { flex: 0 0 20px; }
 .onboarding-error { color: var(--mat-sys-error); font: var(--mat-sys-body-medium); }
 
-// Keep the existing three-plan comparison at its full usable width.
-.field-guide--plan { grid-template-columns: minmax(0, 1fr); }
-.field-guide--plan .field-guide-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
-    align-items: center;
-    min-height: 220px;
-}
-.field-guide--plan app-onboarding-terrain {
-    position: relative;
-    inset: auto;
-    grid-column: 2;
-    grid-row: 1;
-    align-self: stretch;
-    min-height: 220px;
-    --terrain-top-fade-start: 0%;
-    --terrain-top-fade-end: 28%;
-    --terrain-bottom-fade: 42%;
-    --terrain-leading-fade: 22%;
-}
-.field-guide--plan .hero-copy {
-    grid-column: 1;
-    grid-row: 1;
-    padding: 32px 0 32px clamp(24px, 4vw, 56px);
-}
-.field-guide--plan .hero-copy p {
-    font: var(--mat-sys-headline-medium);
-    letter-spacing: -0.5px;
-    margin: 12px 0 0;
-    max-width: 360px;
-}
-.field-guide--plan .hero-caption { display: none; }
-.plan-content { max-width: none; }
-
 @include bp.handset-or-tablet-portrait {
     .field-guide, .field-guide--intro { grid-template-columns: minmax(0, 1fr); }
     .field-guide-hero { min-height: 220px; }
@@ -127,17 +93,6 @@ h1:focus { outline: none; }
     .hero-copy p { font: var(--mat-sys-headline-large); max-width: 300px; margin: 12px 0; }
     .field-guide:not(.field-guide--intro) .hero-caption { display: none; }
     .field-guide:not(.field-guide--intro) .hero-copy p { font: var(--mat-sys-headline-small); }
-    .field-guide--plan .field-guide-hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-    .field-guide--plan .hero-copy { padding: 28px 24px 0; }
-    .field-guide--plan app-onboarding-terrain {
-        grid-column: 1;
-        grid-row: 2;
-        height: 156px;
-        min-height: 0;
-        --terrain-leading-fade: 8%;
-        --terrain-top-fade-end: 20%;
-        --terrain-bottom-fade: 34%;
-    }
     .field-guide-body { padding: 20px 24px 28px; }
     .guide-content { margin-top: 32px; }
 }
@@ -148,8 +103,6 @@ h1:focus { outline: none; }
     .field-guide-header { gap: 8px; }
     h1 { font: var(--mat-sys-headline-medium); font-weight: 700; }
     .field-guide--intro .hero-copy .eyebrow { font: var(--mat-sys-label-small); }
-    .field-guide--plan .hero-copy { padding: 24px 20px 0; }
-    .field-guide--plan app-onboarding-terrain { height: 136px; }
     .onboarding-actions > button { min-height: 44px; }
     .onboarding-actions > button[mat-flat-button] { flex: 1; }
     .intro-actions .next-action { flex: 0 1 auto; }
