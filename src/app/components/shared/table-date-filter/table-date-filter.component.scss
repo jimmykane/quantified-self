@@ -31,6 +31,13 @@
 button.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent); }
 
 .table-date-filter-control.has-week-navigation { flex-wrap: wrap; }
+.table-date-week-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  mat-icon { width: 1em; height: 1em; font-size: inherit; line-height: 1; }
+}
 .table-date-week-return { font: var(--mat-sys-label-medium); }
 
 @media (max-width: 768px) {
