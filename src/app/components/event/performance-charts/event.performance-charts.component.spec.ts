@@ -107,6 +107,7 @@ describe('EventPerformanceChartsComponent', () => {
       .map((label: Element) => label.textContent.trim());
     expect(labels()).toEqual(names.length > 1 ? names : []);
     expect(component.chartTitles).toEqual(names.map(name => name === 'Intensity' ? 'Intensity Zones' : name));
+    expect(fixture.nativeElement.querySelector('mat-tab-nav-panel').getAttribute('role')).toBe(names.length > 1 ? 'tabpanel' : 'region');
     const hide = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
     expect(hide.closest(names.length > 1 ? '.performance-charts-toolbar' : '.chart-intro')).not.toBeNull();
     await component.toggleExpanded(); fixture.detectChanges();
@@ -227,6 +228,47 @@ describe('EventPerformanceChartsComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     await component.toggleExpanded(); fixture.detectChanges();
     expect(fixture.debugElement.query(By.directive(CompactSelectComponent))).toBeNull();
+  });
+
+  it('keeps panel labels valid when switching between tabs, the phone picker and a single chart', async () => {
+    component.hasIntensity = true; component.hasPowerCurve = true;
+    fixture.detectChanges(); await fixture.whenStable();
+    const panel = fixture.nativeElement.querySelector('mat-tab-nav-panel') as HTMLElement;
+    const expectLinkedTab = () => {
+      expect(panel.getAttribute('role')).toBe('tabpanel');
+      const labelID = panel.getAttribute('aria-labelledby');
+      expect(labelID).toBeTruthy();
+      const tab = fixture.nativeElement.querySelector(`#${labelID}`) as HTMLButtonElement;
+      expect(tab).not.toBeNull();
+      expect(tab.getAttribute('aria-selected')).toBe('true');
+      expect(tab.getAttribute('aria-controls')).toBe(panel.id);
+    };
+    expectLinkedTab();
+    expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+
+    breakpoint.next({ matches: true, breakpoints: {} });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.getAttribute('role')).toBe('region');
+    expect(panel.getAttribute('aria-labelledby')).toBeNull();
+    expect(panel.getAttribute('aria-label')).toBe('Intensity');
+
+    fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance.select('powerCurve');
+    fixture.componentRef.setInput('hasIntensity', false);
+    fixture.detectChanges(); await fixture.whenStable();
+    breakpoint.next({ matches: false, breakpoints: {} });
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.getAttribute('role')).toBe('region');
+    expect(panel.getAttribute('aria-labelledby')).toBeNull();
+    expect(panel.getAttribute('aria-label')).toBe('Power Curve');
+
+    fixture.componentRef.setInput('hasIntensity', true);
+    fixture.detectChanges(); await fixture.whenStable();
+    expectLinkedTab();
+    await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(panel.getAttribute('aria-labelledby')).toBeNull();
+    await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expectLinkedTab();
+    expect(updateChartSettings).not.toHaveBeenCalled();
   });
 
   it('should render tabs in locked order when multiple charts are available', async () => {

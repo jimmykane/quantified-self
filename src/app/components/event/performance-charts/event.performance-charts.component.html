@@ -34,7 +34,7 @@
       aria-label="Performance charts">
       @for (chart of chartOptions; track chart.id) {
       <button mat-tab-link type="button" class="performance-chart-tab" [active]="activeTab === chart.id" [disabled]="saving()"
-        [attr.aria-label]="chart.label" (click)="selectChart(chart.id)">
+        [id]="contentId + '-tab-' + chart.id" [attr.aria-label]="chart.label" (click)="selectChart(chart.id)">
         <span class="performance-tab-label">
           <mat-icon aria-hidden="true" class="performance-tab-icon">{{ chart.icon }}</mat-icon>
           <span class="performance-tab-text">{{ chart.label }}</span>
@@ -46,7 +46,8 @@
   <ng-container [ngTemplateOutlet]="disclosure"></ng-container>
   </div>
   }
-  <mat-tab-nav-panel #chartPanel [attr.role]="isMobile() ? 'region' : 'tabpanel'"
+  <mat-tab-nav-panel #chartPanel [attr.role]="shouldShowTabs && !isMobile() ? 'tabpanel' : 'region'"
+    [attr.aria-labelledby]="expanded() && shouldShowTabs && !isMobile() ? contentId + '-tab-' + activeTab : null"
     [attr.aria-label]="!shouldShowTabs ? chartTitles[0] : isMobile() ? activeChartLabel : null">
   @if (expanded()) {
     @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
