@@ -1,9 +1,22 @@
 <div class="performance-charts-container">
   @if (availableTabs.length) {
   <div class="performance-charts-toolbar">
-    @if (shouldShowTabs) {
-    <nav mat-tab-nav-bar [tabPanel]="chartPanel" [mat-stretch-tabs]="false" class="performance-charts-tabs"
-      aria-label="Activity analysis charts">
+    <button mat-button type="button" class="performance-disclosure" [disabled]="saving()"
+      [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
+      [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
+      <span class="performance-disclosure-content">
+        <mat-icon aria-hidden="true">monitoring</mat-icon>
+        <span class="performance-disclosure-label">{{ disclosureLabel }}</span>
+        <span class="performance-disclosure-status">
+          @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
+          @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
+        </span>
+      </span>
+    </button>
+  </div>
+  @if (expanded() && shouldShowTabs) {
+  <nav mat-tab-nav-bar [tabPanel]="chartPanel" [mat-stretch-tabs]="false" class="performance-charts-tabs"
+      aria-label="Performance charts">
       @for (chart of chartOptions; track chart.id) {
       <button mat-tab-link type="button" class="performance-chart-tab" [active]="activeTab === chart.id" [disabled]="saving()"
         [attr.aria-label]="chart.label" (click)="selectChart(chart.id)">
@@ -13,23 +26,8 @@
         </span>
       </button>
       }
-    </nav>
-    } @else {
-    <div class="performance-single-chart-title">
-      <mat-icon aria-hidden="true">{{ activeChartIcon }}</mat-icon>
-      <span class="performance-single-chart-label">{{ chartTitles[0] }}</span>
-    </div>
-    }
-    <button mat-icon-button type="button" class="performance-disclosure" [disabled]="saving()"
-      [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
-      [matTooltip]="expanded() ? 'Hide charts' : 'Show charts'"
-      [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
-      <span class="performance-disclosure-content">
-        @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
-        @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
-      </span>
-    </button>
-  </div>
+  </nav>
+  }
   <mat-tab-nav-panel #chartPanel [id]="contentId" [hidden]="!expanded()"
     [attr.aria-label]="shouldShowTabs ? null : chartTitles[0]">
   @if (expanded()) {

@@ -45,7 +45,8 @@ describe('help.content', () => {
   it('explains remembered performance chart visibility without hiding other event sections', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const text of ['**Intensity**, **Power Curve**, **Durability**, and **Cadence vs Power**',
-      'keeping the chart tabs visible', 'Selecting a tab while collapsed opens that chart', 'tab arrows to reach the full chart names',
+      '**Hide performance charts**', 'collapses the plot and its tabs', '**Show performance charts**',
+      'selected chart is kept', 'tab arrows to reach the full chart names',
       'remembered across activities and devices', 'Charts start visible until you hide them',
       'R–R & HRV keep their own visibility', 'anonymous shared link', 'previous saved visibility returns']) expect(content).toContain(text);
   });

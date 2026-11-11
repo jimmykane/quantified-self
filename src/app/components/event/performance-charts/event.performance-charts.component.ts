@@ -76,11 +76,10 @@ export class EventPerformanceChartsComponent {
     return this.availableTabs.includes(this.selectedTab) ? this.selectedTab : this.availableTabs[0] ?? null;
   }
 
-  async selectChart(tab: PerformanceTabId): Promise<void> {
-    if (this.destroyRef.destroyed || this.saving() || !this.availableTabs.includes(tab)) return;
+  selectChart(tab: PerformanceTabId): void {
+    if (this.destroyRef.destroyed || this.saving() || !this.expanded() || !this.availableTabs.includes(tab)) return;
     const changed = tab !== this.activeTab;
     this.selectedTab = tab;
-    if (!this.expanded()) { await this.toggleExpanded(); return; }
     if (changed) this.haptics.selection();
   }
 
@@ -103,9 +102,7 @@ export class EventPerformanceChartsComponent {
     return this.availableTabs.map(id => ({ id, label: this.getTabLabel(id), icon: this.getTabIcon(id) }));
   }
 
-  get activeChartIcon(): string { return this.activeTab ? this.getTabIcon(this.activeTab) : ''; }
-
-  get disclosureLabel(): string { return `${this.expanded() ? 'Hide' : 'Show'} ${this.chartTitles.join(', ')}`; }
+  get disclosureLabel(): string { return `${this.expanded() ? 'Hide' : 'Show'} performance charts`; }
 
   get shouldShowTabs(): boolean {
     return this.availableTabs.length > 1;

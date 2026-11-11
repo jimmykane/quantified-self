@@ -46,13 +46,15 @@ describe('EventPerformanceChartsComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     const button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(button.getAttribute('aria-label')).toBe('Hide Intensity Zones, Power Curve');
+    expect(button.getAttribute('aria-label')).toBe('Hide performance charts');
+    expect(button.textContent).toContain('Hide performance charts');
     expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('false');
-    expect(button.getAttribute('aria-label')).toBe('Show Intensity Zones, Power Curve');
+    expect(button.getAttribute('aria-label')).toBe('Show performance charts');
+    expect(button.textContent).toContain('Show performance charts');
     expect(fixture.nativeElement.querySelector(`#${button.getAttribute('aria-controls')}`).hidden).toBe(true);
-    expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(0);
     expect(fixture.nativeElement.querySelector('app-event-intensity-zones')).toBeNull();
     expect(updateChartSettings).toHaveBeenCalledExactlyOnceWith({ showPerformanceCharts: false }, { force: true, expectedUserID: 'viewer' });
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
@@ -62,7 +64,7 @@ describe('EventPerformanceChartsComponent', () => {
     const next = TestBed.createComponent(EventPerformanceChartsComponent);
     next.componentRef.setInput('viewer', new User('viewer')); next.componentRef.setInput('hasIntensity', true);
     next.detectChanges(); await next.whenStable();
-    expect(next.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-label')).toBe('Show Intensity Zones');
+    expect(next.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-label')).toBe('Show performance charts');
     expect(next.nativeElement.querySelector('app-event-intensity-zones')).toBeNull();
     next.nativeElement.querySelector('.performance-disclosure').click(); next.detectChanges(); await next.whenStable(); next.detectChanges();
     expect(next.nativeElement.querySelector('app-event-intensity-zones')).not.toBeNull();
@@ -74,29 +76,29 @@ describe('EventPerformanceChartsComponent', () => {
     { flags: [false, false, true, false], names: ['Durability'] },
     { flags: [true, true, false, false], names: ['Intensity', 'Power Curve'] },
     { flags: [true, true, true, true], names: ['Intensity', 'Power Curve', 'Durability', 'Cadence vs Power'] },
-  ])('keeps every available chart discoverable while collapsed: $names', async ({ flags, names }) => {
+  ])('collapses the complete chart section into one reveal row: $names', async ({ flags, names }) => {
     for (const [index, name] of ['hasIntensity', 'hasPowerCurve', 'hasDurability', 'hasCadencePower'].entries()) {
       fixture.componentRef.setInput(name, flags[index]);
     }
     fixture.detectChanges(); await fixture.whenStable();
-    const labels = () => Array.from(fixture.nativeElement.querySelectorAll('.performance-tab-text, .performance-single-chart-label'))
+    const labels = () => Array.from(fixture.nativeElement.querySelectorAll('.performance-tab-text'))
       .map((label: Element) => label.textContent.trim());
-    expect(labels()).toEqual(names);
+    expect(labels()).toEqual(names.length > 1 ? names : []);
+    expect(component.chartTitles).toEqual(names.map(name => name === 'Intensity' ? 'Intensity Zones' : name));
     await component.toggleExpanded(); fixture.detectChanges();
-    expect(labels()).toEqual(names);
+    expect(labels()).toEqual([]);
     expect(fixture.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-label'))
-      .toBe(`Show ${names.map(name => name === 'Intensity' ? 'Intensity Zones' : name).join(', ')}`);
+      .toBe('Show performance charts');
     expect(fixture.nativeElement.querySelector('app-event-intensity-zones, app-event-power-curve, app-event-durability-curve, app-event-cadence-power')).toBeNull();
     fixture.componentRef.setInput('hasIntensity', false); fixture.componentRef.setInput('hasPowerCurve', true);
     fixture.componentRef.setInput('hasDurability', false); fixture.componentRef.setInput('hasCadencePower', false);
     fixture.detectChanges(); await fixture.whenStable();
-    expect(labels()).toEqual(['Power Curve']);
+    expect(labels()).toEqual([]);
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(updateChartSettings).not.toHaveBeenCalled();
   });
 
-  it('opens a chart selected from collapsed tabs with one accepted-action haptic and saves Show once', async () => {
+  it('changes visible tabs without saving visibility and ignores chart selection while collapsed', async () => {
     fixture.componentRef.setInput('viewer', new User('viewer'));
-    chartSettings.set({ showPerformanceCharts: false });
     component.hasIntensity = true; component.hasPowerCurve = true;
     fixture.detectChanges(); await fixture.whenStable();
     const tabs = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]');
@@ -104,12 +106,17 @@ describe('EventPerformanceChartsComponent', () => {
     expect(component.activeTab).toBe('powerCurve'); expect(component.expanded()).toBe(true);
     expect(fixture.nativeElement.querySelector('app-event-power-curve')).not.toBeNull();
     expect(haptics.selection).toHaveBeenCalledOnce();
-    expect(updateChartSettings).toHaveBeenCalledExactlyOnceWith({ showPerformanceCharts: true }, { force: true, expectedUserID: 'viewer' });
+    expect(updateChartSettings).not.toHaveBeenCalled();
     tabs[1].click(); fixture.detectChanges(); await fixture.whenStable();
-    expect(haptics.selection).toHaveBeenCalledOnce(); expect(updateChartSettings).toHaveBeenCalledOnce();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(updateChartSettings).not.toHaveBeenCalled();
     tabs[0].click(); fixture.detectChanges(); await fixture.whenStable();
     expect(component.activeTab).toBe('intensity'); expect(haptics.selection).toHaveBeenCalledTimes(2);
-    expect(updateChartSettings).toHaveBeenCalledOnce();
+    expect(updateChartSettings).not.toHaveBeenCalled();
+    await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
+    expect(updateChartSettings).toHaveBeenCalledExactlyOnceWith({ showPerformanceCharts: false }, { force: true, expectedUserID: 'viewer' });
+    await component.selectChart('powerCurve');
+    expect(component.expanded()).toBe(false); expect(component.activeTab).toBe('intensity');
+    expect(haptics.selection).toHaveBeenCalledTimes(3); expect(updateChartSettings).toHaveBeenCalledOnce();
   });
 
   it('disables duplicate saves, shows progress, restores the saved state on failure and allows retry', async () => {
@@ -120,8 +127,7 @@ describe('EventPerformanceChartsComponent', () => {
     const save = component.toggleExpanded(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.performance-disclosure').disabled).toBe(true);
     expect(fixture.nativeElement.querySelector('mat-spinner')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[role="tab"]').getAttribute('aria-disabled')).toBe('true');
-    fixture.nativeElement.querySelectorAll('[role="tab"]')[1].click();
+    expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(0);
     await component.selectChart('powerCurve'); expect(component.activeTab).toBe('intensity');
     await component.toggleExpanded(); expect(updateChartSettings).toHaveBeenCalledOnce();
     rejectSave!(new Error('Offline')); await save; fixture.detectChanges(); await fixture.whenStable();

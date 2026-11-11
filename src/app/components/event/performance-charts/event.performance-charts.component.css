@@ -10,8 +10,11 @@
   width: 100%;
 }
 
-.performance-disclosure { flex-shrink: 0; }
-.performance-disclosure-content { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+.performance-disclosure { max-width: 100%; height: auto; min-height: 48px; }
+.performance-disclosure-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 24px; }
+.performance-disclosure-content > mat-icon { flex-shrink: 0; }
+.performance-disclosure-label { white-space: normal; text-align: left; }
+.performance-disclosure-status { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: 0 0 24px; }
 
 .performance-charts-toolbar {
   display: flex;
@@ -23,12 +26,9 @@
 .performance-charts-tabs {
   /* Event Details already supplies the separator below this chart group. */
   --mat-tab-divider-height: 0px;
-  flex: 1 1 auto;
   min-width: 0;
 }
 .performance-chart-tab { padding-inline: 8px; }
-.performance-single-chart-title { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
-.performance-single-chart-title mat-icon { flex-shrink: 0; }
 
 .performance-durability-notice {
   display: flex;
