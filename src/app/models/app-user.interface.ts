@@ -229,6 +229,8 @@ export interface AppDashboardTodaySettings {
     readiness: boolean;
     recovery: boolean;
     suggestion: boolean;
+    /** Recorded activity rows; opt-in for both new and existing profiles. */
+    recordedActivities?: boolean;
     metrics: DashboardTodayMetricId[];
 }
 

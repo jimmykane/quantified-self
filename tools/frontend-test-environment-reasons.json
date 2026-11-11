@@ -123,6 +123,10 @@
     "environment": "angular",
     "reason": "Compiles the Today editor with Material controls and CDK ordering to verify draft isolation, persistence outcomes, owner changes, disabled actions and haptic feedback."
   },
+  "src/app/components/summaries/today/dashboard-today.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the Today card with TestBed to verify opt-in calendar activity rows, Material retry controls, status bindings, account/day isolation, router links and haptic ownership."
+  },
   "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the shared owner-only sickness context with Material buttons, signal inputs, date rollover, range registration and component teardown in TestBed."

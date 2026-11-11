@@ -7,7 +7,8 @@ import type { MatMenu } from '@angular/material/menu';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
-import { getEventTags } from '@shared/event-tags';
+import { buildCalendarActivityRow } from '../../../helpers/calendar-activity-row.helper';
+import { CalendarActivityRowComponent } from '../calendar-activity-row/calendar-activity-row.component';
 
 import type { TimelineNote } from '@shared/timeline-notes';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -24,10 +25,7 @@ import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-
 import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
 import {
   buildActivityCalendarPeriodSummary,
-  formatActivityCalendarDuration,
   formatActivityCalendarSummaryMetrics,
-  resolveActivityCalendarEventDurationSeconds,
-  resolveActivityCalendarEventLabel,
 } from '../../../helpers/activity-calendar.helper';
 import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
@@ -40,7 +38,6 @@ import { TrainingImpactComponent } from '../../training-impact/training-impact.c
 import { buildTrainingDayImpactView, buildTrainingSessionImpactView } from '../../../helpers/training-impact.helper';
 import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
-import { CalendarActivityTagsComponent } from '../calendar-activity-tags/calendar-activity-tags.component';
 import { buildPlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 interface HealthState {
@@ -59,7 +56,7 @@ interface HealthState {
     '[class.calendar-day-context--calm-month]': 'calmMonth()',
     '[class.calendar-day-context--compact]': 'compact()',
   },
-  imports: [TrainingGoalsDayComponent, SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent, CalendarActivityTagsComponent],
+  imports: [TrainingGoalsDayComponent, SharedModule, ActivityCalendarVolumeListComponent, HealthSleepStageSummaryComponent, TrainingImpactComponent, CalendarActivityRowComponent],
   templateUrl: './calendar-day-context.component.html',
   styleUrls: ['./calendar-day-context.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -202,19 +199,9 @@ export class CalendarDayContextComponent implements OnChanges {
   });
   readonly isDarkTheme = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly duplicatingId = signal<string | null>(null);
-  readonly activities = computed(() => this.day().events.map((event: EventRead) => ({
-    id: `${event.getID?.() || ''}`,
-    name: resolveActivityCalendarEventLabel(event),
-    tags: getEventTags(event as EventRead),
-    activityType: `${event.getActivityTypesAsString?.() || 'Activity'}`,
-    duration: (() => {
-      const seconds = resolveActivityCalendarEventDurationSeconds(event);
-      return seconds === null ? 'Duration unavailable' : formatActivityCalendarDuration(seconds);
-    })(),
-    trainingImpact: buildTrainingSessionImpactView(event, this.trainingImpactState()),
-    route: event.getID?.() && this.data().userId
-      ? ['/user', this.data().userId, 'event', event.getID()] : null,
-  })));
+  readonly activities = computed(() => this.day().events.map((event: EventRead) =>
+    buildCalendarActivityRow(event, this.data().userId, buildTrainingSessionImpactView(event, this.trainingImpactState())),
+  ));
   readonly activitiesByStoryKey = computed(() => new Map(
     this.activities().map((activity, index) => [`activity:${activity.id || index}`, activity]),
   ));

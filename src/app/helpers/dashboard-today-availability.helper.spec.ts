@@ -86,4 +86,12 @@ describe('Today selector data availability', () => {
     expect(buildDashboardTodayAvailability({ ...input(), derived: missing }).recovery.state).toBe('no-data');
     expect(buildDashboardTodayAvailability({ ...input(), derived: { ...missing, formNowStatus: 'building' } }).load.state).toBe('updating');
   });
+  it('uses recorded-activity evidence for the optional activity rows, independently of totals', () => {
+    for (const complete of [true, false]) {
+      const result = buildDashboardTodayAvailability({ ...input(), metrics: buildTodayActivityMetrics([], complete) });
+      expect(result.recordedActivities).toEqual(result.activities);
+      expect(result.recordedActivities.hasData).toBe(false);
+    }
+  });
+
 });

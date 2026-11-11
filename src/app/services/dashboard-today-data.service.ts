@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Subscription, fromEvent } from 'rxjs';
+import { Subscription, defer, fromEvent } from 'rxjs';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import type {
@@ -25,6 +25,17 @@ import {
 import { selectLatestHealthReading } from '../helpers/health-latest-reading.helper';
 import { getDateTimeFormatter } from '../helpers/date-time-format.helper';
 
+import { buildCalendarActivityRow, type CalendarActivityRow } from '../helpers/calendar-activity-row.helper';
+
+export interface TodayRecordedActivities {
+  ownerUid: string | null;
+  date: string | null;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  rows: CalendarActivityRow[];
+  complete: boolean;
+}
+const emptyActivities = (): TodayRecordedActivities => ({ ownerUid: null, date: null, status: 'idle', rows: [], complete: false });
+
 /** One activity listener and bounded cached Health reads for the optional Today metrics. */
 @Injectable()
 export class DashboardTodayDataService {
@@ -35,6 +46,7 @@ export class DashboardTodayDataService {
   private readonly locale = inject(LOCALE_ID);
   private readonly destroy = inject(DestroyRef);
   readonly metrics = signal<DashboardTodayMetricValues>({});
+  readonly activities = signal<TodayRecordedActivities>(emptyActivities());
   private key = '';
   private generation = 0;
   private activity?: Subscription;
@@ -70,6 +82,7 @@ export class DashboardTodayDataService {
     const key = JSON.stringify([
       activeUid,
       user?.uid,
+      settings.recordedActivities === true,
       settings.metrics
         .filter(
           (id) =>
@@ -89,62 +102,55 @@ export class DashboardTodayDataService {
     this.activity?.unsubscribe();
     this.healthAbort?.abort();
     this.metrics.set({});
+    this.activities.set(emptyActivities());
     this.current =
       user && user.uid === activeUid && /^\d{4}-\d{2}-\d{2}$/.test(date)
         ? { user, settings, date }
         : null;
     if (!this.current) return;
-    const dependencies = dashboardTodayDependencies(settings);
-    const version = this.generation;
-    if (dependencies.activities) {
-      const start = new Date(`${date}T00:00:00`),
-        end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      this.patch(
-        Object.fromEntries(
-          TODAY_ACTIVITY_METRICS.map((id) => [
-            id,
-            { value: '—', detail: 'Loading activities…', status: 'loading' },
-          ])
-        )
-      );
-      this.activity = this.calendar
-        .watchSummaryEvents(user, {
-          startMs: start.getTime(),
-          endExclusiveMs: end.getTime(),
-        })
-        .subscribe({
-          next: (result) => {
-            if (this.valid(version))
-              this.patch(
-                buildTodayActivityMetrics(
-                  result.events,
-                  result.complete,
-                  user.settings.unitSettings,
-                  user.settings.summariesSettings,
-                  this.locale,
-                  settings.metrics
-                )
-              );
-          },
-          error: () => {
-            if (this.valid(version))
-              this.patch(
-                Object.fromEntries(
-                  TODAY_ACTIVITY_METRICS.map((id) => [
-                    id,
-                    {
-                      value: '—',
-                      detail: 'Unable to load activities',
-                      status: 'error',
-                    },
-                  ])
-                )
-              );
-          },
-        });
-    }
+    if (dashboardTodayDependencies(settings).activities) this.watchActivities();
     this.refreshHealth();
+  }
+
+  /** Explicit retry affects only the activity query, leaving Health reads alone. */
+  retryActivities(): boolean {
+    const state = this.activities();
+    if (!this.current || !this.valid(this.generation) || !dashboardTodayDependencies(this.current.settings).activities
+      || !(state.status === 'error' || (state.status === 'ready' && !state.complete))) return false;
+    this.watchActivities();
+    return true;
+  }
+
+  private watchActivities(): void {
+    const { user, settings, date } = this.current;
+    const version = this.generation;
+    const start = new Date(`${date}T00:00:00`), end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    this.activity?.unsubscribe();
+    this.activities.set({ ownerUid: user.uid, date, status: 'loading', rows: [], complete: false });
+    this.patch(Object.fromEntries(TODAY_ACTIVITY_METRICS.map(id => [id,
+      { value: '—', detail: 'Loading activities…', status: 'loading' },
+    ])));
+    this.activity = defer(() => this.calendar.watchSummaryEvents(user, {
+      startMs: start.getTime(), endExclusiveMs: end.getTime(),
+    })).subscribe({
+      next: result => {
+        if (!this.valid(version)) return;
+        this.patch(buildTodayActivityMetrics(result.events, result.complete, user.settings.unitSettings,
+          user.settings.summariesSettings, this.locale, settings.metrics));
+        this.activities.set({ ownerUid: user.uid, date, status: 'ready', complete: result.complete,
+          rows: settings.recordedActivities ? [...new Map(result.events.map(event => [event.getID(), event])).values()]
+            .map(event => buildCalendarActivityRow(event, user.uid)) : [],
+        });
+      },
+      error: () => {
+        if (!this.valid(version)) return;
+        this.activities.set({ ownerUid: user.uid, date, status: 'error', rows: [], complete: false });
+        this.patch(Object.fromEntries(TODAY_ACTIVITY_METRICS.map(id => [id,
+          { value: '—', detail: 'Unable to load activities', status: 'error' },
+        ])));
+      },
+    });
   }
   private patch(values: DashboardTodayMetricValues) {
     this.metrics.update((current) => ({ ...current, ...values }));
