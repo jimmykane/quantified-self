@@ -7,6 +7,8 @@ import {
   AppDashboardTileEventFiltersInterface,
 } from '../models/app-user.interface';
 import { getDatesForDateRange } from './date-range-helper';
+import { activityDateRangeAnchor, formatActivityRangeDate, normalizeActivityRangeNavigation, resolveActivityDateRange, shiftActivityDateRange,
+  type ActivityDateRangeNavigation, type ActivityDateRangePreset, type ActivityDateRangeWindow } from './activity-date-range.helper';
 
 export interface DashboardTileEventRangeOption {
   range: AppDashboardTileEventFilterRange;
@@ -81,11 +83,13 @@ export function normalizeDashboardEventTableFilters(
     filters.dateRange,
     normalizeDashboardEventTableDateRange(legacyFilters.dateRange, DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE),
   );
+  const navigation = normalizeActivityRangeNavigation(filters.rangeNavigation);
   return {
     searchTerm: typeof filters.searchTerm === 'string'
       ? filters.searchTerm
       : (typeof legacyFilters.searchTerm === 'string' ? legacyFilters.searchTerm : null),
     dateRange,
+    ...(navigation && dashboardDateRangeForNavigation(navigation) === dateRange ? { rangeNavigation: navigation } : {}),
     startDate: finiteNumberOrNull(filters.startDate, finiteNumberOrNull(legacyFilters.startDate, null)),
     endDate: finiteNumberOrNull(filters.endDate, finiteNumberOrNull(legacyFilters.endDate, null)),
     activityTypes: normalizeActivityTypes(filters.activityTypes, normalizeActivityTypes(legacyFilters.activityTypes, [])),
@@ -93,6 +97,41 @@ export function normalizeDashboardEventTableFilters(
       ? filters.includeMergedEvents !== false
       : legacyFilters.includeMergedEvents !== false,
   };
+}
+
+/** Keep table navigation independent of chart/My Tracks date-range semantics. */
+export function resolveDashboardEventTableNavigation(filters: Partial<AppDashboardEventTableFiltersInterface>, now = new Date(), startOfWeek = 1): ActivityDateRangeNavigation {
+  const saved = normalizeActivityRangeNavigation(filters.rangeNavigation);
+  if (saved && dashboardDateRangeForNavigation(saved) === filters.dateRange) return saved;
+  const mapping = new Map<DateRanges, ActivityDateRangePreset>([
+    [DateRanges.thisWeek, 'calendar-week'], [DateRanges.lastWeek, 'calendar-week'],
+    [DateRanges.thisMonth, 'calendar-month'], [DateRanges.lastMonth, 'calendar-month'],
+    [DateRanges.thisYear, 'year'], [DateRanges.lastYear, 'year'],
+    [DateRanges.lastSevenDays, 'week'], [DateRanges.lastThirtyDays, 'month'],
+    [DateRanges.custom, 'custom'], [DateRanges.all, 'all'],
+  ]);
+  const preset = mapping.get(filters.dateRange) || 'calendar-week';
+  if ([DateRanges.lastWeek, DateRanges.lastMonth, DateRanges.lastYear].includes(filters.dateRange)) {
+    const previous = shiftActivityDateRange(preset, resolveActivityDateRange(preset, now, null, startOfWeek)!, -1)!;
+    return { preset, anchor: activityDateRangeAnchor(preset, previous) };
+  }
+  return { preset, anchor: null };
+}
+
+export function dashboardDateRangeForNavigation(navigation: ActivityDateRangeNavigation): DateRanges {
+  if (navigation.preset === 'all') return DateRanges.all;
+  if (navigation.anchor || navigation.preset === 'custom' || navigation.preset === 'quarter') return DateRanges.custom;
+  return { week: DateRanges.lastSevenDays, month: DateRanges.lastThirtyDays, 'calendar-week': DateRanges.thisWeek,
+    'calendar-month': DateRanges.thisMonth, year: DateRanges.thisYear }[navigation.preset];
+}
+
+export function resolveDashboardEventTableRange(filters: Partial<AppDashboardEventTableFiltersInterface>, now = new Date(), startOfWeek = 1): ActivityDateRangeWindow | null | undefined {
+  const navigation = resolveDashboardEventTableNavigation(filters, now, startOfWeek);
+  const start = filters.startDate == null ? null : new Date(filters.startDate);
+  const end = filters.endDate == null ? null : new Date(filters.endDate);
+  const custom = start && end && Number.isFinite(+start) && Number.isFinite(+end)
+    ? { startDate: formatActivityRangeDate(start), endDate: formatActivityRangeDate(end) } : null;
+  return resolveActivityDateRange(navigation.preset, now, navigation.customDates || custom, startOfWeek, navigation.anchor);
 }
 
 export function normalizeDashboardEventTableDateRange(

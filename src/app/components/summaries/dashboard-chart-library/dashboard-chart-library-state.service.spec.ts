@@ -11,6 +11,7 @@ import { AppRouteService } from '../../../services/app.route.service';
 import { DashboardDerivedMetricsService, createDashboardDerivedMetricsMissingState } from '../../../services/dashboard-derived-metrics.service';
 import { getDashboardChartCatalog, getAvailableDashboardCharts } from '../../../helpers/dashboard-chart-catalog.helper';
 import { AppUserInterface } from '../../../models/app-user.interface';
+import { type DashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
 
 describe('inline chart library state', () => {
   let state: DashboardChartLibraryState;
@@ -239,6 +240,90 @@ describe('inline chart library state', () => {
     expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
     expect(persistence.save).toHaveBeenCalledTimes(1); expect(watch).not.toHaveBeenCalled();
   });
+  it.each<DashboardTileLaneKey>(['kpi', 'section:calendar', 'section:health', 'section:trainingState', 'section:performancePower', 'section:activityOverview', 'section:routesMaps'])('preserves every tile when hiding and restoring %s', async lane => {
+    user.settings.dashboardSettings.tiles = [structuredClone(calendar.tile)];
+    const tiles = user.settings.dashboardSettings.tiles;
+    await state.setSectionVisibility(user, lane, false);
+    expect(persistence.save).toHaveBeenCalledWith(user.uid, { hiddenSections: [] }, { hiddenSections: [lane] });
+    expect(user.settings.dashboardSettings.tiles).toBe(tiles);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([lane]);
+    await state.setSectionVisibility(user, lane, true);
+    expect(user.settings.dashboardSettings.tiles).toBe(tiles);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+    expect(watch).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(2); expect(haptics.success).toHaveBeenCalledTimes(2);
+  });
+  it('undoes visibility without replacing newer tiles or unrelated settings', async () => {
+    await state.setSectionVisibility(user, 'section:health', false);
+    const tiles = [structuredClone(calendar.tile)];
+    user.settings.dashboardSettings.tiles = tiles;
+    user.settings.dashboardSettings.showTodaySummary = false;
+    await state.undo(user);
+    expect(persistence.save.mock.calls.at(-1)?.[2]).toEqual({ hiddenSections: [] });
+    expect(user.settings.dashboardSettings.tiles).toBe(tiles);
+    expect(user.settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+  });
+  it('keeps a failed visibility change unchanged and reports the failed save', async () => {
+    persistence.save.mockRejectedValueOnce(new DashboardConfigurationConflict());
+    await state.setSectionVisibility(user, 'kpi', false);
+    expect(user.settings.dashboardSettings.hiddenSections).toBeUndefined();
+    expect(state.undoAvailable()).toBe(false); expect(state.busy()).toBe(false);
+    expect(state.error()).toContain('dashboard changed');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('protects an unsaved draft and clears it only after an accepted visibility change succeeds', async () => {
+    await state.select(user, getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!);
+    const editor = state.editor()!;
+    editor.customEventRange = '30d'; state.refreshDraft(); haptics.selection.mockClear();
+    await state.setSectionVisibility(user, 'section:health', false);
+    expect(state.editor()).toBe(editor); expect(persistence.save).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    await state.setSectionVisibility(user, 'section:health', false);
+    expect(state.editor()).toBeNull(); expect(state.activeLane()).toBeNull();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:health']);
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('ignores unchanged, invalid and overlapping section visibility requests', async () => {
+    await state.setSectionVisibility(user, 'kpi', true);
+    await state.setSectionVisibility(user, 'unknown' as never, false);
+    expect(persistence.save).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    let finish!: () => void;
+    persistence.save.mockReturnValueOnce(new Promise<void>(resolve => finish = resolve));
+    const pending = state.setSectionVisibility(user, 'kpi', false);
+    await Promise.resolve(); await state.setSectionVisibility(user, 'section:health', false);
+    expect(persistence.save).toHaveBeenCalledOnce();
+    expect(user.settings.dashboardSettings.hiddenSections).toBeUndefined();
+    state.resetContext(); finish(); await pending;
+    expect(user.settings.dashboardSettings.hiddenSections).toBeUndefined();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(state.undoAvailable()).toBe(false);
+  });
+  it('reveals a hidden section when a chart is added through the manager, with Undo', async () => {
+    user.settings.dashboardSettings.hiddenSections = ['section:health', 'kpi'];
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'health:steps')!;
+    await state.select(user, entry); await state.save();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi']);
+    expect(user.settings.dashboardSettings.tiles).toHaveLength(1);
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:health', 'kpi']);
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+  it('can add a removed Calendar while clearing its hidden preference', async () => {
+    user.settings.dashboardSettings.hiddenSections = ['section:calendar'];
+    await state.setSectionVisibility(user, 'section:calendar', true);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+    expect(user.settings.dashboardSettings.tiles).toEqual([calendar.tile]);
+  });
+  it.each(['reset', 'all', 'clear'] as const)('clears hidden sections with the %s layout action', async action => {
+    user.settings.dashboardSettings.tiles = [structuredClone(calendar.tile)];
+    user.settings.dashboardSettings.hiddenSections = ['section:health', 'kpi'];
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    await state.bulk(user, action);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+  });
+
   it('shows and hides Calendar independently of Today and other saved tiles, with Undo', async () => {
     const custom = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!.tile);
     custom.order = 0;
@@ -322,11 +407,48 @@ describe('inline chart library state', () => {
     expect(state.undoAvailable()).toBe(true);
     await state.undo(user);expect(user.settings.dashboardSettings.tiles[0]).toEqual(previous);
   });
+  it('reveals a hidden destination when moving a chart and restores both changes with Undo', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile);
+    delete tile['healthSection'];
+    user.settings.dashboardSettings = { tiles: [tile], hiddenSections: ['kpi', 'section:health'] };
+    await state.moveHealthTile(user, tile.order, 'health');
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi']);
+    expect(user.settings.dashboardSettings.tiles[0]['healthSection']).toBe('health');
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['kpi', 'section:health']);
+    expect(user.settings.dashboardSettings.tiles).toEqual([tile]);
+  });
+  it('reveals hidden sections with Add all on a fully configured dashboard', async () => {
+    user.settings.dashboardSettings = {
+      tiles: getDashboardChartCatalog().map((entry, order) => ({ ...structuredClone(entry.tile), order })),
+      showTodaySummary: true, hiddenSections: ['kpi', 'section:health'],
+    };
+    await state.bulk(user, 'all');
+    expect(persistence.save).toHaveBeenCalledOnce();
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual([]);
+  });
+  it('does not start a superseded Calendar restore after the context is destroyed', async () => {
+    const pending = state.bulk(user, 'calendar');
+    state.resetContext(); await pending;
+    expect(persistence.save).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+  it('accepts only one of two simultaneous Calendar restores', async () => {
+    let finish!: () => void;
+    persistence.save.mockReturnValue(new Promise<void>(resolve => finish = resolve));
+    const first = state.bulk(user, 'calendar'); const second = state.bulk(user, 'calendar');
+    await Promise.resolve();
+    try { expect(persistence.save).toHaveBeenCalledOnce(); }
+    finally { finish(); await Promise.all([first, second]); }
+  });
   it('leaves a failed move unchanged and reports the persistence error', async () => {
+    user.settings.dashboardSettings.hiddenSections = ['section:trainingState'];
     const tile=JSON.parse(JSON.stringify(getDashboardChartCatalog().find(item=>item.definition.id==='curated-sleep')!.tile));
     user.settings.dashboardSettings.tiles=[tile];persistence.save.mockRejectedValueOnce(new Error('offline'));
     await state.moveHealthTile(user,tile.order,'trainingState');
     expect(user.settings.dashboardSettings.tiles[0].healthSection).toBe('health');expect(state.error()).toBe('offline');expect(state.undoAvailable()).toBe(false);
+    expect(user.settings.dashboardSettings.hiddenSections).toEqual(['section:trainingState']);
   });
 
 });

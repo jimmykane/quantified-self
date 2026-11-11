@@ -28,6 +28,8 @@ import { AppEventService } from '../../services/app.event.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
+import { activityDateRangeAnchor, activityRangeDates, currentActivityDateRange, sameActivityDateRange, shiftActivityDateRange } from '../../helpers/activity-date-range.helper';
+
 
 @Component({
   selector: 'app-activities-page',
@@ -51,12 +53,16 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly dateFilter = viewChild<TableDateFilterComponent<ActivityExplorerPeriod>>(TableDateFilterComponent);
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
+  private readonly calendarTimeZone = signal(Intl.DateTimeFormat().resolvedOptions().timeZone);
   private owner: FirebaseUserType | null = null;
   private generation = 0;
   private eventsSubscription?: Subscription;
   private catalogVersion = 0;
   private urlPeriod: ActivityExplorerPeriod = 'month';
   private allDatesDialog?: MatDialogRef<ConfirmationDialogComponent, boolean>;
+  private loadedWeekStart = 1;
+  readonly isCalendarWeek = computed(() => this.period() === 'calendar-week');
+  readonly rangeAnchor = signal<string | null>(null);
   readonly user = signal<AppUserInterface | null>(null);
   readonly tableUsers = computed(() => { const user = this.user(); return user ? [user] : []; });
   readonly events = signal<EventRead[]>([]);
@@ -71,6 +77,20 @@ export class ActivitiesPageComponent implements OnInit {
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
   readonly periodLabel = computed(() => this.periods.find(period => period.value === this.period())!.label);
   readonly customDates = signal<ActivityExplorerCustomDates | null>(null);
+  readonly historyRange = computed(() => {
+    this.calendarTimeZone();
+    return activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates(),
+      this.user()?.settings?.unitSettings?.startOfTheWeek, this.rangeAnchor());
+  });
+  readonly rangeDates = computed(() => { const range = this.historyRange(); return range ? activityRangeDates(range) : null; });
+  readonly isCurrentPeriod = computed(() => !this.rangeAnchor() && sameActivityDateRange(this.historyRange(), currentActivityDateRange(
+    this.period(), new Date(this.localDayStartMs()), this.historyRange(), this.user()?.settings?.unitSettings?.startOfTheWeek)));
+  readonly nextPeriodEnabled = computed(() => {
+    const range = this.historyRange();
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    return !!range && !!shiftActivityDateRange(this.period(), range, 1, current);
+  });
   readonly customRangeOpen = signal(false);
   readonly showCustomRange = computed(() => this.customRangeOpen() || this.period() === 'custom');
   readonly customDateForm = new FormGroup({
@@ -97,11 +117,12 @@ export class ActivitiesPageComponent implements OnInit {
   readonly sportShortcuts = computed(() => getActivityTypeFamilyFilterOptions(this.selectedSports(), this.sports())
     .map(family => ({ label: family.label, values: family.activityTypes })));
   readonly filters = computed(() => ({
-    tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(), period: this.period(),
-    customDates: this.period() === 'custom' ? this.customDates() : null,
+    tags: this.selectedTags(), untagged: this.untagged(), sports: this.selectedSports(),
+    period: this.period() === 'all' ? 'all' as const : 'custom' as const,
+    customDates: this.rangeDates(),
   }));
   readonly filterContext = computed(() => JSON.stringify({ ...this.filters(), merged: this.includeMergedEvents() }));
-  readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod);
+  readonly hasFilters = computed(() => this.includeMergedEvents() || !!this.selectedTags().length || this.untagged() || !!this.selectedSports().length || this.period() !== this.defaultPeriod || !!this.rangeAnchor());
   readonly filteredEvents = computed(() => this.user()
     ? filterActivityExplorerEvents(this.events().filter(event => this.includeMergedEvents() || !event.isMerge), this.filters(), new Date(this.localDayStartMs())) : []);
   readonly emptyMessage = computed(() => this.loading() ? 'Loading activities…'
@@ -124,9 +145,12 @@ export class ActivitiesPageComponent implements OnInit {
   @HostListener('window:focus')
   refreshLocalDay(): void {
     const next = new Date().setHours(0, 0, 0, 0);
-    if (next === this.localDayStartMs()) return;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (next === this.localDayStartMs() && timeZone === this.calendarTimeZone()) return;
+    const previous = this.historyRange();
     this.localDayStartMs.set(next);
-    if (this.user() && this.period() !== 'all' && this.period() !== 'custom') this.loadHistory();
+    this.calendarTimeZone.set(timeZone);
+    if (this.user() && !sameActivityDateRange(previous, this.historyRange())) this.loadHistory();
   }
 
   @HostListener('document:visibilitychange')
@@ -143,20 +167,21 @@ export class ActivitiesPageComponent implements OnInit {
     });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const previousPeriod = this.period();
+      const previousAnchor = this.rangeAnchor();
+      const legacyWeek = params.get('view') === 'training-log';
+      const requestedPeriod = legacyWeek ? 'calendar-week' : this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       this.selectedTags.set(normalizeEventTagSuggestions(params.getAll('tag')));
       this.untagged.set(params.get('untagged') === '1');
       this.selectedSports.set(normalizeActivityExplorerSports(params.getAll('sport')));
       this.includeMergedEvents.set(params.get('merged') === '1');
-      const requestedPeriod = this.periods.find(period => period.value === params.get('period'))?.value || this.defaultPeriod;
       const customDates = requestedPeriod === 'custom' ? normalizeActivityExplorerCustomDates(params.get('start'), params.get('end')) : null;
       const period = requestedPeriod === 'custom' && !customDates ? this.defaultPeriod : requestedPeriod;
       this.urlPeriod = period;
-      if (period === 'all' && this.period() !== 'all') {
-        this.confirmAllDates();
-        return;
-      }
+      if (period === 'all' && this.period() !== 'all') { this.confirmAllDates(); return; }
       this.closeAllDatesWarning();
-      const rangeChanged = previousPeriod !== period || (period === 'custom'
+      const anchor = params.get('anchor') || (period === 'calendar-week' ? params.get('week') : null);
+      this.rangeAnchor.set(period !== 'custom' && period !== 'all' ? normalizeActivityExplorerCustomDates(anchor, anchor)?.startDate || null : null);
+      const rangeChanged = previousAnchor !== this.rangeAnchor() || previousPeriod !== period || (period === 'custom'
         && (customDates?.startDate !== this.customDates()?.startDate || customDates?.endDate !== this.customDates()?.endDate));
       this.customDates.set(customDates);
       this.period.set(period);
@@ -166,13 +191,14 @@ export class ActivitiesPageComponent implements OnInit {
       }
       if (rangeChanged && this.user()) this.loadHistory();
       else this.refreshLocalDay();
-      if (requestedPeriod === 'custom' && !customDates) this.updateUrl(true);
+      if (legacyWeek || params.has('week') || (requestedPeriod === 'custom' && !customDates)) this.updateUrl(true);
     });
     combineLatest([this.auth.user$, this.auth.authState$]).pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([profile, owner]) => {
         const nextUser = owner && profile?.uid === owner.uid ? profile : null;
         if (nextUser?.uid === this.user()?.uid && owner === this.owner) {
           this.user.set(nextUser);
+          if (nextUser && this.isCalendarWeek() && this.loadedWeekStart !== (nextUser.settings?.unitSettings?.startOfTheWeek ?? 1)) this.loadHistory();
           return;
         }
         this.closeAllDatesWarning();
@@ -197,6 +223,32 @@ export class ActivitiesPageComponent implements OnInit {
           else this.loadHistory();
         }
       });
+  }
+
+  navigateRange(direction: -1 | 1): void {
+    if (this.loading() || !this.user() || this.owner !== this.auth.currentUser) return;
+    const range = this.historyRange();
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), range,
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    const next = range && shiftActivityDateRange(this.period(), range, direction, current);
+    if (!next) return;
+    if (this.period() === 'custom') this.customDates.set(activityRangeDates(next));
+    else {
+      this.rangeAnchor.set(sameActivityDateRange(next, current) ? null : activityDateRangeAnchor(this.period(), next));
+    }
+    this.loadHistory(true);
+    this.filtersChanged();
+  }
+
+  goToCurrentPeriod(): void {
+    if (this.loading() || this.isCurrentPeriod() || !this.user() || this.owner !== this.auth.currentUser) return;
+    const current = currentActivityDateRange(this.period(), new Date(this.localDayStartMs()), this.historyRange(),
+      this.user()?.settings?.unitSettings?.startOfTheWeek);
+    if (!current) return;
+    if (this.period() === 'custom') this.customDates.set(activityRangeDates(current));
+    this.rangeAnchor.set(null);
+    this.loadHistory(true);
+    this.filtersChanged();
   }
 
   selectTags(tags: readonly string[], untagged = false): void {
@@ -243,7 +295,7 @@ export class ActivitiesPageComponent implements OnInit {
       this.customRangeOpen.set(true);
       return;
     }
-    if (period === this.period()) {
+    if (period === this.period() && !this.rangeAnchor()) {
       if (this.customRangeOpen()) this.cancelCustomRange();
       return;
     }
@@ -256,6 +308,7 @@ export class ActivitiesPageComponent implements OnInit {
     }
     this.closeAllDatesWarning();
     this.period.set(period);
+    this.rangeAnchor.set(null);
     this.customDates.set(null);
     this.loadHistory(true);
     this.filtersChanged();
@@ -269,8 +322,9 @@ export class ActivitiesPageComponent implements OnInit {
     this.untagged.set(false);
     this.selectedSports.set([]);
     this.includeMergedEvents.set(false);
-    const periodChanged = this.period() !== this.defaultPeriod;
+    const periodChanged = this.period() !== this.defaultPeriod || !!this.rangeAnchor();
     this.period.set(this.defaultPeriod);
+    this.rangeAnchor.set(null);
     this.customDates.set(null);
     if (periodChanged) this.loadHistory(true);
     this.filtersChanged();
@@ -288,6 +342,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.closeAllDatesWarning();
     this.customDates.set(dates);
     this.period.set('custom');
+    this.rangeAnchor.set(null);
     this.loadHistory(true);
     this.filtersChanged();
   }
@@ -325,7 +380,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private resetCustomDateForm(): void {
     const now = new Date(this.localDayStartMs());
-    const range = activityExplorerDateRange(this.period(), now, this.customDates()) || activityExplorerDateRange(this.defaultPeriod, now)!;
+    const range = this.historyRange() || activityExplorerDateRange(this.defaultPeriod, now)!;
     this.customDateForm.reset({ start: dayjs(range.start), end: dayjs(range.end).subtract(1, 'day') });
   }
 
@@ -355,6 +410,7 @@ export class ActivitiesPageComponent implements OnInit {
       if (this.user()?.uid !== user.uid || this.owner !== owner || owner !== this.auth.currentUser) return;
       if (confirmed === true) {
         this.period.set('all');
+        this.rangeAnchor.set(null);
         this.customDates.set(null);
         this.loadHistory(true);
         // ConfirmationDialogComponent owns feedback for its confirmation button.
@@ -383,6 +439,9 @@ export class ActivitiesPageComponent implements OnInit {
         sport: this.selectedSports().length ? this.selectedSports() : null, period: this.period(), order: null,
         start: this.period() === 'custom' ? this.customDates()?.startDate : null,
         end: this.period() === 'custom' ? this.customDates()?.endDate : null,
+        view: null,
+        week: null,
+        anchor: this.period() !== 'custom' && this.period() !== 'all' ? this.rangeAnchor() : null,
       },
       queryParamsHandling: 'merge',
       replaceUrl,
@@ -455,6 +514,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private loadHistory(feedback = false): void {
     this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
+    this.calendarTimeZone.set(Intl.DateTimeFormat().resolvedOptions().timeZone);
     this.generation += 1;
     this.eventsSubscription?.unsubscribe();
     if (!this.loading()) this.loadingHadMergedEvents.set(this.events().some(event => event.isMerge));
@@ -464,7 +524,8 @@ export class ActivitiesPageComponent implements OnInit {
     this.loading.set(!!user);
     if (!user) return;
     const generation = this.generation;
-    const range = activityExplorerDateRange(this.period(), new Date(this.localDayStartMs()), this.customDates());
+    const range = this.historyRange();
+    this.loadedWeekStart = user.settings?.unitSettings?.startOfTheWeek ?? 1;
     if (range === undefined) {
       this.loading.set(false);
       return;

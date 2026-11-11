@@ -1,0 +1,11 @@
+<section class="deferred-load-error" role="status">
+  <h3>{{ label() }} couldn't load</h3>
+  <p>Check your connection, then reload the page to try again. Unsaved changes may be lost.</p>
+  @if (reloadFailed()) {
+    <p>Reload didn't start. Use your browser's reload control to try again.</p>
+  }
+  <button mat-stroked-button type="button" (click)="reload()" [disabled]="reloading() || !isBrowser"
+    [attr.aria-busy]="reloading()">
+    {{ reloading() ? 'Reloading…' : 'Reload page' }}
+  </button>
+</section>

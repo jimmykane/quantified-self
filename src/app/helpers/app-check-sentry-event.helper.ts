@@ -1,5 +1,6 @@
 import type { Breadcrumb, ErrorEvent, EventHint } from '@sentry/browser';
 import { appCheckFailureDetails } from './app-check-error.helper';
+import { projectSentryBuildTags } from './sentry-build-tags.helper';
 
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -81,7 +82,7 @@ export function appCheckBeforeSend(event: ErrorEvent, hint?: EventHint): ErrorEv
       user: event.user ? { id: text(event.user.id, 128), email: text(event.user.email, 254) } : undefined,
       request: event.request ? { url: safeUrl(event.request.url), method: method(event.request.method), headers: requestHeaders } : undefined,
       contexts: { appCheck, ...(traceId && spanId ? { trace: { trace_id: traceId, span_id: spanId } } : {}) },
-      tags: { appCheckErrorCode: code, appCheckAuthState: authState,
+      tags: { ...projectSentryBuildTags(event.tags), appCheckErrorCode: code, appCheckAuthState: authState,
         ...(failure ? { appCheckPhase: phase, appCheckHttpStatus: String(httpStatus ?? 'unknown') }
           : { appCheckOutcome: outcome, ...(operation ? { appCheckOperation: operation } : {}) }) },
       fingerprint: failure ? ['app-check-verification', phase, String(httpStatus ?? 'unknown')]

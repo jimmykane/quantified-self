@@ -1,0 +1,22 @@
+:host {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.deferred-load-error {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+
+  h3, p { margin: 0; }
+  h3 { font: var(--mat-sys-title-medium); }
+  p { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); }
+}

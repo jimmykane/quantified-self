@@ -12,6 +12,8 @@ vi.mock('../firebase/firestore', () => ({ Firestore: 'Firestore', doc: vi.fn(), 
 describe('dashboard configuration writes', () => {
   beforeEach(() => { TestBed.configureTestingModule({ providers: [{ provide: Firestore, useValue: {} }] }); });
   it('treats missing defaults consistently but detects reordered tiles and changed preferences', () => {
+    expect(() => assertDashboardConfigurationCurrent({ tiles: [] }, { hiddenSections: [] }, ['hiddenSections'])).not.toThrow();
+    expect(() => assertDashboardConfigurationCurrent({ hiddenSections: ['kpi'] }, { hiddenSections: [] }, ['hiddenSections'])).toThrow(DashboardConfigurationConflict);
     expect(() => assertDashboardConfigurationCurrent({ tiles: [] }, { tiles: [], showTodaySummary: true }, ['tiles', 'showTodaySummary'])).not.toThrow();
     expect(() => assertDashboardConfigurationCurrent({ tiles: [] }, { tiles: [{ order: 1 }] } as never, ['tiles'])).toThrow(DashboardConfigurationConflict);
   });

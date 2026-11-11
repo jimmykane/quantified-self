@@ -1,6 +1,7 @@
-import { Component, DestroyRef, ElementRef, EventEmitter, Input, Output, ViewChild, afterNextRender, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, EventEmitter, Input, Output, ViewChild, afterNextRender, computed, inject, input, signal } from '@angular/core';
 import type { Type } from '@angular/core';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-shell-header',
@@ -16,6 +17,7 @@ export class AppShellHeaderComponent {
   private historyImportLoad: Promise<void> | null = null;
   private historyImportType: Type<unknown> | null = null;
   private readonly destroyRef = inject(DestroyRef);
+  private readonly haptics = inject(AppHapticsService);
   @ViewChild('header') private header?: ElementRef<HTMLElement>;
 
   @Input() bannerHeight = 0;
@@ -47,7 +49,13 @@ export class AppShellHeaderComponent {
     }
   }
   @Input() isAdminUser = false;
-  @Input() unreadWhatsNewCount = 0;
+  readonly unreadWhatsNewCount = input(0);
+  readonly isUpdateAvailable = input(false);
+  readonly notificationsLabel = computed(() => [
+    'View updates and notification settings',
+    this.unreadWhatsNewCount() > 0 ? 'Unread release notes' : '',
+    this.isUpdateAvailable() ? 'App update available. Reload to update' : '',
+  ].filter(Boolean).join('. '));
 
   @Output() toggleSidenav = new EventEmitter<void>();
   @Output() logoClick = new EventEmitter<void>();
@@ -75,6 +83,11 @@ export class AppShellHeaderComponent {
       observer.observe(this.header.nativeElement);
       this.destroyRef.onDestroy(() => observer.disconnect());
     });
+  }
+
+  openNotifications(): void {
+    this.haptics.selection();
+    this.whatsNewClick.emit();
   }
 
   private loadHistoryImports(): void {

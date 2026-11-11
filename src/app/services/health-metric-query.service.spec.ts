@@ -12,7 +12,7 @@ import { nightlyHealthAccountKey } from '@shared/nightly-hrv';
 
 describe('shared Health request queue', () => {
   const user = signal<{uid:string}|null>({uid:'owner'});
-  const health = { loadMetricRange: vi.fn() };
+  const health = { loadMetricRange: vi.fn(), loadLatestMeasurement: vi.fn() };
   const sleep = { watchForDashboard: vi.fn(), loadSummaryRange: vi.fn() };
   const pending: Array<() => void> = [];
   const request = (day:number) => ({metricId:'steps' as const,startDate:`2026-09-${String(day).padStart(2,'0')}`,endDate:'2026-09-30',includeSamples:false});
@@ -45,6 +45,16 @@ describe('shared Health request queue', () => {
     expect(service.loadSleepRange('owner', 1, 2)).toBe(first);
     expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
     expect(health.loadMetricRange).not.toHaveBeenCalled();
+  });
+  it('shares latest measurement reads while keeping exact source pins separate', async () => {
+    health.loadLatestMeasurement.mockResolvedValue({ results: [], complete: true });
+    const service = TestBed.inject(HealthMetricQueryService);
+    const first = service.loadLatestMeasurement('owner', 'scale-a');
+    expect(service.loadLatestMeasurement('owner', 'scale-a')).toBe(first);
+    await first;
+    await service.loadLatestMeasurement('owner', 'scale-b');
+    expect(health.loadLatestMeasurement).toHaveBeenCalledTimes(2);
+    expect(health.loadLatestMeasurement.mock.calls.map(call => call[1])).toEqual(['scale-a', 'scale-b']);
   });
   it('coalesces reads, limits concurrency to three, and promotes a selected preview', async () => {
     const service=TestBed.inject(HealthMetricQueryService);

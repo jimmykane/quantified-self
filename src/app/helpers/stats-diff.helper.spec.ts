@@ -2,6 +2,10 @@ import {
   ActivityInterface,
   ActivityTypes,
   DataDistance,
+  DataAltitude,
+  DataAscent,
+  DataDescent,
+  ElevationUnits,
   DataDistanceMiles,
   DataPowerAvg,
   DataSpeedAvg,
@@ -31,6 +35,18 @@ describe('stats-diff.helper', () => {
     type,
     getStat: (statType: string) => statType === DataDistance.type ? new DataDistance(meters) : null,
   }) as ActivityInterface;
+
+  it.each([DataAltitude, DataAscent, DataDescent])('formats %s differences in feet without changing the percentage or source values', Metric => {
+    const first = new Metric(30.48), second = new Metric(15.24);
+    const activity = (stat: DataAltitude) => ({ type: ActivityTypes.Hiking, getStat: () => stat }) as unknown as ActivityInterface;
+    const metres = computeStatDiff(activity(first), activity(second), Metric.type, Metric.type, normalizeUserUnitSettings({}));
+    const feet = computeStatDiff(activity(first), activity(second), Metric.type, Metric.type,
+      normalizeUserUnitSettings({ elevationUnits: ElevationUnits.Feet }));
+    expect(metres?.display).toBe('15 m');
+    expect(feet?.display).toBe('50 ft');
+    expect(feet?.percent).toBe(metres?.percent);
+    expect(first.getValue()).toBe(30.48); expect(second.getValue()).toBe(15.24);
+  });
 
   it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('formats swim distance differences in yards with general %s units', (distanceUnits) => {
     const settings = normalizeUserUnitSettings({ distanceUnits, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });

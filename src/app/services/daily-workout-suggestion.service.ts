@@ -1,8 +1,9 @@
 import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
+import { deleteField } from 'app/firebase/firestore';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest } from '@shared/day-workout';
-import { isDailyWorkoutEventAdvice, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { isDailyWorkoutFailureReason, isDailyWorkoutEventAdvice, dailyWorkoutSuggestionMergePatch, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -83,13 +84,16 @@ export class DailyWorkoutSuggestionService {
     const context = { uid, localDate, authUser, subscription: new Subscription() };
     this.restRead = context;
     context.subscription.add(this.plans.watchCalendarRestDay(uid, localDate).subscribe({ next: record => untracked(() => {
-      if (this.restRead !== context || !this.eligible(uid) || this.preferences().controls.localDate !== localDate) return;
+      if (this.restRead !== context || this.auth.currentUser !== authUser || !this.eligible(uid)
+        || this.preferences().controls.localDate !== localDate) return;
       this.acceptRestDayRevision(uid, localDate, record?.revision ?? 0);
       if (record?.isRestDay && this.cache?.status?.state !== 'dismissed') this.remember(uid, { localDate, state: 'rest-day' });
     }), error: error => untracked(() => {
       context.subscription.unsubscribe();
-      if (this.restRead === context) this.reportFailure(uid, 'calendar-rest', error);
-      if (this.restRead === context && this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
+      if (this.restRead !== context || this.auth.currentUser !== authUser
+        || this.preferences().controls.localDate !== localDate) return;
+      this.reportFailure(uid, 'calendar-rest', error);
+      if (this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
         && (this.cache.status || this.cache.pending.size)) { this.invalidate(); this.persist(); }
     }) }));
   }
@@ -150,6 +154,7 @@ export class DailyWorkoutSuggestionService {
   private validStatus(status: DailyWorkoutSuggestionStatus | null): status is DailyWorkoutSuggestionStatus {
     try {
       if (!status || !states.includes(status.state) || status.localDate !== this.preferences().controls.localDate) return false;
+      if (status.failureReason !== undefined && (status.state !== 'failed' || !isDailyWorkoutFailureReason(status.failureReason))) return false;
       if (status.state !== 'ready') return true;
       const result = status.result;
       if (!status.controls || !result || typeof result.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(result.requestId)
@@ -239,10 +244,11 @@ export class DailyWorkoutSuggestionService {
       const waitingEpoch = entry.epoch;
       await processing;
       if (this.cache !== entry || entry.epoch !== waitingEpoch) throw Error('Daily suggestion access changed.');
-      return this.request(uid, action, current, expectedDate, refresh);
+      // The completed read already refreshed this scope. Recheck access and prepare only if it is still waiting.
+      return this.request(uid, action, current, expectedDate, action === 'prepare' ? false : refresh);
     }
     if (action === 'status' && !refresh && entry.status) return entry.status;
-    if (action === 'prepare' && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
+    if (action === 'prepare' && !refresh && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
     if (action === 'dismiss') this.invalidate();
     const epoch = entry.epoch, sleepKey = entry.observedSleepKey;
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser
@@ -306,7 +312,7 @@ export class DailyWorkoutSuggestionService {
       const changed = this.key(uid) !== JSON.stringify([uid, preferences]);
       this.saving.set(true);
       try {
-        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: preferences,
+        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(preferences, deleteField()),
           ...(deliveryPreferences ? { dailyWorkoutDelivery: deliveryPreferences } : {}) } } });
         if (changed && this.isOwner(uid)) this.clear();
       }

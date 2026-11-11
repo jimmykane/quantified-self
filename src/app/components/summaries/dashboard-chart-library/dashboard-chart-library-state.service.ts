@@ -12,7 +12,7 @@ import { AppUserInterface, AppDashboardSettingsInterface } from '../../../models
 import { DashboardConfigurationService, cloneDashboardSettings, assertDashboardConfigurationCurrent } from '../../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
-import { DashboardTileLaneKey, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
+import { DashboardTileLaneKey, normalizeDashboardHiddenSections, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
 import { DashboardChartCatalogEntry } from '../../../helpers/dashboard-chart-catalog.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { DashboardTileConfiguration } from './dashboard-tile-configuration';
@@ -55,9 +55,9 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.activeLane.set(next);
   }
 
-  async close(): Promise<void> {
+  async close(feedback = true): Promise<void> {
     if (this.busy() || !(await this.canDiscard())) return;
-    this.haptics.selection();
+    if (feedback) this.haptics.selection();
     this.clearSelection();
     this.activeLane.set(null);
   }
@@ -145,11 +145,40 @@ export class DashboardChartLibraryState implements OnDestroy {
     finally { this.busy.set(false); }
   }
 
+  async setSectionVisibility(user: AppUserInterface, lane: DashboardTileLaneKey, visible: boolean): Promise<void> {
+    if (!user?.uid || this.busy() || !normalizeDashboardHiddenSections([lane]).length) return;
+    if (lane === 'section:calendar' && !user.settings.dashboardSettings.tiles.some(isDashboardActivityCalendarTile)) {
+      if (visible) await this.bulk(user, 'calendar');
+      return;
+    }
+    const before = { hiddenSections: normalizeDashboardHiddenSections(user.settings.dashboardSettings.hiddenSections) };
+    const isVisible = !before.hiddenSections.includes(lane);
+    if (isVisible === visible) return;
+    const version = this.contextVersion;
+    if (!(await this.canDiscard()) || this.busy() || version !== this.contextVersion) return;
+    const after = { hiddenSections: normalizeDashboardHiddenSections(visible
+      ? before.hiddenSections.filter(item => item !== lane) : [...before.hiddenSections, lane]) };
+    this.haptics.selection(); this.busy.set(true); this.error.set('');
+    try {
+      await this.persistence.save(user.uid, before, after);
+      if (version !== this.contextVersion) return;
+      user.settings.dashboardSettings = { ...user.settings.dashboardSettings, ...after };
+      this.clearSelection(); this.activeLane.set(null);
+      this.undoState = { uid: user.uid, before: cloneDashboardSettings(before), after: cloneDashboardSettings(after) };
+      this.undoAvailable.set(true); this.changed$.next(null); this.haptics.success();
+    } catch (error) {
+      if (version === this.contextVersion) {
+        this.error.set(error instanceof Error ? error.message : 'Could not update section visibility. Please try again.');
+        this.haptics.error();
+      }
+    } finally { this.busy.set(false); }
+  }
+
   async bulk(user: AppUserInterface, action: 'today' | 'calendar' | 'reset' | 'all' | 'clear'): Promise<void> {
-    if (this.busy() || !(await this.canDiscard())) return;
+    const contextVersion = this.contextVersion;
+    if (!user?.uid || this.busy() || !(await this.canDiscard()) || this.busy() || contextVersion !== this.contextVersion) return;
     this.busy.set(true); this.error.set('');
     const mutationVersion = this.mutationVersion;
-    const contextVersion = this.contextVersion;
     const editor = this.makeController(user, action === 'calendar');
     try {
       if (action === 'today') await editor.onTodaySummaryVisibilityChange(user.settings.dashboardSettings.showTodaySummary === false);
@@ -173,13 +202,19 @@ export class DashboardChartLibraryState implements OnDestroy {
     const previous=resolveDashboardTileLaneKey(tile);
     if(previous===`section:${destination}`) return;
     tile['healthSection']=destination;
+    const patch: Partial<AppDashboardSettingsInterface> = { tiles: after.tiles };
+    const hidden = normalizeDashboardHiddenSections(before.hiddenSections);
+    const destinationLane: DashboardTileLaneKey = `section:${destination}`;
+    if (hidden.includes(destinationLane)) patch.hiddenSections = hidden.filter(lane => lane !== destinationLane);
     this.haptics.selection(); this.busy.set(true); this.error.set('');
     const version=this.contextVersion;
     try {
-      await this.persistence.save(user.uid,before,{tiles:after.tiles});
+      await this.persistence.save(user.uid,before,patch);
       if(version!==this.contextVersion) return;
-      user.settings.dashboardSettings={...user.settings.dashboardSettings,tiles:after.tiles};
-      this.undoState={uid:user.uid,before:cloneDashboardSettings({tiles:before.tiles}),after:cloneDashboardSettings({tiles:after.tiles})};
+      user.settings.dashboardSettings={...user.settings.dashboardSettings,...patch};
+      this.undoState={uid:user.uid,
+        before:cloneDashboardSettings(Object.fromEntries(Object.keys(patch).map(key => [key, before[key]]))),
+        after:cloneDashboardSettings(patch)};
       this.undoAvailable.set(true);this.changed$.next(order);this.haptics.success();
     } catch(error) { if(version===this.contextVersion) {this.error.set(error instanceof Error ? error.message : 'Could not move chart.');this.haptics.error();} }
     finally {this.busy.set(false);}
@@ -194,16 +229,18 @@ export class DashboardChartLibraryState implements OnDestroy {
     try {
       assertDashboardConfigurationCurrent(user.settings.dashboardSettings, undo.after, Object.keys(undo.after));
       const restored = cloneDashboardSettings(undo.before);
-      restored.tiles ??= [];
-      const controller = this.makeController(user, false);
-      controller.syncAutoTileStateAfterSave(restored, undo.after.tiles, restored.tiles);
-      controller.destroy();
+      if ('tiles' in undo.after) {
+        restored.tiles ??= [];
+        const controller = this.makeController(user, false);
+        controller.syncAutoTileStateAfterSave(restored, undo.after.tiles, restored.tiles);
+        controller.destroy();
+      }
       await this.persistence.save(user.uid, undo.after, restored);
       if (contextVersion !== this.contextVersion) return;
       user.settings.dashboardSettings = { ...user.settings.dashboardSettings, ...restored };
       this.clearSelection(); this.activeLane.set(null);
       this.undoAvailable.set(false); this.changed$.next(null); this.haptics.success();
-    } catch (error) { if (contextVersion === this.contextVersion) { this.error.set(error instanceof Error ? error.message : 'Could not undo the addition.'); this.haptics.error(); } }
+    } catch (error) { if (contextVersion === this.contextVersion) { this.error.set(error instanceof Error ? error.message : 'Could not undo the dashboard change. Please try again.'); this.haptics.error(); } }
     finally { this.busy.set(false); }
   }
 
@@ -233,6 +270,16 @@ export class DashboardChartLibraryState implements OnDestroy {
       if (result.saved && contextVersion === this.contextVersion) { this.clearSelection(); this.activeLane.set(null); }
     } }, this.dialog, { updateUserProperties: async (_user, change) => {
       const patch = change.settings.dashboardSettings;
+      if (['resetToDefault', 'removeAll', 'addAll'].includes(controller.savingAction)) {
+        patch.hiddenSections = [];
+      } else if (controller.savingAction === 'save' || controller.savingAction === 'calendar') {
+        const savedTile = controller.savingAction === 'calendar' ? patch.tiles.find(isDashboardActivityCalendarTile)
+          : controller.mode === 'add' ? patch.tiles.at(-1) : patch.tiles.find(tile => tile.order === controller.editTileOrder);
+        const hidden = normalizeDashboardHiddenSections(baseline.hiddenSections);
+        if (savedTile && hidden.includes(resolveDashboardTileLaneKey(savedTile))) {
+          patch.hiddenSections = hidden.filter(lane => lane !== resolveDashboardTileLaneKey(savedTile));
+        }
+      }
       await this.persistence.save(user.uid, baseline, patch);
       if (contextVersion !== this.contextVersion) return;
       this.mutationVersion++;

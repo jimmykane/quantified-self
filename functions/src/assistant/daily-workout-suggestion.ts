@@ -1,6 +1,6 @@
 import { dayWorkoutPowerReferenceUsed } from './day-workout-power';
 import { z } from 'zod';
-import type { DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
+import type { DailyWorkoutFailureReason, DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
@@ -9,7 +9,9 @@ import { dayWorkoutDateOffset, dayWorkoutLocalDate, parseGenerateDayWorkoutReque
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
 import { assertAssistantLegalAccess } from './access';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
-import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
+import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSuggestion, generateValidatedDayWorkout, retryDayWorkoutModelError } from './day-workout-callable';
+import { DayWorkoutModelError } from './day-workout-diagnostics';
+import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
@@ -179,6 +181,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   };
   let attempts = 0, meteredAttempts = 0, inputTokens = 0, outputTokens = 0, thoughtsTokens = 0;
   let outcome: DailyWorkoutSuggestionStatus['state'] = 'failed';
+  let stage: 'context' | 'generation' | 'saving' | 'status' = 'context';
+  let failureReason: DailyWorkoutFailureReason | undefined;
   try {
     // An explicit fallback may proceed on an unavailable import read, with uncertainty disclosed below.
     const importing = useAvailable ? await dependencies.importActive(uid).catch(() => true) : await dependencies.importActive(uid);
@@ -239,9 +243,16 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       });
     };
     let result: DailyWorkoutSuggestionResult;
+    stage = 'generation';
     if (adviceOnly) {
       const schema = z.strictObject({ kind: z.literal('event-advice'), rationale: z.string().trim().min(1).max(3000) });
-      const advice = schema.parse(await generate(request, { ...evidence, adviceOnly: true }));
+      let output: unknown;
+      try { output = await generate(request, { ...evidence, adviceOnly: true }); }
+      catch (error) {
+        if (!await retryDayWorkoutModelError(error, 0, assertActive)) throw error;
+        output = await generate(request, { ...evidence, adviceOnly: true });
+      }
+      const advice = schema.parse(output);
       await assertActive();
       result = { version: 1, ...advice, events: evidence.eventGoals!, requestId: request.requestId,
         observedAt: observedAt.toISOString(), draft: null, previousLoads: [], usedContext: evidence.usedContext, missingContext: evidence.missingContext };
@@ -254,16 +265,28 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
         usedContext: evidence.usedContext, missingContext: evidence.missingContext,
         ...(powerReference ? { powerReference } : {}) };
     }
+    stage = 'saving';
     await dependencies.store.finish(uid, date, token, 'ready', controls, result);
     outcome = 'ready';
+    stage = 'status';
     return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
-  } catch {
-    await dependencies.store.finish(uid, date, token, 'failed').catch(() => undefined);
+  } catch (error) {
+    failureReason = stage === 'generation' && error instanceof DayWorkoutModelError ? 'temporary-service'
+      : stage === 'generation' && (error instanceof DayWorkoutSuggestionValidationError || error instanceof z.ZodError
+        || error instanceof HttpsError && error.code === 'failed-precondition') ? 'invalid-output' : 'unknown';
+    const finished = await dependencies.store.finish(uid, date, token, 'failed', undefined, undefined, failureReason)
+      .then(() => true, () => false);
+    // A confirmed charged failure is terminal today. Lost save/read responses remain an explicit status check.
+    if (stage === 'generation' && failureReason !== 'unknown' && attempts > 0 && finished) {
+      try { return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status); }
+      catch { /* Keep the failed receipt; an unavailable read uses the same safe recovery error below. */ }
+    }
     throw new HttpsError('unavailable', 'Today’s suggestion could not finish. Check again to retrieve it, or use the manual generator.');
   } finally {
     // Aggregate counters only. Meter at the provider response boundary, including invalid JSON/correction attempts.
     // Missing usage is explicit; do not interpret unknown provider failures as a measured zero-dollar request.
     try { dependencies.log({ outcome, attempts, meteredAttempts, unmeteredAttempts: attempts - meteredAttempts,
+      ...(failureReason ? { failureReason, failureStage: stage } : {}),
       inputTokens, outputTokens, thoughtsTokens, model: ASSISTANT_MODEL_NAME,
       durationMs: Math.max(0, dependencies.now().getTime() - now.getTime()) }); } catch { /* Diagnostics are best effort. */ }
   }

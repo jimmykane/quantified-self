@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NgTemplateOutlet } from '@angular/common';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { SimpleChange } from '@angular/core';
 import { Subject } from 'rxjs';
@@ -122,6 +123,7 @@ describe('EventPowerCurveComponent', () => {
     };
 
     await TestBed.configureTestingModule({
+      imports: [NgTemplateOutlet],
       declarations: [EventPowerCurveComponent],
       providers: [
         {

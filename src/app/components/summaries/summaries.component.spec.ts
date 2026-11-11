@@ -1,3 +1,8 @@
+import * as SpecialCharts from '../../helpers/dashboard-special-chart-types';
+import { defaultDashboardTodaySettings } from '../../helpers/dashboard-today-settings.helper';
+import { DailyWorkoutSuggestionComponent } from './daily-workout-suggestion/daily-workout-suggestion.component';
+import { DashboardTodayComponent } from './today/dashboard-today.component';
+import { DashboardTodayDataService } from '../../services/dashboard-today-data.service';
 import {
   getDashboardChartCatalog,
 } from '../../helpers/dashboard-chart-catalog.helper';
@@ -47,6 +52,7 @@ import {
   DataAscent,
   DataDistance,
   DataDuration,
+  DistanceUnits,
   AppThemes,
   TileTypes,
   TimeIntervals,
@@ -79,6 +85,7 @@ import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-ti
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { DashboardDailyBriefingComponent } from './dashboard-daily-briefing/dashboard-daily-briefing.component';
 import { ActivityCalendarService } from '../../services/activity-calendar.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
@@ -200,7 +207,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [DashboardTodayComponent, AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
@@ -231,6 +238,7 @@ describe('SummariesComponent', () => {
       ],
     }).compileComponents();
 
+    TestBed.overrideComponent(DashboardTodayComponent, { remove: { imports: [DailyWorkoutSuggestionComponent] }, add: { schemas: [NO_ERRORS_SCHEMA], providers: [{ provide: DashboardTodayDataService, useValue: { connect: vi.fn(), metrics: signal({}) } }] } });
     fixture = TestBed.createComponent(SummariesComponent);
     component = fixture.componentInstance;
     component.showActions = true;
@@ -451,11 +459,11 @@ describe('SummariesComponent', () => {
     const rebuild = vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
     const endMs = new Date(2026, 8, 10, 12).getTime();
     const context = { charts: [], window: dashboardHrvWindows('14d', endMs).visible, loading: false, error: false };
-    component.user = { uid: 'first-owner' } as any;
+    component.user = { uid: 'first-owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as any;
     component['syncHrvSubscription']();
     first.next(context);
     expect(component['hrvTrend']).toBe(context);
-    component.user = { uid: 'second-owner' } as any;
+    component.user = { uid: 'second-owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as any;
     component['syncHrvSubscription']();
     expect(first.observed).toBe(false);
     expect(component['hrvTrend']).toMatchObject({ charts: [], loading: true });
@@ -570,7 +578,7 @@ describe('SummariesComponent', () => {
     vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
     const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
     const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
-    component.user = { uid: 'owner' } as SummariesComponent['user'];
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }] } } } as SummariesComponent['user'];
     component['syncHrvSubscription'](); first$.next(context);
     component.onHrvTrendNavigate('older');
     expect(first$.observed).toBe(false);
@@ -593,7 +601,7 @@ describe('SummariesComponent', () => {
     vi.setSystemTime(nowMs);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = { uid: 'user-1', settings: { dashboardSettings: {
-      tiles: [], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
+      tiles: [{ type: TileTypes.Chart, chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE }, { type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
     } } } as any;
     component['syncSleepSubscription'](); component['syncHrvSubscription']();
     const hrv = TestBed.inject(DashboardHrvService);
@@ -622,7 +630,7 @@ describe('SummariesComponent', () => {
 
   it('restores only HRV settings when saving its range fails', async () => {
     component.user = { uid: 'user-1', settings: { dashboardSettings: {
-      tiles: [], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
+      tiles: [{ type: TileTypes.Chart, chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE }, { type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_HRV_TREND_CHART_TYPE }], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
     } } } as any;
     component['syncSleepSubscription'](); component['syncHrvSubscription']();
     vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
@@ -725,7 +733,7 @@ describe('SummariesComponent', () => {
     expect(calendarIndex).toBeLessThan(kpiIndex);
     const calendarSection = root.querySelector('[aria-labelledby="dashboard-section-calendar"]');
     expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
-    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"] span')?.textContent).toBe('Open');
     expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
 
     fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
@@ -744,7 +752,8 @@ describe('SummariesComponent', () => {
     component.tiles = [kpi, activity];
     (component as any).refreshTileLanes();
     fixture.detectChanges();
-    expect(root.querySelector('.dashboard-calendar-section')).toBeNull();
+    expect(root.querySelector('.dashboard-calendar-section [aria-label="Calendar options"]')).not.toBeNull();
+    expect(root.querySelector('.dashboard-calendar-section app-dashboard-tile-board')).toBeNull();
   });
 
   it('migrates an owner calendar once and preserves a later manual resize', async () => {
@@ -1178,9 +1187,9 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    expect(sectionHeadings).toEqual(['Calendar', 'Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(2);
+    expect(sectionTitleBlocks).toHaveLength(3);
     expect(dashboardHeader?.querySelector('app-dashboard-chart-library')).not.toBeNull();
     expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
     expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
@@ -1564,7 +1573,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it('keeps one global picker and hides all empty sections on an editable dashboard', () => {
+  it('keeps one global picker and only Calendar restoration controls when sections are empty', () => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [];
@@ -1583,7 +1592,8 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
     expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
     expect(component.mainGridSections).toEqual([]);
-    expect(nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(nativeElement.querySelectorAll('.dashboard-main-section')).toHaveLength(1);
+    expect(nativeElement.querySelector('[aria-labelledby="dashboard-section-calendar"]')).not.toBeNull();
   });
 
   it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {
@@ -1623,22 +1633,115 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it.each([true, false])('offers the saved Calendar visibility in Dashboard options before tile rendering (visible: %s)', visible => {
+  it.each([true, false])('offers saved Calendar visibility beside Open before tile rendering (visible: %s)', visible => {
     const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!.tile;
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: visible ? [tile] : [], showTodaySummary: false } } } as any;
     component.showActions = true; component.isOwnerDashboard = true;
     component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
     fixture.detectChanges();
-    const bulk = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
-    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    const visibility = vi.spyOn(component.library, 'setSectionVisibility').mockResolvedValue(undefined);
+    const root = fixture.nativeElement as HTMLElement;
+    const options = root.querySelector<HTMLButtonElement>('[aria-label="Calendar options"]')!;
+    const open = root.querySelector('.dashboard-calendar-section a')!;
+    expect(options.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(root.querySelector('.dashboard-calendar-section app-tile-chart')).toBeNull();
+    const selection = TestBed.inject(AppHapticsService).selection;
+    vi.mocked(selection).mockClear();
+    options.click();
     fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
     const menu = document.body.querySelector('[role="menu"]')!;
-    expect(menu.textContent).toContain('Show Today summary');
+    expect(menu.textContent).not.toContain('Today');
     const calendarAction = Array.from(menu.querySelectorAll<HTMLButtonElement>('button'))
       .find(button => button.textContent?.includes(visible ? 'Hide Calendar' : 'Show Calendar'))!;
     expect(calendarAction).toBeDefined();
     calendarAction.click(); fixture.detectChanges();
-    expect(bulk).toHaveBeenCalledWith(component.user, 'calendar');
+    expect(visibility).toHaveBeenCalledWith(component.user, 'section:calendar', !visible);
+  });
+
+  it.each([
+    ['kpi', 'KPIs', 'kpi-acwr', '.dashboard-kpi-section', '.dashboard-kpi-lane'],
+    ['section:health', 'Health', 'health:steps', '[aria-labelledby="dashboard-section-health"]', 'app-dashboard-tile-board'],
+    ['section:trainingState', 'Training State', 'curated-form', '[aria-labelledby="dashboard-section-trainingState"]', 'app-dashboard-tile-board'],
+    ['section:performancePower', 'Performance & Power', 'curated-power-curve', '[aria-labelledby="dashboard-section-performancePower"]', 'app-dashboard-tile-board'],
+    ['section:activityOverview', 'Activity Overview', 'custom', '[aria-labelledby="dashboard-section-activityOverview"]', 'app-dashboard-tile-board'],
+    ['section:routesMaps', 'Routes & Maps', 'map-routes-preview', '[aria-labelledby="dashboard-section-routesMaps"]', 'app-dashboard-tile-board'],
+  ])('keeps a menu and saved tiles when %s is hidden', (lane, label, catalogId, sectionSelector, boardSelector) => {
+    const catalog = getDashboardChartCatalog();
+    const entry = catalog.find(item => item.definition.id === catalogId
+      || (catalogId === 'custom' && item.definition.category === 'custom'))!;
+    expect(entry, catalogId).toBeDefined();
+    const tile = { ...structuredClone(entry.tile), order: 0, data: [] } as DashboardChartTileViewModel;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [tile], showTodaySummary: false } } } as any;
+    component.eventUser = component.user;
+    component.showActions = true; component.isOwnerDashboard = true; component.tiles = [tile];
+    component['refreshTileLanes'](); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const section = root.querySelector(sectionSelector)!;
+    expect(section.querySelector(boardSelector)).not.toBeNull();
+    const visibility = vi.spyOn(component.library, 'setSectionVisibility').mockResolvedValue(undefined);
+    const options = section.querySelector<HTMLButtonElement>('.dashboard-section-actions > button')!;
+    expect(options.getAttribute('aria-label')).toBe(`${label} options`);
+    options.click(); fixture.detectChanges();
+    const hide = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button'))
+      .find(button => button.textContent?.includes(`Hide ${label}`))!;
+    hide.click(); fixture.detectChanges();
+    expect(visibility).toHaveBeenLastCalledWith(component.user, lane, false);
+    component.user.settings.dashboardSettings.hiddenSections = [lane as never];
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(section.querySelector(boardSelector)).toBeNull();
+    expect(section.querySelector('h2')?.textContent).toContain(label);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([tile]);
+    options.click(); fixture.detectChanges();
+    const show = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button'))
+      .find(button => button.textContent?.includes(`Show ${label}`))!;
+    show.click(); fixture.detectChanges();
+    expect(visibility).toHaveBeenLastCalledWith(component.user, lane, true);
+  });
+
+  it('keeps shared sections visible without exposing their owner visibility controls', () => {
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'curated-power-curve')!;
+    const tile = { ...structuredClone(entry.tile), order: 0, data: [] } as DashboardChartTileViewModel;
+    component.user = { uid: 'viewer', settings: { dashboardSettings: { tiles: [tile], hiddenSections: ['section:performancePower'], showTodaySummary: false } } } as any;
+    component.eventUser = { uid: 'shared-owner' } as any; component.showActions = false;
+    component.tiles = [tile]; component['refreshTileLanes'](); fixture.detectChanges();
+    const section = fixture.nativeElement.querySelector('[aria-labelledby="dashboard-section-performancePower"]');
+    expect(section.querySelector('app-dashboard-tile-board')).not.toBeNull();
+    expect(section.querySelector('.dashboard-section-actions')).toBeNull();
+  });
+
+  it('keeps Calendar visibility out of Dashboard options', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    fixture.detectChanges();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Show Today summary');
+    expect(menu.textContent).not.toContain('Calendar');
+  });
+
+  it('disables Calendar options while dashboard settings are saving', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.library.busy.set(true);
+    fixture.detectChanges();
+    const options = fixture.nativeElement.querySelector('[aria-label="Calendar options"]');
+    expect(options.disabled).toBe(true);
+    options.click(); fixture.detectChanges();
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it.each([[false, true], [true, false]])('does not offer hidden Calendar controls with showActions=%s and owner=%s', (showActions, owner) => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.eventUser = { uid: owner ? 'owner' : 'shared-owner' } as any;
+    component.showActions = showActions; component.isOwnerDashboard = owner;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.dashboard-calendar-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Calendar options"]')).toBeNull();
   });
 
   it('does not call a saved dashboard empty while its tiles are still being prepared', () => {
@@ -1664,7 +1767,7 @@ describe('SummariesComponent', () => {
     component.tiles = []; component.mainGridTiles = [];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
     expect(component.mainGridSections).toEqual([]);
-    expect(fixture.nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-labelledby="dashboard-section-health"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
     component.tiles = [tile]; component.mainGridTiles = [tile];
     component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
@@ -1854,6 +1957,8 @@ describe('SummariesComponent', () => {
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
+    component.todaySettings = { ...component.todaySettings, recovery: true };
+    component.user = { settings: { dashboardSettings: { today: component.todaySettings } } } as SummariesComponent['user'];
     const nowMs = Date.UTC(2026, 6, 18, 12);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -1922,6 +2027,9 @@ describe('SummariesComponent', () => {
     expect(overnightHeartRate?.getAttribute('data-cue-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('.dashboard-direction-cue')?.getAttribute('aria-label')).toContain('Below your usual level');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.querySelector('.dashboard-overnight-hr-reading')?.getAttribute('aria-label'))
+      .toBe('Average sleep heart rate: 48 bpm');
+    expect(overnightHeartRate?.querySelector('.dashboard-overnight-hr-kind')?.textContent).toBe('avg');
     expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
     expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
       .toBe('Overnight heart rate for the latest 7 eligible nights');
@@ -1957,6 +2065,66 @@ describe('SummariesComponent', () => {
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+  });
+
+  it.each([0, 1])('shows sleep duration beside the score for a night %s days ago and clears it when unavailable', daysAgo => {
+    const nowMs = Date.UTC(2026, 10, 9, 12);
+    vi.useFakeTimers(); vi.setSystemTime(nowMs);
+    component.showTodaySummary = true;
+    const endTimeMs = nowMs - (daysAgo * 24 + 1) * 3_600_000;
+    component['readinessSleepSessions'] = [{
+      id: 'latest', sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+      startTimeMs: endTimeMs - 31_440_000, endTimeMs, durationSeconds: 31_440,
+      score: { value: 81 }, source: { provider: 'SuuntoApp', sourceSessionKey: 'latest' },
+    }] as SleepSession[];
+    const host = fixture.nativeElement as HTMLElement;
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      component.user = { settings: { unitSettings, dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+      component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+      component['changeDetector'].markForCheck(); fixture.detectChanges();
+      const sleep = host.querySelector('.dashboard-today-sleep')!;
+      expect(sleep.querySelector('.dashboard-today-sleep-value > span')?.textContent).toBe('81/100');
+      expect(sleep.querySelector('.dashboard-today-sleep-duration')?.getAttribute('aria-label')).toBe('Sleep duration: 08h 44m');
+      expect(sleep.querySelector('.dashboard-today-sleep-duration')?.textContent).toBe('08h 44m');
+      expect(sleep.querySelector('small')?.textContent).toBe(daysAgo ? 'Last available · Nov 8' : 'Today');
+    }
+    component['readinessSleepSessions'] = [];
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('.dashboard-today-sleep-duration')).toBeNull();
+    expect(component.dashboardTodayReadiness.sleepDurationText).toBeNull();
+  });
+
+  it.each([
+    { average: 54, minimum: 42, kind: 'avg', accessible: 'Average sleep heart rate: 54 bpm' },
+    { average: null, minimum: 42, kind: 'min', accessible: 'Minimum sleep heart rate: 42 bpm' },
+  ])('shows the latest $kind sleep HR without a baseline, respects units and clears expired readings', scenario => {
+    const nowMs = Date.UTC(2026, 10, 9, 12);
+    vi.useFakeTimers(); vi.setSystemTime(nowMs);
+    component.showTodaySummary = true;
+    component['readinessSleepSessions'] = [{
+      id: 'latest', sleepDate: '2026-11-08', startTimeMs: nowMs - 33 * 3_600_000,
+      endTimeMs: nowMs - 25 * 3_600_000, durationSeconds: 28_800, score: { value: 81 },
+      vitals: { averageHeartRateBpm: scenario.average, minimumHeartRateBpm: scenario.minimum },
+      source: { provider: 'SuuntoApp', sourceSessionKey: 'latest' },
+    }] as SleepSession[];
+    const host = fixture.nativeElement as HTMLElement;
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      component.user = { settings: { unitSettings, dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+      component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+      component['changeDetector'].markForCheck(); fixture.detectChanges();
+      expect(host.querySelector('.dashboard-overnight-hr-reading')?.getAttribute('aria-label')).toBe(scenario.accessible);
+      expect(host.querySelector('.dashboard-overnight-hr-kind')?.textContent).toBe(scenario.kind);
+      expect(host.querySelector('.dashboard-today-overnight-hr .dashboard-direction-cue')).toBeNull();
+      expect(host.querySelector('.dashboard-today-overnight-hr small')?.textContent).toBe('Comparison unavailable');
+      expect(component.dashboardTodayReadiness.overnightHeartRateContextText).toContain('Last available');
+      expect(component.dashboardTodayReadiness.awaitingSleep).toBe(true);
+    }
+    vi.setSystemTime(nowMs + 48 * 3_600_000);
+    component.dashboardTodayReadiness = component['buildDashboardTodayReadiness']();
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('.dashboard-overnight-hr-reading')).toBeNull();
+    expect(component.dashboardTodayReadiness.overnightHeartRateReadingKind).toBeNull();
   });
 
   it.each([
@@ -2070,6 +2238,94 @@ describe('SummariesComponent', () => {
       }));
       component['syncDerivedMetricsSubscription']();
       component['syncReadinessSleepSubscription']();
+    });
+
+    it('leaves Recovery hidden and unsubscribed until it is selected', () => {
+      expect(component.user.settings.dashboardSettings.today).toBeUndefined();
+      expect(component.todaySettings.recovery).toBe(false);
+      expect(component['resolveDashboardDerivedMetricKinds']()).not.toContain('recovery_now');
+      load$.next({ ...loadState, recoveryNow: { totalSeconds: 7_200, endTimeMs: nowMs }, recoveryNowStatus: 'ready' });
+      sleep$.next(nights); vi.advanceTimersToNextFrame();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')).toBeNull();
+      expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it('keeps Readiness unchanged when its individual sleep drivers are hidden', () => {
+      load$.next(loadState); sleep$.next(nights); vi.advanceTimersToNextFrame();
+      const score = component.dashboardTodayReadiness.score;
+      component.user.settings.dashboardSettings.today = component.todaySettings = defaultDashboardTodaySettings();
+      component['syncReadinessSleepSubscription'](); component['refreshDashboardTodaySignals']();
+      const host = render();
+      expect(component.dashboardTodayReadiness.score).toBe(score);
+      expect(score).not.toBeNull();
+      expect(host.querySelector('.dashboard-training-state-primary')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-primary')).not.toBeNull();
+      expect(host.querySelector('.dashboard-today-load')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-sleep')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')).toBeNull();
+      expect(host.querySelector('.dashboard-today-overnight-hr')).toBeNull();
+      expect(host.querySelector('app-daily-workout-suggestion')).toBeNull();
+      expect(component.dashboardGlanceSignals.map(signal => signal.id)).toEqual(['readiness', 'training-load']);
+    });
+    it('releases unused Sleep and derived subscriptions for a measurement-only Today', async () => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight', 'steps'] };
+      mockDashboardDerivedMetricsService.watch.mockClear(); mockSleepService.watchForDashboard.mockClear();
+      component.user.settings.dashboardSettings.today = component.todaySettings;
+      await component['unsubscribeAndCreateCharts']();
+      component['syncDerivedMetricsSubscription']();
+      expect(load$.observed).toBe(false); expect(sleep$.observed).toBe(false);
+      expect(mockDashboardDerivedMetricsService.watch).not.toHaveBeenCalled();
+      expect(mockSleepService.watchForDashboard).not.toHaveBeenCalled();
+      expect(component.dashboardGlanceSignals).toEqual([]);
+    });
+    it('keeps an independently selected Recovery block explicit while loading or failed', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, recovery: true, metrics: [] };
+      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      component['refreshDashboardTodaySignals']();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Loading…');
+      load$.next({ ...createDashboardDerivedMetricsMissingState(), recoveryNowStatus: 'failed' });
+      vi.advanceTimersToNextFrame();
+      expect(render().querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Recovery unavailable');
+      expect(sleep$.observed).toBe(false);
+    });
+    it.each([
+      [SpecialCharts.DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE, ['form', 'form_now', 'ramp_rate']],
+      [SpecialCharts.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE, ['form']],
+      [SpecialCharts.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE, ['form']],
+      [SpecialCharts.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE, ['form_now', 'freshness_forecast', 'form_plus_7d']],
+      [SpecialCharts.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE, ['intensity_distribution', 'easy_percent', 'hard_percent']],
+    ])('retains every dependency for %s when Today needs no training data', (chartType, kinds) => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight'] };
+      component.user.settings.dashboardSettings.tiles = [{ type: TileTypes.Chart, chartType }] as never;
+      expect(component['resolveDashboardDerivedMetricKinds']().sort()).toEqual([...kinds].sort());
+    });
+    it('shows recorded sleep duration without a score, vitals or training data', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['sleep'] };
+      component['syncDerivedMetricsSubscription'](); component['syncReadinessSleepSubscription']();
+      sleep$.next([{ ...nights[0], score: undefined, vitals: {} }]);
+      vi.advanceTimersToNextFrame();
+      const host = render();
+      expect(component.dashboardTodayReadiness.sleepDurationText).toBe('08h 00m');
+      expect(host.querySelector('.dashboard-today-sleep-duration')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-primary')).toBeNull();
+      expect(component.dashboardTodayReadiness.awaitingSleep).toBe(false);
+    });
+    it('retains the independent Form chart dependency when Today is empty', () => {
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: [] };
+      component.user.settings.dashboardSettings.tiles = [{ type: TileTypes.Chart, chartType: DASHBOARD_FORM_CHART_TYPE }] as never;
+      expect(component['resolveDashboardDerivedMetricKinds']()).toContain('form');
+    });
+    it('preserves compact metric order, expands one summary and allows an empty Today', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...defaultDashboardTodaySettings(), readiness: false, metrics: ['sleep', 'load'] };
+      let host = render();
+      expect(Array.from(host.querySelectorAll('.dashboard-current-state-row dt')).map(element => element.textContent.trim())).toEqual(['Sleep', 'Load']);
+      expect(host.querySelector('.dashboard-current-state-top')?.classList.contains('single-summary')).toBe(true);
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, trainingState: false, metrics: [] };
+      host = render();
+      expect(host.querySelector('.dashboard-current-state-top')).toBeNull();
+      expect(host.querySelector('.dashboard-current-state-row dl')).toBeNull();
+      expect(host.querySelector('app-dashboard-today')?.textContent).toContain('Customize Today');
+      expect(host.querySelector('app-dashboard-today')?.textContent).toContain('No items selected');
     });
 
     it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
@@ -2201,11 +2457,13 @@ describe('SummariesComponent', () => {
     });
 
     it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
+      component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, recovery: true };
+      component['syncDerivedMetricsSubscription']();
       const host = render();
       // The unit runner does not attach external component CSS. Check its stable
       // sizing contract here; real viewport geometry is verified in the browser.
       const stylesheet = document.createElement('style');
-      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/today/dashboard-today.component.css'), 'utf8');
       host.appendChild(stylesheet);
       const readiness = host.querySelector<HTMLElement>('.dashboard-readiness-primary')!;
       const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
@@ -2224,7 +2482,7 @@ describe('SummariesComponent', () => {
       const pendingLayout = reservations();
       const pendingTopAndRecoveryHeight = reservedTopAndRecoveryHeight();
       expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
-      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-band')?.textContent).toContain('Loading…');
       expect(getComputedStyle(host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band')!).boxSizing).toBe('border-box');
       expect(getComputedStyle(readiness).alignContent).toBe('start');
       expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
@@ -3550,7 +3808,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3587,7 +3845,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3609,7 +3867,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '30d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3640,7 +3898,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -3834,7 +4092,7 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '1y' },
-          tiles: [],
+          tiles: [{ type: TileTypes.Chart, chartType: SpecialCharts.DASHBOARD_SLEEP_TREND_CHART_TYPE }],
         },
       },
     } as any;
@@ -4065,7 +4323,7 @@ describe('SummariesComponent', () => {
     const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(summaryHeading?.nextElementSibling).toBe(today?.parentElement);
+    expect(summaryHeading?.nextElementSibling).toBe(today?.closest('app-dashboard-today'));
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 
@@ -4158,6 +4416,10 @@ describe('SummariesComponent', () => {
     expect(component.derivedMetricsBanner).toBeNull();
 
     (component as any).derivedRecoveryNowContext = { totalSeconds: 3_600, endTimeMs: nowMs };
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner).toBeNull();
+
+    component.user.settings.dashboardSettings.today = component.todaySettings = { ...component.todaySettings, recovery: true };
     (component as any).refreshDerivedMetricsBannerState();
     expect(component.derivedMetricsBanner?.type).toBe('warning');
   });

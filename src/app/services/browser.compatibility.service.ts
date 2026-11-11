@@ -6,6 +6,10 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    public static checkAbortControllerSupport(): boolean {
+        return typeof AbortController === 'function';
+    }
+
     public static checkResizeObserverSupport(): boolean {
         return typeof ResizeObserver !== 'undefined';
     }

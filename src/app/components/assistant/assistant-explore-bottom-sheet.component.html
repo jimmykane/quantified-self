@@ -1,12 +1,12 @@
 <section class="bottom-sheet-container assistant-explore-sheet">
-  <app-bottom-sheet-header title="Explore your data" icon="auto_awesome">
+  <app-bottom-sheet-header title="Explore &amp; plan" icon="auto_awesome">
     <button mat-icon-button type="button" aria-label="Close examples and data access" (click)="close()">
       <mat-icon>close</mat-icon>
     </button>
   </app-bottom-sheet-header>
 
   <div class="bottom-sheet-content assistant-explore-content">
-    <p class="assistant-explore-intro">Choose a question to add it to your chat, or ask anything about the data you have connected.</p>
+    <p class="assistant-explore-intro">Create a training plan around your goals and available days, or explore the data you have connected. Choose an example to fill your message; nothing sends automatically.</p>
 
     <section aria-labelledby="assistant-example-questions">
       <h3 id="assistant-example-questions">Example questions</h3>
@@ -130,7 +130,7 @@
 
         <app-compact-row title="Plan and workout changes" titleId="assistant-training-plan-changes-title"
           icon="edit_calendar" iconTone="secondary" density="compact">
-          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Prepare goal create, edit, pause, complete, archive or restore changes, and plan/workout create, edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
+          <p id="assistant-training-plan-changes-summary" class="assistant-training-summary">Create training plans and scheduled workouts, or prepare goal create, edit, pause, complete, archive or restore changes and plan/workout edit, move, copy, skip, archive and delete changes. Workout deletion is recoverable. Plan deletion is permanent; you choose whether to keep its workouts as standalone or delete them. Nothing is applied without your approval.</p>
           <mat-slide-toggle compactRowAction [checked]="data.trainingPlanChangesEnabled === true"
             aria-label="Training plan changes — changing this starts a new chat"
             aria-describedby="assistant-training-plan-changes-summary"

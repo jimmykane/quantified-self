@@ -42,7 +42,7 @@ describe('PaymentSuccessComponent', () => {
             providers: [
                 provideRouter([
                     { path: 'payment/success', component: PaymentSuccessComponent },
-                    ...['services', 'subscriptions', 'dashboard', 'help'].map(path => ({
+                    ...['services', 'subscriptions', 'dashboard', 'help', 'onboarding'].map(path => ({
                         path, component: MembershipDestinationStub, canActivate: [() => navigationAllowed],
                     })),
                 ]),
@@ -87,7 +87,7 @@ describe('PaymentSuccessComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('trial dates, renewal terms, and invoices');
         expect(fixture.nativeElement.querySelector('.checkmark')).toBeTruthy();
         const buttons = fixture.nativeElement.querySelectorAll('mat-card-actions button');
-        expect(buttons[0].textContent).toContain('Connect your devices');
+        expect(buttons[0].textContent).toContain('Open Connections');
         expect(buttons[1].textContent).toContain('Manage membership');
         expect(fixture.nativeElement.textContent).not.toContain('purchase');
         expect(haptics.selection).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe('PaymentSuccessComponent', () => {
         fixture.detectChanges();
         expect(fixture.nativeElement.textContent).toContain('Welcome to Basic!');
         expect(fixture.nativeElement.querySelector('button[mat-flat-button]').textContent).toContain('Go to Dashboard');
-        expect(fixture.nativeElement.textContent).not.toContain('Connect your devices');
+        expect(fixture.nativeElement.textContent).not.toContain('Open Connections');
     });
 
     it('stops after ten unconfirmed checks and offers recovery without asserting payment success', async () => {
@@ -274,6 +274,39 @@ describe('PaymentSuccessComponent', () => {
         await harness.fixture.whenStable();
         expect(TestBed.inject(Router).url).toBe(destination);
         expect(haptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['basic', 'pro'])('returns confirmed %s checkout to the saved onboarding destination', async role => {
+        authUser.getIdTokenResult.mockResolvedValue({ claims: { stripeRole: role } });
+        paymentService.getUserSubscriptions.mockReturnValue(of([{ id: 'sub_ready', role, status: 'active' }]));
+        const resume = '/onboarding?start=upload&returnUrl=%2Fmcp%2Fauthorize&request_id=request_123';
+        const harness = await RouterTestingHarness.create(`/payment/success?onboarding=${encodeURIComponent(resume)}`);
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        const action = harness.routeNativeElement!.querySelector<HTMLButtonElement>('button[mat-flat-button]')!;
+        expect(action.textContent).toContain('Continue setup');
+        action.click();
+        await harness.fixture.whenStable();
+        const query = TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams;
+        expect(query).toEqual({ start: 'upload', returnUrl: '/mcp/authorize', request_id: 'request_123' });
+        expect(TestBed.inject(Router).url).toMatch(/^\/onboarding\?/);
+    });
+
+    it('does not offer setup continuation without confirmed membership', async () => {
+        auth.currentUser = null;
+        const harness = await RouterTestingHarness.create('/payment/success?onboarding=%2Fonboarding%3Fstart%3Dconnect');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        expect(harness.routeNativeElement!.textContent).not.toContain('Continue setup');
+        expect(harness.routeNativeElement!.textContent).toContain('Membership still syncing');
+    });
+
+    it('ignores an external onboarding destination', async () => {
+        const harness = await RouterTestingHarness.create('/payment/success?onboarding=https%3A%2F%2Fexample.com');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        expect(harness.routeNativeElement!.textContent).not.toContain('Continue setup');
+        expect(harness.routeNativeElement!.textContent).toContain('Open Connections');
     });
 
     it('does not emit feedback when connection navigation is canceled', async () => {

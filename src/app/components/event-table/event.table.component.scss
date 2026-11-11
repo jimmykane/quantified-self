@@ -1,6 +1,34 @@
 @use '../../../styles/breakpoints' as bp;
 @use '@angular/material' as mat;
 
+// Density uses Material's public tokens; phone controls retain their normal touch targets.
+.activity-table {
+  @include mat.table-overrides((row-item-container-height: 48px, header-container-height: 40px));
+  @include bp.medium-and-up {
+    @include mat.table-overrides((row-item-container-height: 40px));
+    @include mat.icon-button-overrides((state-layer-size: 36px, icon-size: 20px));
+    @include mat.checkbox-overrides((state-layer-size: 32px, touch-target-display: none));
+  }
+  .mat-mdc-cell, .mat-mdc-header-cell { padding-inline: 8px !important; }
+  // Size to visible content rather than stretching a short column selection.
+  table.mat-mdc-table { width: max-content; min-width: 0; }
+}
+.event-table-column-heading { display: flex; align-items: center; gap: 6px; }
+.event-table-column-heading app-data-type-icon { display: flex; flex-shrink: 0; color: var(--mat-sys-on-surface); }
+.activity-total-row { background: var(--mat-sys-surface-container); cursor: default; }
+.activity-total-label, .activity-total-coverage { display: block; white-space: normal; }
+.activity-total-label { font: var(--mat-sys-label-medium); }
+.activity-total-sport { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.activity-total-sport app-activity-type-icon { display: flex; flex-shrink: 0; }
+.activity-total-copy { min-width: 0; white-space: normal; }
+.activity-total-name { display: block; font: inherit; font-weight: 500; }
+.activity-total-label small, .activity-total-copy small, .activity-total-coverage { display: block; font: var(--mat-sys-label-small); color: var(--mat-sys-on-surface-variant); }
+.activity-total-label small, .activity-total-copy small { white-space: nowrap; }
+.activity-total-row td { border-top: 1px solid var(--mat-sys-outline-variant); }
+// The date cell carries the sport identity when its optional column is hidden.
+// Give that label room inside the existing horizontal table scroll on phones.
+.activity-total-row .activity-total-fallback-cell { min-width: 10rem !important; width: auto !important; max-width: none !important; }
+
 /* Consolidated and cleaned up styles for event table */
 
 /* Keep basic layout but remove fighting against Material */
@@ -192,14 +220,14 @@
 
 .mat-column-Tags,
 .cdk-column-Tags {
-  min-width: 190px;
-  width: 190px;
-  max-width: 190px;
+  min-width: 72px;
+  width: 1px;
 }
 
 .event-tags-cell-button {
   justify-content: flex-start;
   min-width: 0;
+  padding-inline: 4px;
   width: 100%;
 }
 
@@ -217,9 +245,15 @@
   --mat-chip-container-height: 28px;
   --mat-chip-label-text-size: 0.78rem;
   display: block;
+  width: max-content;
   max-width: 170px;
   overflow: hidden;
 }
+
+// Keep two tag previews and their extra-tag count on one compact row.
+.event-tag-label { display: block; max-width: 146px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-tags-chip-set:has(mat-chip:nth-child(2)) .event-tag-label { max-width: 56px; }
+.event-tags-chip-set:has(mat-chip:nth-child(3)) .event-tag-label { max-width: 32px; }
 
 /* Responsive width for the Start Date column */
 .mat-column-Start-Date,
@@ -303,6 +337,7 @@
 
 .mat-mdc-header-cell,
 .mat-mdc-cell {
+  font-family: 'Barlow Condensed', sans-serif;
   white-space: nowrap !important;
   padding: 0 16px !important;
   border-bottom-color: var(--mat-sys-outline-variant) !important;
@@ -310,14 +345,10 @@
 
 .mat-mdc-header-cell {
   color: var(--mat-sys-on-surface-variant) !important;
-  font-weight: 500 !important;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-}
-
-.mat-mdc-cell {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600 !important;
+  text-transform: none;
+  font-size: 0.95rem !important;
+  letter-spacing: normal;
 }
 
 .mat-mdc-row {
@@ -331,11 +362,13 @@
 
 
 /* Gradient strip on the left of the first cell */
-.activity-row td:first-child {
+.activity-row td:first-child,
+.activity-total-row td:first-child {
   position: relative;
 }
 
-.activity-row td:first-child::before {
+.activity-row td:first-child::before,
+.activity-total-row td:first-child::before {
   content: '';
   position: absolute;
   left: 0;
@@ -363,7 +396,6 @@
 .mat-mdc-cell.cdk-column-Activity-Types,
 .mat-mdc-cell.mat-column-activity-types,
 .mat-mdc-cell.cdk-column-activity-types {
-  width: 120px;
   max-width: 140px;
 }
 
@@ -372,7 +404,6 @@
 .mat-mdc-cell.cdk-column-Description,
 .mat-mdc-cell.mat-column-description,
 .mat-mdc-cell.cdk-column-description {
-  width: 120px;
   max-width: 140px;
 }
 
@@ -381,7 +412,6 @@
 .mat-mdc-cell.cdk-column-Device-Names,
 .mat-mdc-cell.mat-column-device-names,
 .mat-mdc-cell.cdk-column-device-names {
-  width: 160px;
   max-width: 160px;
 }
 
@@ -394,8 +424,8 @@
 /* Mobile Adjustments for Overall Table Compactness */
 @include bp.handset-or-tablet-portrait {
 
-  .mat-mdc-header-cell,
-  .mat-mdc-cell {
+  .activity-table .mat-mdc-header-cell,
+  .activity-table .mat-mdc-cell {
     padding: 0 4px !important;
   }
 }
@@ -411,9 +441,9 @@
 
   .mat-column-Tags,
   .cdk-column-Tags {
-    min-width: 52px !important;
-    width: 52px !important;
-    max-width: 52px !important;
+    min-width: 72px !important;
+    width: 72px !important;
+    max-width: 72px !important;
   }
 
   .event-tags-cell-button {

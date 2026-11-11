@@ -1,3 +1,6 @@
+import { activityDateRangeAnchor, activityRangeDates, currentActivityDateRange, formatActivityRangeDate, sameActivityDateRange, shiftActivityDateRange, type ActivityDateRangeNavigation, type ActivityDateRangePreset, type ActivityDateRangeWindow } from '../../helpers/activity-date-range.helper';
+import { dashboardDateRangeForNavigation, resolveDashboardEventTableNavigation, resolveDashboardEventTableRange } from '../../helpers/dashboard-tile-event-filters.helper';
+import type { AppDashboardEventTableFiltersInterface } from '../../models/app-user.interface';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -33,7 +36,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 
 interface DateRangeShortcutOption {
   label: string;
-  value: DateRanges;
+  value: ActivityDateRangePreset;
 }
 
 @Component({
@@ -46,6 +49,9 @@ interface DateRangeShortcutOption {
 
 export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
   @Input() selectedDateRange!: DateRanges;
+  @Input() rangeNavigation?: ActivityDateRangeNavigation | null;
+  @Input() dateContext = '';
+  @Input() dateSelection?: AppDashboardEventTableFiltersInterface;
   @Input() selectedStartDate!: Date;
   @Input() selectedEndDate!: Date;
   @Input() startOfTheWeek!: DaysOfTheWeek;
@@ -83,7 +89,13 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public toolbarSportShortcuts: ActivityFilterPickerShortcut[] = [];
   public toolbarSelectedSports: string[] = [];
   public customRangeOpen = false;
-  @ViewChild(TableDateFilterComponent) private tableDateFilter?: TableDateFilterComponent<DateRanges>;
+  public toolbarRangePreset: ActivityDateRangePreset = 'month';
+  public toolbarNavigationEnabled = false;
+  public toolbarNextPeriodEnabled = false;
+  public toolbarIsCurrentPeriod = false;
+  public toolbarRangeStart: Date | null = null;
+  public toolbarRangeEnd: Date | null = null;
+  @ViewChild(TableDateFilterComponent) private tableDateFilter?: TableDateFilterComponent<ActivityDateRangePreset>;
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,
@@ -129,8 +141,16 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.dateSelection && this.dateSelection) {
+      this.selectedDateRange = this.dateSelection.dateRange;
+      this.rangeNavigation = this.dateSelection.rangeNavigation;
+      this.selectedStartDate = this.dateSelection.startDate == null ? null : new Date(this.dateSelection.startDate);
+      this.selectedEndDate = this.dateSelection.endDate == null ? null : new Date(this.dateSelection.endDate);
+    }
+    // A clock/zone refresh updates navigation state without replacing calendar drafts.
+    if (changes.dateContext) this.syncToolbarRange();
     if (changes.selectedActivityTypes || changes.availableActivityTypes) this.syncToolbarSports();
-    if (changes['selectedDateRange'] || changes['dateRangesToShow'] || changes['compact']) {
+    if (changes['selectedDateRange'] || changes['dateRangesToShow'] || changes['compact'] || changes['rangeNavigation'] || changes['toolbarRangeLayout'] || changes.dateSelection) {
       this.syncToolbarDateRangeOptions();
     }
 
@@ -141,7 +161,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!changes['selectedDateRange']
       && !changes['selectedStartDate']
       && !changes['selectedEndDate']
-      && !changes['startOfTheWeek']) {
+      && !changes['startOfTheWeek'] && !changes['rangeNavigation'] && !changes.dateSelection) {
       return;
     }
 
@@ -149,6 +169,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.startDateControl?.setValue(startDate, { emitEvent: false });
     this.endDateControl?.setValue(endDate, { emitEvent: false });
     this.searchFormGroup.updateValueAndValidity({ emitEvent: false });
+    this.syncToolbarRange();
   }
 
 
@@ -166,6 +187,13 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
 
+    if (this.toolbarRangeLayout) {
+      // Legacy Last week/month/year choices become fixed historical navigation
+      // when saved through this toolbar, with a matching compatibility value.
+      this.rangeNavigation = this.resolveToolbarNavigation();
+      this.selectedDateRange = dashboardDateRangeForNavigation(this.rangeNavigation);
+    }
+
     const { startDate, endDate } = this.toolbarRangeLayout ? this.resolveCurrentRangeDates() : {
       startDate: this.coerceDate(this.startDateControl.value), endDate: this.coerceDate(this.endDateControl.value),
     };
@@ -173,13 +201,15 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.selectedStartDate = startDate ? this.normalizeStartDate(startDate) : (null as any);
     this.selectedEndDate = endDate ? this.normalizeEndDate(endDate) : (null as any);
 
+    this.syncToolbarRange();
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search')?.value,
       startDate: this.selectedStartDate,
       endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
-      includeMergedEvents
+      includeMergedEvents,
+      ...(this.toolbarRangeLayout ? { rangeNavigation: this.resolveToolbarNavigation() } : {}),
     });
   }
 
@@ -266,19 +296,30 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.syncToolbarSports();
   }
 
-  async onToolbarDateRangeChange(value: DateRanges, source?: MatSelect): Promise<void> {
-    if (value === DateRanges.custom) {
+  async onToolbarDateRangeChange(value: ActivityDateRangePreset | DateRanges, source?: MatSelect): Promise<void> {
+    if (this.isLoading) return;
+    const navigation = typeof value === 'number' ? resolveDashboardEventTableNavigation({ dateRange: value }, new Date(), this.startOfTheWeek)
+      : { preset: value, anchor: null };
+    if (navigation.preset === 'custom') {
       if (this.customRangeOpen) return;
       const { startDate, endDate } = this.resolveCurrentRangeDates();
-      // Presets use an exclusive midnight bound; the editor shows inclusive calendar dates.
       const inclusiveEnd = endDate && endDate.getHours() === 0 && endDate.getMinutes() === 0
-        && endDate.getSeconds() === 0 && endDate.getMilliseconds() === 0 ? new Date(endDate.getTime() - 1) : endDate;
+        && endDate.getSeconds() === 0 && endDate.getMilliseconds() === 0 ? new Date(+endDate - 1) : endDate;
       this.searchFormGroup.patchValue({ startDate, endDate: inclusiveEnd }, { emitEvent: false });
       this.customRangeOpen = true;
-    } else if (value !== this.selectedDateRange) {
-      await this.selectDateRange(value);
+    } else {
+      const previous = this.resolveToolbarNavigation();
+      if (navigation.preset !== previous.preset || navigation.anchor !== previous.anchor) {
+        this.hapticsService?.selection();
+        if (navigation.preset !== 'all' || await this.confirmAllRangeSelection()) {
+          this.customRangeOpen = false;
+          const range = resolveDashboardEventTableRange({ dateRange: dashboardDateRangeForNavigation(navigation), rangeNavigation: navigation }, new Date(), this.startOfTheWeek);
+          this.setToolbarRange(navigation, range);
+          await this.search();
+        }
+      }
     }
-    if (source) source.value = this.selectedDateRange;
+    if (source) source.value = typeof value === 'number' ? this.selectedDateRange : this.toolbarRangePreset;
   }
 
   async applyToolbarCustomRange(): Promise<void> {
@@ -288,16 +329,71 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       this.searchFormGroup.markAllAsTouched();
       return;
     }
-    const unchanged = this.selectedDateRange === DateRanges.custom
+    const unchanged = this.resolveToolbarNavigation().preset === 'custom'
       && this.normalizeStartDate(start).getTime() === this.selectedStartDate?.getTime()
       && this.normalizeEndDate(end).getTime() === this.selectedEndDate?.getTime();
     this.customRangeOpen = false;
     if (unchanged) return;
     this.selectedDateRange = DateRanges.custom;
+    this.rangeNavigation = { preset: 'custom', anchor: null, customDates: { startDate: formatActivityRangeDate(start), endDate: formatActivityRangeDate(end) } };
     this.selectedStartDate = this.normalizeStartDate(start);
     this.selectedEndDate = this.normalizeEndDate(end);
     this.hapticsService?.selection();
     await this.search();
+  }
+
+  async shiftToolbarRange(direction: -1 | 1): Promise<void> {
+    if (this.isLoading) return;
+    const navigation = this.resolveToolbarNavigation();
+    const range = this.resolveToolbarRange();
+    const current = currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek);
+    const next = range && shiftActivityDateRange(navigation.preset, range, direction, current);
+    if (!next) return;
+    const anchor = navigation.preset === 'custom' || sameActivityDateRange(next, current) ? null : activityDateRangeAnchor(navigation.preset, next);
+    this.setToolbarRange({ preset: navigation.preset, anchor }, next);
+    this.hapticsService?.selection();
+    await this.search();
+  }
+
+  async showToolbarCurrentPeriod(): Promise<void> {
+    if (this.isLoading) return;
+    const navigation = this.resolveToolbarNavigation();
+    const range = this.resolveToolbarRange();
+    const current = currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek);
+    if (!current || (sameActivityDateRange(range, current) && !navigation.anchor)) return;
+    this.setToolbarRange({ preset: navigation.preset, anchor: null }, current);
+    this.hapticsService?.selection();
+    await this.search();
+  }
+
+  private resolveToolbarNavigation(): ActivityDateRangeNavigation {
+    return resolveDashboardEventTableNavigation({ dateRange: this.selectedDateRange, rangeNavigation: this.rangeNavigation }, new Date(), this.startOfTheWeek);
+  }
+
+  private resolveToolbarRange(): ActivityDateRangeWindow | null | undefined {
+    return resolveDashboardEventTableRange({ dateRange: this.selectedDateRange, rangeNavigation: this.rangeNavigation,
+      startDate: this.selectedStartDate ? +this.selectedStartDate : null, endDate: this.selectedEndDate ? +this.selectedEndDate : null }, new Date(), this.startOfTheWeek);
+  }
+
+  private setToolbarRange(navigation: ActivityDateRangeNavigation, range: ActivityDateRangeWindow | null | undefined): void {
+    this.rangeNavigation = navigation.preset === 'custom' && range ? { ...navigation, customDates: activityRangeDates(range) } : navigation;
+    this.selectedDateRange = dashboardDateRangeForNavigation(navigation);
+    this.selectedStartDate = range?.start ?? null;
+    this.selectedEndDate = range ? new Date(+range.end - 1) : null;
+    this.searchFormGroup.patchValue({ startDate: this.selectedStartDate, endDate: this.selectedEndDate }, { emitEvent: false });
+    this.syncToolbarRange();
+  }
+
+  private syncToolbarRange(): void {
+    const navigation = this.resolveToolbarNavigation();
+    const range = this.resolveToolbarRange();
+    this.toolbarRangePreset = navigation.preset;
+    this.toolbarNavigationEnabled = !!range;
+    this.toolbarRangeStart = range?.start ?? null;
+    this.toolbarRangeEnd = range ? new Date(+range.end - 1) : null;
+    const current = currentActivityDateRange(navigation.preset, new Date(), range, this.startOfTheWeek);
+    this.toolbarIsCurrentPeriod = !navigation.anchor && sameActivityDateRange(range, current);
+    this.toolbarNextPeriodEnabled = !!range && !!shiftActivityDateRange(navigation.preset, range, 1, current);
   }
 
   onToolbarPickerOpened(): void { this.hapticsService?.selection(); }
@@ -310,14 +406,14 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   async clearToolbarCustomRange(): Promise<void> {
-    if (this.customRangeOpen && this.selectedDateRange !== DateRanges.custom) {
+    if (this.customRangeOpen && this.resolveToolbarNavigation().preset !== 'custom') {
       this.cancelToolbarCustomRange();
       return;
     }
     this.customRangeOpen = false;
     const fallback = this.dateRangesToShow.includes(DateRanges.lastThirtyDays) ? DateRanges.lastThirtyDays
       : this.dateRangesToShow.find(value => value !== DateRanges.custom && value !== DateRanges.all) ?? DateRanges.lastThirtyDays;
-    await this.selectDateRange(fallback);
+    await this.onToolbarDateRangeChange(fallback);
   }
 
   async onActivityTypesChange(activityTypes) {
@@ -340,6 +436,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   private resolveCurrentRangeDates(): { startDate: Date | null; endDate: Date | null } {
+    if (this.toolbarRangeLayout) {
+      const range = this.resolveToolbarRange();
+      return { startDate: range?.start ?? null, endDate: range ? new Date(+range.end - 1) : null };
+    }
     if (this.selectedDateRange === DateRanges.custom) {
       return {
         startDate: this.selectedStartDate ?? null,
@@ -356,18 +456,19 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   private syncToolbarDateRangeOptions(): void {
     const visibleDateRanges = new Set(this.dateRangesToShow ?? []);
 
-    this.toolbarDateRangeOptions = [
-      { value: DateRanges.lastThirtyDays, label: 'Last 30 days' },
-      { value: DateRanges.lastSevenDays, label: 'Last 7 days' },
-      { value: DateRanges.thisWeek, label: 'This week' },
-      { value: DateRanges.lastWeek, label: 'Last week' },
-      { value: DateRanges.thisMonth, label: 'This month' },
-      { value: DateRanges.lastMonth, label: 'Last month' },
-      { value: DateRanges.thisYear, label: 'This year' },
-      { value: DateRanges.lastYear, label: 'Last year' },
-      { value: DateRanges.custom, label: 'Custom dates' },
-      { value: DateRanges.all, label: 'All dates' },
-    ].filter(option => visibleDateRanges.has(option.value));
+    const options: (DateRangeShortcutOption & { ranges: DateRanges[] })[] = [
+      { value: 'month', label: '30 days', ranges: [DateRanges.lastThirtyDays] },
+      { value: 'week', label: '7 days', ranges: [DateRanges.lastSevenDays] },
+      { value: 'calendar-week', label: 'Week', ranges: [DateRanges.thisWeek, DateRanges.lastWeek] },
+      { value: 'quarter', label: '90 days', ranges: [DateRanges.lastThirtyDays] },
+      { value: 'calendar-month', label: 'Month', ranges: [DateRanges.thisMonth, DateRanges.lastMonth] },
+      { value: 'year', label: 'Year', ranges: [DateRanges.thisYear, DateRanges.lastYear] },
+      { value: 'custom', label: 'Custom dates', ranges: [DateRanges.custom] },
+      { value: 'all', label: 'All dates', ranges: [DateRanges.all] },
+    ];
+    this.toolbarDateRangeOptions = options.filter(option => option.ranges.some(range => visibleDateRanges.has(range)))
+      .map(({ value, label }) => ({ value, label }));
+    this.syncToolbarRange();
   }
 
   private coerceDate(value: unknown): Date | null {
@@ -459,6 +560,7 @@ export interface Search {
   startDate?: Date,
   endDate?: Date,
   dateRange: DateRanges,
+  rangeNavigation?: ActivityDateRangeNavigation | null,
   activityTypes?: ActivityTypes[],
   includeMergedEvents?: boolean
 }

@@ -5,6 +5,7 @@ import { OverlayContainer } from '@angular/cdk/overlay';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { DateAdapter } from '@angular/material/core';
 import { MatDateRangePicker } from '@angular/material/datepicker';
+import { MatTooltip } from '@angular/material/tooltip';
 import dayjs, { type Dayjs } from 'dayjs';
 import { describe, expect, it, vi } from 'vitest';
 import { MaterialModule } from '../../../modules/material.module';
@@ -18,7 +19,10 @@ async function setup() {
   ] });
   const fixture = TestBed.createComponent(TableDateFilterComponent);
   const form = new FormGroup({ start: new FormControl<Dayjs | null>(null, Validators.required), end: new FormControl<Dayjs | null>(null, Validators.required) });
-  fixture.componentRef.setInput('options', [{ value: 'month', label: 'Last 30 days' }, { value: 'week', label: 'Last 7 days' }, { value: 'custom', label: 'Custom dates' }, { value: 'all', label: 'All dates' }]);
+  fixture.componentRef.setInput('options', [{ value: 'month', label: '30 days' }, { value: 'week', label: '7 days' },
+    { value: 'calendar-week', label: 'Week' }, { value: 'quarter', label: '90 days' },
+    { value: 'calendar-month', label: 'Month' }, { value: 'year', label: 'Year' },
+    { value: 'custom', label: 'Custom dates' }, { value: 'all', label: 'All dates' }]);
   fixture.componentRef.setInput('value', 'month'); fixture.componentRef.setInput('customValue', 'custom'); fixture.componentRef.setInput('allValue', 'all');
   fixture.componentRef.setInput('rangeForm', form);
   const selected = vi.fn(); const applied = vi.fn(); const cancelled = vi.fn(); const cleared = vi.fn(); const opened = vi.fn();
@@ -39,7 +43,7 @@ async function setup() {
 describe('TableDateFilterComponent', () => {
   it('opens chart-style presets without changing the range, marks the selection and keeps All dates last with a warning', async () => {
     const c = await setup(); expect(c.haptics.selection).not.toHaveBeenCalled();
-    expect(c.trigger.textContent).toContain('Last 30 days'); expect(c.fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
+    expect(c.trigger.textContent).toContain('30 days'); expect(c.fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
     c.fixture.componentInstance.open(); await c.settle(); c.fixture.componentInstance.open();
     expect(c.haptics.selection).toHaveBeenCalledOnce(); expect(c.selected).not.toHaveBeenCalled();
     const choices = [...c.overlay.querySelectorAll<HTMLButtonElement>('button[role="menuitemradio"]')];
@@ -52,7 +56,7 @@ describe('TableDateFilterComponent', () => {
   it.each(['disable', 'destroy'])('discards a queued preset when the owner chooses to %s before the menu handoff', async action => {
     const c = await setup();
     c.trigger.click(); await c.settle();
-    const week = [...c.overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(button => button.textContent?.includes('Last 7 days'))!;
+    const week = [...c.overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(button => button.textContent?.includes('7 days'))!;
     week.click();
     expect(c.selected).not.toHaveBeenCalled();
     if (action === 'destroy') c.fixture.destroy();
@@ -60,6 +64,79 @@ describe('TableDateFilterComponent', () => {
     await c.settle();
     expect(c.selected).not.toHaveBeenCalled();
     expect(c.opened).not.toHaveBeenCalled();
+  });
+
+  it('shows calendar-week navigation in the date control and delegates feedback to its owner', async () => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true);
+    c.fixture.componentRef.setInput('currentPeriod', false);
+    c.fixture.componentRef.setInput('startDate', '2026-11-02');
+    c.fixture.componentRef.setInput('endDate', '2026-11-08');
+    const shift = vi.fn(); const current = vi.fn();
+    c.fixture.componentInstance.rangeShift.subscribe(shift);
+    c.fixture.componentInstance.currentPeriodRequested.subscribe(current);
+    await c.settle();
+    expect(c.trigger.textContent).toContain('2–8 Nov 2026');
+    c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
+    c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click();
+    c.fixture.nativeElement.querySelector('.table-date-current-period').click();
+    expect(shift.mock.calls).toEqual([[-1], [1]]);
+    expect(current).toHaveBeenCalledOnce();
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+    c.fixture.componentRef.setInput('disabled', true); await c.settle();
+    c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
+    expect(shift).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([['week', '7 days'], ['month', '30 days'], ['quarter', '90 days'],
+    ['calendar-week', 'Week'], ['calendar-month', 'Month'], ['year', 'Year']])(
+    'shows the current %s preset name, dates while browsing, and the name again on return', async (value, label) => {
+      const c = await setup();
+      c.fixture.componentRef.setInput('value', value);
+      c.fixture.componentRef.setInput('navigation', true);
+      c.fixture.componentRef.setInput('currentPeriod', true);
+      c.fixture.componentRef.setInput('startDate', '2026-11-04');
+      c.fixture.componentRef.setInput('endDate', '2026-11-10'); await c.settle();
+      const tooltip = c.fixture.debugElement.query(By.css('.table-date-filter-button')).injector.get(MatTooltip);
+      expect(c.trigger.textContent).toContain(label);
+      expect(c.trigger.textContent).not.toContain('4–10 Nov 2026');
+      expect(c.trigger.getAttribute('aria-label')).toBe(`Date range: ${label}, 4–10 Nov 2026`);
+      expect(tooltip.message).toBe('4–10 Nov 2026'); expect(tooltip.disabled).toBe(false);
+      c.fixture.componentRef.setInput('currentPeriod', false); await c.settle();
+      expect(c.trigger.textContent).toContain('4–10 Nov 2026'); expect(tooltip.disabled).toBe(true);
+      c.fixture.componentRef.setInput('currentPeriod', true); await c.settle();
+      expect(c.trigger.textContent).toContain(label);
+      expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.selected).not.toHaveBeenCalled();
+    });
+
+  it.each(['current', 'fixed-current-or-future'])('keeps older navigation available but ignores Next for a %s window', async kind => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true);
+    c.fixture.componentRef.setInput('currentPeriod', kind === 'current');
+    c.fixture.componentRef.setInput('nextPeriodEnabled', kind === 'current');
+    await c.settle();
+    const shift = vi.fn(); c.fixture.componentInstance.rangeShift.subscribe(shift);
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+    c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click();
+    c.fixture.componentInstance.shiftRange(1);
+    expect(shift).not.toHaveBeenCalled();
+    c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
+    expect(shift).toHaveBeenCalledExactlyOnceWith(-1);
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('keeps the date menu available while disabling navigation for an unbounded range', async () => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true);
+    c.fixture.componentRef.setInput('navigationEnabled', false);
+    c.fixture.componentRef.setInput('value', 'all'); await c.settle();
+    const shift = vi.fn(); c.fixture.componentInstance.rangeShift.subscribe(shift);
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').disabled).toBe(true);
+    expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+    expect(c.fixture.nativeElement.querySelector('.table-date-current-period').disabled).toBe(true);
+    expect(c.trigger.disabled).toBe(false);
+    c.fixture.componentInstance.shiftRange(-1); expect(shift).not.toHaveBeenCalled();
+    c.trigger.click(); await c.settle(); expect(c.overlay.querySelector('[role="menu"]')).toBeTruthy();
   });
 
   it('uses the native range calendar, stages both dates until Apply and restores the date button focus', async () => {
@@ -83,6 +160,7 @@ describe('TableDateFilterComponent', () => {
 
   it('shows applied dates with a separate clear action and cancels without applying draft changes', async () => {
     const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true); c.fixture.componentRef.setInput('currentPeriod', true);
     c.fixture.componentRef.setInput('value', 'custom'); c.fixture.componentRef.setInput('startDate', '2026-10-01'); c.fixture.componentRef.setInput('endDate', '2026-10-29');
     c.form.setValue({ start: dayjs('2026-10-01'), end: dayjs('2026-10-29') }); await c.settle();
     expect(c.trigger.textContent).toContain('1–29 Oct 2026');

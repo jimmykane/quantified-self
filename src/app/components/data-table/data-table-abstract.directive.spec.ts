@@ -1,5 +1,5 @@
 import { ChangeDetectorRef } from '@angular/core';
-import { DataDistance, DataHeartRateAvg, DataPowerAvg, DataPowerMax, DistanceUnits, type DataInterface } from '@sports-alliance/sports-lib';
+import { DataDistance, DataGradeAdjustedPaceAvg, DataHeartRateAvg, DataPowerAvg, DataPowerMax, DistanceUnits, type DataInterface } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTableAbstractDirective } from './data-table-abstract.directive';
@@ -56,6 +56,16 @@ describe('DataTableAbstractDirective', () => {
     const directive = new TestDataTableDirective({ detectChanges: vi.fn() } as any);
     const row = directive.getStatsRowElement([new DataPowerAvg(100), new DataPowerMax(250)], []);
     expect(row[`sort.${DataPowerMax.type}`]).toBe(250);
+  });
+
+  it('distinguishes missing GAP from recorded zero without changing canonical sort values', () => {
+    const directive = new TestDataTableDirective({ detectChanges: vi.fn() } as any);
+    const missing = directive.getStatsRowElement([], []);
+    const zero = directive.getStatsRowElement([new DataGradeAdjustedPaceAvg(0)], []);
+    const recorded = directive.getStatsRowElement([new DataGradeAdjustedPaceAvg(300)], []);
+    expect(missing[`sort.${DataGradeAdjustedPaceAvg.type}`]).toBeNull();
+    expect(zero[`sort.${DataGradeAdjustedPaceAvg.type}`]).toBe(0);
+    expect(recorded[`sort.${DataGradeAdjustedPaceAvg.type}`]).toBe(300);
   });
 
   it('sets sort value for Average Heart Rate', () => {

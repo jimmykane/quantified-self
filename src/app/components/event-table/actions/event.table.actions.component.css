@@ -1,0 +1,11 @@
+.column-dialog-content { min-inline-size: 0; overscroll-behavior: contain; }
+.column-copy { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); margin-block: 8px; }
+.column-section-title { font: var(--mat-sys-title-small); margin-block: 16px 8px; }
+.column-selected-list { list-style: none; padding: 0; margin: 0; }
+.column-selected-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding-block: 4px; }
+.column-selected-metric { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.column-order-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.column-search-field { box-sizing: border-box; display: block; width: 100%; min-width: 0; }
+.column-empty { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); margin: 0; padding-block: 12px; }
+.column-saving { display: flex; align-items: center; gap: 8px; padding-block: 8px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); }
+.column-trigger-content { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }

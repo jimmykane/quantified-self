@@ -1,5 +1,6 @@
 import { ActivitySendService } from './services/activity-send.service';
-import { ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
+import { DeferredLoadErrorComponent } from './components/shared/deferred-load-error/deferred-load-error.component';
 import { Component, OnDestroy, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -16,6 +17,7 @@ import { AppLocaleService } from './services/app.locale.service';
 import { AppWindowService } from './services/app.window.service';
 import { LoggerService } from './services/logger.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
+import { AppUpdateService } from './services/app.update.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
 
@@ -136,6 +138,7 @@ describe('AppShellComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [AppShellComponent, NavigationContentsFixture],
             imports: [
+                DeferredLoadErrorComponent,
                 MatSidenavModule,
                 MatTabsModule,
                 MatTooltipModule,
@@ -174,6 +177,7 @@ describe('AppShellComponent', () => {
                         setAdminMode: vi.fn()
                     }
                 },
+                { provide: AppUpdateService, useValue: { isUpdateAvailable: signal(false) } },
                 {
                     provide: MatDialog, useValue: {
                         open: vi.fn()
@@ -740,6 +744,20 @@ describe('AppShellComponent', () => {
         expect(component.unreadWhatsNewCount).toBe(0);
     });
 
+    it('passes live app update availability to the header independently of release notes', () => {
+        renderShellFixture();
+        const header = fixture.nativeElement.querySelector('app-shell-header');
+        const available = TestBed.inject(AppUpdateService).isUpdateAvailable;
+        expect(header.isUpdateAvailable).toBe(false);
+        available.set(true);
+        fixture.detectChanges();
+        expect(header.isUpdateAvailable).toBe(true);
+        expect(header.unreadWhatsNewCount).toBe(0);
+        available.set(false);
+        fixture.detectChanges();
+        expect(header.isUpdateAvailable).toBe(false);
+    });
+
     it('should navigate to dashboard on logo click when authenticated', () => {
         renderShellFixture();
         component.authState = true;
@@ -764,6 +782,18 @@ describe('AppShellComponent', () => {
         resumeIdle();
         expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
         expect(navigationLifecycle.created).not.toHaveBeenCalled();
+    });
+    it('renders explicit navigation recovery when the deferred view fails', async () => {
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Manual });
+        const capture = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => undefined);
+        renderShellFixture();
+        const [block] = await fixture.getDeferBlocks();
+        await block.render(DeferBlockState.Error); fixture.detectChanges();
+        expect(fixture.debugElement.query(By.directive(DeferredLoadErrorComponent))).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('mat-sidenav').textContent).toContain("Navigation couldn't load");
+        expect(capture).toHaveBeenCalledWith('Deferred content failed to load', expect.objectContaining({
+            tags: { operation: 'deferred-load', area: 'navigation' },
+        }));
     });
 
     it('constructs navigation on first open and retains the same contents through close/reopen', async () => {

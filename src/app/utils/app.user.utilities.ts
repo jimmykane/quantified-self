@@ -1,3 +1,5 @@
+import { normalizeDashboardTodaySettings } from '../helpers/dashboard-today-settings.helper';
+import { normalizeDashboardHiddenSections } from '../helpers/dashboard-tile-section.helper';
 import { AppUserAccess } from '../helpers/user-access.helper';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../helpers/dashboard-health-tile.helper';
 import {
@@ -33,6 +35,7 @@ import {
     UserExportToCsvSettingsInterface,
     VerticalSpeedUnits,
     WeightUnits,
+    ElevationUnits,
     XAxisTypes,
     MapThemes,
     MapTypes,
@@ -342,6 +345,7 @@ export class AppUserUtilities extends AppUserAccess {
         unitSettings.verticalSpeedUnits = AppUserUtilities.getDefaultVerticalSpeedUnits();
         unitSettings.distanceUnits = AppUserUtilities.getDefaultDistanceUnits();
         unitSettings.weightUnits = WeightUnits.Kilograms;
+        unitSettings.elevationUnits = ElevationUnits.Meters;
         unitSettings.startOfTheWeek = AppUserUtilities.getDefaultStartOfTheWeek();
         return unitSettings;
     }
@@ -537,6 +541,8 @@ export class AppUserUtilities extends AppUserAccess {
         settings.unitSettings.verticalSpeedUnits = Array.isArray(settings.unitSettings.verticalSpeedUnits) && settings.unitSettings.verticalSpeedUnits.length > 0
             ? settings.unitSettings.verticalSpeedUnits
             : AppUserUtilities.getDefaultVerticalSpeedUnits();
+        settings.unitSettings.elevationUnits = settings.unitSettings.elevationUnits === ElevationUnits.Feet
+            ? ElevationUnits.Feet : ElevationUnits.Meters;
         settings.unitSettings.distanceUnits = normalizeDistanceUnits(
             settings.unitSettings.distanceUnits,
             AppUserUtilities.getDefaultDistanceUnits(),
@@ -557,6 +563,8 @@ export class AppUserUtilities extends AppUserAccess {
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.showTodaySummary = settings.dashboardSettings.showTodaySummary !== false;
+        settings.dashboardSettings.hiddenSections = normalizeDashboardHiddenSections(settings.dashboardSettings.hiddenSections);
+        settings.dashboardSettings.today = normalizeDashboardTodaySettings(settings.dashboardSettings.today);
         settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
             settings.dashboardSettings.eventTableFilters,
             {
@@ -685,8 +693,11 @@ export class AppUserUtilities extends AppUserAccess {
         settings.dashboardSettings.tableSettings.eventsPerPage = isNumber(settings.dashboardSettings.tableSettings.eventsPerPage)
             ? settings.dashboardSettings.tableSettings.eventsPerPage
             : defaultTableSettings.eventsPerPage;
-        const normalizedSelectedColumns = AppUserUtilities.normalizeTableSelectedColumns(settings.dashboardSettings.tableSettings.selectedColumns);
+        const selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns;
+        const normalizedSelectedColumns = AppUserUtilities.normalizeTableSelectedColumns(selectedColumns);
+        // An explicit empty layout is a saved choice; absent or malformed settings still use defaults.
         settings.dashboardSettings.tableSettings.selectedColumns = normalizedSelectedColumns.length > 0
+            || (Array.isArray(selectedColumns) && selectedColumns.length === 0)
             ? normalizedSelectedColumns
             : AppUserUtilities.getDefaultSelectedTableColumns();
 

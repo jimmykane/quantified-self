@@ -115,6 +115,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'training') {
               <app-training-load-settings [uid]="user.uid"></app-training-load-settings>
+            } @error {
+              <app-deferred-load-error area="training-settings" />
             }
           </div>
         </ng-template>
@@ -123,6 +125,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'workout-power') {
               <app-workout-power-settings [uid]="user.uid"></app-workout-power-settings>
+            } @error {
+              <app-deferred-load-error area="power-settings" />
             }
           </div>
         </ng-template>
@@ -372,7 +376,7 @@
             <div class="settings-option-block">
               <div>
                 <h4 class="settings-subsection-title">Unit preset</h4>
-                <p>Set distance, pace, speed, and swim units together. Weight stays independent.</p>
+                <p>Set distance, elevation, pace, speed, and swim units together. Weight stays independent.</p>
                 @if (selectedUnitPreset === null) {
                 <p class="settings-section-note" role="status">Custom unit choices</p>
                 }
@@ -456,6 +460,16 @@
               </mat-form-field>
 
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Elevation</mat-label>
+                <mat-select formControlName="elevationUnitsToUse" (selectionChange)="onPreferenceChange()">
+                  @for (unit of elevationUnitOptions; track unit.value) {
+                    <mat-option [value]="unit.value">{{ unit.label }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Altitude, ascent and descent; independent of distance and vertical speed.</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Weight</mat-label>
                 <mat-select formControlName="weightUnitsToUse" (selectionChange)="onWeightUnitChange()">
                   @for (unit of weightUnitOptions; track unit.value) {
@@ -513,6 +527,8 @@
           <div class="settings-panel-body">
             @defer (when activeSection === 'notifications') {
               <app-push-notification-settings />
+            } @error {
+              <app-deferred-load-error area="notification-settings" />
             }
           </div>
         </ng-template>

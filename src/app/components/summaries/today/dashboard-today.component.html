@@ -1,0 +1,456 @@
+@let dashboardTodayReadiness = readiness();
+@let dashboardTodayTrainingState = trainingState();
+@let isOwnerDashboard = owner();
+@let user = account();
+@let todayRestDate = localDate();
+<div [class.dashboard-today-card]="!isOwnerDashboard || expanded()">
+  <section
+    id="dashboard-today-details"
+    class="dashboard-current-state-row"
+    aria-label="Today overview"
+    [hidden]="isOwnerDashboard && !expanded()"
+    [style.--qs-today-sleep-base]="todaySleepBaseColor"
+    [class.has-recovery]="settings().recovery"
+  >
+    @if (settings().trainingState || settings().readiness) {
+      <div
+        class="dashboard-current-state-top"
+        [class.single-summary]="
+          !settings().trainingState || !settings().readiness
+        "
+      >
+        @if (settings().trainingState) {
+          <div
+            class="dashboard-current-state-primary dashboard-training-state-primary"
+            [attr.data-cue-tone]="dashboardTodayTrainingState.scaleTone"
+          >
+            <span>Training state</span>
+            <strong>{{ dashboardTodayTrainingState.label }}</strong>
+            <small class="dashboard-training-state-caption"
+              >{{
+                (sicknessContext.hasActiveSickness() ||
+                  restContext.isRestDay()) &&
+                dashboardTodayTrainingState.label === 'Fresh'
+                  ? 'Low training load'
+                  : dashboardTodayTrainingState.caption
+              }}
+              · TSS only</small
+            >
+            <app-current-plan-rest-day
+              #restContext
+              [ownerUid]="isOwnerDashboard ? user?.uid : null"
+              [localDate]="todayRestDate"
+            />
+            <app-active-sickness-note
+              #sicknessContext
+              [context]="isOwnerDashboard ? timelineNotes() : null"
+            />
+            <div
+              class="dashboard-training-state-scale"
+              role="img"
+              [attr.aria-label]="
+                'Training state: ' + dashboardTodayTrainingState.label
+              "
+            >
+              @for (
+                segment of dashboardTodayTrainingStateScaleSegments;
+                track segment
+              ) {
+                <span
+                  aria-hidden="true"
+                  [class.reached]="
+                    dashboardTodayTrainingState.scalePosition !== null &&
+                    segment < dashboardTodayTrainingState.scalePosition
+                  "
+                  [class.active]="
+                    segment === dashboardTodayTrainingState.scalePosition
+                  "
+                  [attr.data-tone]="
+                    segment === dashboardTodayTrainingState.scalePosition
+                      ? dashboardTodayTrainingState.scaleTone
+                      : null
+                  "
+                ></span>
+              }
+            </div>
+            <div
+              class="dashboard-training-state-scale-labels"
+              aria-hidden="true"
+            >
+              <small>Lower load</small><small>Stable</small
+              ><small>High strain</small>
+            </div>
+          </div>
+        }
+        @if (settings().readiness) {
+          <div
+            class="dashboard-current-state-primary dashboard-readiness-primary"
+            [attr.aria-busy]="dashboardTodayReadiness.loading"
+            [attr.data-cue-tone]="dashboardTodayReadiness.scoreTone"
+          >
+            <span>Readiness</span>
+            <div class="dashboard-readiness-primary-value">
+              <strong>{{ dashboardTodayReadiness.label }}</strong>
+              <b>{{ dashboardTodayReadiness.scoreText }}</b>
+            </div>
+            <div class="dashboard-readiness-score">
+              @if (dashboardTodayReadiness.loading) {
+                <mat-progress-bar
+                  mode="indeterminate"
+                  aria-label="Loading readiness"
+                ></mat-progress-bar>
+              } @else if (dashboardTodayReadiness.score !== null) {
+                <app-metric-indicator
+                  class="dashboard-readiness-score-indicator"
+                  label="Readiness"
+                  [value]="dashboardTodayReadiness.score"
+                  [tone]="dashboardTodayReadiness.scoreTone"
+                  [showThresholds]="true"
+                ></app-metric-indicator>
+              }
+            </div>
+            @if (dashboardTodayReadiness.loading) {
+              <small>Waiting for load and sleep data</small>
+            } @else {
+              <small
+                class="dashboard-readiness-method"
+                [attr.role]="
+                  dashboardTodayReadiness.warningText ||
+                  dashboardTodayReadiness.awaitingSleep
+                    ? 'status'
+                    : null
+                "
+                >{{
+                  dashboardTodayReadiness.warningText ||
+                    (dashboardTodayReadiness.awaitingSleep
+                      ? 'Today’s readiness will appear after sleep syncs.'
+                      : 'Load + sleep signals · Freshness stays TSS-only')
+                }}</small
+              >
+              @if (dashboardTodayReadiness.score !== null) {
+                <small
+                  >{{ dashboardTodayReadiness.confidenceText }} ·
+                  {{ dashboardTodayReadiness.evidenceText }}</small
+                >
+                <app-metric-indicator
+                  variant="segments"
+                  label="Available readiness signals"
+                  [value]="dashboardTodayReadiness.availableSignalCount"
+                  [total]="4"
+                  [tone]="dashboardTodayReadiness.scoreTone"
+                ></app-metric-indicator>
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+    @if (
+      settings().recovery &&
+      dashboardTodayReadiness.recoveryText !== '--' &&
+      dashboardTodayReadiness.recoveryFinishText
+    ) {
+      <div class="dashboard-readiness-recovery-band">
+        <small class="dashboard-readiness-imported-recovery"
+          >Recovery left ·
+          <strong>{{ dashboardTodayReadiness.recoveryText }}</strong> · expected
+          by {{ dashboardTodayReadiness.recoveryFinishText }} · separate from
+          score</small
+        >
+        <app-metric-indicator
+          class="dashboard-readiness-recovery-indicator"
+          label="Recovery remaining"
+          [value]="dashboardTodayReadiness.recoveryRemainingPercent"
+          [max]="100"
+          tone="recover"
+          [compact]="true"
+        ></app-metric-indicator>
+      </div>
+    } @else if (settings().recovery) {
+      <div class="dashboard-readiness-recovery-band">
+        <small
+          >Recovery left ·
+          {{
+            dashboardTodayReadiness.loading
+              ? 'Loading…'
+              : dashboardTodayReadiness.recoveryStatusText ||
+                'No current recovery estimate'
+          }}</small
+        >
+      </div>
+    }
+    @if (settings().metrics.length) {
+      <dl
+        [style.--today-metric-columns]="
+          settings().metrics.length < 4 ? settings().metrics.length : 4
+        "
+      >
+        @for (metric of settings().metrics; track metric) {
+          @switch (metric) {
+            @case ('load') {
+              <div
+                class="dashboard-today-load"
+                [attr.data-cue-tone]="dashboardTodayTrainingState.scaleTone"
+              >
+                <dt>Load</dt>
+                <dd class="dashboard-today-load-value">
+                  @if (dashboardTodayReadiness.rampCue; as cue) {
+                    <span>{{ dashboardTodayReadiness.formText }} /</span>
+                    <span
+                      class="dashboard-direction-cue dashboard-ramp-direction"
+                      [class.is-flat]="cue.icon === 'trending_flat'"
+                      role="img"
+                      [attr.aria-label]="
+                        cue.label + ': ' + dashboardTodayReadiness.rampText
+                      "
+                    >
+                      <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon
+                      >{{ dashboardTodayReadiness.rampText }}
+                    </span>
+                  } @else {
+                    {{ dashboardTodayReadiness.loadText }}
+                  }
+                </dd>
+                <div class="dashboard-today-history-slot">
+                  @if (dashboardTodayReadiness.loadBars.length) {
+                    <!-- A static seven-day summary stays semantic HTML so Today paints with its data;
+               two ECharts hosts would add delayed canvases and pointer handlers for seven noninteractive values. -->
+                    <div
+                      class="dashboard-today-history-bars"
+                      role="img"
+                      [attr.aria-label]="
+                        'Daily training load for the latest ' +
+                        dashboardTodayReadiness.loadBars.length +
+                        ' days'
+                      "
+                    >
+                      @for (
+                        bar of dashboardTodayReadiness.loadBars;
+                        track bar.key
+                      ) {
+                        <span
+                          aria-hidden="true"
+                          [class.current]="bar.current"
+                          [class.zero]="bar.zero"
+                          [attr.data-tone]="bar.tone"
+                          [style.height.%]="bar.heightPercent"
+                        ></span>
+                      }
+                    </div>
+                  }
+                </div>
+                <small>Form / ramp</small>
+              </div>
+            }
+            @case ('sleep') {
+              <div
+                class="dashboard-today-sleep"
+                [class.has-score]="dashboardTodayReadiness.sleepScore !== null"
+              >
+                <dt>Sleep</dt>
+                <dd class="dashboard-today-sleep-value">
+                  <span>{{ dashboardTodayReadiness.sleepText }}</span>
+                  @if (dashboardTodayReadiness.sleepDurationText; as duration) {
+                    <span
+                      class="dashboard-today-sleep-duration"
+                      role="img"
+                      [attr.aria-label]="'Sleep duration: ' + duration"
+                      >{{ duration }}</span
+                    >
+                  }
+                </dd>
+                <div class="dashboard-today-history-slot">
+                  <app-metric-indicator
+                    label="Sleep score"
+                    [value]="dashboardTodayReadiness.sleepScore"
+                    [compact]="true"
+                  ></app-metric-indicator>
+                </div>
+                <small>{{ dashboardTodayReadiness.sleepContextText }}</small>
+              </div>
+            }
+            @case ('hrv') {
+              <div
+                class="dashboard-readiness-hrv"
+                [attr.data-cue-tone]="dashboardTodayReadiness.hrvCueTone"
+              >
+                <dt>HRV · 7-day average</dt>
+                <dd>{{ dashboardTodayReadiness.hrvText }}</dd>
+                <div class="dashboard-hrv-status">
+                  <small>{{
+                    dashboardTodayReadiness.hrvRangeStatusText
+                  }}</small>
+                  @if (dashboardTodayReadiness.hrvCue; as cue) {
+                    <span
+                      class="dashboard-direction-cue dashboard-hrv-direction"
+                      [attr.data-hrv-trend]="cue.label"
+                      ><mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon
+                      >{{ cue.label }}</span
+                    >
+                  }
+                </div>
+                @if (dashboardTodayReadiness.hrvRangeIndicator; as indicator) {
+                  <app-metric-indicator
+                    variant="range"
+                    label="HRV"
+                    [value]="indicator.value"
+                    [min]="indicator.min"
+                    [max]="indicator.max"
+                    [rangeMin]="indicator.rangeMin"
+                    [rangeMax]="indicator.rangeMax"
+                    [valueText]="dashboardTodayReadiness.hrvText"
+                    [rangeText]="dashboardTodayReadiness.hrvRangeText"
+                    [tone]="dashboardTodayReadiness.hrvCueTone"
+                    [compact]="true"
+                  ></app-metric-indicator>
+                }
+                <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
+                @if (dashboardTodayReadiness.hrvLatestText) {
+                  <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
+                }
+              </div>
+            }
+            @case ('overnight-hr') {
+              <div
+                class="dashboard-today-overnight-hr"
+                [attr.data-cue-tone]="
+                  dashboardTodayReadiness.overnightHeartRateTone
+                "
+              >
+                <dt>Overnight HR</dt>
+                <dd class="dashboard-today-overnight-hr-value">
+                  @if (
+                    dashboardTodayReadiness.overnightHeartRateReadingText;
+                    as reading
+                  ) {
+                    <span
+                      class="dashboard-overnight-hr-reading"
+                      role="img"
+                      [attr.aria-label]="
+                        (dashboardTodayReadiness.overnightHeartRateReadingKind ===
+                        'avg'
+                          ? 'Average'
+                          : 'Minimum') +
+                        ' sleep heart rate: ' +
+                        reading
+                      "
+                    >
+                      {{ reading }}
+                      <span
+                        class="dashboard-overnight-hr-kind"
+                        aria-hidden="true"
+                        >{{
+                          dashboardTodayReadiness.overnightHeartRateReadingKind
+                        }}</span
+                      >
+                    </span>
+                  }
+                  @if (dashboardTodayReadiness.overnightHeartRateCue; as cue) {
+                    <span
+                      class="dashboard-direction-cue"
+                      role="img"
+                      [attr.aria-label]="
+                        cue.label +
+                        ': ' +
+                        dashboardTodayReadiness.overnightHeartRateText
+                      "
+                    >
+                      <mat-icon aria-hidden="true">{{ cue.icon }}</mat-icon
+                      >{{ dashboardTodayReadiness.overnightHeartRateText }}
+                    </span>
+                  } @else if (
+                    !dashboardTodayReadiness.overnightHeartRateReadingText
+                  ) {
+                    {{ dashboardTodayReadiness.overnightHeartRateText }}
+                  }
+                </dd>
+                <div class="dashboard-today-history-slot">
+                  @if (dashboardTodayReadiness.overnightHeartRateBars.length) {
+                    <div
+                      class="dashboard-today-history-bars"
+                      role="img"
+                      [attr.aria-label]="
+                        'Overnight heart rate for the latest ' +
+                        dashboardTodayReadiness.overnightHeartRateBars.length +
+                        ' eligible nights'
+                      "
+                    >
+                      @for (
+                        bar of dashboardTodayReadiness.overnightHeartRateBars;
+                        track bar.key
+                      ) {
+                        <span
+                          aria-hidden="true"
+                          [class.current]="bar.current"
+                          [class.zero]="bar.zero"
+                          [attr.data-tone]="bar.tone"
+                          [style.height.%]="bar.heightPercent"
+                        ></span>
+                      }
+                    </div>
+                  } @else {
+                    <app-metric-indicator
+                      variant="deviation"
+                      label="Overnight heart rate"
+                      [value]="
+                        dashboardTodayReadiness.overnightHeartRateDeviationPercent
+                      "
+                      [tone]="dashboardTodayReadiness.overnightHeartRateTone"
+                      [compact]="true"
+                    ></app-metric-indicator>
+                  }
+                </div>
+                <small>{{
+                  dashboardTodayReadiness.overnightHeartRateCue?.label ||
+                    'Comparison unavailable'
+                }}</small>
+                <small class="dashboard-readiness-night-context">{{
+                  dashboardTodayReadiness.overnightHeartRateContextText
+                }}</small>
+              </div>
+            }
+            @default {
+              @let value = data.metrics()[metric];
+              <div
+                class="dashboard-today-extra"
+                [attr.data-today-metric]="metric"
+              >
+                <dt>{{ labels[metric] }}</dt>
+                <dd>{{ value?.value || '—' }}</dd>
+                <small
+                  [attr.role]="value?.status === 'error' ? 'status' : null"
+                  >{{ value?.detail || 'Loading…' }}</small
+                >
+              </div>
+            }
+          }
+        }
+      </dl>
+    }
+    @if (
+      !settings().trainingState &&
+      !settings().readiness &&
+      !settings().metrics.length &&
+      !settings().recovery &&
+      !settings().suggestion &&
+      isOwnerDashboard
+    ) {
+      <div class="dashboard-today-empty">
+        <p>No items selected</p>
+        <small>Add a panel or metric to see it here.</small>
+        <button mat-button type="button" (click)="customize.emit()">
+          <mat-icon>tune</mat-icon>Customize Today
+        </button>
+      </div>
+    }
+  </section>
+  @if (settings().suggestion && isOwnerDashboard && user?.uid) {
+    <app-daily-workout-suggestion
+      [ownerUid]="user!.uid"
+      [localDate]="todayRestDate"
+      [dataReady]="!dashboardTodayReadiness.loading"
+      [sleepRevision]="sleepRevision()"
+      [sleepKey]="sleepKey()"
+    ></app-daily-workout-suggestion>
+  }
+</div>

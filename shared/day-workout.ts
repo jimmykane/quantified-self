@@ -28,7 +28,9 @@ export interface DayWorkoutControls extends Partial<Record<DayWorkoutSignalKey, 
   localDate: string;
   timeZone: string;
   sport: ActivityTypes;
-  minutes: number;
+  /** Missing mode preserves legacy fixed-minute requests and their replay fingerprints. */
+  durationMode?: 'auto' | 'manual';
+  minutes?: number;
   purpose: DayWorkoutPurpose;
   timing: 'approximate' | 'strict';
   target: DayWorkoutTarget;
@@ -95,11 +97,11 @@ export function dayWorkoutSupportsGarminPowerAveraging(controls: Pick<DayWorkout
 }
 
 export function defaultDayWorkoutControls(localDate: string, timeZone: string, sport: ActivityTypes = ActivityTypes.Running): DayWorkoutControls {
-  return { localDate, timeZone, sport, minutes: 30, purpose: 'suggest', timing: 'approximate',
+  return { localDate, timeZone, sport, purpose: 'suggest', timing: 'approximate',
     target: isStrengthWorkoutSportV1(sport) ? 'none' : 'auto', structure: 'auto', destinationPlanId: null,
     equipment: ['bodyweight'], strengthFocus: 'full-body', usePreviousWeights: true,
     trainingContext: true, timelineContext: true, freshnessContext: true, hrvContext: true, sleepContext: true,
-    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true, routineContext: true, goalsContext: true };
+    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true, routineContext: true, goalsContext: true, durationMode: 'auto' };
 }
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {
@@ -110,7 +112,7 @@ function object(value: unknown, keys: string[]): Record<string, unknown> {
 export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date()): GenerateDayWorkoutRequest {
   const request = object(value, ['requestId', 'controls', 'replaceWorkout']);
   if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(request.requestId)) throw new Error('Invalid request identifier.');
-  const c = object(request.controls, [...Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')), 'garminPowerAveragingSeconds']);
+  const c = object(request.controls, [...Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')), 'minutes', 'garminPowerAveragingSeconds']);
   if (typeof c.timeZone !== 'string' || c.timeZone.length > 100) throw new Error('Choose a valid time zone.');
   const today = dayWorkoutLocalDate(now, c.timeZone);
   const localDate = normalizeTrainingLocalDate(c.localDate);
@@ -118,7 +120,9 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
   const sport = DAY_WORKOUT_SPORTS.find(sport => sport === c.sport);
   if (!sport || !dayWorkoutPurposes(sport).includes(c.purpose as DayWorkoutPurpose)
     || !dayWorkoutTargets(sport).includes(c.target as DayWorkoutTarget)) throw new Error('Choose supported sport options.');
-  if (!Number.isSafeInteger(c.minutes) || Number(c.minutes) < 5 || Number(c.minutes) > 240) throw new Error('Choose 5 to 240 minutes.');
+  if ('durationMode' in c && c.durationMode !== 'auto' && c.durationMode !== 'manual') throw new Error('Choose Auto or Set minutes.');
+  if (c.durationMode === 'auto' && ('minutes' in c || c.timing !== 'approximate')) throw new Error('Auto duration cannot include a fixed time budget.');
+  if (c.durationMode !== 'auto' && (!Number.isSafeInteger(c.minutes) || Number(c.minutes) < 5 || Number(c.minutes) > 240)) throw new Error('Choose 5 to 240 minutes.');
   if (typeof c.timing !== 'string' || !['approximate', 'strict'].includes(c.timing) || (isStrengthWorkoutSportV1(sport) && c.timing !== 'approximate')
     || typeof c.structure !== 'string' || !['auto', 'simple'].includes(c.structure)
     || typeof c.strengthFocus !== 'string' || !['full-body', 'upper-body', 'lower-body', 'core'].includes(c.strengthFocus)) throw new Error('Choose supported workout options.');
@@ -151,13 +155,14 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
   }
   // Construct an allowlisted, stable-key object for request fingerprinting.
   return { requestId: request.requestId, ...(replaceWorkout ? { replaceWorkout } : {}), controls: {
-    localDate, timeZone: c.timeZone, sport, minutes: c.minutes as number, purpose: c.purpose as DayWorkoutPurpose,
+    localDate, timeZone: c.timeZone, sport, ...(c.durationMode !== 'auto' ? { minutes: c.minutes as number } : {}), purpose: c.purpose as DayWorkoutPurpose,
     timing: c.timing as DayWorkoutControls['timing'], target: c.target as DayWorkoutTarget,
     structure: c.structure as DayWorkoutControls['structure'], destinationPlanId: c.destinationPlanId as string | null,
     equipment: [...c.equipment].sort(), strengthFocus: c.strengthFocus as DayWorkoutControls['strengthFocus'],
     usePreviousWeights: c.usePreviousWeights as boolean, trainingContext: c.trainingContext as boolean,
     timelineContext: c.timelineContext as boolean,
     ...signals,
+    ...('durationMode' in c ? { durationMode: c.durationMode as DayWorkoutControls['durationMode'] } : {}),
     ...('garminPowerAveragingSeconds' in c ? { garminPowerAveragingSeconds: c.garminPowerAveragingSeconds as GarminPowerAveragingSeconds } : {}),
   } };
 }

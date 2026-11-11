@@ -7,6 +7,7 @@ import { ASSISTANT_PROMPT_CARDS } from '@shared/assistant.prompts';
 import type { AssistantLocationAccess } from '@shared/assistant.types';
 import { SharedModule } from '../../modules/shared.module';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
@@ -43,6 +44,7 @@ export type AssistantExploreBottomSheetResult =
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantExploreBottomSheetComponent {
+  private readonly haptics = inject(AppHapticsService);
   private readonly bottomSheetRef = inject(
     MatBottomSheetRef<
       AssistantExploreBottomSheetComponent,
@@ -54,6 +56,7 @@ export class AssistantExploreBottomSheetComponent {
   readonly prompts = ASSISTANT_PROMPT_CARDS;
 
   selectPrompt(prompt: string): void {
+    this.haptics.selection();
     this.bottomSheetRef.dismiss({ kind: 'prompt', prompt });
   }
 

@@ -5,6 +5,7 @@ import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { environment } from '../../environments/environment';
 import { createHttpUploadError, UploadError } from './upload-error';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 export interface UploadActivityFromFitResponse {
     eventId: string;
@@ -45,6 +46,7 @@ function mapFallbackUploadErrorMessage(statusCode: number): string {
     providedIn: 'root'
 })
 export class AppFitUploadService {
+    private static readonly UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
     private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = 'localhost';
     private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private app = inject(FirebaseApp);
@@ -56,12 +58,49 @@ export class AppFitUploadService {
         fileExtension: string,
         originalFilename?: string,
     ): Promise<UploadActivityFromFitResponse> {
+        const controller = BrowserCompatibilityService.checkAbortControllerSupport() ? new AbortController() : undefined;
+        const timeoutError = new UploadError(
+            'Upload timed out. Processing may still finish. Check your activities before uploading this file again.',
+            408,
+            'upload_timeout',
+        );
+        let expired = false;
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const deadline = new Promise<never>((_resolve, reject) => {
+            timeoutId = setTimeout(() => {
+                expired = true;
+                // Settle the deadline before aborting so callers get the recovery guidance,
+                // rather than a transport-specific AbortError. Aborting cannot undo a server write.
+                reject(timeoutError);
+                controller?.abort();
+            }, AppFitUploadService.UPLOAD_TIMEOUT_MS);
+        });
+        const throwIfExpired = () => { if (expired) throw timeoutError; };
+        try {
+            return await Promise.race([
+                this.uploadActivityFileRequest(fileBytes, fileExtension, originalFilename, controller?.signal, throwIfExpired),
+                deadline,
+            ]);
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
+    private async uploadActivityFileRequest(
+        fileBytes: ArrayBuffer,
+        fileExtension: string,
+        originalFilename: string | undefined,
+        signal: AbortSignal | undefined,
+        throwIfExpired: () => void,
+    ): Promise<UploadActivityFromFitResponse> {
         if (!this.auth.currentUser) {
             throw new UploadError('User must be authenticated to upload activities.', 401, 'unauthenticated');
         }
 
-        const idToken = await this.auth.currentUser.getIdToken(true);
+        const idToken = await this.auth.currentUser.getIdToken();
+        throwIfExpired();
         const appCheckToken = await this.appCheckReadiness.getToken();
+        throwIfExpired();
 
         const projectID = this.app.options.projectId;
         if (!projectID) {
@@ -95,6 +134,7 @@ export class AppFitUploadService {
             method: 'POST',
             headers,
             body: fileBytes,
+            signal,
         });
 
         let payload: any = null;
@@ -103,6 +143,7 @@ export class AppFitUploadService {
         } catch {
             payload = null;
         }
+        throwIfExpired();
 
         if (!response.ok) {
             const backendMessage = payload?.error ? `${payload.error}` : '';

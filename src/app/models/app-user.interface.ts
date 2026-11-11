@@ -1,4 +1,5 @@
 import type { WorkoutPowerSettingsV1 } from '@shared/workout-power-settings';
+import type { ActivityDateRangeNavigation } from '../helpers/activity-date-range.helper';
 import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
   User,
@@ -169,6 +170,7 @@ export interface AppDashboardEventTableFiltersInterface {
     dateRange: DateRanges;
     startDate: number | null;
     endDate: number | null;
+    rangeNavigation?: ActivityDateRangeNavigation | null;
     activityTypes: ActivityTypes[];
     includeMergedEvents: boolean;
 }
@@ -208,14 +210,26 @@ export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInt
 }
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
+    hiddenSections?: import('../helpers/dashboard-tile-section.helper').DashboardTileLaneKey[];
     includeMergedEvents?: boolean;
     showTodaySummary?: boolean;
+    today?: AppDashboardTodaySettings;
     dismissedCuratedRecoveryNowTile?: boolean;
     calendarDayContextLayoutVersion?: number;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
     hrvTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
+}
+
+export type DashboardTodayMetricId = 'load' | 'sleep' | 'hrv' | 'overnight-hr' | 'weight' | 'tss' | 'ascent' | 'duration' | 'distance' | 'activities' | 'steps';
+export interface AppDashboardTodaySettings {
+    version: 1;
+    trainingState: boolean;
+    readiness: boolean;
+    recovery: boolean;
+    suggestion: boolean;
+    metrics: DashboardTodayMetricId[];
 }
 
 export type AppEventLapSportFamily = 'running' | 'cycling' | 'swimming' | 'other';
@@ -225,6 +239,7 @@ export interface AppEventDetailsSettingsInterface {
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
+    showPerformanceCharts?: boolean;
     eventLineContinuity?: import('../helpers/event-chart-line-continuity.helper').EventLineContinuitySettings;
     theme?: ChartThemes;
     fillOpacityVersion?: number;

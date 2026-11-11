@@ -29,6 +29,7 @@ import { TrainingDeliveryService } from '../../services/training-delivery.servic
 import { dayWorkoutReview } from '../../helpers/day-workout-review.helper';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { Auth, authState } from 'app/firebase/auth';
+import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
@@ -56,7 +57,7 @@ type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'tar
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
 @Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [DatePipe, NgTemplateOutlet, FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule,
   MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, AppChartSharedModule,
-  CompactRowComponent, SummaryDisclosureComponent, ActivityFilterPickerComponent, TrainingDeliveryButtonComponent, ServiceSourceIconComponent, MatSlideToggleModule],
+  CompactSelectComponent, CompactRowComponent, SummaryDisclosureComponent, ActivityFilterPickerComponent, TrainingDeliveryButtonComponent, ServiceSourceIconComponent, MatSlideToggleModule],
   templateUrl: './day-workout-dialog.component.html', styleUrls: ['./day-workout-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DayWorkoutDialogComponent {
@@ -75,6 +76,10 @@ export class DayWorkoutDialogComponent {
   readonly today = dayWorkoutLocalDate(new Date(), this.timeZone);
   readonly latestDate = dayWorkoutDateOffset(this.today, 365);
   readonly controls = signal(this.data.initialControls ? structuredClone(this.data.initialControls) : defaultDayWorkoutControls(this.data.localDate, this.timeZone, this.data.sport));
+  readonly durationMode = computed(() => this.controls().durationMode ?? 'manual');
+  readonly durationOptions = [{ value: 'auto' as const, label: 'Auto' }, { value: 'manual' as const, label: 'Set minutes' }];
+  private manualMinutes = this.controls().minutes ?? 30;
+  private manualTiming = this.controls().timing;
   readonly followRoutine = signal(this.data.followRoutine ?? true);
   readonly more = signal(false);
   readonly showPersonalization = signal(true);
@@ -211,8 +216,8 @@ export class DayWorkoutDialogComponent {
   readonly contextDetails = computed(() => [...(this.result()?.usedContext ?? []), ...(this.result()?.missingContext ?? [])]);
   readonly valid = computed(() => { try {
     const controls = this.controls(); const date = normalizeTrainingLocalDate(controls.localDate);
-    return date >= this.today && date <= this.latestDate && Number.isSafeInteger(controls.minutes)
-      && controls.minutes >= 5 && controls.minutes <= 240 && controls.equipment.length > 0
+    return date >= this.today && date <= this.latestDate && (controls.durationMode === 'auto' || Number.isSafeInteger(controls.minutes)
+      && controls.minutes >= 5 && controls.minutes <= 240) && controls.equipment.length > 0
       && (this.data.mode === 'preferences' || !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable)
       && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
@@ -245,7 +250,7 @@ export class DayWorkoutDialogComponent {
     ...(this.strength() ? [this.choice('equipment', 'Available equipment', DAY_WORKOUT_EQUIPMENT)] : [])]);
   readonly moreChoices = computed<Choice[]>(() => this.strength()
     ? [this.choice('strengthFocus', 'Strength focus', ['full-body', 'upper-body', 'lower-body', 'core'])]
-    : [this.choice('timing', 'Timing', ['approximate', 'strict']), this.choice('target', 'Targets', dayWorkoutTargets(this.controls().sport)),
+    : [...(this.durationMode() === 'auto' ? [] : [this.choice('timing', 'Timing', ['approximate', 'strict'])]), this.choice('target', 'Targets', dayWorkoutTargets(this.controls().sport)),
       this.choice('structure', 'Session structure', ['auto', 'simple'])]);
   readonly readinessSourcesEnabled = computed(() => dayWorkoutReadinessSourcesEnabled(this.controls()));
   readonly contextChoices = computed(() => [
@@ -382,6 +387,16 @@ export class DayWorkoutDialogComponent {
     if (this.savedWorkoutId() || this.busy() || this.saveUncertain() || JSON.stringify(this.controls()[key]) === JSON.stringify(value)) return;
     this.controls.update(controls => {
       const next = { ...controls, [key]: value };
+      if (key === 'durationMode') {
+        if (value === 'auto') {
+          this.manualMinutes = controls.minutes ?? 30; this.manualTiming = controls.timing;
+          delete next.minutes; next.timing = 'approximate';
+        } else {
+          next.minutes = this.manualMinutes;
+          next.timing = isStrengthWorkoutSportV1(next.sport) ? 'approximate' : this.manualTiming;
+        }
+      }
+      if (key === 'minutes') next.durationMode = 'manual';
       if (key === 'sport') {
         next.purpose = 'suggest'; next.target = isStrengthWorkoutSportV1(next.sport) ? 'none' : 'auto'; next.timing = 'approximate';
         if (!next.equipment.length) next.equipment = ['bodyweight'];

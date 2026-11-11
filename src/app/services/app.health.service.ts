@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { selectLatestHealthReading } from '../helpers/health-latest-reading.helper';
 import {
     Firestore,
     collection,
@@ -91,6 +92,40 @@ interface LoadedCollectionPage<T> {
     providedIn: 'root',
 })
 export class AppHealthService {
+    /** Latest real measurement, independent of a chart's date range. Uses the existing point/metric/time index. */
+    async loadLatestMeasurement(uid: string, preferred: string | null, isCurrent: () => boolean): Promise<{ results: HealthRangeResult[]; complete: boolean }> {
+        const records: HealthSourceRecord[] = [];
+        let cursor: Awaited<ReturnType<typeof getDocsFromServer>>['docs'][number] | null = null;
+        let bytes = 0;
+        const project = () => {
+            const byDate = new Map<string, HealthSourceRecord[]>();
+            for (const record of records) byDate.set(record.calendarDate, [...(byDate.get(record.calendarDate) || []), record]);
+            return [...byDate].map(([date, values]) => projectLoadedHealthRange(values, [], {
+                startDate: date, endDate: date, metricIds: [HEALTH_METRIC_IDS.BodyWeight], includeSamples: false,
+            }, { sourceRecordsComplete: true, samplesComplete: true }));
+        };
+        while (records.length < HEALTH_WORKSPACE_LOAD_LIMITS.sourceRecords) {
+            if (!uid || !isCurrent()) throw new Error('Measurement read cancelled.');
+            const size = Math.min(32, HEALTH_WORKSPACE_LOAD_LIMITS.sourceRecords - records.length);
+            const page = await getDocsFromServer(query(collection(this.firestore, 'users', uid, HEALTH_SOURCE_RECORDS_COLLECTION_ID),
+                where('kind', '==', HEALTH_SOURCE_RECORD_KINDS.PointMeasurement),
+                where('metricIds', 'array-contains', HEALTH_METRIC_IDS.BodyWeight), where('endTimeMs', '<=', Date.now()),
+                orderBy('endTimeMs', 'desc'), orderBy(documentId(), 'desc'),
+                ...(cursor ? [startAfter(cursor)] : []), limit(size + 1)));
+            if (!isCurrent()) throw new Error('Measurement read cancelled.');
+            for (const document of page.docs.slice(0, size)) {
+                const raw = { ...document.data(), id: document.id } as HealthSourceRecord;
+                bytes += new TextEncoder().encode(JSON.stringify(raw)).byteLength;
+                if (bytes > HEALTH_WORKSPACE_LOAD_LIMITS.serializedBytes) return { results: project(), complete: false };
+                records.push(raw);
+            }
+            const results = project();
+            const selected = selectLatestHealthReading(results, preferred);
+            if (page.size <= size || selected && records.at(-1).endTimeMs < selected.point.timestampMs) return { results, complete: true };
+            cursor = page.docs[size - 1];
+        }
+        return { results: project(), complete: false };
+    }
     private static readonly MAX_SYNC_STATE_DOCUMENTS = 6;
 
     private firestore = inject(Firestore);

@@ -72,7 +72,7 @@ describe('HomeComponent', () => {
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
     expect(hero.querySelector('app-public-feature-preview')).toBeTruthy();
     expect(hero.textContent).toContain('Sample data');
-    expect(hero.querySelector('#hero-preview-title')?.textContent).toBe('Your training, together.');
+    expect(hero.querySelector('#hero-preview-title')?.textContent).toBe('Training load and recovery');
     expect(hero.querySelector('.preview-placeholder--hero')).toBeTruthy();
     const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
     expect(training.textContent).toContain('Sample data');

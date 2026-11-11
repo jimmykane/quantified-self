@@ -125,6 +125,14 @@ values during read failures and same-account reloads, preserves saved values on 
 account callbacks. Read errors and reloads block new consent and editing until every category is confirmed again.
 The import form links to category/device settings if unavailable.
 
+Notification listener teardown drains its saved handles before calling the SDK and attempts every unsubscribe even
+when Firestore throws. Auth changes and destruction still fence callbacks and reset owner state. A Firestore internal
+assertion means its local queue cannot safely accept new work: category editing stays blocked, the last confirmed
+same-account choices remain visible, and Settings offers **Reload app**. Only that explicit action reloads the page;
+ordinary read errors retain **Retry category settings**. Token refresh does not restart a known failed queue. No
+persistence clearing, automatic reload, permission prompt or category write is part of recovery. This contains the
+notification lifecycle failure and provides recovery; it does not repair the browser/SDK's IndexedDB implementation.
+
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
 consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
 default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
@@ -269,8 +277,16 @@ The first eligible arrival fixes a two-minute batching deadline and snapshots at
 workouts; excess arrivals are suppressed. The minute scheduler normally sends after roughly two to three minutes.
 One workout opens `/user/<uid>/event/<eventId>`; multiple workouts open `/activities`. The payload exposes only a generic
 message/count, no workout names or metrics, using the shared QS icon, declarative `web_push: 8030`, Angular click
-fallback, low urgency, fixed topic/tag `qs-activity-sync`, `renotify: false`, five-second transport timeout and ten-minute
-push TTL (including WNS). A browser may replace a previous visible alert with the same tag.
+fallback, low urgency, fixed topic/tag `qs-activity-sync`, `renotify: true`, five-second transport timeout and ten-minute
+push TTL (including WNS). Each permitted batch requests renewed attention when replacing an older visible activity
+alert with the same tag. This retains one visible activity alert per site while allowing a later batch to alert again;
+browser/OS permissions and presentation still apply. Grouping, duplicate receipts and rate limits govern how many
+batches are sent, independently of browser replacement. Monitoring coverage is **unchanged**: this presentation
+setting changes no sender outcome, schedule, backlog, retry or alert filter and adds no device-display acknowledgement.
+
+After separate deployment approval, this payload-only adjustment ships with
+`npm run firebase -- deploy --only functions:sendActivitySyncNotifications --project quantified-self-io`.
+Already delivered notifications retain their previous payload.
 
 There is at most **one batch attempt per 15 minutes and four per rolling 24 hours per account across providers**.
 These limits are separate from history-completion and self-test budgets. Cooldown/capped arrivals are skipped,
@@ -443,9 +459,26 @@ During readback, validate every dashboard and alert-condition filter with Monito
 including filters with no current samples. Multi-service comparisons must use `one_of(...)`; Logging's
 `label=("a" OR "b")` shorthand is not valid Monitoring syntax. Offline bundle tests do not replace this live check.
 
+Outcome metrics use Logging substring comparisons for the full bracketed marker, for example
+`jsonPayload.message:"[ActivityDeliveryPush]"`. Firebase's error logger prefixes the marker with `Error:` and appends
+a stack trace, so equality with the whole message misses real failures. The runtime/project scope, telemetry version,
+fixed phases/outcomes and label extractors still bound each metric. Native 5xx, overdue and heartbeat coverage,
+thresholds, ownership and the existing alert channel are unchanged. Regression fixtures use the installed Firebase
+logger's real info/error formatting. Applying these corrected definitions still requires separate cloud approval;
+no sender deployment or flag activation is needed for this monitoring correction. Training activation remains a
+separate rollout step.
+
 The bundle retains the self-test metric/policy and adds `sendhistoryimportnotification`, both restricted to `europe-west2`. Each charts fixed outcomes and native requests and alerts on three genuine failures in fifteen minutes. Category opt-outs and revision changes use the existing suppression/cancelled paths and do not add an alert or label. History also alerts on native 5xx to cover failures before outcome logging; its fixed cancelled/limited categories never page. The existing owned dashboard is updated, not duplicated. Permission denial, rate limits, disabled configuration and expired registrations do not page. User-requested traffic has no heartbeat; idle/missing outcomes do not assert health and do not page. History completion has no notification outbox or dead-letter queue; its backlog remains the existing coordinator backlog. Existing connection-history monitoring remains authoritative for import backlog, failed processing and terminal runs. A sender claim with an uncertain outcome is intentionally not repaired or replayed. Reapplication preserves unrelated resources through shared ownership checks. Thresholds should be reviewed after observed traffic.
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
+
+Activity-delivery and Training sweep errors additionally record `failureStage` (initialization, configuration,
+signing key, due query, account processing or backlog probe) and an allowlisted `errorCode`. Codes cover canonical
+gRPC/Firestore statuses, known SDK/network codes and numeric HTTP error statuses; other errors become `unknown`.
+Account processing retains only the first rejection's safe code while awaiting the existing bounded fan-out.
+No raw error, stack, account/device identifier, endpoint, signing key or notification payload is added to these logs.
+Monitoring coverage is unchanged: the existing `phase: sweep`, `outcome: failed`, native 5xx and heartbeat filters
+remain authoritative. This diagnostic-only change adds no queries, retries, sends, public/MCP fields or Training planning behavior.
 
 The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
 (including admission failures in existing Gen 1/Gen 2 import workers), completed-sweep heartbeat, and positive oldest-due

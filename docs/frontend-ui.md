@@ -29,6 +29,121 @@ away during preparation. Record whether the actual example is prepared below the
 whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
 snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
 
+## Deferred content recovery
+
+Every `@defer` in the app's external templates has an eager `@error` block containing
+`DeferredLoadErrorComponent`. This includes navigation, the three deferred Settings sections, dashboard maps and
+every public feature preview. Keep the original defer triggers, lazy dependencies, SSR placeholders and public
+`data-nosnippet` wrappers. The fallback itself must be available before the failed deferred dependency loads.
+See [Angular's deferred-view error states](https://angular.dev/guide/templates/defer#handling-deferred-loading-errors-with-error).
+
+The fallback uses a fixed area label, a polite status message and an explicit **Reload page** Material button.
+It warns that unsaved changes may be lost; rendering never reloads, clears storage, signs out or performs a write.
+The clicked button owns one selection haptic and prevents double dispatch. A five-second UI reset permits another
+explicit attempt if the browser cancels navigation; it never initiates a reload itself. Teardown cancels that timer.
+If navigation throws, the fallback stays usable and points to the browser's reload control.
+
+Uncaught route/module import failures retain the global handler's one automatic reload per tab session, including
+Chrome's failed dynamic import, Safari's `Importing a module script failed` and Firefox's import-loading wording.
+The handler writes its shared session guard before reloading. Missing or blocked session storage skips automatic
+navigation, and storage/navigation exceptions cannot replace the original error report. Deferred-view errors and
+account-settings import failures retain their explicit recovery actions; nested causes do not trigger this reload.
+The `account/settings-load-failed` classification takes precedence even when the error's own message matches a
+browser import failure; these errors do not consume the automatic route-reload guard.
+
+`DeferredLoadDiagnosticsService` reports one fixed-label warning per allowlisted area per app instance, including
+the specific public preview key. It adds no exception text, URL, account content or persisted tracking state.
+Reused error views report changes to their area input, while the shared service still deduplicates each area.
+Optional haptic failures cannot prevent reload or break the blocked-navigation fallback.
+Invalid area values are neither displayed nor sent. Server rendering does not report browser failures.
+This is shared rendering/recovery only: Training records, MCP tools/projections/approval, consent and provider
+actions are unchanged. Settings drafts remain in memory until the user explicitly reloads.
+
+`npm run test:workflows` includes a compiler-AST guard for external HTML templates, including hidden/nested files
+and nested defer blocks. It also rejects inline deferred template literals in runtime TypeScript, so those views
+cannot bypass the external-template guard; `.spec.ts` fixtures remain exempt. New deferred views need the same eager
+fallback and a rendered error-state test.
+Focused tests exercise the actual parent error blocks, cancellation, telemetry failure, SSR and haptic ownership.
+Browser verification must cover phone/desktop widths, both themes and a short map container with scrolling.
+The optimized production build with recovery/build tags exceeded the preceding total-script cap by 3.33 kB.
+Matching beta/production `allScript` error caps move from 14.20 to 14.21 MB for this addition; the 1474 kB initial cap
+and warning budgets remain unchanged. This is bundle accounting, not a runtime speed measurement.
+
+## Goal-based account setup
+
+Onboarding offers **Analyze my training**, **Sync between services**, and **Compare device recordings**,
+with **Let me look around** as a secondary action. All paths retain the required account policies and
+unchecked optional consent. Saving valid preferences initializes Starter only for an unpaid account,
+marks onboarding complete and opens the chosen workspace; onboarding no longer mounts Pricing or
+requires a membership selection. Existing paid access is preserved. Failures keep consent and allow retry.
+
+Analysis and exploration open Dashboard, whose empty state already offers file upload and provider selection.
+Sync opens `/services?setup=sync`: a display-only hint that expands the existing data-flow panel and shows
+contextual Pro benefits for unpaid accounts. Provider tabs retain this hint, while MCP and OAuth callback,
+connect or reconnect navigation take precedence. It never connects providers, enables a sync path or starts
+checkout. After source and destination connections are established, the existing matrix and sync controls
+own path selection and explicit opt-in. Connection offers and provider entitlement checks remain in Connections.
+
+The compact Compare path, explicit service/price/MCP return destinations and legacy `start=connect` /
+`start=upload` URLs still work. Return URLs allow only curated destinations and the exact sync display hint;
+they never accept provider actions or external redirects. Reloading saved consent with a remembered goal
+resumes the consent screen for explicit continuation. A deliberate tour or step change wins over late account
+checks. Training calculations, planning behavior and MCP permissions/contracts are unchanged.
+
+Initial goal-based setup verification exceeded the preceding 14.82 MB total-script cap by 3.96 kB.
+The final production build passes matching beta/production `allScript` error caps of 14.83 MB; initial
+and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
+
+## Field guide onboarding terrain and bundle allowance
+
+The optional Field guide and general account setup use `OnboardingTerrainComponent`. Its native 3D mountain
+illustration uses fictional sample loads reshaped into scenery; it does not visualize an account or expose
+readable Training metrics. The compact Compare account step never mounts this component. The geometry helper
+is pure TypeScript; the renderer is imported after browser rendering and pins Three.js to 0.180.0.
+ECharts remains the product-chart renderer. This decorative WebGL exception needs lit 3D relief and contour
+occlusion, with no quantitative axes, tooltips or input data contract.
+
+Light and dark scenes follow `AppThemeService`. Material tokens control text and the blend into the card;
+the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
+procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
+A 4.5-second camera glide introduces depth on first display and when entering the optional intro, blending
+into a gentle continuous camera orbit with a 24-second cycle. Entering the intro replays the glide on the
+existing renderer so time spent on the starting-point screen cannot consume the intro's movement.
+Passive animation paints at up to 30 fps; pointer panning, theme and size changes can repaint immediately.
+There is no playback control. Touch input disables pointer panning; reduced-motion preferences disable
+all camera motion. Enabling reduced motion centers the camera and ends the entry glide without replaying
+it; disabling it resumes only the slow drift. Rendering suspends offscreen and in hidden tabs without
+advancing either animation while hidden. Destroying the view releases frames, GPU
+resources, listeners and observers, and a late module response cannot initialize a destroyed view.
+Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
+loss. Onboarding stays usable in all cases.
+
+The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
+(104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.
+The 1474 kB initial cap, 13000 kB total-script warning and public startup checks remain unchanged. The renderer
+is outside the startup import graph; the existing service worker still precaches JavaScript chunks. This is
+bundle accounting, not a runtime performance measurement. There are no new account reads, writes, provider
+operations, Training calculations or MCP contracts.
+
+## Frontend build identification
+
+`npm run build`, `build-beta` and `build-production` use `tools/angular-build.mjs` after the existing public-snapshot
+generation. The wrapper passes Angular/esbuild compile-time constants without generating or rewriting source files.
+Sentry keeps `release: environment.appVersion` and the current version-based sourcemap upload. Separate initial-scope
+tags identify `build_commit`, `build_run` (`GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`, or `local`) and `build_dirty`.
+Both error and transaction events inherit these tags; signing out changes user identity independently.
+The strict App Check diagnostic scrubber retains only these validated build fields alongside its existing allowlist;
+it continues dropping arbitrary tags and private payloads. In-memory SDK transport tests cover the outgoing envelope.
+Search by version plus commit/run when multiple deployments reuse a package version. Tags do not replace sourcemaps
+or identify a failing request's cause.
+
+GitHub builds verify that the actual checkout matches `GITHUB_SHA`; missing/mismatched metadata fails the build
+instead of attributing it to another commit. Local builds mark tracked or untracked changes as dirty; archives without
+Git use an unknown commit. Beta's intentional manifest edit can also set the dirty tag. Only validated public SHA/run
+identifiers and a boolean enter tags; branch names, repository paths, secrets and arbitrary environment values do not.
+Direct `ng build`/`ng serve` without these constants report unknown metadata rather than reusing stale generated data.
+Use the npm build entry points for deployable artifacts. Build/tool regression tests run in the existing workflow guard.
+
 ## Font and icon caching across releases
 
 Bundled Fontsource fonts and the Material Symbols icon font are emitted under `/media/` with content-hashed
@@ -241,9 +356,60 @@ and tablets place the four drivers below the primary summaries instead of squeez
 minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
 geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
 
-Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, four drivers,
+Above 720 px, Today uses tighter cell padding and smaller minimum heights for the primary summaries, selected compact metrics,
 and optional recovery band. Phone spacing and wrapped-text reservations stay unchanged. Desktop cells still grow
 with their content; do not truncate recovery messages or HRV range details to meet the compact minimums.
+
+Today configuration is stored in the versioned `dashboardSettings.today` field. The owner opens the same lazy Material
+editor from **Dashboard options → Customize Today** or the global dashboard chart manager. The editor keeps a local
+draft until Save, writes only that field through `DashboardConfigurationService`, and uses its conflict checks. Cancel
+and dismissal do not persist. Training state and Readiness retain their larger top views; a single summary fills that
+row. Compact metrics follow the saved order, with at most four columns on desktop and two on phones; the last row
+expands to use the available width. The editor separates shown metrics from Add metrics. Reordering uses handles plus
+accessible up/down buttons, announces the resulting position and keeps focus on the moved metric. Checkbox focus is
+also retained when a metric moves between the shown and available lists. Recovery left and Today's suggestion remain optional full-width
+context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
+An empty Today explains that no items are selected, offers Customize Today and retains the existing title, date and
+calendar action. Save is enabled only for a changed draft. Restore defaults explains the three-block layout before
+saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
+
+New profiles explicitly start with Training state, Readiness and Load. Hydrating an existing profile without the field
+preserves its legacy summaries and metrics, with Recovery off unless explicitly saved as enabled. Restore defaults and Reset to starter dashboard explicitly select the three-block
+layout. Readiness still uses all its existing drivers when a driver cell is hidden. The greeting uses only displayed
+assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
+
+Today scopes its derived and Sleep subscriptions to enabled consumers, independently of visible charts' dependencies.
+`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals share Calendar's bounded
+summary listener for the current browser-local day, across all sports, using the same exclusions/TSS/ascent rules.
+They do not follow event-table or chart filters. Weight uses a bounded newest-first query for actual Health point
+measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection
+from one source. Both follow the saved Health metric source pin, never sum providers, retain source/date context and
+report incomplete reads. The shared Health query cache/queue, aborts and owner checks prevent duplicate or stale reads.
+Steps displays the recorded calendar day independently of the daily interval's end timestamp or browser time zone;
+its date still follows the account's regional formatting preference. Weight retains its actual measurement timestamp.
+Opening the editor starts one read-only availability scope for all candidate metrics. Selected and available rows use
+the dashboard manager's availability states, with text and icons for ready, checking, missing, updating, history and
+failed reads. User-facing labels use concise, formal wording such as **Data available**, **Partial data available** and
+**More HRV history required**. These checks reuse Today’s activity and Health readers, the same eligible Sleep evidence and four existing
+load/recovery snapshots. They never ensure/rebuild snapshots or generate a suggestion. Selection and ordering do not
+restart checks; closing the editor or changing accounts releases its listeners and aborts pending Health reads. A minute
+clock updates expiry and the local activity day. Recorded zero is available evidence; the displayed zero for an empty
+activity day is not. Missing data never disables a choice. Status text describes its checkbox and wraps below the
+reorder controls at narrow widths. Missing snapshots say **Not calculated yet**, rather than implying an active update.
+Availability follows the same ready Form-series/compact-snapshot precedence as Today, ignoring unused fallback errors.
+Health checks use the current profile's source pins, units and ascent settings while the editor is open; same-owner
+profile updates do not restart the Sleep or training snapshot readers. Dashboard charts and picker previews resolve snapshot kinds through
+`dashboard-derived-dependencies.helper.ts`, including each composite KPI's complete input set. Hiding Today drivers
+must not remove data needed by a chart. The legacy Sleep/HRV chart listeners run only when a matching chart is present.
+The manager waits for its overlay to finish closing before opening Customize Today, restores focus after the editor
+closes and publishes the normal configuration-change event after a save. This reconnects Today readers even when the
+profile observer receives the same already-updated settings object. A failed editor load gives actionable feedback;
+a subsequent explicit opening can retry. The launcher is fenced to the account and originating view: navigation during
+loading cannot open a late dialog, and destroying the originating view closes an already-open editor. Unsubmitted drafts
+remain unsaved; a save already in progress retains its existing account-safe completion checks.
+The combined feature uses matching beta/production `allScript` caps of 14.80 MB: its measured total is 26.45 kB above
+develop's 14.77 MB cap. The initial 1474 kB and warning budgets are unchanged. The editor stays lazy. This records
+bundle accounting only, not a device runtime speed claim.
 
 Today distinguishes calculation evidence from same-day presentation. Once both initial reads settle, it withholds the
 Readiness score, confidence and signal indicators until the latest eligible completed main night ends on the current
@@ -388,6 +554,9 @@ progress mode, optional plan and status. It reuses the Connection History menu p
 allowlisted options and a disabled state; nullable values represent an explicit option such as Independent goal.
 The menu shows the selected checkmark and `menuitemradio`/`aria-checked`, supports keyboard/Escape and focus return,
 wraps long labels and keeps 44px targets. Do not recreate this dropdown with outlined fields or custom popup CSS.
+In an existing labelled header, `hideLabel` can omit the separate caption to keep the picker on that row. Keep the
+`label` input meaningful: the trigger still announces the label and current choice. Event Details uses this for the
+phone performance-chart picker beside Hide; standalone fields retain their visible labels.
 The component owns menu-opening haptics; the caller validates/commits the accepted change and owns its selection
 haptic. Unchanged, disabled and stale choices emit nothing. Retain `mat-select` where a Material form-field/CVA/error
 state is needed, searchable pickers for long catalogs, and segmented controls for immediately visible alternatives.
@@ -852,6 +1021,25 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
+`EventPerformanceChartsComponent` keeps its available **Intensity**, **Power Curve**, **Durability** and
+**Cadence vs Power** choices visible in a native Material tab navigation bar beside an expand/collapse icon button
+with **Show charts/Hide charts** tooltips and a complete accessible name. Hiding unmounts only the plot children;
+the navigation stays mounted and retains its active chart. Selecting
+a collapsed tab opens that chart and saves Show with one accepted-action haptic. Selecting another already visible
+chart produces one selection haptic without a preference write; selecting the current visible tab is silent.
+Phones retain full tab names and Material's pagination, keyboard focus and associated tab panel instead of replacing
+names with icons or joining them into a long heading. At widths below 360px, decorative tab icons yield space to the
+full names. A single available chart keeps its own title beside the expand/collapse button.
+`chartSettings.showPerformanceCharts` is an optional account preference: only explicit `false`
+collapses the section, preserving the visible default for existing accounts. The signed-in viewer owns this preference,
+including while viewing another owner's shared activity; anonymous viewers use transient local state and never write
+owner settings. The existing chart-settings writer saves only this field and checks the expected viewer ID. Accepted
+changes own one selection haptic, pending saves disable repeat clicks and show progress, failures restore the saved
+state with an error notice, and stale completions after account changes are ignored. Hydration stays silent.
+Collapsed content retains its `aria-controls` target but unmounts the chart children and missing-output notice. Showing
+charts restores the active performance tab. Dive Profile, R–R & HRV, ordinary charts, the map and Training impact keep
+their independent behavior. This changes presentation only, without metric calculations, activity writes or MCP impact.
+
 `BenchmarkRRComponent` is shared by ordinary workouts, explicit multisport merges and benchmarks. Event Details
 mounts it after the performance/dive charts only when a selected activity has valid saved R–R statistics or an original
 IBI stream with usable timing metadata. The panel independently filters to those same eligible recordings; no-data
@@ -1141,6 +1329,11 @@ Complete profile snapshots add no Firestore reads. Incomplete snapshots require 
 reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
 and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
 restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
+Firestore Lite's fetch-rejection signature (`FirebaseError`, code `unknown`, exact message
+`Request failed with error: undefined`) is normalized to `unavailable` only where `getDoc` rejects. The original
+error remains its cause. This uses the existing four retries with backoff and the same account/session fences;
+it adds no nested retry budget. Other unknown errors, settings imports/merges and permanent read failures retain
+their original classification. Exhaustion exposes the existing manual **Retry** without publishing missing data.
 The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.
@@ -1584,7 +1777,19 @@ Owners use a compact **Add to dashboard +** action in the dashboard header (an a
 One dashboard-scoped `DashboardChartLibraryComponent` with `allSections=true` owns the overlay and handles section
 add actions and existing-tile editing. Its Material section selector exposes every lane, including hidden ones. Opening
 from the top prioritizes unseen additions, then an available section; it avoids landing on a completed preset list.
-Empty KPI/main sections are omitted from the dashboard. Populated sections retain right-aligned Add KPI, Add chart,
+Empty KPI/chart/map sections are omitted from the dashboard. Each populated section has an owner-only options menu
+to the left of its add action; Calendar keeps its menu beside Open, including when no Calendar tile is configured.
+Show/Hide stores normalized lane keys in `dashboardSettings.hiddenSections` through the existing owner-scoped
+configuration transaction. Hidden sections retain their headers, saved tiles, ranges and layout; only their renderers
+unmount. Existing data acquisition remains keyed to configured tiles and Today. Visibility Undo owns only this field
+and cannot replace newer tiles or unrelated preferences. Adding, saving or moving a chart reveals its destination section;
+Health's View on dashboard awaits an existing chart's visibility save before navigating, without an addition toast.
+That navigation is fenced by the current account and metric, and a failed save leaves the Health page open.
+Reset, Add all presets and Remove all clear the hidden lanes. Calendar's Show action can still add a missing tile.
+Shared/read-only dashboards expose no section controls and ignore the owner's private visibility choices.
+At phone widths the section add label shortens to Add; its full accessible label and hint remain available, keeping
+long section titles clear of both actions at 320px.
+Populated sections retain right-aligned Add KPI, Add chart,
 Add map, or mixed Add tile actions, delegated to the same picker. A section action is hidden when no presets remain;
 Activity Overview retains custom creation and its direct action opens properties when complete. Adding a first tile
 reveals its section, removing the last hides it, and restoring the tile restores the section. The global picker remains
@@ -1872,6 +2077,21 @@ Health thumbnails reuse completed browser evidence for the same owner, metric, r
 The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.
 
 
+## Activity table date navigation
+
+Activities and Dashboard share bounded date navigation: current presets show their names, while shifted and custom
+ranges show their dates. The current preset's tooltip and accessible name retain its covered dates. Presets retain
+their identity while browsing history; Next period stops at the current window and is disabled there or beyond it.
+Off-cycle historical ranges land on the current window without overshooting it. Current period restores the live window. All dates retains the existing
+confirmation and disables
+period navigation. Custom dates use inclusive calendar days, including across DST. Activities stores history anchors
+in the URL; Dashboard stores validated navigation metadata alongside its compatible numeric date-range preference.
+See [event summary reads](event-summary-reads.md) for query boundaries, rollover and save-failure recovery.
+
+The additional controls and shared date resolution measure 14.81 MB of total production scripts. Beta and production
+therefore share a 14.82 MB `allScript` error cap. Initial and warning budgets remain unchanged; this is bundle accounting,
+not a runtime performance claim.
+
 ## Empty activity tables
 
 The Dashboard table's projected date/sport toolbar uses a content-sized flex basis at the same small-screen breakpoint
@@ -1922,3 +2142,23 @@ renderers opt into the shared dashboard plot sizing/alignment contract; their no
 layouts retain their defaults. Durability fits the tile width, with compact weekly labels on narrow plots. Full manager
 previews grow with evidence text rather than clipping it. No raw streams, new calculations or per-tile snapshot
 listeners are introduced.
+
+### Independent elevation units
+
+`unitSettings.elevationUnits` selects `ElevationUnits.Meters` or `ElevationUnits.Feet` independently of distance and
+vertical-speed preferences. Shared normalization and legacy profile hydration retain metres when absent or invalid.
+Settings exposes Elevation under Units & formatting → Customize units; the kilometre/mile presets set metres/feet.
+An elevation override makes the preset Custom. Onboarding uses the same preset builder.
+
+All metric surfaces use the existing Sports Lib display boundary through `shared/unit-aware-display.ts`, including
+event/route chart axes, headers, tooltips, range stats, calendar period totals, tables, exports and canonical Health
+altitude. Raw chart samples, altitude-grade calculation inputs, canonical metric identities and stored JSON stay in
+metres. The elevation correction editor uses Sports Lib's unrounded display conversion and converts accepted feet
+input back to metres; an unchanged loaded value cannot become a correction merely from changing display units.
+Benchmark altitude-error cards and copied summaries convert presentation through the same library conversion, retaining
+their decimal precision. Grades, correlations, GNSS errors and stored benchmark results are unchanged. Their small
+display map refreshes only when the report or unit settings change.
+No activity rewrite, provider send, reparse, derived rebuild or data migration is required.
+
+Both root and Functions pin the published Sports Lib 23.11.0 package with matching lockfile integrity. The shared
+display boundary uses its public APIs; no local adapters or node_modules patches are used.

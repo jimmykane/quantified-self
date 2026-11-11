@@ -36,6 +36,7 @@ import {
   type AssistantVisual,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
+import { ASSISTANT_CREATE_PLAN_PROMPT } from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -199,7 +200,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private destroyed = false;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
-  readonly composerPlaceholder = 'Ask your history…';
+  readonly composerPlaceholder = 'Ask about your training or create a plan…';
   readonly promptControl = new FormControl('', {
     nonNullable: true,
     validators: [
@@ -452,6 +453,12 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.hapticsService.selection();
     this.planRequest.set(null);
     this.planRequestSession = null;
+  }
+
+  startPlan(): void {
+    if (this.promptControl.value === ASSISTANT_CREATE_PLAN_PROMPT) return;
+    this.useStarterPrompt(ASSISTANT_CREATE_PLAN_PROMPT);
+    this.hapticsService.selection();
   }
 
   openExploreSheet(): void {

@@ -27,7 +27,7 @@
     <div after-stats class="event-charts-summary-wrapper">
       <mat-divider></mat-divider>
       @if (hasPerformanceChartsFlag()) {
-      <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
+      <app-event-performance-charts [viewer]="currentUser()" [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
         [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
         [hasPowerCurve]="hasPowerCurveFlag()" [hasDurability]="hasDurabilityFlag()"
         [durabilityOutputUnavailable]="durabilityOutputUnavailableFlag()"

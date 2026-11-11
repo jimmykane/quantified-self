@@ -122,6 +122,52 @@ consent and location exclusions. Lazy derivation does not authorize exposing a m
 existing [MCP workflow](../.agent/skills/mcp-metric-surface/SKILL.md) for any affected MCP contract and retain
 [Training's existing semantics](training-workspace.md) for Training or derived consumers.
 
+## Shared activity tables
+
+Dashboard, Calendar and Activities use the same compact table, column icons alongside text labels, account-backed column selection/order,
+sort and page-size settings. Default/Running presets live inside the shared column dialog. Date ranges belong to the
+host page: Calendar supplies its visible period; Activities and Dashboard offer previous/next navigation for their
+bounded windows. The shared `activity-date-range.helper.ts` uses exclusive local-midnight bounds, calendar-day
+steps for 7/30/90-day and custom windows, and complete calendar weeks/months/years. Custom dates are inclusive.
+DST changes never change a window's calendar-day count. The date control shows the preset name for a live current
+window and explicit dates for shifted or custom windows. Covered dates remain in the current preset's tooltip and
+accessible name. Next period stops at the matching current window and is disabled there or on fixed/future windows
+that end at or beyond it. An off-cycle historical step lands on the current window without shortening its duration.
+Current period restores the matching present window. Each destination boundary resolves its own
+start of day, including time zones where DST skips midnight; the source day's normalized hour must not carry into
+another date. All dates keeps the controls disabled and retains its existing confirmation.
+
+Activities retains the preset and a date-only `anchor` in its URL (plus `start`/`end` for custom ranges). Older
+`view=training-log` and `week` links normalize to the calendar-week preset. Dashboard retains `rangeNavigation`
+with its existing event-table preferences: the preset, an optional date-only anchor, and explicit calendar dates for
+custom windows. Navigation metadata must match its compatible numeric preset; conflicting metadata left by an older
+client is ignored. Existing numeric `DateRanges` and timestamp-only custom preferences remain readable. The resolver,
+live query and toolbar use the same window resolution. Dashboard retains its inclusive `<=` query using one millisecond
+before the exclusive end; Activities retains `< end`. Navigating back to a current preset clears its anchor so it
+stays live; custom and historical windows stay fixed. Clock/focus and timezone refreshes update only changed query
+bounds without saving preferences, changing drafts or producing haptics. Preference-save failures restore both the
+previous navigation state and live query. Dashboard keeps date, sport and merged filters disabled until their preference write settles,
+even if the activity query has already finished, and rejects overlapping filter events. The save lock is scoped to the
+viewer and target owner so an old account's completion cannot unlock or restore another account's filters.
+Existing owner guards, cancellation and complete-range reads remain in force.
+There is no separate table presentation or temporary log layout.
+
+Sport totals consume all filtered activity rows before pagination. `activity-training-log.helper.ts` reads only
+Duration, Distance and eligible Ascent, formats through Sports Lib, and retains missing/zero/partial coverage,
+elevation exclusions, exact sports and one Multisport group per recording. Generated comparisons are excluded.
+Totals are appended to the rendered page stream, outside the activity data source used for sorting, filtering,
+selection and exports. They share the table columns, have no event links/actions, and disappear while loading or
+failed. Their sport icon and leading color mark reuse the activity palette. Sport names sit in the sport/name column,
+falling back to the date column when that column is hidden. Counts stay separate from the sport label. The shared
+table owns the underlying data-source connection and disconnects it on destruction. Neither row construction nor
+totals hydrate child activities or streams. GAP continues to use its persisted canonical stat and
+unit conversion; absent historical values remain unavailable.
+
+MCP impact review: these are presentations over existing recorded summaries. No numeric class, parser,
+persisted metric, derived snapshot, Training plan/workout, permission, query contract or public MCP schema changes.
+The automatic persisted-only numeric catalog already covers GAP. No reparse, migration, plugin rebuild or deployment
+is required to prepare this change; historical summaries without GAP remain unavailable.
+
 ## Verification for future changes
 
 Use focused behavioral tests to establish that metadata reads construct no metrics, selected reads construct only

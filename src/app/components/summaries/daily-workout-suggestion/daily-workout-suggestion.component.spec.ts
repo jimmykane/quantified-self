@@ -166,10 +166,9 @@ describe('compact daily workout in Today', () => {
     expect(request).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Waiting for history import');
     expect(fixture.nativeElement.textContent).toContain('Use available data');
-    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-import' });
     importActive.set(false); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
     const calls = request.mock.calls.length;
     setVisible(false); fixture.detectChanges(); setVisible(true); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600);
@@ -265,15 +264,15 @@ describe('compact daily workout in Today', () => {
       fixture.detectChanges(); return fixture;
     };
     const first = mount(); await vi.advanceTimersByTimeAsync(1600); first.detectChanges();
-    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status', 'prepare']);
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['prepare']);
     first.componentInstance.visible.set(false); first.detectChanges(); first.destroy();
     const second = mount(); await vi.advanceTimersByTimeAsync(1600); second.detectChanges();
-    expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenCalledTimes(1);
     finish({ data: ready }); await vi.advanceTimersByTimeAsync(0); second.detectChanges();
     expect(second.componentInstance.status()).toEqual(ready); second.destroy();
     const third = mount(); expect(third.nativeElement.textContent).toContain('Rest day suggested');
     expect(third.componentInstance.busy()).toBe(false);
-    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(1);
     // Helsinki rolls over while the parent's browser-local day can still be Oct 30.
     third.componentInstance.visible.set(false); third.detectChanges();
     vi.setSystemTime(new Date('2026-10-30T22:01Z'));
@@ -282,7 +281,7 @@ describe('compact daily workout in Today', () => {
     expect(third.componentInstance.preferences().controls.localDate).toBe('2026-10-31');
     expect(third.componentInstance.status()).toBeNull();
     await vi.advanceTimersByTimeAsync(1600); third.detectChanges();
-    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status', 'prepare', 'status', 'prepare']);
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['prepare', 'prepare']);
     const nextReady: DailyWorkoutSuggestionStatus = { ...ready, localDate: '2026-10-31',
       controls: { ...controls, localDate: '2026-10-31' },
       result: { ...ready.result!, requestId: 'daily-suggestion:2026-10-31', observedAt: new Date().toISOString() } };
@@ -290,7 +289,7 @@ describe('compact daily workout in Today', () => {
     expect(third.componentInstance.status()).toEqual(nextReady);
     third.componentInstance.visible.set(false); third.detectChanges();
     third.componentInstance.visible.set(true); third.detectChanges();
-    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(2);
   });
   it('restores a cached covered day immediately without a loading flash or API read', async () => {
     const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'planned' });
@@ -315,7 +314,7 @@ describe('compact daily workout in Today', () => {
     expect(fixture.nativeElement.textContent).toContain(estimated
       ? 'Full-body strength · AI planning estimate: 20m 00s–30m 00s' : 'Full-body strength · Total session duration unknown');
     expect(fixture.nativeElement.textContent).not.toContain('01m 30s');
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
   });
   it('shows live saved details after acceptance, using the existing prescription summary', async () => {
     const { fixture, workouts, watchCalendarSchedule, request, open, haptics } = setup();
@@ -446,7 +445,7 @@ describe('compact daily workout in Today', () => {
     };
     let fixture = mount(); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
-    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status']); expect(generate).not.toHaveBeenCalled();
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['prepare']); expect(generate).not.toHaveBeenCalled();
     fixture.destroy(); fixture = mount(); await vi.advanceTimersByTimeAsync(1600);
     expect(call).toHaveBeenCalledOnce();
     // Removing one workout while another still covers the day must keep generation blocked.
@@ -461,7 +460,7 @@ describe('compact daily workout in Today', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Your workout is planned for today.');
     expect(fixture.nativeElement.textContent).toContain('Easy run');
     expect(generate).toHaveBeenCalledTimes(alreadyGenerated ? 0 : 1);
-    expect(call.mock.calls.map(args => args[1].action)).toEqual(alreadyGenerated ? ['status', 'status', 'status'] : ['status', 'status', 'status', 'prepare']);
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['prepare', 'prepare', 'prepare']);
     // Adding and deleting a replacement must expose the same daily draft, never generate a second one.
     covered = true; revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
@@ -484,7 +483,7 @@ describe('compact daily workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     fixture.componentRef.setInput('sleepKey', 'night-b'); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
   });
 
   it('stays off by default and does no private reads for free or shared dashboards', async () => {
@@ -497,7 +496,7 @@ describe('compact daily workout in Today', () => {
     const { fixture, request, saving } = setup(); saving.set(true); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     saving.set(false); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(1600);
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
   });
   it('opens guidance after a fresh coverage check without offering to add or send a workout', async () => {
     const ready: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'ready', controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'),
@@ -519,7 +518,7 @@ describe('compact daily workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
     expect(fixture.nativeElement.textContent).toContain('Rest day suggested');
     expect(fixture.nativeElement.querySelector('.suggestion-rationale').textContent).toBe('An easy day.');
     expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
@@ -533,7 +532,7 @@ describe('compact daily workout in Today', () => {
     fixture.detectChanges(); exportQa(fixture.nativeElement, 'daily-ready');
     expect(fixture.nativeElement.querySelector('.suggestion-rationale').textContent).toBe(rationale);
     expect(fixture.nativeElement.textContent).not.toContain('Included with Pro');
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
     request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     expect(open).toHaveBeenCalledWith('owner', '2026-10-30', expect.any(String), expect.objectContaining({ initialResult: expect.any(Object), onAdded: expect.any(Function) }));
@@ -744,7 +743,6 @@ describe('compact daily workout in Today', () => {
     const pending = fixture.componentInstance.load();
     fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
     finish({ localDate: '2026-10-30', state: 'waiting-sleep' });
-    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-sleep' } as any);
     await pending; fixture.detectChanges();
     const attempts = request.mock.calls.length;
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
@@ -811,28 +809,29 @@ describe('compact daily workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     request.mockResolvedValue(ready); setVisible(true);
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'status', expect.any(Function), undefined, true);
+    expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'prepare', expect.any(Function), undefined, true);
     expect(fixture.componentInstance.status()).toBe(ready);
   });
-  it.each(['waiting', 'waiting-sleep'] as const)('defers %s preparation when its status read finishes hidden', async state => {
+  it.each(['waiting', 'waiting-sleep'] as const)('defers %s preparation when a recovery status read finishes hidden', async state => {
     const { fixture, request, setVisible } = setup();
     let finish!: (value: any) => void;
     request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    fixture.componentInstance.error.set('Previous response lost');
     const pending = fixture.componentInstance.load(); setVisible(false);
     finish({ localDate: '2026-10-30', state }); await pending; fixture.detectChanges();
     expect(request.mock.calls.map(call => call[1])).toEqual(['status']);
     expect(fixture.componentInstance.status()?.state).toBe(state);
     setVisible(true); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
     expect(fixture.componentInstance.status()?.state).toBe('ready');
     setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledTimes(2);
   });
   it('keeps a failed read stable on tab return and allows an explicit retry', async () => {
     const { fixture, request, setVisible } = setup();
     request.mockRejectedValueOnce(Error('Offline'));
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(fixture.componentInstance.error()).toBe('Could not check today’s suggestion. Try again.');
+    expect(fixture.componentInstance.error()).toBe('Could not retrieve today’s suggestion. Check again to see whether it finished.');
     expect(fixture.nativeElement.textContent).not.toContain('could not be generated');
     setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
     expect(request).toHaveBeenCalledOnce();
@@ -895,7 +894,6 @@ describe('compact daily workout in Today', () => {
   it('retrieves a lost preparation response without claiming failure or starting another preparation', async () => {
     const { fixture, request } = setup();
     const ready = await request('owner', 'prepare'); request.mockClear();
-    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting' });
     request.mockRejectedValueOnce(Error('Response lost'));
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Check again to see whether it finished');
@@ -903,7 +901,7 @@ describe('compact daily workout in Today', () => {
     exportQa(fixture.nativeElement, 'daily-response-lost');
     request.mockResolvedValueOnce(ready);
     await fixture.componentInstance.load(); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare', 'status']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare', 'status']);
     expect(fixture.componentInstance.status()).toBe(ready);
     expect(fixture.componentInstance.error()).toBeNull();
   });
@@ -913,14 +911,47 @@ describe('compact daily workout in Today', () => {
     expect(fixture.nativeElement.textContent).toContain('Generate manually');
     expect(fixture.nativeElement.textContent).not.toContain('Check again');
   });
+  it('reports a confirmed generation failure once without counting cached displays or tab focus again', async () => {
+    const { fixture, request, event, setVisible, cached, cacheRevision } = setup();
+    const failed: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'failed', failureReason: 'invalid-output' };
+    request.mockResolvedValue(failed);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(event).toHaveBeenCalledExactlyOnceWith('owner', 'failed', 'failed');
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+    await fixture.componentInstance.load(); fixture.detectChanges();
+    expect(event).toHaveBeenCalledOnce();
+    cached.mockReturnValue({ status: failed, sleepKey: 'night-a' });
+    cacheRevision.update(value => value + 1); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(event).toHaveBeenCalledOnce();
+  });
+  it.each([
+    ['temporary-service', 'AI service was temporarily unavailable'],
+    ['invalid-output', 'AI could not produce a valid workout'],
+    ['unknown', 'Today’s suggestion could not be generated'],
+  ] as const)('explains a confirmed %s failure and manual quota without retrying on focus', async (failureReason, message) => {
+    const { fixture, request, setVisible, open } = setup(true, { localDate: '2026-10-30', state: 'failed', failureReason });
+    expect(fixture.nativeElement.textContent).toContain(message);
+    expect(fixture.nativeElement.textContent).toContain('Generate manually uses your Assistant allowance.');
+    expect(fixture.nativeElement.textContent).not.toContain('Check again');
+    exportQa(fixture.nativeElement, `daily-failed-${failureReason}`);
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).not.toHaveBeenCalled();
+    const manual = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.trim() === 'Generate manually') as HTMLButtonElement;
+    manual.click(); await vi.advanceTimersByTimeAsync(0);
+    expect(open).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-30', ActivityTypes.Running,
+      { initialControls: fixture.componentInstance.preferences().controls });
+    expect(request).not.toHaveBeenCalled();
+  });
   it.each(['2026-10-30T00:30Z', '2026-10-30T10:00Z', '2026-10-30T13:00Z', '2026-10-30T20:30Z'])(
     'prepares on a fresh foreground visit at %s and stays cached on focus', async instant => {
       const { fixture, request, setVisible } = setup(); vi.setSystemTime(new Date(instant));
       await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-      expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+      expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
       expect(fixture.componentInstance.status()?.state).toBe('ready');
       setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
-      expect(request).toHaveBeenCalledTimes(2);
+      expect(request).toHaveBeenCalledOnce();
     });
   it('still retires in-flight reads when personalization changes', async () => {
     const { fixture, request, preferences } = setup();
@@ -950,7 +981,7 @@ describe('compact daily workout in Today', () => {
     fixture.detectChanges(); vi.setSystemTime(new Date('2026-10-30T13:00Z'));
     fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    expect(request.mock.calls.map(call => call[1])).toEqual(['prepare']);
     expect(fixture.componentInstance.status()?.state).toBe('waiting-sleep');
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Use available data')) as HTMLButtonElement;
     button.click(); await vi.advanceTimersByTimeAsync(0);

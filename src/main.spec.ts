@@ -75,6 +75,10 @@ describe('browser startup', () => {
     await vi.dynamicImportSettled();
 
     expect(startup.initSentry).toHaveBeenCalledOnce();
+    expect(startup.initSentry).toHaveBeenCalledWith(expect.objectContaining({
+      release: 'test',
+      initialScope: { tags: { build_commit: 'unknown', build_run: 'unknown', build_dirty: 'unknown' } },
+    }));
     expect(startup.enableProdMode).toHaveBeenCalledOnce();
     expect(startup.registerLocale).toHaveBeenCalledOnce();
     expect(startup.loadAppModule).toHaveBeenCalledOnce();
@@ -94,5 +98,13 @@ describe('browser startup', () => {
     expect(startup.enableProdMode).not.toHaveBeenCalled();
     expect(startup.registerLocale).toHaveBeenCalledOnce();
     expect(startup.bootstrapModule).toHaveBeenCalledExactlyOnceWith(startup.AppModule);
+  });
+  it('attaches the build constants to Sentry without changing release or adding a dist', async () => {
+    vi.stubGlobal('QS_BUILD_COMMIT', 'a'.repeat(40)); vi.stubGlobal('QS_BUILD_RUN', '123.2'); vi.stubGlobal('QS_BUILD_DIRTY', false);
+    await import('./main'); await vi.dynamicImportSettled();
+    expect(startup.initSentry).toHaveBeenCalledWith(expect.objectContaining({ release: 'test', initialScope: {
+      tags: { build_commit: 'a'.repeat(40), build_run: '123.2', build_dirty: 'false' },
+    } }));
+    expect(startup.initSentry.mock.calls[0][0]).not.toHaveProperty('dist');
   });
 });

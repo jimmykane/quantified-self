@@ -1,8 +1,11 @@
 <div class="intensity-zones-container">
   @if (showHeader) {
-  <div class="chart-intro">
+  <div class="chart-intro" [class.chart-intro-with-actions]="headerActions">
+    <div class="chart-intro-copy">
     <div class="chart-title">Intensity Zones</div>
     <div class="chart-description">Distribution of time spent across active intensity zones.</div>
+    </div>
+    <ng-container [ngTemplateOutlet]="headerActions"></ng-container>
   </div>
   }
   <div class="intensity-zones-chart" data-dashboard-chart-plot #chartDiv role="img"

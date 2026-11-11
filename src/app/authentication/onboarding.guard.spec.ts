@@ -139,14 +139,14 @@ describe('onboardingGuard', () => {
         expect((result as any).toString()).toContain('/onboarding');
     });
 
-    it.each(['Wahoo%20API', 'COROS%20API', 'Suunto%20app'])('keeps %s setup selected while still requiring onboarding', async service => {
+    it.each(['serviceName=Wahoo%20API', 'serviceName=COROS%20API', 'serviceName=Suunto%20app', 'setup=sync', 'serviceName=Garmin%20API&setup=sync'])('keeps %s setup selected while still requiring onboarding', async query => {
         mockRouter.getCurrentNavigation.mockReturnValue({
-            extractedUrl: { toString: () => `/services?serviceName=${service}` },
+            extractedUrl: { toString: () => `/services?${query}` },
         });
         const result = await firstValueFrom(runGuard({ uid: '123' }, [{ path: 'services' }]) as Observable<unknown>);
         expect(result).not.toBe(true);
         expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/onboarding'], {
-            queryParams: { returnUrl: `/services?serviceName=${service}` },
+            queryParams: { returnUrl: `/services?${query}` },
         });
     });
 

@@ -39,9 +39,44 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
   generate.mockImplementation(options => ai.generate({ ...options as object, model }) as never);
   return { provider, generate };
 }
-const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
+const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), durationMode: 'manual' as const, minutes: 30 } };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it.each(['UNAVAILABLE', 'RESOURCE_EXHAUSTED', 'DEADLINE_EXCEEDED'] as const)('recovers a transient %s inside one quota reservation and two model attempts', async status => {
+    const { provider, generate } = mockSdkOutputs(new GenkitError({ status, message: 'PRIVATE_REPLY' }),
+      JSON.stringify({ kind: 'rest', rationale: 'Take it easy.' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      expect((await runGenerateDayWorkout(request, auth, deps)).kind).toBe('rest');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce(); expect(deps.finalize).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+  it.each(['transport-first', 'schema-first', 'two-outages'])('never exceeds two total attempts with %s', async order => {
+    const outage = new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' });
+    const invalid = JSON.stringify({ kind: 'rest', rationale: 123 });
+    const outputs = order === 'transport-first' ? [outage, invalid] : order === 'schema-first' ? [invalid, outage] : [outage, outage];
+    const { provider, generate } = mockSdkOutputs(...outputs, JSON.stringify({ kind: 'rest', rationale: 'Unreachable' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+      expect(provider).toHaveBeenCalledTimes(2); expect(deps.reserve).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+  it.each([false, true])('rechecks the active request before spending the transport retry (revoked during backoff: %s)', async duringBackoff => {
+    const { provider, generate } = mockSdkOutputs(new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' }),
+      JSON.stringify({ kind: 'rest', rationale: 'Unreachable' }));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    provider.mockImplementationOnce(async () => {
+      vi.mocked(deps.store.assertActive).mockRejectedValue(new HttpsError('aborted', 'Request changed'));
+      if (duringBackoff) vi.mocked(deps.store.assertActive).mockResolvedValueOnce(undefined);
+      throw new GenkitError({ status: 'UNAVAILABLE', message: 'PRIVATE_REPLY' });
+    });
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+      expect(provider).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
   it.each(['override', 'shared', 'imported'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
     const deps = dependencies();
     const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: request.controls.sport, family: 'running' as const,
@@ -196,6 +231,9 @@ describe('generateDayWorkout callable', () => {
       const response = await runGenerateDayWorkout(request, auth, deps);
       expect(response.draft?.structure).toEqual(reply.structure);
       expect(JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction).toContain('Invalid prescription schema.');
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).toContain('$.structure.nodes[].ending');
+      expect(correction).not.toContain('Easy run'); expect(correction).not.toContain('Keep it easy.');
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.reserve).toHaveBeenCalledOnce();
       expect(deps.finalize).toHaveBeenCalledOnce();
@@ -289,7 +327,7 @@ describe('generateDayWorkout callable', () => {
   });
   it.each(['schema', 'JSON syntax'])('corrects a strength reply rejected by real Genkit %s validation', async kind => {
     const deps = dependencies();
-    const reply = { kind: 'workout', title: 'Bodyweight session', rationale: 'A gentle session.',
+    const reply = { kind: 'workout', title: 'Bodyweight session', rationale: 'A gentle session.', estimatedMinutes: { minimum: 10, maximum: 20 },
       strength: { version: 1, exercises: [{ id: 'squat', name: 'Bodyweight squat',
         sets: [{ id: 'set1', ending: { kind: 'repetitions', repetitions: 10 } }] }] } };
     const malformed = kind === 'schema' ? JSON.stringify({ ...reply,
@@ -454,4 +492,20 @@ describe('generateDayWorkout callable', () => {
     expect(deps.generate).toHaveBeenCalledTimes(2);
     expect(deps.finalize).toHaveBeenCalledTimes(2);
   });
+});
+
+
+it('sends Auto without a numeric budget or timing anchor and constrains its endurance decoder', async () => {
+  const autoRequest = { ...request, controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
+  const evidence = await dependencies().context('owner', autoRequest, new Date());
+  const mock = vi.mocked(assistantGenkit.generate).mockReset().mockResolvedValue({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
+  try {
+    await generateDayWorkoutSuggestion(autoRequest, evidence);
+    const options = mock.mock.calls[0][0] as { prompt: string; output: { jsonSchema: object } };
+    expect(JSON.parse(options.prompt).controls).toMatchObject({ durationMode: 'auto' });
+    expect(JSON.parse(options.prompt).controls).not.toHaveProperty('minutes');
+    expect(JSON.parse(options.prompt).controls).not.toHaveProperty('timing');
+    const schema = JSON.stringify(options.output.jsonSchema);
+    expect(schema).toContain('"time"'); expect(schema).not.toContain('"manual"'); expect(schema).not.toContain('"distance"');
+  } finally { mock.mockReset(); }
 });

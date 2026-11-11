@@ -1,13 +1,59 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="disabled" aria-label="Configure table columns" appHapticTap
-  (click)="$event.preventDefault(); $event.stopPropagation();">
-  <mat-icon>{{ icon }}</mat-icon>
+<button mat-icon-button type="button" [disabled]="disabled" [attr.aria-busy]="saving" aria-label="Configure table columns"
+  matTooltip="Choose table columns" (click)="$event.preventDefault(); $event.stopPropagation(); openColumnsDialog()">
+  <span class="column-trigger-content">
+    @if (saving) { <mat-progress-spinner diameter="20" mode="indeterminate" aria-label="Saving columns"></mat-progress-spinner> }
+    @else { <mat-icon>{{ icon }}</mat-icon> }
+  </span>
 </button>
-<mat-menu #menu="matMenu" class="qs-menu-panel" (closed)="menuClosed()">
-  <mat-selection-list [multiple]="true" [disabled]="disabled" (selectionChange)="selectionChange($event)" (click)="$event.preventDefault(); $event.stopPropagation();">
-    @for (dataType of dataTypes; track dataType) {
-      <mat-list-option [selected]="selectedDataTypes.indexOf(dataType) !== -1" [value]="dataType">
-        {{dataType}}
-      </mat-list-option>
+<ng-template #columnsDialog>
+  <h2 mat-dialog-title>Choose table columns</h2>
+  <mat-dialog-content class="column-dialog-content">
+    <p class="column-copy">{{ scopeHint }}</p>
+    <app-compact-select label="Preset" [value]="selectedPreset" [options]="presetOptions" [disabled]="disabled || saving"
+      (selectionChange)="selectPreset($event)"></app-compact-select>
+    <h3 class="column-section-title">Selected columns · table order</h3>
+    <ol class="column-selected-list" aria-label="Selected table columns in order" [attr.aria-busy]="saving">
+      @for (type of selectedColumns; track type; let first = $first; let last = $last) {
+      <li class="column-selected-row" [attr.data-event-column]="type">
+        <div class="column-selected-metric">
+          <mat-checkbox [checked]="true" [disabled]="disabled || saving" (change)="removeColumn(type)">
+            {{ labels[type] || type }}
+          </mat-checkbox>
+        </div>
+        <div class="column-order-actions">
+          <button mat-icon-button type="button" [disabled]="first || disabled || saving" [attr.aria-label]="'Move ' + type + ' up'"
+            matTooltip="Move up" (click)="moveColumn(type, -1)"><mat-icon>arrow_upward</mat-icon></button>
+          <button mat-icon-button type="button" [disabled]="last || disabled || saving" [attr.aria-label]="'Move ' + type + ' down'"
+            matTooltip="Move down" (click)="moveColumn(type, 1)"><mat-icon>arrow_downward</mat-icon></button>
+        </div>
+      </li>
+      } @empty {
+      <li class="column-empty">No columns selected.</li>
+      }
+    </ol>
+    @if (saving) {
+    <div class="column-saving" role="status"><mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner><span>Saving columns</span></div>
     }
-  </mat-selection-list>
-</mat-menu>
+    @if (saveError) { <p class="column-copy" role="alert">{{ saveError }}</p> }
+    <p class="cdk-visually-hidden" role="status" aria-live="polite">{{ announcement }}</p>
+    <h3 class="column-section-title">Add columns</h3>
+    <mat-form-field appearance="outline" class="column-search-field" subscriptSizing="dynamic">
+      <mat-label>Search columns</mat-label>
+      <input matInput data-event-column-search [value]="searchTerm" (input)="search($event)" autocomplete="off" aria-label="Search table columns">
+      @if (searchTerm) {
+      <button mat-icon-button matSuffix type="button" aria-label="Clear column search" (click)="clearSearch()"><mat-icon>close</mat-icon></button>
+      } @else { <mat-icon matSuffix>search</mat-icon> }
+    </mat-form-field>
+    <mat-selection-list [multiple]="true" [disabled]="disabled || saving" aria-label="Available table columns" (selectionChange)="selectionChange($event)">
+      @for (type of availableColumns; track type) {
+      <mat-list-option [value]="type" [attr.aria-label]="labels[type] || type">
+        <app-data-type-icon matListItemIcon [dataType]="type" size="18px"></app-data-type-icon>
+        <span matListItemTitle>{{ labels[type] || type }}</span>
+      </mat-list-option>
+      } @empty {
+      <p class="column-empty" role="status">{{ searchTerm.trim() ? 'No matching columns.' : 'All columns are selected.' }}</p>
+      }
+    </mat-selection-list>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end"><button mat-button mat-dialog-close type="button">Done</button></mat-dialog-actions>
+</ng-template>

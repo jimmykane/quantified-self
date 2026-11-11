@@ -1,10 +1,11 @@
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { runGenerateDayWorkout } from './day-workout-callable';
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { dailyWorkoutSuggestionMergePatch } from '../../../shared/daily-workout-suggestion';
+import { FieldValue, Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
@@ -14,6 +15,7 @@ import { createFirestoreTrainingReads, readTrainingPlans } from '../mcp/training
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from '../mcp/training-plans.schemas';
 import { collectDailyWorkoutSuggestionCoverage, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import type { AssistantMcpSession } from './mcp-session';
+import { DayWorkoutModelError } from './day-workout-diagnostics';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation private state and existing MCP read-back', () => {
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required');
@@ -22,6 +24,80 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('switches merged duration preferences without retaining incompatible fields or replacing the charged suggestion', async () => {
+    const uid = `duration-settings-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const settings = user.collection('config').doc('settings');
+    const automatic = { enabled: true, followRoutine: false, controls };
+    const legacy = { ...automatic, controls: { ...controls, minutes: 30 } }; delete legacy.controls.durationMode;
+    const delivery = { enabled: true, providers: ['garmin', 'suunto'] };
+    await user.set({});
+    await settings.set({ appSettings: { dailyWorkoutSuggestion: legacy, dailyWorkoutDelivery: delivery, otherSetting: 'keep' } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    try {
+      const first = (await store.read(uid)).preferences!;
+      const token = (await store.begin(uid, first))!;
+      await store.charge(uid, controls.localDate, token);
+      const result = response(`daily-suggestion:${controls.localDate}`);
+      await store.finish(uid, controls.localDate, token, 'ready', first.controls, result);
+      // Exercise the exact production merge patch, with the Admin SDK's matching delete sentinel.
+      await settings.set({ appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(automatic, FieldValue.delete()) } }, { merge: true });
+      const auto = await store.read(uid);
+      expect(auto.preferences?.controls).toEqual(automatic.controls);
+      expect((await settings.get()).get('appSettings.dailyWorkoutSuggestion.controls')).not.toHaveProperty('minutes');
+      expect(auto.status).toMatchObject({ state: 'ready', controls: first.controls, result });
+      expect(await store.begin(uid, auto.preferences!)).toBeNull();
+      const manual = { ...automatic, controls: { ...controls, durationMode: 'manual' as const, minutes: 45 } };
+      for (const preferences of [manual, automatic, legacy]) {
+        await settings.set({ appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(preferences, FieldValue.delete()) } }, { merge: true });
+        const saved = (await settings.get()).get('appSettings.dailyWorkoutSuggestion');
+        expect(saved).toEqual(preferences);
+        expect((await store.read(uid)).status.result).toEqual(result);
+      }
+      expect((await settings.get()).get('appSettings.dailyWorkoutDelivery')).toEqual(delivery);
+      expect((await settings.get()).get('appSettings.otherSetting')).toBe('keep');
+      expect((await user.collection('assistantUsage').get()).empty).toBe(true);
+    } finally { await db.recursiveDelete(user); }
+  }, 30000);
+  it.each([false, true])('keeps one durable daily charge across concurrent views and transport recovery (recovered: %s)', async recover => {
+    const uid = `daily-retry-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const preferences = { enabled: true, followRoutine: false, controls };
+    await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let attempts = 0;
+    const generate = vi.fn(async () => {
+      if (++attempts === 1) { entered(); await blocked; throw new DayWorkoutModelError('unavailable'); }
+      if (!recover) throw new DayWorkoutModelError('unavailable');
+      return { kind: 'rest', rationale: 'Keep it easy.' };
+    });
+    const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+      selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
+      regenerate: vi.fn(), log: vi.fn(), context: async () => ({ evidence: { daily: {
+        dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } },
+        activitiesToday: { scanComplete: true, activities: [] },
+        plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } },
+      } }, usedContext: [], missingContext: [], previousStrength: [], references: [] }) };
+    const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
+    let pending: Promise<unknown> | undefined;
+    try {
+      pending = runDailyWorkoutSuggestion(input, identity, deps); await started;
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('preparing');
+      release(); const result = await pending;
+      expect(result).toMatchObject(recover ? { state: 'ready' } : { state: 'failed', failureReason: 'temporary-service' });
+      expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+      expect(await store.begin(uid, preferences)).toBeNull(); expect(generate).toHaveBeenCalledTimes(2);
+      const receipt = (await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get(`messages.${controls.localDate}`);
+      expect(receipt.charged).toBe(true); expect(receipt.state).toBe(recover ? 'ready' : 'failed');
+      expect((await user.collection('assistantUsage').get()).empty).toBe(true);
+      if (!recover) {
+        await user.collection('assistantConversations').doc('daily-workout-suggestion')
+          .update({ [`messages.${controls.localDate}.failureReason`]: 'PRIVATE_PROVIDER_REPLY' });
+        expect((await store.read(uid)).status).toEqual({ localDate: controls.localDate, state: 'failed' });
+      }
+    } finally { release(); await pending?.catch(() => undefined); await db.recursiveDelete(user); }
+  }, 30_000);
   it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('replaces %s in place and reads the new recipe through existing MCP contracts', async sport => {
     const uid = `replacement-mcp-${randomUUID()}`, user = db.doc(`users/${uid}`), nowMs = Date.parse('2026-10-28T12:00Z');
     await user.set({}); await user.collection('mcpConnections').doc('connection').set({ status: 'active', scopes: ['training-plans:read'] });
@@ -234,7 +310,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const selected = { ...controls, sport: ActivityTypes.StrengthTraining, target: 'none' as const, trainingContext: true, equipment: ['dumbbells' as const] };
     const context = await readDayWorkoutTrainingContext(uid, selected, new Date('2026-10-28T12:00Z'), db);
     expect(context.previousStrength.map(item => item.localDate)).toEqual(['2026-10-27', '2026-10-26', '2026-10-25', '2026-10-24', '2026-10-23']);
-    const generatedStrength = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated strength', rationale: 'Familiar prescription.', strength }, selected, context.previousStrength);
+    const generatedStrength = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated strength', rationale: 'Familiar prescription.', strength, estimatedMinutes: { minimum: 20, maximum: 40 } }, selected, context.previousStrength);
     expect(generatedStrength.draft!.strength!.exercises[0].sets.map(set => set.externalLoadKg)).toEqual([0, 12.5]);
     expect(generatedStrength.previousLoads).toEqual([{ exerciseId: 'squat', localDate: '2026-10-27' }]);
     const generatedRun = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated run', rationale: 'Easy session.', structure: {
@@ -242,7 +318,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
         { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 120 }, targets: [], note: 'Comfortable effort' },
         { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, targets: [] },
       ] }],
-    } }, { ...controls, timing: 'strict' });
+    } }, controls);
     const reads = createFirestoreTrainingReads(() => db);
     const run = (tool: TrainingReadTool, args: unknown) => readTrainingPlans({ tool, arguments: args, uid,
       connectionId: 'connection', scopes: ['training-plans:read'] }, reads, { encode: JSON.stringify, decode: JSON.parse });
@@ -307,10 +383,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect((await store.read(uid)).status.result).toEqual(advice);
     expect(await store.begin(uid, saved)).toBeNull();
   }, 30000);
-  it('claims one included daily result after noon across devices, preserves preferences and never touches Assistant quota', async () => {
+  it.each(['manual', 'auto'] as const)('claims one included daily result after noon across devices and preference changes (%s)', async durationMode => {
     const uid = `daily-suggestion-${randomUUID()}`;
     let now = new Date('2026-10-30T13:00Z');
-    const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
+    const initialControls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+    if (durationMode === 'manual') { delete initialControls.durationMode; initialControls.minutes = 30; }
+    const saved = { enabled: true, followRoutine: true, controls: parseGenerateDayWorkoutRequest({ requestId: 'daily-options', controls: initialControls }, now).controls };
     const user = db.doc(`users/${uid}`); await user.set({});
     await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: saved } });
     const store = createDailyWorkoutSuggestionStore(() => db, () => now);
@@ -323,8 +401,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await store.finish(uid, '2026-10-30', token, 'ready', saved.controls, result);
     expect((await store.read(uid)).status).toMatchObject({ state: 'ready', result, controls: saved.controls });
     await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: { ...saved,
-      controls: { ...saved.controls, minutes: 60 } } } });
-    expect((await store.read(uid)).status.controls?.minutes).toBe(30);
+      controls: durationMode === 'auto' ? { ...saved.controls, durationMode: 'manual', minutes: 60 } : defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') } } });
+    expect((await store.read(uid)).status.controls).toEqual(saved.controls);
     expect(await store.begin(uid, (await store.read(uid)).preferences!)).toBeNull();
     expect((await user.collection('assistantUsage').get()).empty).toBe(true);
     const state = (await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).data()!;

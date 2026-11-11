@@ -36,7 +36,7 @@ import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
-import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
+import { BehaviorSubject, combineLatest, defer, firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation } from '../../animations/animations';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -65,6 +65,15 @@ import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dial
 import { resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
+import { buildTrainingLogSportTotals, type TrainingLogSportTotal } from '../../helpers/activity-training-log.helper';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/metrics';
+
+interface ActivityTableTotalRow {
+  'Sport Total': TrainingLogSportTotal;
+  Color: string;
+  Duration: string; Distance: string; Ascent: string;
+  'Total Coverage': Record<string, string>;
+}
 
 interface EventTableRowCacheEntry {
   event: EventRead;
@@ -131,10 +140,26 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  readonly eventColumnChoices = [...AppUserUtilities.getDefaultSelectedTableColumns().filter(type => type !== 'Description'), DataGradeAdjustedPaceAvg.type];
+  readonly columnsSaving = signal(false);
+  readonly columnSaveError = signal<string | null>(null);
+  private columnSaveGeneration = 0;
+  sportTotals: TrainingLogSportTotal[] = [];
+  totalSportColumn = 'Start Date';
+  private readonly totalRows = new BehaviorSubject<ActivityTableTotalRow[]>([]);
+  readonly renderedRows$ = defer(() => combineLatest([this.data.connect(), this.totalRows]).pipe(
+    map(([rows, totals]) => [...rows, ...totals]),
+  ));
+  readonly columnLabels: Record<string, string> = {
+    'Start Date': 'Date', 'Activity Types': 'Activity', 'Average Speed': 'Pace / speed',
+    [DataGradeAdjustedPaceAvg.type]: 'GAP', 'Average Heart Rate': 'Avg HR', 'Recovery Time': 'Recovery',
+    'Average Power': 'Avg power', 'Aerobic Training Effect': 'Aerobic TE', 'Device Names': 'Devices',
+  };
   private libraryColumns = ['Distance', 'Duration'];
   private libraryPageSize = 5;
   private libraryPageIndex = 0;
-  private suppressLibraryPageFeedback = false;
+  private dashboardPageIndex = 0;
+  private suppressPageFeedback = false;
   private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
   readonly libraryAvailableColumns = [
     'Distance', 'Duration',
@@ -166,6 +191,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   override loading(): void {
     this.mutationLoading.set(true);
+    this.updateSportTotals();
   }
 
   override loaded(): void {
@@ -173,6 +199,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // Local actions must never complete the parent's history request. Settle
     // deferred filters without restarting any read or changing its loading input.
     this.settleDeferredFilters();
+    this.updateSportTotals();
   }
 
   get showInitialLoading(): boolean {
@@ -265,6 +292,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'tag-library';
   }
 
+  get columnPickerContext(): string {
+    return `${this.currentOwnerKey}:${this.presentation}`;
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -294,8 +325,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    if (simpleChanges.presentation || (this.renderedOwnerKey !== null && this.renderedOwnerKey !== this.currentOwnerKey)) {
+      this.columnSaveGeneration++;
+      this.columnsSaving.set(false);
+      this.columnSaveError.set(null);
+    }
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
-    if (preferencesChanged) {
+    // A live profile refresh can carry the old layout while its replacement is saving.
+    if (preferencesChanged && !this.columnsSaving()) {
       this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
         : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
     }
@@ -304,7 +341,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.data.data = [];
       this.rowCache.clear();
       this.selection.clear();
+      this.sportTotals = [];
+      this.totalRows.next([]);
       this.mutationLoading.set(false);
+    }
+    if (preferencesChanged && this.sort) {
+      // Input bindings update the header without emitting sortChange. Set the
+      // destination view's sort before rebuilding data, including identical ranges.
+      this.sort.active = this.tableSortActive;
+      this.sort.direction = this.tableSortDirection;
     }
     if (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames || simpleChanges.targetUser || this.pendingLoadingInputs) {
       this.pendingLoadingInputs = !!this.isLoading || !this.events || this.awaitingOwnerEvents;
@@ -315,7 +360,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (preferencesChanged) {
       const nextPageSize = this.tablePageSize;
       if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
-        this.paginator._changePageSize(nextPageSize);
+        this.changePageSilently(() => this.paginator._changePageSize(nextPageSize));
       }
       this.updateDisplayedColumns();
     }
@@ -338,6 +383,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.pendingFilterContextReset = true;
     }
     this.settleDeferredFilters();
+    this.updateSportTotals();
     if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation
       || (this.pendingTagCatalog && !this.tableIsLoading)) {
       void this.loadAllHistoryTags();
@@ -355,10 +401,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.tagFilters = [];
       this.untaggedFilter = false;
       this.selection.clear();
-      this.suppressLibraryPageFeedback = true;
-      this.paginator?.firstPage();
-      this.suppressLibraryPageFeedback = false;
+      this.changePageSilently(() => this.paginator?.firstPage());
       this.libraryPageIndex = 0;
+      this.dashboardPageIndex = 0;
       this.applyTableFilter();
     }
     if (this.pendingTableFilter) {
@@ -398,7 +443,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.paginator = this.paginator;
     this.data.sort = this.sort;
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
-      return (statRowElement as any)[`sort.${header}`];
+      const value = (statRowElement as any)[`sort.${header}`];
+      // Keep unavailable GAP after recorded values in either direction, including zero.
+      if (header === DataGradeAdjustedPaceAvg.type && value == null) return this.sort.direction === 'asc' ? Infinity : -Infinity;
+      return value;
     };
     this.data.filterPredicate = (row: any, filter: string) => {
       const filterState = this.parseTableFilter(filter);
@@ -439,6 +487,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         return;
       }
       if (tableSettings.active !== sort.active || tableSettings.direction !== sort.direction) {
+        this.hapticsService.selection();
         tableSettings.active = sort.active;
         tableSettings.direction = sort.direction as OrderByDirection;
         await this.persistDashboardSettings({
@@ -576,6 +625,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
    * Helper to handle cell clicks safely for strict templates
    */
   public onCellClick(event: Event, row: any, column: string): void {
+    if (row['Sport Total']) return;
     if (column === 'Checkbox') {
       event.preventDefault();
       event.stopPropagation();
@@ -583,8 +633,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
   }
 
-  trackByEventId = (index: number, row: StatRowElement): string | number => {
-    const event = row?.Event as EventRead | undefined;
+  trackByEventId = (index: number, row: StatRowElement | ActivityTableTotalRow): string | number => {
+    if (!row) return index;
+    if (row['Sport Total']) return `total:${row['Sport Total'].sport}`;
+    const event = ('Event' in row ? row.Event : undefined) as EventRead | undefined;
     return event?.getID ? event.getID() : index;
   }
 
@@ -1073,11 +1125,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
         ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
       ];
+      this.totalSportColumn = 'Name';
       return;
     }
     const sortedSelectedColumns = (this.selectedColumns || [])
-      .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
-      .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
+      .filter(column => column !== 'Tags' && (column !== 'Description' && column !== 'Shared'));
 
     const activityTypeColumn = sortedSelectedColumns.find(column => column === 'Activity Types');
     const remainingSelectedColumns = activityTypeColumn
@@ -1092,8 +1144,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       'Checkbox',
       'Start Date',
       ...dataColumns,
-      'Description',
-      'Shared',
+      'Description', 'Shared',
       'Actions',
     ];
 
@@ -1106,6 +1157,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       return true;
     });
+    this.totalSportColumn = this.displayedColumns.includes('Activity Types') ? 'Activity Types' : 'Start Date';
   }
 
   async saveEventDescription(description: string, event: EventRead) {
@@ -1130,12 +1182,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
     if (this.isLibraryPresentation) {
       const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
       const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
-      if (!this.suppressLibraryPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      if (!this.suppressPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
       this.libraryPageIndex = pageIndex;
       this.libraryPageSize = pageEvent.pageSize;
       return;
@@ -1143,8 +1194,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBrowsePresentation) {
       return;
     }
-    // @important This is nasty because it's called if anything almost changes
     if (this.user.settings?.dashboardSettings?.tableSettings) {
+      const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
+      const previousPageIndex = pageEvent.previousPageIndex ?? this.dashboardPageIndex;
+      const sizeChanged = this.tablePageSize !== pageEvent.pageSize;
+      if (!this.suppressPageFeedback && (pageIndex !== previousPageIndex || sizeChanged)) this.hapticsService.selection();
+      this.dashboardPageIndex = pageIndex;
       if (this.user.settings.dashboardSettings.tableSettings.eventsPerPage === pageEvent.pageSize) {
         return;
       }
@@ -1155,6 +1210,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         },
       });
     }
+  }
+
+  private changePageSilently(change: () => void): void {
+    const previous = this.suppressPageFeedback;
+    this.suppressPageFeedback = true;
+    try { change(); } finally { this.suppressPageFeedback = previous; }
   }
 
   searchTerm: string = '';
@@ -1171,7 +1232,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.tagFilters = tags;
     this.untaggedFilter = untagged;
     this.hapticsService.selection();
-    this.paginator?.firstPage();
+    this.changePageSilently(() => this.paginator?.firstPage());
     this.applyTableFilter();
   }
 
@@ -1350,6 +1411,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.filter = JSON.stringify({
       text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,
     });
+    this.updateSportTotals();
+  }
+
+  private updateSportTotals(): void {
+    this.sportTotals = !this.isBrowsePresentation && !this.tableIsLoading && !this.hasLoadError
+      ? buildTrainingLogSportTotals((this.data.filteredData ?? this.data.data).map(row => row.Event),
+        this.user?.settings?.unitSettings, this.user?.settings?.summariesSettings) : [];
+    this.totalRows.next(this.sportTotals.map(total => ({
+      'Sport Total': total,
+      Color: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+        ActivityTypesHelper.resolveActivityType(total.sport) || ActivityTypes.unknown),
+      Duration: total.duration.value, Distance: total.distance.value, Ascent: total.ascent.value,
+      'Total Coverage': { Duration: total.duration.coverage, Distance: total.distance.coverage, Ascent: total.ascent.coverage },
+    })));
   }
 
   private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {
@@ -1371,27 +1446,42 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async selectedColumnsChange(event: string[]) {
-    if (this.isBrowsePresentation) {
+    if (this.isBrowsePresentation || this.columnsSaving() || !this.user) {
       return;
     }
     if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
       return;
     }
     if (this.isLibraryPresentation) {
-      // Material's selected-options order can change as choices are toggled.
-      this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
+      this.libraryColumns = [...new Set(event)].filter(column => this.libraryAvailableColumns.includes(column));
       this.selectedColumns = this.libraryColumns;
       this.updateDisplayedColumns();
       return;
     }
-    this.selectedColumns = event
+    const previous = [...this.selectedColumns];
+    const context = this.columnPickerContext;
+    const generation = ++this.columnSaveGeneration;
+    const isCurrent = () => !this.destroyed && generation === this.columnSaveGeneration && context === this.columnPickerContext;
+    this.columnsSaving.set(true);
+    this.columnSaveError.set(null);
+    this.selectedColumns = [...event];
     this.updateDisplayedColumns();
-    this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
-    await this.persistDashboardSettings({
-      tableSettings: {
-        selectedColumns: this.selectedColumns,
-      },
-    });
+    try {
+      await this.persistDashboardSettings({ tableSettings: { selectedColumns: this.selectedColumns } });
+      if (isCurrent()) {
+        this.user.settings.dashboardSettings.tableSettings.selectedColumns = [...event];
+        this.hapticsService.success();
+      }
+    } catch {
+      if (!isCurrent()) return;
+      this.selectedColumns = previous;
+      this.updateDisplayedColumns();
+      this.columnSaveError.set('Could not save columns. Your previous columns have been restored.');
+      this.snackBar.open('Could not save table columns. Please try again.', 'Close');
+      this.hapticsService.error();
+    } finally {
+      if (isCurrent()) this.columnsSaving.set(false);
+    }
   }
 
   ngOnDestroy() {
@@ -1402,6 +1492,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.breakpointSubscription.unsubscribe();
     }
     this.rowCache.clear();
+    this.data.disconnect();
+    this.totalRows.complete();
   }
 
   isSticky(column: string) {

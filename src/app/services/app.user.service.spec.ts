@@ -20,6 +20,7 @@ import { appCheckFailureDetails } from '../helpers/app-check-error.helper';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 import { defaultSuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
+import { FirebaseError } from 'firebase/app';
 
 vi.mock('../helpers/user-settings.loader', () => ({ loadUserSettingsUtilities: vi.fn() }));
 
@@ -1132,6 +1133,7 @@ describe('AppUserService', () => {
         expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
         expect(mergedUser.acceptedDataPolicy).toBe(false);
         expect(mergedUser.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mergedUser.settings.dashboardSettings.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: false, suggestion: false, metrics: ['load'] });
         expect(service.profileReadState()).toEqual({
             status: 'ready',
             uid: 'u1',
@@ -1179,6 +1181,77 @@ describe('AppUserService', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    describe('Lite profile transport recovery', () => {
+        const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true,
+            acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
+
+        beforeEach(() => {
+            TestBed.overrideProvider(UserProfileVerificationService, { useClass: UserProfileVerificationService });
+            verificationSDK.getFirestore.mockReturnValue({});
+            verificationSDK.doc.mockImplementation((_db, path) => path);
+            verificationSDK.getDoc.mockReset().mockImplementation(async path => ({ data: () => path === 'users/u1' ? complete : undefined }));
+            vi.mocked(docData).mockReturnValue(of(undefined));
+        });
+
+        it('recovers a Lite fetch rejection after the existing backoff without publishing missing account data', async () => {
+            vi.useFakeTimers();
+            try {
+                verificationSDK.getDoc.mockRejectedValueOnce(new FirebaseError('unknown', 'Request failed with error: undefined'));
+                service = TestBed.inject(AppUserService);
+                const emitted: AppUserInterface[] = [];
+                const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+                await vi.advanceTimersByTimeAsync(0);
+                expect(service.profileReadState()).toMatchObject({ status: 'recovering', attempt: 1, code: 'unavailable' });
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4);
+                expect(emitted).toEqual([]);
+                await vi.advanceTimersByTimeAsync(749);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4);
+                await vi.advanceTimersByTimeAsync(1);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(8);
+                expect(service.profileReadState()).toEqual({ status: 'ready', uid: 'u1', profileExists: true });
+                expect(emitted).toHaveLength(1);
+                expect(emitted[0].onboardingCompleted).toBe(true);
+                expect(setDoc).not.toHaveBeenCalled();
+                expect(updateDoc).not.toHaveBeenCalled();
+                expect(mockAuth.signOut).not.toHaveBeenCalled();
+                subscription.unsubscribe();
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('exhausts the existing four-retry budget and leaves manual recovery available', async () => {
+            vi.useFakeTimers();
+            try {
+                verificationSDK.getDoc.mockRejectedValue(new FirebaseError('unknown', 'Request failed with error: undefined'));
+                service = TestBed.inject(AppUserService);
+                await vi.runAllTimersAsync();
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(20);
+                expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'unavailable' });
+                expect(service.user()).toBeNull();
+                expect(setDoc).not.toHaveBeenCalled();
+                expect(updateDoc).not.toHaveBeenCalled();
+                expect(mockAuth.signOut).not.toHaveBeenCalled();
+                verificationSDK.getDoc.mockImplementation(async path => ({ data: () => path === 'users/u1' ? complete : undefined }));
+                const retry = service.retryProfileRead();
+                await vi.advanceTimersByTimeAsync(0);
+                expect(await retry).toBe(true);
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(24);
+                expect(service.profileReadState()).toEqual({ status: 'ready', uid: 'u1', profileExists: true });
+            } finally { vi.useRealTimers(); }
+        });
+
+        it('does not retry an unrelated unknown Lite failure', async () => {
+            vi.useFakeTimers();
+            try {
+                verificationSDK.getDoc.mockRejectedValue(new FirebaseError('unknown', 'Unexpected server response'));
+                service = TestBed.inject(AppUserService);
+                await vi.runAllTimersAsync();
+                expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4);
+                expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'unknown' });
+                expect(service.user()).toBeNull();
+            } finally { vi.useRealTimers(); }
+        });
     });
 
     it('should not repeat verification for identical incomplete listener snapshots', async () => {

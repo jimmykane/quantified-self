@@ -10,11 +10,11 @@ import { firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { WhereFilterOp } from 'firebase/firestore';
-import { getDatesForDateRange } from '../helpers/date-range-helper';
 import { LoggerService } from '../services/logger.service';
 import {
     eventMatchesDashboardActivityTypes,
     normalizeDashboardEventTableFilters,
+    resolveDashboardEventTableRange,
 } from '../helpers/dashboard-tile-event-filters.helper';
 
 export interface DashboardResolverData {
@@ -111,18 +111,10 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 includeMergedEvents: dashboardSettings.includeMergedEvents,
             });
 
-            let searchStartDate: Date | null = null;
-            let searchEndDate: Date | null = null;
-
-            if (eventTableFilters.dateRange === DateRanges.custom && eventTableFilters.startDate !== null && eventTableFilters.endDate !== null) {
-                searchStartDate = new Date(eventTableFilters.startDate);
-                searchEndDate = new Date(eventTableFilters.endDate);
-            } else {
-                const startOfTheWeek = user.settings.unitSettings?.startOfTheWeek ?? DaysOfTheWeek.Monday;
-                const range = getDatesForDateRange(eventTableFilters.dateRange, startOfTheWeek);
-                searchStartDate = range.startDate;
-                searchEndDate = range.endDate;
-            }
+            const startOfTheWeek = user.settings.unitSettings?.startOfTheWeek ?? DaysOfTheWeek.Monday;
+            const range = resolveDashboardEventTableRange(eventTableFilters, new Date(), startOfTheWeek);
+            const searchStartDate = range?.start ?? null;
+            const searchEndDate = range ? new Date(+range.end - 1) : null;
 
             const where: any[] = [];
             const includeMergedEvents = eventTableFilters.includeMergedEvents !== false;

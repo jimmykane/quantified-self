@@ -10,7 +10,7 @@ import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/
 import { TableDateFilterComponent } from '../shared/table-date-filter/table-date-filter.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { MergedActivitiesToggleComponent } from '../shared/merged-activities-toggle/merged-activities-toggle.component';
-import { ChangeDetectorRef, Component } from '@angular/core';
+import { ChangeDetectorRef, Component, SimpleChange } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -31,7 +31,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   selector: 'app-merged-filter-test-host',
   standalone: false,
   template: `<app-event-search class="table-toolbar-layout compact-filter-layout"
-    [compact]="true" [toolbarRangeLayout]="toolbar" [selectedDateRange]="range" [isLoading]="loading"
+    [compact]="true" [toolbarRangeLayout]="toolbar" [selectedDateRange]="range" [dateSelection]="selection" [isLoading]="loading"
     [startOfTheWeek]="weekStart" [selectedActivityTypes]="sports" [availableActivityTypes]="availableSports" [showMergedEventsToggle]="true"
     [includeMergedEvents]="includeMerged" [mergedEventsToggleDisabled]="disabled"
     (searchChange)="onSearch($event)"></app-event-search>`,
@@ -47,9 +47,12 @@ class MergedFilterTestHost {
   disabled = false;
   acceptSearch = false;
   requests: Search[] = [];
+  selection: EventSearchComponent['dateSelection'];
+  rejectDateSearch = false;
 
   onSearch(search: Search): void {
     this.requests.push(search);
+    if (this.rejectDateSearch) this.selection = { ...this.selection! };
     if (this.acceptSearch) {
       this.includeMerged = search.includeMergedEvents !== false;
     }
@@ -68,6 +71,73 @@ describe('Merged toolbar filter rendering', () => {
       providers: [{ provide: AppHapticsService, useValue: haptics },
         { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } }],
     }).compileComponents();
+  });
+
+  it('restores the controlled date selection after a synchronous save rejection', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const host = fixture.componentInstance;
+    host.selection = { searchTerm: null, dateRange: DateRanges.thisWeek, startDate: null, endDate: null,
+      activityTypes: [], includeMergedEvents: true, rangeNavigation: { preset: 'calendar-week', anchor: null } };
+    host.rejectDateSearch = true;
+    fixture.detectChanges(); await fixture.whenStable();
+    const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+    const original = search.toolbarRangeStart?.getTime();
+    fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(host.requests.at(-1)?.rangeNavigation?.anchor).toBeTruthy();
+    expect(search.toolbarRangeStart?.getTime()).toBe(original);
+    expect(search.rangeNavigation?.anchor).toBeNull();
+    expect(fixture.nativeElement.querySelector('.table-date-current-period').disabled).toBe(true);
+  });
+
+  it('navigates full calendar weeks through the shared date control with one haptic per accepted change', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const fixture = TestBed.createComponent(MergedFilterTestHost);
+      fixture.detectChanges(); await fixture.whenStable();
+      const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+      const previous = fixture.nativeElement.querySelector('[aria-label="Previous period"]') as HTMLButtonElement;
+      expect(previous).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Week');
+      expect(fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+      await search.shiftToolbarRange(1);
+      expect(fixture.componentInstance.requests).toEqual([]);
+      expect(haptics.selection).not.toHaveBeenCalled();
+      previous.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('26 Oct – 1 Nov 2026');
+      expect(fixture.componentInstance.requests.at(-1)).toMatchObject({ dateRange: DateRanges.custom,
+        startDate: new Date(2026, 9, 26), endDate: new Date(2026, 10, 1, 23, 59, 59, 999) });
+      expect(search.toolbarNavigationEnabled).toBe(true);
+      expect(fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(false);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+      fixture.nativeElement.querySelector('.table-date-current-period').click();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(fixture.componentInstance.requests.at(-1)?.dateRange).toBe(DateRanges.thisWeek);
+      expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Week');
+      expect(fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
+      expect(haptics.selection).toHaveBeenCalledTimes(2);
+      await search.onToolbarDateRangeChange(DateRanges.lastSevenDays);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[aria-label="Previous period"]').disabled).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps week navigation available for Last week with the legacy second-precision end bound', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 4, 12));
+    try {
+      const fixture = TestBed.createComponent(MergedFilterTestHost);
+      fixture.componentInstance.range = DateRanges.lastWeek;
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      const previous = fixture.nativeElement.querySelector('[aria-label="Previous period"]') as HTMLButtonElement;
+      expect(previous).toBeTruthy();
+      expect(haptics.selection).not.toHaveBeenCalled();
+      previous.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      expect(fixture.componentInstance.requests).toEqual([expect.objectContaining({
+        dateRange: DateRanges.custom,
+        startDate: new Date(2026, 9, 19), endDate: new Date(2026, 9, 25, 23, 59, 59, 999),
+      })]);
+      expect(haptics.selection).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
   });
 
   it('keeps the merged checkmark aligned when the parent rejects a filter change', async () => {
@@ -133,7 +203,7 @@ describe('Merged toolbar filter rendering', () => {
     search.openToolbarDateFilter(); await render();
     const overlay = TestBed.inject(OverlayContainer).getContainerElement();
     [...overlay.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(option => option.textContent?.includes('Custom dates'))!.click(); await render();
-    const presetEnd = getDatesForDateRange(DateRanges.thisMonth, DaysOfTheWeek.Monday).endDate!;
+    const now = new Date(); const presetEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     expect(search.endDateControl.value?.getTime()).toBe(presetEnd.getTime() - 1);
     expect(fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
     const adapter = fixture.debugElement.query(By.directive(MatDateRangeInput)).injector.get(DateAdapter) as DateAdapter<Dayjs>;
@@ -150,7 +220,7 @@ describe('Merged toolbar filter rendering', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(3);
     fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]').click(); await render();
     expect(fixture.componentInstance.requests).toHaveLength(2); expect(fixture.componentInstance.requests[1].dateRange).toBe(DateRanges.lastThirtyDays);
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
+    expect(document.activeElement?.classList.contains('table-date-filter-button')).toBe(true);
   });
 
   it.each(['Cancel', 'OK'])('restores date-button focus after closing the real All dates warning with %s', async action => {
@@ -166,7 +236,7 @@ describe('Merged toolbar filter rendering', () => {
     expect(dialog).toBeTruthy();
     expect(dialog.contains(document.activeElement)).toBe(true);
     [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === action)!.click(); await settle();
-    expect(fixture.componentInstance.requests).toEqual(action === 'Cancel' ? [] : [expect.objectContaining({ dateRange: DateRanges.all })]);
+    await vi.waitFor(() => expect(fixture.componentInstance.requests).toEqual(action === 'Cancel' ? [] : [expect.objectContaining({ dateRange: DateRanges.all })]));
     expect(haptics.selection).toHaveBeenCalledTimes(action === 'Cancel' ? 3 : 2);
     expect(haptics.warning).toHaveBeenCalledTimes(action === 'Cancel' ? 0 : 1);
     expect(document.activeElement).toBe(trigger);
@@ -281,6 +351,130 @@ describe('EventSearchComponent', () => {
     return { component, hapticsService };
   };
 
+  it.each([
+    { end: new Date(2026, 10, 8) },
+    { end: new Date(2026, 10, 8, 23, 59, 59) },
+    { end: new Date(2026, 10, 9) },
+  ])('keeps the inclusive custom end date navigable: $end', ({ end }) => {
+    const { component, hapticsService } = createComponent(undefined, search => {
+      search.selectedDateRange = DateRanges.custom;
+      search.selectedStartDate = new Date(2026, 10, 2);
+      search.selectedEndDate = end;
+    });
+    expect(component.toolbarNavigationEnabled).toBe(true);
+    expect(component.toolbarRangeEnd?.getDate()).toBe(end.getDate());
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it.each(['week', 'month', 'quarter', 'calendar-week', 'calendar-month', 'year', 'custom'] as const)('preserves the selected %s navigation kind through a saved-filter round trip', async preset => {
+    const { component, hapticsService } = createComponent(undefined, c => { c.toolbarRangeLayout = true; });
+    if (preset === 'custom') {
+      await component.onToolbarDateRangeChange('custom');
+      component.searchFormGroup.patchValue({ startDate: dayjs('2026-10-30'), endDate: dayjs('2026-11-02') });
+      await component.applyToolbarCustomRange();
+    } else await component.onToolbarDateRangeChange(preset);
+    const emit = vi.spyOn(component.searchChange, 'emit');
+    hapticsService.selection.mockClear();
+    await component.shiftToolbarRange(-1);
+    const saved = emit.mock.lastCall[0];
+    expect(saved.rangeNavigation?.preset).toBe(preset);
+    const restored = createComponent(undefined, c => {
+      c.toolbarRangeLayout = true; c.selectedDateRange = saved.dateRange; c.rangeNavigation = saved.rangeNavigation;
+      c.selectedStartDate = saved.startDate; c.selectedEndDate = saved.endDate;
+    }).component;
+    expect(restored.toolbarRangeStart).toEqual(component.toolbarRangeStart);
+    expect(restored.toolbarRangeEnd).toEqual(component.toolbarRangeEnd);
+    expect(restored.toolbarRangePreset).toBe(preset);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    await component.showToolbarCurrentPeriod();
+    expect(component.toolbarIsCurrentPeriod).toBe(true);
+    expect(component.toolbarNextPeriodEnabled).toBe(false);
+    const requestCount = emit.mock.calls.length;
+    await component.shiftToolbarRange(1);
+    expect(emit).toHaveBeenCalledTimes(requestCount);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['week', 'custom'] as const)('caps a saved off-cycle %s range at today and keeps blocked navigation silent', async preset => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const { component, hapticsService } = createComponent(undefined, c => {
+        c.toolbarRangeLayout = true; c.selectedDateRange = DateRanges.custom;
+        c.rangeNavigation = { preset, anchor: preset === 'custom' ? null : '2026-11-09',
+          ...(preset === 'custom' ? { customDates: { startDate: '2026-11-03', endDate: '2026-11-09' } } : {}) };
+      });
+      const emit = vi.spyOn(component.searchChange, 'emit');
+      expect(component.toolbarNextPeriodEnabled).toBe(true);
+      await component.shiftToolbarRange(1);
+      expect(component.toolbarRangeStart).toEqual(new Date(2026, 10, 4));
+      expect(component.toolbarRangeEnd).toEqual(new Date(2026, 10, 10, 23, 59, 59, 999));
+      expect(component.rangeNavigation?.anchor).toBeNull();
+      expect(component.toolbarNextPeriodEnabled).toBe(false);
+      await component.shiftToolbarRange(1);
+      expect(emit).toHaveBeenCalledOnce(); expect(hapticsService.selection).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([
+    [DateRanges.lastWeek, 'calendar-week', '2026-11-02'],
+    [DateRanges.lastMonth, 'calendar-month', '2026-10-01'],
+    [DateRanges.lastYear, 'year', '2025-01-01'],
+  ] as const)('saves legacy previous-period selection %s with compatible fixed navigation metadata', async (legacy, preset, anchor) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; c.selectedDateRange = legacy; });
+      const emit = vi.spyOn(component.searchChange, 'emit');
+      await component.search();
+      expect(emit).toHaveBeenCalledWith(expect.objectContaining({ dateRange: DateRanges.custom,
+        rangeNavigation: { preset, anchor } }));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('clears an explicit anchor when returning a matching current calendar year to live navigation', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10));
+    try {
+      const { component, hapticsService } = createComponent(undefined, c => {
+        c.toolbarRangeLayout = true; c.selectedDateRange = DateRanges.custom;
+        c.rangeNavigation = { preset: 'year', anchor: '2026-01-01' };
+      });
+      expect(component.toolbarIsCurrentPeriod).toBe(false);
+      await component.showToolbarCurrentPeriod();
+      expect(component.rangeNavigation).toEqual({ preset: 'year', anchor: null });
+      expect(component.toolbarIsCurrentPeriod).toBe(true);
+      expect(hapticsService.selection).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('can turn a 90-day preset into custom dates without changing its bounds', async () => {
+    const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; });
+    await component.onToolbarDateRangeChange('quarter');
+    const start = component.selectedStartDate, end = component.selectedEndDate;
+    await component.onToolbarDateRangeChange('custom');
+    await component.applyToolbarCustomRange();
+    expect(component.toolbarRangePreset).toBe('custom');
+    expect(component.selectedStartDate).toEqual(start); expect(component.selectedEndDate).toEqual(end);
+    expect(component.rangeNavigation?.customDates).toBeTruthy();
+  });
+
+  it('updates current-period availability at midnight without replacing a custom editor draft', () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+    try {
+      const { component, hapticsService } = createComponent(undefined, c => {
+        c.toolbarRangeLayout = true; c.selectedDateRange = DateRanges.custom;
+        c.selectedStartDate = new Date(2026, 10, 8); c.selectedEndDate = new Date(2026, 10, 10, 23, 59, 59, 999);
+      });
+      expect(component.toolbarIsCurrentPeriod).toBe(true);
+      component.searchFormGroup.patchValue({ startDate: dayjs('2026-09-01'), endDate: null });
+      const emit = vi.spyOn(component.searchChange, 'emit');
+      vi.setSystemTime(new Date(2026, 10, 11, 12));
+      component.ngOnChanges({ dateContext: new SimpleChange('old', 'new', false) });
+      expect(component.toolbarIsCurrentPeriod).toBe(false);
+      expect(component.startDateControl.value.format('YYYY-MM-DD')).toBe('2026-09-01');
+      expect(component.endDateControl.value).toBeNull();
+      expect(emit).not.toHaveBeenCalled(); expect(hapticsService.selection).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('should update selected range and trigger search when a date toggle is selected', async () => {
     const { component, hapticsService } = createComponent();
     const searchSpy = vi.spyOn(component, 'search').mockResolvedValue(undefined);
@@ -309,7 +503,7 @@ describe('EventSearchComponent', () => {
 
   it('offers full date preset labels, with Custom dates and All dates last', () => {
     const { component } = createComponent(undefined, c => { c.toolbarRangeLayout = true; c.compact = true; });
-    expect(component.toolbarDateRangeOptions[0].label).toBe('Last 30 days');
+    expect(component.toolbarDateRangeOptions[0].label).toBe('30 days');
     expect(component.toolbarDateRangeOptions.slice(-2).map(option => option.label)).toEqual(['Custom dates', 'All dates']);
   });
 

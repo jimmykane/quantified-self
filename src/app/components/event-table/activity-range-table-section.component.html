@@ -23,7 +23,7 @@
     <span>{{ resolvedEmptyMessage() }}</span>
   </div>
   } @else if ((isReady() || isLoading()) && user(); as user) {
-  <app-event-table presentation="dashboard" [user]="user" [targetUser]="targetUser() || user"
+  <app-event-table [hideGeneratedNames]="true" presentation="dashboard" [user]="user" [targetUser]="targetUser() || user"
     [events]="events()" [showActions]="true" [isLoading]="isLoading()">
   </app-event-table>
   }

@@ -177,6 +177,24 @@ describe('dashboardResolver', () => {
         });
     }));
 
+    it('prefetches the saved historical period instead of stale timestamp bounds', () => new Promise<void>(done => {
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            searchTerm: null, dateRange: DateRanges.custom, activityTypes: [], includeMergedEvents: true,
+            rangeNavigation: { preset: 'year', anchor: '2025-01-01' },
+            startDate: +new Date(2024, 0, 1), endDate: +new Date(2024, 0, 31),
+        };
+        eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
+        (executeResolver(route, {} as RouterStateSnapshot) as any).subscribe(() => {
+            expect(eventServiceSpy.getEventSummariesOnceByWithMeta.mock.lastCall[1]).toEqual([
+                { fieldPath: 'startDate', opStr: '>=', value: +new Date(2025, 0, 1) },
+                { fieldPath: 'startDate', opStr: '<=', value: +new Date(2025, 11, 31, 23, 59, 59, 999) },
+            ]);
+            done();
+        });
+    }));
+
     it('should handle error when fetching targetUser and navigate', () => new Promise<void>(done => {
         userServiceSpy.getUserByID.mockReturnValue(throwError(() => new Error('User not found')));
         eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));

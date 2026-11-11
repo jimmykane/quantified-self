@@ -615,11 +615,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
   activityMap: {
     key: 'activityMap',
     path: PUBLIC_FEATURE_PATHS.activityMap,
-    eyebrow: 'Activity Map',
-    title: 'Activity Map and Automatic Trip Detection',
-    description: 'Map GPS workouts, filter by sport or date, and group activity history into trips with an inferred Home area and destination views.',
-    h1: 'See workouts, trips, and destinations on one map',
+    eyebrow: 'My Tracks',
+    title: 'My Tracks: GPS Activity Map & Trip Detection',
+    description: 'Map GPS workouts, filter by sport or date, and group activity history into trips with My Tracks. Included with Starter; provider imports and sync require Pro.',
+    h1: 'My Tracks: activities, trips and destinations on one map',
     intro: 'Bring location-enabled activities from connected providers and uploaded files into My Tracks. Filter by date or sport, inspect each trace, and move between an inferred Home area and detected destination visits.',
+    accessNote: 'My Tracks is included with Starter, Basic and Pro. Activity limits apply. Automatic provider imports and sync require Pro.',
+    freeOfferDescription: 'My Tracks mapping is included with Starter, Basic and Pro; activity limits apply. Automatic provider imports and sync require Pro.',
     chips: ['Trip detection', 'Inferred Home', 'Destination visits', 'Date and sport filters', 'Activity details', 'MTB jump heatmaps'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -653,13 +655,14 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         title: 'Map provider imports and uploaded files together',
         copy: 'Location-enabled activities can share one view even when their source devices and services differ.',
         items: [
-          { icon: 'hub', title: 'Connected provider history', copy: 'Use supported Garmin, Suunto, COROS, and Wahoo activity imports as part of the same account history.' },
+          { icon: 'hub', title: 'Connected provider history', copy: 'With Pro, use supported Garmin, Suunto, COROS, and Wahoo activity imports as part of the same account history.' },
           { icon: 'upload_file', title: 'Uploaded activity files', copy: 'Include compatible uploaded FIT, TCX, GPX, JSON, and SML activities when they contain recorded coordinates.' },
           { icon: 'calendar_month', title: 'Map and calendar context', copy: 'Use the map for geographic exploration and the activity calendar for the rhythm and volume of the same workout history.' },
         ],
       },
     ],
     faqItems: [
+      { question: 'Which plans include My Tracks?', answer: 'My Tracks is included with Starter, Basic and Pro. Manual activity file uploads are available on every plan, within its activity allowance. Automatic provider imports and sync require Pro.' },
       { question: 'Which activities appear on the activity map?', answer: 'Activities need compatible recorded coordinates. Runs, rides, hikes, open-water swims, and other outdoor activities can appear when location data is available.' },
       { question: 'How does My Tracks detect trips?', answer: 'My Tracks uses recorded activity start coordinates and dates to group recurring destinations into visit windows. It also infers a likely Home area from recurring history so local activity groups are not presented as trips.' },
       { question: 'What appears in the Trips panel?', answer: 'Each detected visit shows a resolved location, date range, and activity count. You can sort the list newest- or oldest-first and select a trip to focus its workout traces on the map.' },
@@ -668,7 +671,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       { question: 'Can uploaded workout files appear?', answer: 'Yes. Compatible uploaded activity files can appear when they contain usable recorded coordinates.' },
     ],
     closingTitle: 'Turn workout history into places, visits, and trips',
-    closingCopy: 'Connect a provider or upload location-enabled activities, then explore where you trained and which workouts belonged to each destination visit.',
+    closingCopy: 'Upload location-enabled activity files with Starter, or connect supported providers with Pro, then explore where you trained and which workouts belonged to each destination visit.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),

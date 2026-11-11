@@ -113,7 +113,24 @@ export class UserProfileVerificationService {
       getUserLegalAgreementsPath(userID),
       `users/${userID}/system/status`,
       `users/${userID}/config/settings`,
-    ].map(async path => (await getDoc(doc(firestore, path))).data()));
+    ].map(async path => {
+      const reference = doc(firestore, path);
+      const snapshot = await getDoc(reference).catch((cause: unknown) => {
+        assertCurrentUser();
+        // Lite loses fetch rejection details when the native error has no HTTP status.
+        // Normalize only that SDK signature at the read boundary, so the existing
+        // account retry budget applies without retrying unrelated unknown errors.
+        if (cause instanceof Error && cause.name === 'FirebaseError'
+          && (cause as Error & { code?: unknown }).code === 'unknown'
+          && cause.message === 'Request failed with error: undefined') {
+          throw Object.assign(new Error('Could not reach the account profile server.'), {
+            code: 'unavailable', cause,
+          });
+        }
+        throw cause;
+      });
+      return snapshot.data();
+    }));
     assertCurrentUser();
     const profile = await mergeUserProfileDocuments(userID, { user, legal, system, settings });
     assertCurrentUser();

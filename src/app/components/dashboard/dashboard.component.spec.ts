@@ -1778,6 +1778,7 @@ describe('DashboardComponent', () => {
 
         expect(component.user.settings.dashboardSettings.eventTableFilters).toEqual({
             searchTerm: 'tempo',
+            rangeNavigation: null,
             includeMergedEvents: false,
             dateRange: DateRanges.lastThirtyDays,
             startDate: startDate.getTime(),
@@ -1847,6 +1848,88 @@ describe('DashboardComponent', () => {
 
         expect(component.isLoading).toBe(false);
         expect(mockEventService.getEventSummariesBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+    });
+
+    it.each(['success', 'failure'])('keeps table filters disabled until a preference save settles with %s', async outcome => {
+        fixture.detectChanges(); await fixture.whenStable();
+        let resolveSave!: () => void;
+        let rejectSave!: (error: Error) => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>((resolve, reject) => {
+            resolveSave = resolve; rejectSave = reject;
+        }));
+        const pending = component.search({ dateRange: DateRanges.lastSevenDays, activityTypes: [] });
+        fixture.detectChanges();
+        // The activity listener can finish before the preference write.
+        expect(component.isLoading).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-event-search').isLoading).toBe(true);
+        const acceptedFilters = component.eventTableFilters;
+        const queryCount = mockEventService.getEventSummariesBy.mock.calls.length;
+        const writeCount = mockUserService.updateUserProperties.mock.calls.length;
+        await component.search({ dateRange: DateRanges.thisYear, activityTypes: [] });
+        expect(component.eventTableFilters).toEqual(acceptedFilters);
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(queryCount);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(writeCount);
+        if (outcome === 'success') resolveSave(); else rejectSave(new Error('save failed'));
+        await pending; fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-search').isLoading).toBe(false);
+    });
+
+    it('restores the previous live query and navigation metadata after a date-preference save fails', async () => {
+        mockUser.settings.dashboardSettings.eventTableFilters = { searchTerm: null, dateRange: DateRanges.custom,
+            rangeNavigation: { preset: 'month', anchor: '2026-10-11' }, startDate: +new Date(2026, 8, 12),
+            endDate: +new Date(2026, 9, 11, 23, 59, 59, 999), activityTypes: [], includeMergedEvents: true };
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        fixture.detectChanges(); await fixture.whenStable();
+        mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('save failed'));
+        await component.search({ dateRange: DateRanges.custom, rangeNavigation: { preset: 'month', anchor: '2026-09-11' },
+            startDate: new Date(2026, 7, 13), endDate: new Date(2026, 8, 11, 23, 59, 59, 999), activityTypes: [] });
+        expect(component.eventTableFilters.rangeNavigation).toEqual({ preset: 'month', anchor: '2026-10-11' });
+        expect(mockEventService.getEventSummariesBy.mock.lastCall[1]).toEqual([
+            { fieldPath: 'startDate', opStr: '>=', value: +new Date(2026, 8, 12) },
+            { fieldPath: 'startDate', opStr: '<=', value: +new Date(2026, 9, 11, 23, 59, 59, 999) },
+        ]);
+    });
+
+    it('keeps an old account save failure from unlocking or rolling back a new account save', async () => {
+        fixture.detectChanges(); await fixture.whenStable();
+        let rejectOld!: (error: Error) => void;
+        let resolveNew!: () => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectOld = reject; }));
+        const oldSave = component.search({ dateRange: DateRanges.lastSevenDays, activityTypes: [] });
+        const nextUser = Object.assign(new User('next-user'), { settings: { ...mockUser.settings,
+            dashboardSettings: { ...mockUser.settings.dashboardSettings, eventTableFilters: undefined } } });
+        component.user = nextUser as AppUserInterface;
+        expect(component.isSavingEventTableFilters).toBe(false);
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { resolveNew = resolve; }));
+        const newSave = component.search({ dateRange: DateRanges.thisYear, activityTypes: [] });
+        rejectOld(new Error('old save failed')); await oldSave;
+        expect(component.isSavingEventTableFilters).toBe(true);
+        expect(component.eventTableFilters.dateRange).toBe(DateRanges.thisYear);
+        expect(mockSnackBar.open).not.toHaveBeenCalledWith('Could not update event table filters');
+        resolveNew(); await newSave;
+        expect(component.isSavingEventTableFilters).toBe(false);
+    });
+
+    it('refreshes live date windows at rollover without saving preferences or refreshing a fixed historical range', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 10, 12));
+        try {
+            mockUser.settings.dashboardSettings.eventTableFilters = { searchTerm: null, dateRange: DateRanges.lastThirtyDays,
+                startDate: null, endDate: null, activityTypes: [], includeMergedEvents: true };
+            mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+            fixture.detectChanges(); await fixture.whenStable();
+            const before = mockEventService.getEventSummariesBy.mock.calls.length;
+            mockUserService.updateUserProperties.mockClear(); mockHaptics.selection.mockClear();
+            vi.setSystemTime(new Date(2026, 10, 11, 12)); component.refreshEventTableDates();
+            expect(mockEventService.getEventSummariesBy.mock.calls.length).toBe(before + 1);
+            expect(component.searchEndDate).toEqual(new Date(2026, 10, 11, 23, 59, 59, 999));
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
+            mockUser.settings.dashboardSettings.eventTableFilters.rangeNavigation = { preset: 'month', anchor: '2026-10-11' };
+            mockUser.settings.dashboardSettings.eventTableFilters.dateRange = DateRanges.custom;
+            (component as any).applyEventTableFilterDates(component.eventTableFilters, mockUser);
+            vi.setSystemTime(new Date(2026, 10, 12, 12)); component.refreshEventTableDates();
+            expect(mockEventService.getEventSummariesBy.mock.calls.length).toBe(before + 1);
+        } finally { vi.useRealTimers(); }
     });
 
     it('should default bounded event table ranges to Monday when unit start of week is missing', () => {

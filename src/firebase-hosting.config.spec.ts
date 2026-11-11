@@ -203,6 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
+// Help places Hide beside chart tabs or the single-chart title, with a Show row only while collapsed (2026-11-11).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
@@ -321,6 +322,8 @@ describe('Firebase Hosting configuration', () => {
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
+    // Getting Started covers three goal choices, direct completion and contextual Pro offers (2026-11-10).
+    // Getting Started help covers intent-first setup and the compact Compare path with Continue free (2026-11-09).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
@@ -345,6 +348,7 @@ describe('Firebase Hosting configuration', () => {
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
+    // Assistant help advertises the Create a plan starter, goal-setting questions and existing approval flow (2026-11-03).
     // Generated rep-based strength leads with its AI estimate, keeping partial timed steps in the timing breakdown (2026-11-03).
     // Notification help explains Safari branding and optional per-import alerts, caps, best-effort delivery and Garmin exclusion (2026-11-03).
     // Workout-power help covers manual sport/source references, immutable generation snapshots and unchanged daily allowance (2026-11-04).
@@ -355,8 +359,23 @@ describe('Firebase Hosting configuration', () => {
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Notification help also covers grouped Training sync attention alerts (2026-11-06).
     // Notification clicks use browser app routing and require a matching beta/production installation (2026-11-06).
-    // Help covers future-day health, goal dates and the explicit Power reference check (2026-11-07).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
+    // New grouped activity alerts can re-alert while retaining the existing grouping and limits (2026-11-07).
+    // Notification category help distinguishes retry from explicit app reload and retains saved choices (2026-11-09).
+    // Help covers future-day health, goal dates, Power references and bounded manual-upload recovery (2026-11-07).
+    // Daily suggestion help explains bounded outage recovery, confirmed failure reasons and manual-generation allowance (2026-11-09).
+    // Account recovery help covers bounded connection retries and once-per-tab page-download recovery (2026-11-09).
+    // Today customization help explains Add metrics, Save/Cancel and the three-block starter (2026-11-09).
+    // Today Recovery is opt-in for profiles without an explicit saved choice (2026-11-10).
+    // Today editor availability explains per-metric periods and keeps missing-data choices usable (2026-11-10).
+    // Missing calculated values are distinct from an active availability refresh (2026-11-10).
+    // Today customization uses concise, formal guidance and availability labels (2026-11-10).
+    // Calendar visibility moves to its own header beside Open, including restoration while hidden (2026-11-10).
+    // Every dashboard section has an independent visibility menu that preserves its configured tiles (2026-11-10).
+    // Hidden sections also reopen for chart moves and explicit Health-to-dashboard navigation (2026-11-10).
+    // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
+    // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
+    // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -492,17 +511,19 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-04');
+    // The hero preview now names the charts: Training load and recovery (2026-11-10).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-10');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-04');
+    // My Tracks is included on Starter; pricing and the public map overview now agree (2026-11-09).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
@@ -533,7 +554,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
@@ -575,7 +596,7 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
@@ -697,7 +718,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.20mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.84mb',
     });
   });
 

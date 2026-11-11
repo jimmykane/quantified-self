@@ -21,13 +21,14 @@ import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 /** Bounded dependencies for full-reader cache validation; summary revisions observe only requested metrics. */
 export const EVENT_TABLE_STAT_TYPES = [DataDistance.type, DataDuration.type, DataAscent.type, DataDescent.type,
   DataEnergy.type, DataVO2Max.type, DataPeakEPOC.type, DataRecoveryTime.type, DataAerobicTrainingEffect.type,
-  DataSpeedAvg.type, DataPowerAvg.type, DataPowerMax.type, DataHeartRateAvg.type, DataRPE.type, DataFeeling.type];
+  DataSpeedAvg.type, DataGradeAdjustedPaceAvg.type, DataPowerAvg.type, DataPowerMax.type, DataHeartRateAvg.type, DataRPE.type, DataFeeling.type];
 
 @Directive()
 export abstract class DataTableAbstractDirective extends LoadingAbstractDirective {
@@ -46,6 +47,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
       'Description',
       'Average Power',
       'Average Speed',
+      DataGradeAdjustedPaceAvg.type,
       'Duration',
       'Ascent',
       'Descent',
@@ -119,7 +121,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     });
     for (const type of EVENT_TABLE_STAT_TYPES) {
       if (type === DataRPE.type || type === DataFeeling.type) continue;
-      lazy(`sort.${type}`, () => getStat(type)?.getValue() ?? 0);
+      lazy(`sort.${type}`, () => getStat(type)?.getValue() ?? (type === DataGradeAdjustedPaceAvg.type ? null : 0));
     }
 
     return statRowElement;

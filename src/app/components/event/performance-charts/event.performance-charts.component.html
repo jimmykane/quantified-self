@@ -1,70 +1,88 @@
-<div class="performance-charts-container">
-  @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
-  <section class="performance-durability-notice" aria-label="Durability unavailable">
-    <mat-icon aria-hidden="true">info_outline</mat-icon>
-    <div>
-      <strong>Durability unavailable</strong>
-      <span>No selected activity has supported output data. Durability compares sustained power, pace, or speed with heart rate.</span>
-    </div>
-  </section>
-  }
-  @if (shouldShowTabs) {
-  <mat-tab-group class="performance-charts-tabs">
-    @for (tab of availableTabs; track tab) {
-    <mat-tab [aria-label]="getTabLabel(tab)">
-      <ng-template mat-tab-label>
-        <span class="performance-tab-label">
-          <mat-icon aria-hidden="true" class="performance-tab-icon">{{ getTabIcon(tab) }}</mat-icon>
-          <span class="performance-tab-text">{{ getTabLabel(tab) }}</span>
+<ng-template #disclosure>
+    <button mat-button type="button" class="performance-disclosure" [class.performance-disclosure-compact]="expanded()"
+      [id]="disclosureId" [disabled]="saving()" [disabledInteractive]="true" [matTooltip]="expanded() ? disclosureLabel : ''"
+      [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
+      [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
+      <span class="performance-disclosure-content">
+        @if (!expanded()) {
+        <mat-icon aria-hidden="true">monitoring</mat-icon>
+        }
+        <span class="performance-disclosure-label">{{ expanded() ? 'Hide' : 'Show performance charts' }}</span>
+        <span class="performance-disclosure-status">
+          @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
+          @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
         </span>
-      </ng-template>
-      <ng-template matTabContent>
-        @switch (tab) {
-        @case ('intensity') {
-        <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-        </app-event-intensity-zones>
-        }
-        @case ('powerCurve') {
-        <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-power-curve>
-        }
-        @case ('durability') {
-        <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-durability-curve>
-        }
-        @case ('cadencePower') {
-        <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-cadence-power>
-        }
-        }
-      </ng-template>
-    </mat-tab>
+      </span>
+    </button>
+</ng-template>
+<div class="performance-charts-container">
+  @if (availableTabs.length) {
+  @if (!expanded()) {
+  <div class="performance-charts-toolbar">
+    <ng-container [ngTemplateOutlet]="disclosure"></ng-container>
+  </div>
+  }
+  <div [id]="contentId" [hidden]="!expanded()" role="region" aria-label="Performance charts">
+  @if (expanded() && shouldShowTabs) {
+  <div class="performance-charts-toolbar">
+  @if (isMobile()) {
+  <app-compact-select class="performance-mobile-chart-picker" label="Performance chart" [hideLabel]="true"
+    [value]="activeTab" [options]="chartChoices" [disabled]="saving()" (selectionChange)="selectChart($event)">
+  </app-compact-select>
+  } @else {
+  <nav mat-tab-nav-bar [tabPanel]="chartPanel" [mat-stretch-tabs]="false" class="performance-charts-tabs"
+      aria-label="Performance charts">
+      @for (chart of chartOptions; track chart.id) {
+      <button mat-tab-link type="button" class="performance-chart-tab" [active]="activeTab === chart.id" [disabled]="saving()"
+        [id]="contentId + '-tab-' + chart.id" [attr.aria-label]="chart.label" (click)="selectChart(chart.id)">
+        <span class="performance-tab-label">
+          <mat-icon aria-hidden="true" class="performance-tab-icon">{{ chart.icon }}</mat-icon>
+          <span class="performance-tab-text">{{ chart.label }}</span>
+        </span>
+      </button>
+      }
+  </nav>
+  }
+  <ng-container [ngTemplateOutlet]="disclosure"></ng-container>
+  </div>
+  }
+  <mat-tab-nav-panel #chartPanel [attr.role]="shouldShowTabs && !isMobile() ? 'tabpanel' : 'region'"
+    [attr.aria-labelledby]="expanded() && shouldShowTabs && !isMobile() ? contentId + '-tab-' + activeTab : null"
+    [attr.aria-label]="!shouldShowTabs ? chartTitles[0] : isMobile() ? activeChartLabel : null">
+  @if (expanded()) {
+    @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
+    <section class="performance-durability-notice" aria-label="Durability unavailable">
+      <mat-icon aria-hidden="true">info_outline</mat-icon>
+      <div>
+        <strong>Durability unavailable</strong>
+        <span>No selected activity has supported output data. Durability compares sustained power, pace, or speed with heart rate.</span>
+      </div>
+    </section>
     }
-  </mat-tab-group>
-  } @else if (singleChartTab) {
-  @switch (singleChartTab) {
-  @case ('intensity') {
-  <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-  </app-event-intensity-zones>
+    @switch (activeTab) {
+    @case ('intensity') {
+    <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [headerActions]="shouldShowTabs ? null : disclosure">
+    </app-event-intensity-zones>
+    }
+    @case ('powerCurve') {
+    <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge" [headerActions]="shouldShowTabs ? null : disclosure">
+    </app-event-power-curve>
+    }
+    @case ('durability') {
+    <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge" [headerActions]="shouldShowTabs ? null : disclosure">
+    </app-event-durability-curve>
+    }
+    @case ('cadencePower') {
+    <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge" [headerActions]="shouldShowTabs ? null : disclosure">
+    </app-event-cadence-power>
+    }
+    }
   }
-  @case ('powerCurve') {
-  <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-power-curve>
-  }
-  @case ('durability') {
-  <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-durability-curve>
-  }
-  @case ('cadencePower') {
-  <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-cadence-power>
-  }
-  }
+  </mat-tab-nav-panel>
+  </div>
   }
 </div>

@@ -50,6 +50,12 @@ export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[
 export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
   DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id);
 
+export function normalizeDashboardHiddenSections(value: unknown): DashboardTileLaneKey[] {
+  if (!Array.isArray(value)) return [];
+  const lanes: DashboardTileLaneKey[] = ['kpi', ...DASHBOARD_TILE_SECTION_ORDER.map(id => `section:${id}` as const)];
+  return lanes.filter(lane => value.includes(lane));
+}
+
 const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
   [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'performancePower',
   [DASHBOARD_W_PRIME_CHART_TYPE]: 'performancePower',

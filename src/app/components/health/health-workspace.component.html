@@ -114,10 +114,15 @@
               <p class="health-mobile-metric-empty" role="status">No imported Health metrics yet.</p>
             }
             <button mat-icon-button type="button" class="health-dashboard-action"
-              [attr.aria-label]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [attr.aria-label]="openingDashboardMetric() ? 'Opening chart on dashboard' : metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [attr.aria-busy]="openingDashboardMetric()"
               [matTooltip]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
-              [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()">
-              <mat-icon>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
+              [disabled]="dashboardLibrary.busy() || openingDashboardMetric()" (click)="addToDashboard()">
+              @if (openingDashboardMetric()) {
+                <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+              } @else {
+                <mat-icon>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
+              }
             </button>
           </div>
           <div class="health-detail-controls">

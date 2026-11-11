@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subject, map, tap } from 'rxjs';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import { Auth } from 'app/firebase/auth';
+import { deleteField } from 'app/firebase/firestore';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '@shared/strength-workout';
@@ -227,15 +228,38 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect((await service.request('owner', 'status', () => true))).toBe(ready);
     expect(call.mock.calls.map(([, request]) => request.action)).toEqual(['prepare', 'status', 'status']);
   });
-  it('reports failed calendar-rest reads separately while invalidating coverage authority', async () => {
+  it.each(['permission-denied', 'deadline-exceeded'])('reports calendar-rest %s separately while invalidating coverage authority', async code => {
     const { service, logger, restDay$ } = setup(); TestBed.flushEffects();
     await service.request('owner', 'prepare', () => true);
-    restDay$.error({ code: 'permission-denied', message: 'private document path' });
+    restDay$.error({ code, message: 'private document path' });
     expect(service.cached('owner')).toBeNull();
     expect(logger.captureMessage).toHaveBeenCalledWith('Daily workout suggestion request failed', expect.objectContaining({
-      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: 'permission-denied' },
+      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: code },
     }));
     expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private document');
+  });
+  it('never dispatches generation when initial rest-day verification exhausts its read deadline', async () => {
+    const { service, restRevisions, call, logger } = setup(); restRevisions.clear();
+    const evidence = new Subject<TrainingRestDayV1 | null>();
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay').mockReturnValue(evidence);
+    const pending = service.request('owner', 'prepare', () => true);
+    const failure = { code: 'deadline-exceeded', message: 'private document path' };
+    const rejected = expect(pending).rejects.toBe(failure);
+    await Promise.resolve(); evidence.error(failure); await rejected;
+    expect(call).not.toHaveBeenCalled(); expect(service.cached('owner')).toBeNull();
+    expect(watch).toHaveBeenCalledTimes(2); // Root listener and the waiting request share the underlying day stream.
+    expect(logger.captureMessage).toHaveBeenCalledExactlyOnceWith('Daily workout suggestion request failed', expect.objectContaining({
+      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: 'deadline-exceeded' },
+    }));
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private document');
+  });
+  it.each(['session', 'date'] as const)('does not report a retired rest-day read as a failure of the new %s', async change => {
+    const { service, auth, restDay$, logger } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    if (change === 'session') auth.currentUser = { uid: 'owner' };
+    else vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    restDay$.error({ code: 'cancelled' });
+    expect(logger.captureMessage).not.toHaveBeenCalled();
   });
   it('immediately hides a cached suggestion on calendar rest and reuses the daily result after removal', async () => {
     const { service, setRest, call, result } = setup(); TestBed.flushEffects();
@@ -309,6 +333,22 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
     expect(service.cached('owner')?.status?.state).toBe('dismissed'); expect(call).toHaveBeenCalledOnce();
   });
+  it('clears mutually exclusive duration fields when saving through the shared deep-merge settings writer', async () => {
+    const { service, user, updateUserProperties } = setup();
+    const automatic = service.preferences();
+    const legacyControls = { ...automatic.controls, minutes: 30 }; delete legacyControls.durationMode;
+    const legacy = { ...automatic, controls: legacyControls };
+    user.update(value => ({ ...value, settings: { appSettings: { dailyWorkoutSuggestion: legacy } } }));
+    await service.save('owner', automatic);
+    const autoPatch = updateUserProperties.mock.calls[0][1].settings.appSettings.dailyWorkoutSuggestion;
+    expect(autoPatch.controls).toEqual({ ...automatic.controls, minutes: deleteField() });
+    expect(automatic.controls).not.toHaveProperty('minutes');
+    await service.save('owner', legacy);
+    const legacyPatch = updateUserProperties.mock.calls[1][1].settings.appSettings.dailyWorkoutSuggestion;
+    expect(legacyPatch.controls).toEqual({ ...legacyControls, durationMode: deleteField() });
+    expect(legacy.controls).not.toHaveProperty('durationMode');
+    expect(updateUserProperties.mock.calls[1][1].settings.appSettings).not.toHaveProperty('dailyWorkoutDelivery');
+  });
   it('defaults off with all data selected, persists preferences and fences account changes', async () => {
     const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
     const preferences = service.preferences();
@@ -318,7 +358,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { acknowledge = resolve; }));
     const write = service.save('owner', { ...preferences, enabled: true }); await Promise.resolve();
     expect(service.saving()).toBe(true); acknowledge(); await write; expect(service.saving()).toBe(false);
-    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true } } } });
+    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true, controls: { ...preferences.controls, minutes: deleteField() } } } } });
     await service.request('owner', 'prepare', () => true);
     expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
@@ -372,6 +412,28 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     finishStatus({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } }); await status;
     await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2)); finishGeneration({ data: result() });
     expect((await generation).state).toBe('ready'); expect(service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it.each(['ready', 'failed', 'planned', 'completed', 'rest-day', 'dismissed', 'preparing'] as const)(
+    'reuses a pending status returning %s when preparation asks for a refresh', async state => {
+      const { service, call, result } = setup();
+      let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+      call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      const read = service.request('owner', 'status', () => true, undefined, true);
+      const prepare = service.request('owner', 'prepare', () => true, undefined, true);
+      const status: DailyWorkoutSuggestionStatus = state === 'ready' ? result() : { localDate: '2026-10-30', state };
+      finish({ data: status });
+      expect(await read).toEqual(status); expect(await prepare).toEqual(status);
+      expect(call).toHaveBeenCalledOnce();
+    });
+  it('still fences a retired view when refreshed preparation waits for a terminal status', async () => {
+    const { service, call, result } = setup(); let current = true;
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const read = service.request('owner', 'status', () => true);
+    const prepare = service.request('owner', 'prepare', () => current, undefined, true);
+    const rejected = expect(prepare).rejects.toThrow('access changed');
+    current = false; finish({ data: result() }); await read; await rejected;
+    expect(call).toHaveBeenCalledOnce();
   });
   it('queues the explicit available-data choice after a pending sleep check', async () => {
     const { service, call, result } = setup();
@@ -458,7 +520,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const delivery = { enabled: true, providers: ['garmin' as const] };
     await service.save('owner', service.preferences(), delivery);
     expect(updateUserProperties).toHaveBeenLastCalledWith(user(), { settings: { appSettings: {
-      dailyWorkoutSuggestion: service.preferences(), dailyWorkoutDelivery: delivery,
+      dailyWorkoutSuggestion: { ...service.preferences(), controls: { ...service.preferences().controls, minutes: deleteField() } }, dailyWorkoutDelivery: delivery,
     } } });
     user.update(value => ({ ...value, settings: { ...value.settings, appSettings: { ...value.settings.appSettings, dailyWorkoutDelivery: delivery } } }));
     expect(service.cached('owner')?.status).toEqual(cached);
@@ -467,12 +529,12 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(() => service.save('owner', service.preferences(), { enabled: true, providers: [] })).toThrow();
     expect(updateUserProperties).toHaveBeenCalledOnce();
   });
-  it('lets an explicit refresh bypass cached status and shares that refresh', async () => {
+  it.each(['status', 'prepare'] as const)('lets an explicit %s refresh bypass the cache and shares that refresh', async action => {
     const { service, call, result } = setup(); await service.request('owner', 'status', () => true);
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const first = service.request('owner', 'status', () => true, undefined, true);
-    const second = service.request('owner', 'status', () => true, undefined, true);
+    const first = service.request('owner', action, () => true, undefined, true);
+    const second = service.request('owner', action, () => true, undefined, true);
     expect(call).toHaveBeenCalledTimes(2); finish({ data: result() }); await Promise.all([first, second]);
   });
   it.each(['dismiss', 'use-available-data'] as const)('keeps the view cancellation fence on explicit %s actions', async action => {
@@ -587,6 +649,21 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const saved = JSON.parse(second.saved.getItem(key)!); saved.status.result.draft = {};
     second.saved.setItem(key, JSON.stringify(saved)); const third = setup(second.saved);
     expect(third.service.cached('owner')).toBeNull();
+  });
+  it.each(['temporary-service', 'invalid-output', 'unknown', undefined] as const)('restores a terminal failure with %s reason without another API call', async failureReason => {
+    const first = setup(), status: DailyWorkoutSuggestionStatus = { localDate: '2026-10-30', state: 'failed',
+      ...(failureReason ? { failureReason } : {}) };
+    first.service.remember('owner', status);
+    const next = setup(first.saved);
+    expect(next.service.cached('owner')?.status).toEqual(status);
+    expect(await next.service.request('owner', 'prepare', () => true)).toEqual(status);
+    expect(next.call).not.toHaveBeenCalled();
+  });
+  it('rejects a cached failure containing arbitrary provider text', () => {
+    const first = setup(); first.service.remember('owner', { localDate: '2026-10-30', state: 'failed' });
+    const key = [...first.saved.values.keys()][0], value = JSON.parse(first.saved.getItem(key)!);
+    value.status.failureReason = 'PRIVATE_PROVIDER_RESPONSE'; first.saved.setItem(key, JSON.stringify(value));
+    expect(setup(first.saved).service.cached('owner')).toBeNull();
   });
   it('continues caching in memory when browser storage is blocked', async () => {
     const saved = storage(); saved.setItem = () => { throw Error('Blocked'); };

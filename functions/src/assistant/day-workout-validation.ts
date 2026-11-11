@@ -1,4 +1,5 @@
 import type { DayWorkoutControls, DayWorkoutDraft, DayWorkoutLoadSource } from '../../../shared/day-workout';
+import type { DayWorkoutValidationDiagnostic } from './day-workout-diagnostics';
 import { parseWorkoutStructureV1, hasGarminPowerZoneTargetV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, projectStrengthWorkoutToV1,
@@ -6,7 +7,7 @@ import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, projectStrengthW
 
 // Only server-authored messages belong here; safe to use for model corrections and diagnostics.
 export class DayWorkoutSuggestionValidationError extends Error {
-  constructor(message: string) { super(message); this.name = 'DayWorkoutSuggestionValidationError'; }
+  constructor(message: string, readonly diagnostics: DayWorkoutValidationDiagnostic[] = []) { super(message); this.name = 'DayWorkoutSuggestionValidationError'; }
 }
 
 export interface PreviousStrengthPrescription { localDate: string; strength: StrengthWorkoutDraftV1 }
@@ -68,7 +69,7 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
       for (const step of node.kind === 'step' ? [node] : node.steps) {
         if ('allowEarlyLap' in step.ending) throw new DayWorkoutSuggestionValidationError('Generation does not enable or author early Lap settings.');
         if (!['time', 'distance', 'manual'].includes(step.ending.kind)) throw new DayWorkoutSuggestionValidationError('Use editor-supported endings.');
-        if (controls.timing === 'strict' && step.ending.kind !== 'time') throw new DayWorkoutSuggestionValidationError('Strict timing requires timed steps throughout.');
+        if ((controls.timing === 'strict' || controls.durationMode === 'auto') && step.ending.kind !== 'time') throw new DayWorkoutSuggestionValidationError('Strict timing and Auto duration require timed endurance steps throughout.');
         for (const target of step.targets) {
           if (target.kind === 'power' && target.garminPowerAveragingSeconds !== undefined) {
             throw new DayWorkoutSuggestionValidationError('Generation must leave power averaging to the explicit controls.');
@@ -98,8 +99,13 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
     }
   }
   const analysis = analyzeWorkoutStructureV1(structure);
-  if (controls.timing === 'strict' && (analysis.summary.duration.completeExactSeconds === null
+  if (controls.timing === 'strict' && (typeof controls.minutes !== 'number' || analysis.summary.duration.completeExactSeconds === null
     || analysis.summary.duration.completeExactSeconds > controls.minutes * 60)) throw new DayWorkoutSuggestionValidationError('The full prescription exceeds the strict time budget.');
+  const exactSeconds = analysis.summary.duration.completeExactSeconds;
+  if (controls.durationMode === 'auto' && ((!strength && exactSeconds === null)
+    || exactSeconds !== null && (exactSeconds < 300 || exactSeconds > 14400))) {
+    throw new DayWorkoutSuggestionValidationError('Auto duration requires a full timed workout between 5 and 240 minutes.');
+  }
   let estimatedMinutes: DayWorkoutDraft['estimatedMinutes'];
   if (row.estimatedMinutes !== undefined) {
     const range = row.estimatedMinutes as Record<string, unknown>;
@@ -107,6 +113,10 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
       || typeof range.minimum !== 'number' || typeof range.maximum !== 'number' || !Number.isFinite(range.minimum)
       || !Number.isFinite(range.maximum) || range.minimum < 1 || range.maximum < range.minimum || range.maximum > 480) throw new DayWorkoutSuggestionValidationError('Invalid planning time range.');
     estimatedMinutes = { minimum: range.minimum, maximum: range.maximum };
+  }
+  if (controls.durationMode === 'auto' && strength && (!estimatedMinutes || estimatedMinutes.minimum < 5 || estimatedMinutes.maximum > 240
+    || analysis.summary.duration.exactSubtotalSeconds > estimatedMinutes.minimum * 60)) {
+    throw new DayWorkoutSuggestionValidationError('Auto strength requires a planning estimate between 5 and 240 minutes with a lower bound covering all timed work and rests.');
   }
   return { kind: 'workout', rationale: row.rationale.trim(), previousLoads,
     draft: { title: row.title.trim(), structure, ...(strength ? { strength } : {}), ...(estimatedMinutes ? { estimatedMinutes } : {}) } };

@@ -9,6 +9,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ASSISTANT_CREATE_PLAN_PROMPT,
   ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT,
   ASSISTANT_LATEST_TRAINING_IMPACT_PROMPT,
   ASSISTANT_PROMPT_CARDS,
@@ -16,6 +17,7 @@ import {
 } from '@shared/assistant.prompts';
 import { ASSISTANT_MAX_MESSAGE_CHARS } from '@shared/assistant.types';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { compile } from 'sass';
 
@@ -25,9 +27,11 @@ describe('AssistantExploreBottomSheetComponent', () => {
   const bottomSheetRef = {
     dismiss: vi.fn(),
   };
+  const haptics = { selection: vi.fn() };
 
   beforeEach(async () => {
     bottomSheetRef.dismiss.mockReset();
+    haptics.selection.mockReset();
 
     await TestBed.configureTestingModule({
       imports: [
@@ -37,6 +41,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
         MatIconTestingModule,
       ],
       providers: [
+        { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheetRef, useValue: bottomSheetRef },
         {
           provide: MAT_BOTTOM_SHEET_DATA,
@@ -56,6 +61,7 @@ describe('AssistantExploreBottomSheetComponent', () => {
     ) as HTMLButtonElement[];
 
     expect(buttons).toHaveLength(ASSISTANT_PROMPT_CARDS.length);
+    expect(buttons[0].textContent).toContain('Create a plan');
     ASSISTANT_PROMPT_CARDS.forEach((prompt, index) => {
       expect(buttons[index].textContent).toContain(prompt.shortLabel);
       expect(buttons[index].getAttribute('aria-label')).toContain(prompt.prompt);
@@ -149,6 +155,22 @@ describe('AssistantExploreBottomSheetComponent', () => {
     expect(component.data.trainingPlansEnabled ?? false).toBe(false);
     expect(component.data.trainingPlanChangesEnabled ?? false).toBe(false);
     expect(component.data.timelineNotesEnabled ?? false).toBe(false);
+  });
+
+  it('advertises plan creation and inserts its goal-setting prompt without granting access', () => {
+    const button = [...fixture.nativeElement.querySelectorAll('.assistant-explore-prompts button')]
+      .find((candidate: HTMLButtonElement) => candidate.textContent.includes('Create a plan')) as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    button.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledExactlyOnceWith({ kind: 'prompt', prompt: ASSISTANT_CREATE_PLAN_PROMPT });
+    expect(ASSISTANT_CREATE_PLAN_PROMPT.length).toBeLessThanOrEqual(ASSISTANT_MAX_MESSAGE_CHARS);
+    expect(component.data.trainingPlansEnabled ?? false).toBe(false);
+    expect(component.data.trainingPlanChangesEnabled ?? false).toBe(false);
+    expect(component.data.trainingDeliveryEnabled ?? false).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('nothing sends automatically');
+    expect(fixture.nativeElement.textContent).toContain('Create training plans and scheduled workouts');
   });
 
   it('returns explicit precise activity-location consent to the Assistant page', () => {

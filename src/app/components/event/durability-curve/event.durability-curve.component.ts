@@ -8,6 +8,7 @@ import {
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -68,7 +69,7 @@ interface EventDurabilitySummaryViewModel {
 @Component({
   selector: 'app-event-durability-curve',
   templateUrl: './event.durability-curve.component.html',
-  styleUrls: ['./event.durability-curve.component.css'],
+  styleUrls: ['./event.durability-curve.component.css', '../performance-charts/performance-chart-header.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
   imports: [SharedModule],
@@ -79,6 +80,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
   @Input() useAnimations = false;
   @Input() isMerge = false;
   @Input() previewMode = false;
+  @Input() headerActions: TemplateRef<unknown> | null = null;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;

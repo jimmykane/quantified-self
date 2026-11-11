@@ -67,5 +67,5 @@
   @if (preferences.status() === 'signed-out') { <p>Sign in to manage notification categories.</p> }
   @if (preferences.status() === 'impersonating') { <p>Categories cannot be changed while viewing another account.</p> }
   @if (preferences.message()) { <p role="status" aria-live="polite">{{ preferences.message() }}</p> }
-  @if (preferences.status() === 'error') { <button mat-button type="button" (click)="retryCategories()">Retry category settings</button> }
+  @if (preferences.status() === 'error') { <button mat-button type="button" (click)="retryCategories()">{{ preferences.reloadRequired() ? 'Reload app' : 'Retry category settings' }}</button> }
 </section>

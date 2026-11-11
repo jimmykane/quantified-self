@@ -2,6 +2,7 @@ import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
 import { DashboardChartLibraryState } from '../summaries/dashboard-chart-library/dashboard-chart-library-state.service';
 import { dashboardHealthMetric, dashboardHealthSettings, dashboardHealthPresetId } from '../../helpers/dashboard-health-tile.helper';
 import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { normalizeDashboardHiddenSections, resolveDashboardTileLaneKey } from '../../helpers/dashboard-tile-section.helper';
 import { HealthMetricQueryService } from '../../services/health-metric-query.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -220,13 +221,31 @@ export class HealthWorkspaceComponent {
   ), { initialValue: { metric: this.activatedRoute.snapshot.queryParamMap.get('metric') } });
   readonly dashboardUser = computed(() => this.userService.user() as AppUserInterface | null);
   private readonly dashboardRevision = signal(0);
+  readonly openingDashboardMetric = signal(false);
   readonly dashboardSeed = computed(() => { this.dashboardRevision(); return {tiles:this.dashboardUser()?.settings?.dashboardSettings?.tiles || []}; });
   readonly metricOnDashboard = computed(() => this.dashboardSeed().tiles.some(tile=>dashboardHealthMetric(tile)===this.routeState().metric));
   async addToDashboard(): Promise<void> {
+    if (this.openingDashboardMetric() || this.dashboardLibrary.busy()) return;
     const user=this.dashboardUser(); if(!user?.settings?.dashboardSettings) return;
     const metric=this.routeState().metric;
-    if(user.settings.dashboardSettings.tiles.some(tile=>dashboardHealthMetric(tile)===metric)) {
-      this.haptics.selection(); await this.dashboardRouter.navigate(['/dashboard'],{queryParams:{healthMetric:metric}}); return;
+    const existing = user.settings.dashboardSettings.tiles.find(tile=>dashboardHealthMetric(tile)===metric);
+    if(existing) {
+      this.openingDashboardMetric.set(true);
+      try {
+        const lane = resolveDashboardTileLaneKey(existing);
+        if (normalizeDashboardHiddenSections(user.settings.dashboardSettings.hiddenSections).includes(lane)) {
+          await this.dashboardLibrary.setSectionVisibility(user, lane, true);
+          if (this.dashboardUser()?.uid !== user.uid || this.routeState().metric !== metric) return;
+          if (normalizeDashboardHiddenSections(user.settings.dashboardSettings.hiddenSections).includes(lane)) {
+            if (this.dashboardLibrary.error()) this.snackBar.open(this.dashboardLibrary.error(), 'Dismiss', { duration: 6000 });
+            return;
+          }
+        } else {
+          this.haptics.selection();
+        }
+        await this.dashboardRouter.navigate(['/dashboard'],{queryParams:{healthMetric:metric}});
+      } finally { this.openingDashboardMetric.set(false); }
+      return;
     }
     const entry=getDashboardChartCatalog().find(item=>item.definition.id===dashboardHealthPresetId(metric));
     if(!entry) return;
@@ -932,7 +951,7 @@ export class HealthWorkspaceComponent {
   constructor() {
     this.dashboardLibrary.changed$.pipe(takeUntilDestroyed()).subscribe(() => {
       this.dashboardRevision.update(value => value + 1);
-      if (!this.dashboardLibrary.undoAvailable()) return;
+      if (this.openingDashboardMetric() || !this.dashboardLibrary.undoAvailable()) return;
       this.snackBar.open('Chart added to dashboard', 'Undo', { duration: 7000 }).onAction()
         .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(async () => {
           const user = this.dashboardUser();

@@ -37,12 +37,14 @@ import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSlee
 import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
 import type { DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { DayWorkoutModelError } from './day-workout-diagnostics';
 
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), enforceAppCheck: (context: { app?: unknown }) => {
   if (!context.app) throw Error('App Check required');
 }, getUserRoleAndGracePeriod: vi.fn() }));
 const dailyNow = new Date('2026-10-30T07:00:00Z');
-const dailyControls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+// Saved fixed-duration preferences remain supported alongside the new Auto default.
+const dailyControls = { ...defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), durationMode: 'manual' as const, minutes: 30 };
 function evidence(): DayWorkoutContext {
   return { evidence: { daily: { dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } }, activitiesToday: { scanComplete: true, activities: [] },
     plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
@@ -52,7 +54,7 @@ function dependencies() {
   const preferences = { enabled: true, followRoutine: true, controls: dailyControls };
   let status: any = { localDate: '2026-10-30', state: 'waiting' };
   const store = { replace: vi.fn(async (_uid, _preferences, _expected, controls, result) => { status = { localDate: controls.localDate, state: 'ready', controls, result }; return status; }), read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
-    assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
+    assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result, failureReason?) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}), ...(failureReason ? { failureReason } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
   return { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
     importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
@@ -61,6 +63,82 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('generates Auto for the final selected sport once and keeps the charged result after preferences change', async () => {
+    const deps = dependencies(), read = deps.store.read.getMockImplementation()!;
+    const automatic = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', ActivityTypes.Cycling);
+    let selected = automatic;
+    deps.store.read.mockImplementation(async () => ({ ...await read(), preferences: { enabled: true, followRoutine: true, controls: selected } }));
+    deps.selectSport.mockResolvedValue(automatic as never);
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Usual ride', rationale: 'Fits recent rides and recovery.',
+      structure: { version: 1, sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'ride', purpose: 'work',
+        ending: { kind: 'time', seconds: 3600 }, targets: [] }] } } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toMatchObject({ state: 'ready', controls: { durationMode: 'auto', sport: ActivityTypes.Cycling } });
+    expect(deps.generate.mock.calls[0][0].controls).not.toHaveProperty('minutes');
+    selected = { ...automatic, durationMode: 'manual', minutes: 20 };
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it.each([false, true])('recovers a temporary outage within one daily charge (event guidance: %s)', async eventDay => {
+    const deps = dependencies();
+    if (eventDay) {
+      deps.context.mockResolvedValue({ ...evidence(), eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+      deps.generate.mockResolvedValue({ kind: 'event-advice', rationale: 'Follow your practiced routine.' } as never);
+    }
+    deps.generate.mockRejectedValueOnce(new DayWorkoutModelError('unavailable'));
+    const input = { mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result.state).toBe('ready'); expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.log).toHaveBeenCalledWith(expect.objectContaining({ attempts: 2, unmeteredAttempts: eventDay ? 2 : 1 }));
+  });
+  it.each([false, true])('returns and retains a confirmed outage after at most two attempts (event guidance: %s)', async eventDay => {
+    const deps = dependencies();
+    if (eventDay) deps.context.mockResolvedValue({ ...evidence(), eventGoals: [{ name: 'Race', localDate: dailyControls.localDate }] });
+    deps.generate.mockRejectedValue(new DayWorkoutModelError('unavailable'));
+    const input = { mode: 'daily-suggestion', action: 'prepare', resultVersion: 2 };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toEqual({ localDate: dailyControls.localDate, state: 'failed', failureReason: 'temporary-service' });
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.log).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed', attempts: 2,
+      meteredAttempts: 0, unmeteredAttempts: 2, failureReason: 'temporary-service', failureStage: 'generation' }));
+    deps.coverage.mockResolvedValue('planned');
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual({ localDate: dailyControls.localDate, state: 'planned' });
+  });
+  it('reports exhausted validation without generating again or exposing the invalid response', async () => {
+    const deps = dependencies(); deps.generate.mockResolvedValue({ bad: 'PRIVATE_MODEL_REPLY' } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toEqual({ localDate: dailyControls.localDate, state: 'failed', failureReason: 'invalid-output' });
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(JSON.stringify(deps.log.mock.calls)).not.toContain('PRIVATE');
+  });
+  it('keeps a failed receipt write uncertain instead of claiming a confirmed failure', async () => {
+    const deps = dependencies(); deps.generate.mockRejectedValue(new DayWorkoutModelError('timeout'));
+    deps.store.finish.mockRejectedValue(Error('Receipt unavailable'));
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps))
+      .rejects.toMatchObject({ code: 'unavailable' });
+    expect(deps.generate).toHaveBeenCalledTimes(2);
+  });
+  it('sanitizes a read failure after recording a confirmed model failure and retrieves the same receipt later', async () => {
+    const deps = dependencies(); deps.generate.mockResolvedValue({ bad: 'PRIVATE_MODEL_REPLY' } as never);
+    const finish = deps.store.finish.getMockImplementation()!;
+    deps.store.finish.mockImplementationOnce(async (...args) => {
+      await finish(...args);
+      deps.store.read.mockRejectedValueOnce(Error('PRIVATE_DATABASE_ERROR'));
+    });
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    await expect(runDailyWorkoutSuggestion(input, identity, deps)).rejects.toMatchObject({
+      code: 'unavailable', message: 'Today’s suggestion could not finish. Check again to retrieve it, or use the manual generator.',
+    });
+    expect(await runDailyWorkoutSuggestion({ ...input, action: 'status' }, identity, deps))
+      .toEqual({ localDate: dailyControls.localDate, state: 'failed', failureReason: 'invalid-output' });
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.store.finish).toHaveBeenCalledOnce(); expect(JSON.stringify(deps.log.mock.calls)).not.toContain('PRIVATE');
+  });
   it.each(['override', 'shared', 'imported'] as const)('resolves %s power after routine sport selection and retains it after settings change', async origin => {
     const deps = dependencies(), controls = { ...dailyControls, sport: ActivityTypes.Cycling };
     const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: ActivityTypes.Cycling, family: 'cycling' as const,

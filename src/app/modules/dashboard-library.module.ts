@@ -1,3 +1,5 @@
+import { DashboardTodayComponent } from '../components/summaries/today/dashboard-today.component';
+import { DeferredLoadErrorComponent } from '../components/shared/deferred-load-error/deferred-load-error.component';
 import { DashboardPerformanceTrendComponent } from '../components/charts/performance-trend/dashboard-performance-trend.component';
 import { DashboardHealthChartComponent } from '../components/charts/health/dashboard-health-chart.component';
 import { DailyWorkoutSuggestionComponent } from '../components/summaries/daily-workout-suggestion/daily-workout-suggestion.component';
@@ -35,6 +37,8 @@ import { EventTableModule } from './event-table.module';
 @NgModule({
     imports: [
         CommonModule,
+        DashboardTodayComponent,
+        DeferredLoadErrorComponent,
         DashboardHealthChartComponent,
         DashboardPerformanceTrendComponent,
         DashboardDailyBriefingComponent,

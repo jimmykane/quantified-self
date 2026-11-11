@@ -12,6 +12,7 @@ export interface DayWorkoutRoutine {
   recordedDayCount: number;
   sessionCount: number;
   typicalDurationSeconds: number | null;
+  durationBaseline?: { source: 'weekday' | 'sport'; typicalDurationSeconds: number; recordedDayCount: number } | null;
   missingDatesAreUnknown: true;
 }
 const record = (value: unknown): RecordValue => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -33,6 +34,8 @@ export function buildDayWorkoutRoutine(controls: DayWorkoutControls, now: Date, 
   const seen = new Set<string>();
   const durations: number[] = [];
   const durationDates = new Set<string>();
+  const sportDurations: number[] = [];
+  const sportDurationDates = new Set<string>();
   let sessionCount = 0;
   for (const value of activities) {
     const activity = record(value);
@@ -42,23 +45,33 @@ export function buildDayWorkoutRoutine(controls: DayWorkoutControls, now: Date, 
     const instant = new Date(activity.startTimeMs);
     if (!Number.isFinite(instant.getTime())) continue;
     const date = dayWorkoutLocalDate(instant, controls.timeZone);
-    if (date < windowStartDate || date > windowEndDate || weekday(date) !== targetWeekday) continue;
-    seen.add(activity.activityRef); dates.add(date); sessionCount += 1;
+    if (date < windowStartDate || date > windowEndDate) continue;
+    seen.add(activity.activityRef);
     const duration = record(activity.stats).durationSeconds;
+    if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) { sportDurations.push(duration); sportDurationDates.add(date); }
+    if (weekday(date) !== targetWeekday) continue;
+    dates.add(date); sessionCount += 1;
     if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) { durations.push(duration); durationDates.add(date); }
   }
-  durations.sort((a, b) => a - b);
   // A single recorded day cannot establish a usual duration; missing persisted duration stays unknown.
-  const middle = Math.floor(durations.length / 2);
-  const typicalDurationSeconds = durationDates.size >= 2 && durations.length >= 2
-    ? durations.length % 2 ? durations[middle] : durations[middle - 1] + (durations[middle] - durations[middle - 1]) / 2
-    : null;
+  const median = (values: number[], dates: Set<string>): number | null => {
+    if (dates.size < 2 || values.length < 2) return null;
+    values.sort((a, b) => a - b);
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2 ? values[middle] : values[middle - 1] + (values[middle] - values[middle - 1]) / 2;
+  };
+  const typicalDurationSeconds = median(durations, durationDates);
+  const sportDurationSeconds = median(sportDurations, sportDurationDates);
+  const durationBaseline = typicalDurationSeconds !== null
+    ? { source: 'weekday' as const, typicalDurationSeconds, recordedDayCount: durationDates.size }
+    : sportDurationSeconds !== null
+      ? { source: 'sport' as const, typicalDurationSeconds: sportDurationSeconds, recordedDayCount: sportDurationDates.size } : null;
   let weekdayOpportunities = 0;
   for (let day = 0; day < 28; day += 1) if (weekday(dayWorkoutDateOffset(windowStartDate, day)) === targetWeekday) weekdayOpportunities += 1;
   return { status: dates.size >= 2 ? 'available' : 'insufficient', sport: controls.sport,
     weekday: new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'UTC' }).format(new Date(controls.localDate + 'T12:00:00Z')),
     windowStartDate, windowEndDate, weekdayOpportunities, recordedDayCount: dates.size, sessionCount,
-    typicalDurationSeconds, missingDatesAreUnknown: true };
+    typicalDurationSeconds, ...(controls.durationMode === 'auto' ? { durationBaseline } : {}), missingDatesAreUnknown: true };
 }
 
 /** At most two existing MCP pages; never turn a partial scan or a failed read into an apparent habit. */

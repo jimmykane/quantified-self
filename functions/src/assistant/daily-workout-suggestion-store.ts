@@ -6,7 +6,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { dayWorkoutDateOffset, type DayWorkoutControls } from '../../../shared/day-workout';
 import type { DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { TRAINING_GOAL_STATE_PATH } from '../../../shared/training-goals';
-import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
+import { isDailyWorkoutFailureReason, parseDailyWorkoutSuggestionPreferences, type DailyWorkoutFailureReason, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { dailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferences } from '../../../shared/daily-workout-delivery';
 import { TTL_CONFIG } from '../shared/ttl-config';
@@ -17,7 +17,8 @@ interface State { version: 'daily-workout-suggestion-v1'; messages: Record<strin
 type TransactionOutcome<T> = { value: T; write?: boolean };
 const fingerprint = (value: DailyWorkoutSuggestionPreferences) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const LEASE_MS = 4 * 60_000;
-const publicEntry = ({ localDate, state, controls, result }: Entry): DailyWorkoutSuggestionStatus => ({ localDate, state,
+const publicEntry = ({ localDate, state, controls, result, failureReason }: Entry): DailyWorkoutSuggestionStatus => ({ localDate, state,
+  ...(state === 'failed' && isDailyWorkoutFailureReason(failureReason) ? { failureReason } : {}),
   ...(controls ? { controls } : {}), ...(result ? { result } : {}) });
 
 /** Four owner-scoped projections; the same masked read is also used inside allowance admission. */
@@ -113,7 +114,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       entry.charged = true; return { value: true, write: true };
     }),
     finish: (uid: string, date: string, token: string, outcome: DailyWorkoutSuggestionStatus['state'],
-      controls?: DayWorkoutControls, result?: DailyWorkoutSuggestionResult) => transact(uid, (preferences, state, now) => {
+      controls?: DayWorkoutControls, result?: DailyWorkoutSuggestionResult, failureReason?: DailyWorkoutFailureReason) => transact(uid, (preferences, state, now) => {
       const current = state.messages[date];
       // A source-choice change can cancel uncharged work without spending the daily allowance.
       if (outcome === 'failed' && current?.token === token && current.charged === false) {
@@ -124,6 +125,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       const entry = active(preferences, state, date, token, now);
       if (outcome === 'waiting-sleep') entry.awaitingSleep = true;
       entry.state = outcome; if (controls) entry.controls = controls; if (result) entry.result = result;
+      if (outcome === 'failed' && isDailyWorkoutFailureReason(failureReason)) entry.failureReason = failureReason;
       return { value: undefined, write: true };
     }),
     replace: (uid: string, expected: DailyWorkoutSuggestionPreferences, expectedRequestId: string,

@@ -25,11 +25,17 @@ export interface DailyWorkoutEventAdviceV1 {
   previousLoads: [];
 }
 export type DailyWorkoutSuggestionResult = GenerateDayWorkoutResponse | DailyWorkoutEventAdviceV1;
+export type DailyWorkoutFailureReason = 'temporary-service' | 'invalid-output' | 'unknown';
+export function isDailyWorkoutFailureReason(value: unknown): value is DailyWorkoutFailureReason {
+  return value === 'temporary-service' || value === 'invalid-output' || value === 'unknown';
+}
 export interface DailyWorkoutSuggestionStatus {
   localDate: string;
   state: 'off' | 'waiting' | 'waiting-sleep' | 'waiting-import' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
   controls?: DayWorkoutControls;
   result?: DailyWorkoutSuggestionResult;
+  /** Fixed first-party failure category; never model output or provider error text. */
+  failureReason?: DailyWorkoutFailureReason;
 }
 function validAdviceDate(value: unknown): boolean {
   try { normalizeTrainingLocalDate(value); return true; } catch { return false; }
@@ -63,4 +69,12 @@ export function parseDailyWorkoutSuggestionPreferences(value: unknown, now = new
     throw new Error('Daily suggestions require Training plans and Recent activities to check whether today is already covered.');
   }
   return { enabled: input.enabled, followRoutine: input.followRoutine, controls };
+}
+
+/** Write-only patch for the shared deep-merge settings writer. Keep SDK sentinels out of request/cache controls. */
+export function dailyWorkoutSuggestionMergePatch<T>(preferences: DailyWorkoutSuggestionPreferences, deletedField: T) {
+  return { ...preferences, controls: { ...preferences.controls,
+    ...(preferences.controls.durationMode === 'auto' ? { minutes: deletedField } : {}),
+    ...(preferences.controls.durationMode === undefined ? { durationMode: deletedField } : {}),
+  } };
 }

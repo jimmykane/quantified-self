@@ -6,9 +6,10 @@ import { EventTableComponent, MatPaginatorIntlFireStore } from '../components/ev
 import { MergeOptionsDialogComponent } from '../components/event-table/merge-options-dialog/merge-options-dialog.component';
 import { EventsExportFormComponent } from '../components/events-export-form/events-export.form.component';
 import { SharedModule } from './shared.module';
+import { CompactSelectComponent } from '../components/shared/compact-select/compact-select.component';
 
 @NgModule({
-  imports: [SharedModule, ActivityFilterPickerComponent],
+  imports: [SharedModule, ActivityFilterPickerComponent, CompactSelectComponent],
   declarations: [
     EventTableComponent,
     EventTableActionsComponent,

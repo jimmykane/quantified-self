@@ -1,0 +1,8 @@
+<img
+  class="terrain-fallback"
+  [src]="fallback()"
+  alt=""
+  aria-hidden="true"
+  [class.is-hidden]="ready()"
+/>
+<canvas #canvas aria-hidden="true" [class.is-ready]="ready()"></canvas>

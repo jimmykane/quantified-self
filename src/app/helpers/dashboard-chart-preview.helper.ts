@@ -1,3 +1,4 @@
+import { dashboardTileMetricKinds } from './dashboard-derived-dependencies.helper';
 import { TRAINING_PREVIEW_POWER, TRAINING_PREVIEW_DURABILITY } from '../components/public-seo/training-explorer-preview.data';
 import { AppEventSummary } from '@shared/event-summary';
 import type { EventRead } from '@shared/event-read';
@@ -5,7 +6,7 @@ import { dashboardChartHasPerformanceContext, dashboardChartHasRecordedData, res
 import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
-import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, FileType, Privacy, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, FileType, Privacy, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { DERIVED_METRIC_KINDS as M, DerivedMetricKind } from '@shared/derived-metrics';
 import * as C from './dashboard-special-chart-types';
@@ -84,33 +85,8 @@ export function dashboardPreviewSourceLabel(preview: DashboardChartPreview): str
 
 const DAY = 86400000;
 const K = C;
-const contexts: Record<string, keyof DashboardChartTileViewModel> = {
-  [K.DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'recoveryNow', [K.DASHBOARD_FORM_CHART_TYPE]: 'absoluteLatestFormPoint',
-  [K.DASHBOARD_ACWR_KPI_CHART_TYPE]: 'acwr', [K.DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'rampRate',
-  [K.DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'monotonyStrain', [K.DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'formNow',
-  [K.DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE]: 'formNow', [K.DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'fitnessCtl',
-  [K.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE]: 'fitnessCtl', [K.DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'fatigueAtl',
-  [K.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE]: 'fatigueAtl', [K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: 'formNow',
-  [K.DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'formPlus7d', [K.DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'easyPercent',
-  [K.DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'hardPercent', [K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE]: 'intensityDistribution',
-  [K.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'efficiencyDelta4w', [K.DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'freshnessForecast',
-  [K.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'intensityDistribution', [K.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'efficiencyTrend',
-  [K.DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'sleepTrend', [K.DASHBOARD_HRV_TREND_CHART_TYPE]: 'hrvTrend', [K.DASHBOARD_POWER_CURVE_CHART_TYPE]: 'powerCurve',
-  [K.DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'aerobicCapacity', [K.DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'aerobicDurability',
-};
-const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetricKind[]>> = {
-  recoveryNow: [M.RecoveryNow], absoluteLatestFormPoint: [M.Form], acwr: [M.Acwr], rampRate: [M.RampRate],
-  monotonyStrain: [M.MonotonyStrain], formNow: [M.FormNow, M.Form, M.RampRate], fitnessCtl: [M.Form], fatigueAtl: [M.Form],
-  formPlus7d: [M.FormPlus7d], easyPercent: [M.EasyPercent], hardPercent: [M.HardPercent], efficiencyDelta4w: [M.EfficiencyDelta4w],
-  freshnessForecast: [M.FreshnessForecast], intensityDistribution: [M.IntensityDistribution], efficiencyTrend: [M.EfficiencyTrend],
-  powerCurve: [M.PowerCurve], aerobicCapacity: [M.TrainingCapacity], aerobicDurability: [M.TrainingDurability],
-};
 export function dashboardPreviewMetricKinds(tile: TileSettingsInterface): DerivedMetricKind[] {
-  if (C.isDashboardPowerCapacityChartType(tile['chartType'])) return [M.TrainingPowerSystems];
-  if (tile['chartType'] === C.DASHBOARD_DURABILITY_CHART_TYPE) return [M.TrainingDurability];
-  if (`${tile['chartType']}` === K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) return [M.FormNow, M.FreshnessForecast, M.FormPlus7d];
-  if (`${tile['chartType']}` === K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) return [M.IntensityDistribution, M.EasyPercent, M.HardPercent];
-  return metricKinds[contexts[(tile as TileChartSettingsInterface).chartType]] || [];
+  return dashboardTileMetricKinds(tile);
 }
 /** Snapshot context keys used by the picker; these are read-only dependencies, never rebuild requests. */
 export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind, keyof NonNullable<DashboardPreviewInput['derivedMetrics']>>> = {

@@ -1,3 +1,4 @@
+import { DeferredLoadErrorComponent } from './components/shared/deferred-load-error/deferred-load-error.component';
 import { connectFirestoreEmulator } from 'firebase/firestore';
 import { connectStorageEmulator } from 'firebase/storage';
 import { EnvironmentInjector, ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
@@ -89,6 +90,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
+    DeferredLoadErrorComponent,
     AppRoutingModule,
     ClipboardModule,
     AppShellModule,

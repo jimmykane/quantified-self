@@ -6,7 +6,8 @@ import { garminStrengthExercise } from '../../../shared/garmin-strength-workout'
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 
-const controls = defaultDayWorkoutControls('2026-11-02', 'UTC');
+// Saved fixed-duration preferences remain supported alongside the new Auto default.
+const controls = { ...defaultDayWorkoutControls('2026-11-02', 'UTC'), durationMode: 'manual' as const, minutes: 30 };
 describe('provider-aware daily recipe context', () => {
   it('derives Wahoo ending constraints from the existing mapper instead of the broad catalog', () => {
     const context = dayWorkoutProviderContext(controls, ['wahoo', 'garmin'], []);

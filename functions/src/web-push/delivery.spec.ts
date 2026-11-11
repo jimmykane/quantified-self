@@ -47,7 +47,8 @@ describe('bounded activity delivery notification scheduler', () => {
     mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/activityDelivery` } })) });
     vi.mocked(sendDeliveryNotification).mockImplementation(async uid => { if (uid === 'one') throw new Error('private-canary'); });
     await expect(run()).rejects.toThrow('Activity delivery notification sweep failed.'); expect(sendDeliveryNotification).toHaveBeenCalledTimes(2);
-    expect(mocks.log).toHaveBeenCalledWith('[ActivityDeliveryPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+    expect(mocks.log).toHaveBeenCalledWith('[ActivityDeliveryPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
+      failureStage: 'account_processing', errorCode: 'unknown' });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/private-canary|ActivityDeliveryPushSweep/);
   });
 });

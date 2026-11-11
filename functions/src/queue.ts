@@ -1544,8 +1544,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
         break; // Stop checking other tokens if usage limit exceeded
       } else if (e instanceof UserNotFoundError) {
         logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
-        await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
-        return QueueResult.MovedToDLQ;
+        return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
       } else if (
         (e as any).code === 'EVENT_EMPTY_ERROR'
         && serviceName === ServiceNames.SuuntoApp
@@ -1572,8 +1571,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
           fitHeaderSize: payloadInspection?.headerSize ?? null,
           fitDeclaredDataSize: payloadInspection?.declaredDataSize ?? null,
         });
-        await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'EVENT_EMPTY_ERROR');
-        return QueueResult.MovedToDLQ;
+        return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'EVENT_EMPTY_ERROR');
       }
 
       // Attempt to upload debug file

@@ -18,12 +18,16 @@
   }
   <app-processing-indicator class="right"></app-processing-indicator>
 
-  @if (authState !== null) {
-  <button mat-icon-button class="right" (click)="whatsNewClick.emit()" matTooltip="Updates &amp; notifications"
-    aria-label="View updates and notification settings">
-    <mat-icon class="qs-app-badge qs-app-badge--small"
-      [matBadge]="unreadWhatsNewCount" [matBadgeHidden]="unreadWhatsNewCount === 0"
-      aria-hidden="false">notifications</mat-icon>
+  @if (authState !== null || isUpdateAvailable()) {
+  <button mat-icon-button class="right" (click)="openNotifications()" matTooltip="Updates &amp; notifications"
+    [attr.aria-label]="notificationsLabel()">
+    <span class="notification-badges" aria-hidden="true">
+      <mat-icon aria-hidden="true">notifications</mat-icon>
+      <span class="notification-badge app-update-badge qs-app-badge--small" matBadge="1" matBadgeSize="medium"
+        matBadgePosition="above before" [matBadgeHidden]="!isUpdateAvailable()"></span>
+      <span class="notification-badge qs-app-badge qs-app-badge--small" matBadge="1" matBadgeSize="medium"
+        matBadgePosition="above after" [matBadgeHidden]="unreadWhatsNewCount() === 0"></span>
+    </span>
   </button>
   }
 

@@ -5,6 +5,8 @@
     <app-daily-workout-preview></app-daily-workout-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--daily-workout" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 @if (previewKey() === 'health-note-comparison') {
@@ -12,6 +14,8 @@
     <app-health-note-comparison-preview></app-health-note-comparison-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--note-comparison" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 @if (previewKey() === 'health-overview') {
@@ -19,6 +23,8 @@
     <app-health-overview-preview></app-health-overview-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--health-overview" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 @if (previewKey() === 'training-plans') {
@@ -26,6 +32,8 @@
     <app-training-plans-preview></app-training-plans-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--training-plans" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -35,6 +43,8 @@
   } @placeholder {
     <div class="preview-placeholder" [class.preview-placeholder--readiness]="previewKey() === 'training-readiness'"
       [class.preview-placeholder--explorer]="previewKey() === 'training-explorer'" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -43,6 +53,8 @@
     <app-health-preview [kind]="previewKey() === 'health-sleep' ? 'sleep' : previewKey() === 'health-hrv' ? 'hrv' : 'weight'"></app-health-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--health" [class.preview-placeholder--health-sleep]="previewKey() === 'health-sleep'" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -51,6 +63,8 @@
     <app-training-snapshot-preview></app-training-snapshot-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--training" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -59,6 +73,8 @@
     <app-home-signal-charts-preview [hero]="previewKey() === 'training-hero'"></app-home-signal-charts-preview>
   } @placeholder {
     <div class="preview-placeholder" [class.preview-placeholder--signals]="previewKey() === 'training-signals'" [class.preview-placeholder--hero]="previewKey() === 'training-hero'" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -67,6 +83,8 @@
     <app-home-dashboard-preview></app-home-dashboard-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--dashboard" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -75,6 +93,8 @@
     <app-home-workout-preview></app-home-workout-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--workout" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -84,6 +104,8 @@
       <app-home-my-tracks-preview></app-home-my-tracks-preview>
     } @placeholder {
       <div class="preview-placeholder preview-placeholder--map" aria-hidden="true"></div>
+    } @error {
+      <app-deferred-load-error [area]="previewKey()" />
     }
   </div>
 }
@@ -99,6 +121,8 @@
     ></app-provider-data-flow-matrix>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--flow" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -107,6 +131,8 @@
     <app-reviewer-benchmark-preview></app-reviewer-benchmark-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--reviewer" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -115,6 +141,8 @@
     <app-assistant-example-preview></app-assistant-example-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--assistant" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 
@@ -123,6 +151,8 @@
     <app-mcp-read-only-flow-preview></app-mcp-read-only-flow-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--mcp" aria-hidden="true"></div>
+  } @error {
+    <app-deferred-load-error [area]="previewKey()" />
   }
 }
 </div>

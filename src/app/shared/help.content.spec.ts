@@ -17,6 +17,47 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('includes My Tracks on Starter while keeping provider imports and sync on Pro', () => {
+    const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    const starter = billing.split('### Starter (Free)')[1].split('### Basic')[0];
+    const basic = billing.split('### Basic')[1].split('### Pro')[0];
+    expect(starter).toContain('**My Tracks (Beta)**');
+    expect(basic).not.toContain('My Tracks');
+    expect(billing).toContain('**My Tracks (Beta):** Starter, Basic, Pro');
+    expect(billing).toContain('automatic provider imports and sync require Pro');
+  });
+  it('explains the searchable, ordered activity-table column dialog and save recovery', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Choose table columns:**', '**Selected columns · table order**', '**Search columns**',
+      '**Add columns**', 'failed save restores the previous choices and order', 'share one column layout and order', '**Preset → Default**', '**Preset → Running**']) expect(content).toContain(phrase);
+  });
+  it('explains unified activity tables, adaptive date labels and inline period totals', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const phrase of ['**Activity date ranges:**', '**Week**', '**Current period**', '**Previous period**', '**90 days**', '**Totals**', '**Preset → Running**',
+      '**GAP** (grade-adjusted pace)', 'saved start-of-week setting', 'across every paginator page',
+      'same compact activity table', 'recorded-activity counts for partial coverage',
+      'merged comparisons stay out of totals', 'unavailable value stays blank',
+      'preset name for the current period', 'dates for shifted or custom ranges',
+      '**Custom dates** always shows its explicit dates', 'current preset button’s tooltip',
+      '**Next period** stops at the current window', 'arrows cannot navigate into future periods']) expect(content).toContain(phrase);
+    expect(content).not.toContain('**View → Training log**');
+  });
+  it('explains remembered performance chart visibility without hiding other event sections', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    for (const text of ['**Intensity**, **Power Curve**, **Durability**, and **Cadence vs Power**',
+      '**Hide performance charts**', 'collapses the plot and its tabs', '**Show performance charts**',
+      'beside the chart tabs', 'beside the chart title', 'row appears only while collapsed',
+      'selected chart is kept', 'compact chart picker beside **Hide**',
+      'remembered across activities and devices', 'Charts start visible until you hide them',
+      'R–R & HRV keep their own visibility', 'anonymous shared link', 'previous saved visibility returns']) expect(content).toContain(text);
+  });
+  it('explains explicit recovery for a failed section without promising to preserve unsaved edits', () => {
+    const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ["A section or preview couldn't load", '**Reload page**', 'Save or copy any unsaved edits first',
+      'does not reload automatically for this message', 'button becomes available again']) expect(troubleshooting).toContain(phrase);
+    expect(troubleshooting).toContain('may reload once automatically in that tab');
+    expect(troubleshooting).toContain('Temporary connection failures during this check retry automatically a limited number of times');
+  });
   it('explains explicit Garmin averaging and the independent Suunto display limits', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Garmin power averaging:**', '**Default**, **3 seconds**, **10 seconds** or **30 seconds**',
@@ -66,10 +107,37 @@ describe('help.content', () => {
       'normal Assistant allowance', 'paused plan', 'provider delivery remain explicit']) expect(copy).toContain(text);
   });
 
+  it('explains intent-first setup, the optional Field guide and existing handoffs', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
+    expect(content).toContain('**Skip tour**');
+    expect(content).toContain('**Analyze my training**');
+    expect(content).toContain('**Sync between services**');
+    expect(content).toContain('**Compare device recordings**');
+    expect(content).toContain('**Take a quick tour**');
+    expect(content).toContain('without the tour, watch setup, or pricing step');
+    expect(content).toContain('**Continue free**');
+    expect(content).toContain('Your existing plan stays the same');
+    expect(content).toContain('Opening a Saved comparisons link takes you back to that list after setup');
+    expect(content).toContain('**Explore more of QS**');
+    expect(content).toContain('not required account setup');
+    expect(content).toContain('optional and start unchecked');
+    expect(content).toContain('does not start a payment, upload, or provider connection');
+    expect(content).toContain('provider connections require Pro');
+    expect(content).toContain('**Analyze my training** opens **Dashboard**');
+    expect(content).toContain('**Set up activity sync** expanded');
+    expect(content).toContain('does not connect a service or enable delivery');
+    expect(content).toContain('Your starting point is kept when you reload or return from checkout');
+    expect(content).toContain('without a plan-selection screen');
+    expect(content).toContain('Connections shows the relevant Pro offer');
+  });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['**Retry category settings**', '**Reload app**', 'Your saved category choices are retained',
+      'Reloading does not enable notifications or change your browser permission']) expect(copy).toContain(phrase);
     for (const phrase of ['install it from the same site', 'beta and production are separate installations',
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
+    expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
+    expect(copy).toContain('Your browser and OS control banners, sound and vibration');
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
       'Activity delivery', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
@@ -105,6 +173,13 @@ describe('help.content', () => {
     expect(copy).toContain('GPX routes/tracks and FIT courses, not recorded workout FITs');
     expect(copy).toContain('Use activity upload for recorded workouts');
     expect(copy).toContain('QS does not send completed activities to Garmin');
+  });
+
+  it('explains bounded bulk uploads and checking uncertain results before resending', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    for (const phrase of ['one file at a time', 'more than five minutes', 'batch continues with the remaining files',
+      'Processing may still finish on the server', 'Check your activities before uploading that file again',
+      'timed-out files are not automatically resent']) expect(copy).toContain(phrase);
   });
 
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
@@ -146,6 +221,8 @@ describe('help.content', () => {
     expect(help).toContain('**Personalization** starts expanded with every data option selected');
     expect(help).toContain('Uncheck any source to exclude its evidence');
     expect(help).toContain('turning off any of those also turns off the combined score');
+    expect(help).toContain('**Duration · Auto**');
+    expect(help).toContain('existing saved limits stay unchanged until you choose Auto');
     expect(help).toContain('**Training routine** starts selected and requires **Recent activities**');
     expect(help).toContain('previous 28 complete local days, excluding today');
     expect(help).toContain('missing recordings do not mean missed training');
@@ -381,14 +458,14 @@ describe('help.content', () => {
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
       '**Search tags**', '**Search sports**', 'select checkboxes', 'any selected tag', 'any selected sport',
       'Searching keeps checked choices selected', '**Clear selection**',
-      '**Untagged**', '**Last 7 days**', 'previous six local calendar days', 'selected-row bulk actions',
+      '**Untagged**', '**7 days**', 'previous six local calendar days', 'selected-row bulk actions',
       '**Next** and **Previous**', 'matching total within that date range', 'do not start new event queries', 'shared table preferences',
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
       '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
       'Saved All dates links also require confirmation', '**Custom dates**', 'Both dates are included',
       'compact date button opens the presets', 'The button shows your selected dates', '**×** clear button',
       '**Cancel** keeps the previous range',
-      'only applying a valid changed range starts a new date-range query', 'Custom dates stay fixed as days pass',
+      'only applying a valid changed custom range starts a new date-range query', 'Custom dates stay fixed as days pass',
       'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });
   it('explains unavailable pool timing without losing rests or inventing replacements', () => {
@@ -1299,6 +1376,9 @@ describe('help.content', () => {
   it('explains independent Training read and approval-gated change access without expanding Assistant access', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Training planning (optional):**');
+    expect(content).toContain('**Create a plan** is available on the empty Assistant screen');
+    expect(content).toContain('Larger plans may need several reviewed batches');
+    expect(content).toContain('Selecting the example does not enable permissions, send a message or send workouts to services');
     expect(content).toContain('Gemini can prepare one bounded proposal but cannot apply it');
     expect(content).toContain('disable Training write tools while using Research');
     expect(content).toContain('resets Training permissions off');
@@ -1704,6 +1784,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('estimated local recovery day and time as Training');
     expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
+    expect(gettingStartedSection?.content).toContain('**Recovery left** is off by default');
+    expect(gettingStartedSection?.content).toContain('Data indicators beside selected and available metrics');
+    expect(gettingStartedSection?.content).toContain('You can select a metric without data');
+    expect(gettingStartedSection?.content).toContain('**Not calculated yet** means that no calculated value is available');
   });
 
   it('should document My Tracks trip sorting and the inferred Home entry', () => {
@@ -1770,7 +1854,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
-    expect(gettingStartedSection?.content).toContain('Empty sections stay hidden');
+    expect(gettingStartedSection?.content).toContain('Empty chart, KPI, and map sections stay hidden');
+    expect(gettingStartedSection?.content).toContain('**Show or hide a section.**');
+    expect(gettingStartedSection?.content).toContain('Hiding a section keeps its charts, date ranges, and layout');
+    expect(gettingStartedSection?.content).toContain('Adding, saving, or moving a chart shows its section automatically');
+    expect(gettingStartedSection?.content).toContain('**View on dashboard** in Health also shows a hidden section');
+    expect(gettingStartedSection?.content).toContain('The Calendar header remains available so you can show the calendar again');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
@@ -1787,6 +1876,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('**Today** card opens a compact month calendar in a bottom sheet');
     expect(calendarSection?.content).toContain('Open the full [Calendar](/calendar) from the app navigation or the dashboard Calendar section');
     expect(calendarSection?.content).toContain('without changing their saved settings');
+    expect(calendarSection?.content).toContain('**Calendar options** to its left');
+    expect(calendarSection?.content).toContain('The header remains available when the calendar is hidden');
+    expect(calendarSection?.content).not.toContain('**Dashboard options**');
     expect(calendarSection?.content).toContain('out of suggestions until you add it manually');
     expect(calendarSection?.content).toContain('show overlapping activity-group circles');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
@@ -3152,6 +3244,7 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   const content = HELP_SECTIONS.map(section => section.content).join('\n');
   for (const text of ['/send-activities', '20 MiB compressed and expanded', '200 MiB', '24 hours', 'seven days', '30 days', 'Unknown acceptance', 'Stop unsent activities', 'rather than Basic', 'temporary storage cleanup continues in the background', 'Start a new send to add a file you removed']) expect(content).toContain(text);
   expect(content).not.toContain('upload rows are not retained across reloads');
+  expect(content).toContain('download it to this device and select it again');
   expect(content).toContain('A temporary file-read failure pauses the preview without excluding the recording');
   expect(content).toContain('If opening a new draft fails, reopen it from **Recent sends**');
   expect(content).toContain('If you switch destinations, sources or sends during preparation, reopen the original draft to continue');

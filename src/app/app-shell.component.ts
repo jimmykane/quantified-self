@@ -31,6 +31,7 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppLocaleService } from './services/app.locale.service';
 import { AppWindowService } from './services/app.window.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
+import { AppUpdateService } from './services/app.update.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
@@ -137,6 +138,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private localeService = inject(AppLocaleService);
   private windowService = inject(AppWindowService);
   private whatsNewService = inject(AppWhatsNewService);
+  public readonly isUpdateAvailable = inject(AppUpdateService).isUpdateAvailable;
   public dialog = inject(MatDialog);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;

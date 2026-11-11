@@ -45,6 +45,7 @@
     [isAdminRoute]="isAdminRoute" [isHandset]="isHandset()"
     [showUploadActivities]="showUploadActivities()" [isAdminUser]="isAdminUser"
     [unreadWhatsNewCount]="unreadWhatsNewCount"
+    [isUpdateAvailable]="isUpdateAvailable()"
     (toggleSidenav)="toggleSidenav()" (logoClick)="onLogoClick()"
     (whatsNewClick)="openWhatsNew()" (dashboardClick)="navigateToDashboard()"
     (adminClick)="navigateToAdmin()" (loginClick)="navigateToLogin()" (heightChanged)="onHeaderHeightChanged($event)">
@@ -57,6 +58,8 @@
       [autoFocus]="false">
       @defer (on idle; when sidenav.opened) {
       <app-sidenav></app-sidenav>
+      } @error {
+      <app-deferred-load-error area="navigation" />
       }
     </mat-sidenav>
     }

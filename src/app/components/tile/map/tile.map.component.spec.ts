@@ -3,9 +3,12 @@ import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '
 import { By } from '@angular/platform-browser';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TileMapComponent } from './tile.map.component';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { DeferredLoadErrorComponent } from '../../shared/deferred-load-error/deferred-load-error.component';
+import { LoggerService } from '../../../services/logger.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-tile-map-actions',
@@ -49,9 +52,14 @@ describe('TileMapComponent', () => {
   let fixture: ComponentFixture<TileMapComponent>;
   let component: TileMapComponent;
 
-  beforeEach(async () => {
+  async function renderMap(): Promise<void> {
     await TestBed.configureTestingModule({
       deferBlockBehavior: DeferBlockBehavior.Manual,
+      imports: [DeferredLoadErrorComponent],
+      providers: [
+        { provide: LoggerService, useValue: { captureMessage: vi.fn() } },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      ],
       declarations: [
         TileMapComponent,
         MockTileMapActionsComponent,
@@ -68,9 +76,10 @@ describe('TileMapComponent', () => {
     component.clusterMarkers = true;
     component.mapStyle = 'default';
     fixture.detectChanges();
-  });
+  }
 
-  it('should re-emit dashboard manager edit requests from map tile actions', () => {
+  it('should re-emit dashboard manager edit requests from map tile actions', async () => {
+    await renderMap();
     const emittedOrders: number[] = [];
     component.editTile.subscribe((order) => emittedOrders.push(order));
 
@@ -80,8 +89,20 @@ describe('TileMapComponent', () => {
 
     expect(emittedOrders).toEqual([5]);
   });
+  it('keeps the map header and provides recovery when deferred map code fails', async () => {
+    await renderMap();
+    await (await fixture.getDeferBlocks())[0].render(DeferBlockState.Error); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tile-map-title').textContent.trim()).toBe('Map');
+    expect(fixture.nativeElement.querySelector('.tile-map-body').textContent).toContain("Map couldn't load");
+    expect(fixture.debugElement.query(By.directive(DeferredLoadErrorComponent))).toBeTruthy();
+    expect(TestBed.inject(LoggerService).captureMessage).toHaveBeenCalledWith('Deferred content failed to load', expect.objectContaining({
+      tags: { operation: 'deferred-load', area: 'dashboard-map' },
+    }));
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
 
-  it('should render and re-emit event filter controls', () => {
+  it('should render and re-emit event filter controls', async () => {
+    await renderMap();
     const eventFilters = { range: '90d' as const, activityTypes: [] };
     fixture.componentRef.setInput('eventFilters', eventFilters);
     fixture.componentRef.setInput('canNavigateTileEventsNewer', true);
@@ -114,6 +135,7 @@ describe('TileMapComponent', () => {
   });
 
   it('should render map controls in a header and keep the map inside the body', async () => {
+    await renderMap();
     await (await fixture.getDeferBlocks())[0].render(DeferBlockState.Complete);
     const section = fixture.nativeElement.querySelector('section') as HTMLElement;
     const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
@@ -127,6 +149,7 @@ describe('TileMapComponent', () => {
   });
 
   it('should hide event filters and render the route preview map for routes source tiles', async () => {
+    await renderMap();
     fixture.componentRef.setInput('tileName', 'Routes');
     fixture.componentRef.setInput('mapSource', 'routes');
     fixture.componentRef.setInput('showRouteEndpointMarkers', false);
@@ -149,6 +172,7 @@ describe('TileMapComponent', () => {
   });
 
   it.each(['events', 'routes'] as const)('defers the %s renderer while keeping header actions available', async mapSource => {
+    await renderMap();
     fixture.componentRef.setInput('mapSource', mapSource);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.tile-map-placeholder')).toBeTruthy();

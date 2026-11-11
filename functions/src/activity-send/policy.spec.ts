@@ -14,7 +14,7 @@ describe('activity send safety', () => {
   it.each(['../other', 'a/b', '', null])('rejects unsafe references: %s', value => expect(() => sendIdentifier(value)).toThrow());
   it('rejects a gzip expansion bomb before parsing', () => expect(() => decodeSendFile(gzipSync(Buffer.alloc(21 * 1024 * 1024)), 'recording.fit.gz')).toThrow('20 MiB'));
   it.each([
-    ['empty_body', () => Buffer.alloc(0), 'private.fit', 'Choose a FIT or FIT.gz file up to 20 MiB.'],
+    ['empty_body', () => Buffer.alloc(0), 'private.fit', 'No file data was received. Download the file to this device and select it again.'],
     ['file_too_large', () => Buffer.alloc(ACTIVITY_SEND_LIMITS.fileBytes + 1), 'private.fit', 'Choose a FIT or FIT.gz file up to 20 MiB.'],
     ['unsupported_extension', () => syntheticFit(), 'private@example.com.txt', 'Choose a FIT or FIT.gz file up to 20 MiB.'],
     ['invalid_gzip', () => Buffer.from('private-file-content'), 'private.fit.gz', 'FIT.gz cannot be expanded within 20 MiB.'],
