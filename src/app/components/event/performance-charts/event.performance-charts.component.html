@@ -1,11 +1,11 @@
 <div class="performance-charts-container">
   @if (availableTabs.length) {
-  <app-event-section-header icon="monitoring" title="Performance charts">
+  <app-event-section-header icon="monitoring" [title]="sectionTitle">
     <button mat-button type="button" class="performance-disclosure" [disabled]="saving()"
       [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
-      [attr.aria-label]="expanded() ? 'Hide performance charts' : 'Show performance charts'" (click)="toggleExpanded()">
+      [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
       <span class="performance-disclosure-content">
-        <span>{{ expanded() ? 'Hide charts' : 'Show charts' }}</span>
+        <span>{{ expanded() ? 'Hide' : 'Show' }}</span>
         <span class="performance-disclosure-icon">
           @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
           @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }

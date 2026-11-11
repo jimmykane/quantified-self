@@ -1018,8 +1018,12 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
-`EventPerformanceChartsComponent` uses the shared Event section header with a surface-free **Show/Hide charts**
-Material button. `chartSettings.showPerformanceCharts` is an optional account preference: only explicit `false`
+`EventPerformanceChartsComponent` names the available charts in the shared Event section header, for example
+**Intensity Zones · Power Curve**, with a surface-free **Show/Hide** Material button. The heading follows chart
+availability and retains every title while collapsed; the accessible button name includes those same chart titles.
+The header reserves its action width through `--event-section-header-actions-flex: 0 0 auto`, letting long title lists
+wrap at phone widths while keeping the Show/Hide control separate and reachable.
+`chartSettings.showPerformanceCharts` is an optional account preference: only explicit `false`
 collapses the section, preserving the visible default for existing accounts. The signed-in viewer owns this preference,
 including while viewing another owner's shared activity; anonymous viewers use transient local state and never write
 owner settings. The existing chart-settings writer saves only this field and checks the expected viewer ID. Accepted

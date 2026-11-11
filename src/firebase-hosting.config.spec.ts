@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Help covers bounded activity date navigation and remembered Event Details performance chart visibility (2026-11-10).
+// Help names the available Event Details charts in the remembered Show/Hide control (2026-11-11).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
@@ -374,7 +374,7 @@ describe('Firebase Hosting configuration', () => {
     // Hidden sections also reopen for chart moves and explicit Health-to-dashboard navigation (2026-11-10).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -510,7 +510,7 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
@@ -595,7 +595,7 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

@@ -86,6 +86,14 @@ export class EventPerformanceChartsComponent {
   @Input() durabilityOutputUnavailable = false;
   @Input() hasCadencePower = false;
 
+  get chartTitles(): string[] {
+    return this.availableTabs.map(tab => tab === 'intensity' ? 'Intensity Zones' : this.getTabLabel(tab));
+  }
+
+  get sectionTitle(): string { return this.chartTitles.join(' · '); }
+
+  get disclosureLabel(): string { return `${this.expanded() ? 'Hide' : 'Show'} ${this.chartTitles.join(', ')}`; }
+
   get shouldShowTabs(): boolean {
     return this.availableTabs.length > 1;
   }

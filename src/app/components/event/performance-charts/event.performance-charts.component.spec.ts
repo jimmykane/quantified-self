@@ -45,10 +45,12 @@ describe('EventPerformanceChartsComponent', () => {
     component.hasIntensity = true; component.hasPowerCurve = true;
     fixture.detectChanges(); await fixture.whenStable();
     const button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
-    expect(button.textContent).toContain('Hide charts'); expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(button.textContent).toContain('Hide'); expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Hide Intensity Zones, Power Curve');
     expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
-    expect(button.textContent).toContain('Show charts'); expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(button.textContent).toContain('Show'); expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Show Intensity Zones, Power Curve');
     expect(fixture.nativeElement.querySelector(`#${button.getAttribute('aria-controls')}`).hidden).toBe(true);
     expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-event-intensity-zones')).toBeNull();
@@ -60,11 +62,34 @@ describe('EventPerformanceChartsComponent', () => {
     const next = TestBed.createComponent(EventPerformanceChartsComponent);
     next.componentRef.setInput('viewer', new User('viewer')); next.componentRef.setInput('hasIntensity', true);
     next.detectChanges(); await next.whenStable();
-    expect(next.nativeElement.querySelector('.performance-disclosure').textContent).toContain('Show charts');
+    expect(next.nativeElement.querySelector('.performance-disclosure').textContent).toContain('Show');
     expect(next.nativeElement.querySelector('app-event-intensity-zones')).toBeNull();
     next.nativeElement.querySelector('.performance-disclosure').click(); next.detectChanges(); await next.whenStable(); next.detectChanges();
     expect(next.nativeElement.querySelector('app-event-intensity-zones')).not.toBeNull();
     expect(chartSettings()).toEqual({ showPerformanceCharts: true });
+  });
+
+  it.each([
+    { flags: [true, false, false, false], title: 'Intensity Zones' },
+    { flags: [false, false, true, false], title: 'Durability' },
+    { flags: [true, true, false, false], title: 'Intensity Zones · Power Curve' },
+    { flags: [true, true, true, true], title: 'Intensity Zones · Power Curve · Durability · Cadence vs Power' },
+  ])('names the available charts in the disclosure: $title', async ({ flags, title }) => {
+    for (const [index, name] of ['hasIntensity', 'hasPowerCurve', 'hasDurability', 'hasCadencePower'].entries()) {
+      fixture.componentRef.setInput(name, flags[index]);
+    }
+    fixture.detectChanges(); await fixture.whenStable();
+    const heading = () => fixture.nativeElement.querySelector('.event-section-header-title').textContent.trim();
+    expect(heading()).toBe(title);
+    await component.toggleExpanded(); fixture.detectChanges();
+    expect(heading()).toBe(title);
+    expect(fixture.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-label'))
+      .toBe(`Show ${title.replaceAll(' · ', ', ')}`);
+    fixture.componentRef.setInput('hasIntensity', false); fixture.componentRef.setInput('hasPowerCurve', true);
+    fixture.componentRef.setInput('hasDurability', false); fixture.componentRef.setInput('hasCadencePower', false);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(heading()).toBe('Power Curve');
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(updateChartSettings).not.toHaveBeenCalled();
   });
 
   it('disables duplicate saves, shows progress, restores the saved state on failure and allows retry', async () => {
@@ -119,19 +144,9 @@ describe('EventPerformanceChartsComponent', () => {
     await fixture.whenStable();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const fullText = nativeElement.textContent ?? '';
-
     expect(nativeElement.querySelector('mat-tab-group')).not.toBeNull();
-
-    const intensityIndex = fullText.indexOf('Intensity');
-    const powerIndex = fullText.indexOf('Power Curve');
-    const durabilityIndex = fullText.indexOf('Durability');
-    const cadenceIndex = fullText.indexOf('Cadence vs Power');
-
-    expect(intensityIndex).toBeGreaterThanOrEqual(0);
-    expect(powerIndex).toBeGreaterThan(intensityIndex);
-    expect(durabilityIndex).toBeGreaterThan(powerIndex);
-    expect(cadenceIndex).toBeGreaterThan(durabilityIndex);
+    expect(Array.from(nativeElement.querySelectorAll('[role="tab"]')).map(tab => tab.getAttribute('aria-label')))
+      .toEqual(['Intensity', 'Power Curve', 'Durability', 'Cadence vs Power']);
 
     const icons = Array.from(nativeElement.querySelectorAll('.performance-tab-icon'))
       .map((icon) => icon.textContent?.trim())

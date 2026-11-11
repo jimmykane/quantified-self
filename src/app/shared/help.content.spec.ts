@@ -44,7 +44,7 @@ describe('help.content', () => {
   });
   it('explains remembered performance chart visibility without hiding other event sections', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
-    for (const text of ['**Performance charts** has a **Hide charts** / **Show charts** button',
+    for (const text of ['heading lists only the available charts', '**Intensity Zones · Power Curve**', '**Hide** or **Show**',
       'remembered across activities and devices', 'Charts start visible until you hide them',
       'R–R & HRV keep their own visibility', 'anonymous shared link', 'previous saved visibility returns']) expect(content).toContain(text);
   });
