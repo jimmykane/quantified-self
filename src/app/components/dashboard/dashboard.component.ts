@@ -163,8 +163,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private userService: AppUserService,
     private route: ActivatedRoute,
     private snackBar: MatSnackBar) {
+    this.refreshEventTableDates();
     afterNextRender(() => {
-      this.refreshEventTableDates();
       const clock = globalThis.setInterval(() => this.refreshEventTableDates(), 60_000);
       this.destroyRef.onDestroy(() => globalThis.clearInterval(clock));
     });

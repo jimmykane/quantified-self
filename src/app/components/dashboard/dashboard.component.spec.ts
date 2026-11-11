@@ -9,7 +9,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { ApplicationRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of, Subject, throwError } from 'rxjs';
 import {
@@ -191,6 +191,22 @@ describe('DashboardComponent', () => {
     it('should create', () => {
         fixture.detectChanges();
         expect(component).toBeTruthy();
+    });
+
+    it('keeps the initial date context stable through the full application render cycle', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        const app = TestBed.inject(ApplicationRef);
+        const expectedContext = `${new Date().setHours(0, 0, 0, 0)}:${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+
+        // Include post-render callbacks before Angular's development-mode stability check.
+        app.attachView(fixture.componentRef.hostView);
+        try {
+            expect(() => app.tick()).not.toThrow();
+            const search = fixture.nativeElement.querySelector('app-event-search') as HTMLElement & { dateContext: string };
+            expect(search.dateContext).toBe(expectedContext);
+        } finally {
+            app.detachView(fixture.componentRef.hostView);
+        }
     });
 
     it('mounts shared import progress only on the signed-in owner dashboard', () => {
