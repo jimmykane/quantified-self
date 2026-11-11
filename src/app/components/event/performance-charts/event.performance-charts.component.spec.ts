@@ -48,6 +48,10 @@ describe('EventPerformanceChartsComponent', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.getAttribute('aria-label')).toBe('Hide performance charts');
     expect(button.textContent).toContain('Hide performance charts');
+    const controlledRegion = fixture.nativeElement.querySelector(`#${button.getAttribute('aria-controls')}`) as HTMLElement;
+    expect(controlledRegion.getAttribute('aria-label')).toBe('Performance charts');
+    expect(controlledRegion.contains(fixture.nativeElement.querySelector('.performance-charts-tabs'))).toBe(true);
+    expect(controlledRegion.contains(fixture.nativeElement.querySelector('app-event-intensity-zones'))).toBe(true);
     expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('false');
@@ -125,7 +129,7 @@ describe('EventPerformanceChartsComponent', () => {
     updateChartSettings.mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectSave = reject; }));
     fixture.detectChanges(); await fixture.whenStable();
     const save = component.toggleExpanded(); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.performance-disclosure').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-disabled')).toBe('true');
     expect(fixture.nativeElement.querySelector('mat-spinner')).not.toBeNull();
     expect(fixture.nativeElement.querySelectorAll('[role="tab"]')).toHaveLength(0);
     await component.selectChart('powerCurve'); expect(component.activeTab).toBe('intensity');
@@ -136,6 +140,28 @@ describe('EventPerformanceChartsComponent', () => {
     expect(haptics.success).not.toHaveBeenCalled(); expect(snackBar.open).toHaveBeenCalledOnce();
     await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
     expect(component.expanded()).toBe(false); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('keeps focus on the disclosure while saving and blocks repeated activation', async () => {
+    fixture.componentRef.setInput('viewer', new User('viewer'));
+    component.hasIntensity = true;
+    let finishSave: () => void;
+    updateChartSettings.mockImplementationOnce(settings => new Promise<void>(resolveSave => {
+      finishSave = () => { chartSettings.set(settings); resolveSave(); };
+    }));
+    fixture.detectChanges(); await fixture.whenStable();
+    const button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
+    button.focus(); button.click(); fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(button);
+    button.click(); fixture.detectChanges();
+    expect(updateChartSettings).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    finishSave!(); await fixture.whenStable(); fixture.detectChanges();
+    expect(document.activeElement).toBe(button);
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    expect(button.getAttribute('aria-busy')).toBe('false');
   });
 
   it('keeps anonymous shared views local and ignores late failures after the viewer changes', async () => {

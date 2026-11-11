@@ -1,7 +1,7 @@
 <div class="performance-charts-container">
   @if (availableTabs.length) {
   <div class="performance-charts-toolbar">
-    <button mat-button type="button" class="performance-disclosure" [disabled]="saving()"
+    <button mat-button type="button" class="performance-disclosure" [disabled]="saving()" [disabledInteractive]="true"
       [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
       [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
       <span class="performance-disclosure-content">
@@ -14,6 +14,7 @@
       </span>
     </button>
   </div>
+  <div [id]="contentId" [hidden]="!expanded()" role="region" aria-label="Performance charts">
   @if (expanded() && shouldShowTabs) {
   <nav mat-tab-nav-bar [tabPanel]="chartPanel" [mat-stretch-tabs]="false" class="performance-charts-tabs"
       aria-label="Performance charts">
@@ -28,7 +29,7 @@
       }
   </nav>
   }
-  <mat-tab-nav-panel #chartPanel [id]="contentId" [hidden]="!expanded()"
+  <mat-tab-nav-panel #chartPanel
     [attr.aria-label]="shouldShowTabs ? null : chartTitles[0]">
   @if (expanded()) {
     @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
@@ -63,5 +64,6 @@
     }
   }
   </mat-tab-nav-panel>
+  </div>
   }
 </div>
