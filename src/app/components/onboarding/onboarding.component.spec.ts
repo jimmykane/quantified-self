@@ -50,6 +50,8 @@ describe('OnboardingComponent', () => {
         settings: {}
     };
 
+    const savedConsent = { acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true };
+
     const setRequiredPoliciesAccepted = () => {
         component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(true);
         component.termsFormGroup.get('acceptDataPolicy')!.setValue(true);
@@ -60,6 +62,7 @@ describe('OnboardingComponent', () => {
         routeSnapshot = { queryParamMap: convertToParamMap({}) };
         routeStub = { snapshot: routeSnapshot };
         mockUserService = {
+            user$: of({ ...mockUser, ...savedConsent, onboardingCompleted: true }),
             createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
             isPro: vi.fn().mockResolvedValue(false),
             hasPaidAccess: vi.fn().mockResolvedValue(false),
@@ -126,10 +129,10 @@ describe('OnboardingComponent', () => {
     });
 
     // Logic cases initialize the component without rendering its template; UI cases opt in.
-    const setupComponent = async (render = false) => {
+    const setupComponent = async (render = false, userOverrides = {}) => {
         fixture = TestBed.createComponent(OnboardingComponent);
         component = fixture.componentInstance;
-        component.user = { ...mockUser } as any;
+        component.user = { ...mockUser, ...userOverrides } as any;
         if (render) fixture.detectChanges();
         else component.ngOnInit();
         await fixture.whenStable();
@@ -176,7 +179,7 @@ describe('OnboardingComponent', () => {
 
     it.each([
         { choice: 'analyze', path: '/dashboard' },
-        { choice: 'sync', path: '/services' },
+        { choice: 'sync', path: '/subscriptions' },
         { choice: 'compare', path: '/tools/compare' },
     ] as const)('completes $choice directly into $path without loading prices or checkout', async ({ choice, path }) => {
         await setupComponent(true);
@@ -192,8 +195,10 @@ describe('OnboardingComponent', () => {
         fixture.detectChanges();
         if (choice === 'sync') expect(mockRouter.navigate).toHaveBeenCalledWith([path], { queryParams: { setup: 'sync' } });
         else expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
-        expect(mockUserService.setFreeTier).toHaveBeenCalledOnce();
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { onboardingCompleted: true });
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
         expect(fixture.nativeElement.querySelector('app-pricing')).toBeNull();
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
         expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
@@ -216,13 +221,13 @@ describe('OnboardingComponent', () => {
     });
 
     it.each(['analyze', 'sync', 'compare'] as const)('keeps paid access on the %s path without selecting Starter', async choice => {
-        mockUserService.hasPaidAccess.mockResolvedValue(true);
-        await setupComponent();
+        await setupComponent(false, { stripeRole: 'pro' });
         component.chooseStart(choice);
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
@@ -238,13 +243,13 @@ describe('OnboardingComponent', () => {
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
-    it('returns a sync deep link to Connections without granting provider access', async () => {
+    it('returns a sync deep link to Pro selection without granting provider access', async () => {
         routeSnapshot.queryParamMap = convertToParamMap({returnUrl:'/services?setup=sync'});
         await setupComponent();
         expect(component.stage()).toBe('privacy');
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {queryParams:{setup:'sync'}});
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions'], {queryParams:{setup:'sync'}});
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
@@ -264,7 +269,7 @@ describe('OnboardingComponent', () => {
         clickButton('Continue free');
         await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledWith([path]));
         expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
-        expect(mockUserService.setFreeTier).toHaveBeenCalledOnce();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
         expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
@@ -305,8 +310,7 @@ describe('OnboardingComponent', () => {
 
     it('keeps an existing paid membership when the Compare user accepts missing policies', async () => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
-        mockUserService.hasPaidAccess.mockResolvedValue(true);
-        await setupComponent(true);
+        await setupComponent(true, { stripeRole: 'basic' });
         expect(component.hasPaidMembership()).toBe(true);
         fixture.detectChanges();
         expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain('Open Compare');
@@ -317,11 +321,11 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/tools/compare']);
     });
 
-    it('keeps the compact form retryable when Starter setup fails', async () => {
+    it('keeps the compact form retryable when the combined consent and setup save fails', async () => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/tools/compare' });
         await setupComponent(true);
         setRequiredPoliciesAccepted();
-        mockUserService.setFreeTier.mockRejectedValueOnce(new Error('offline'));
+        mockUserService.createOrUpdateUser.mockRejectedValueOnce(new Error('offline'));
         await component.onTermsSubmit();
         expect(component.stage()).toBe('privacy');
         expect(component.termsFormGroup.enabled).toBe(true);
@@ -470,6 +474,60 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
+    it('waits for the authoritative completed profile before opening a guarded workspace', async () => {
+        await setupComponent(true);
+        component.stage.set('privacy');
+        setRequiredPoliciesAccepted();
+        const profile$ = new BehaviorSubject({ ...mockUser, ...savedConsent, onboardingCompleted: false });
+        mockUserService.user$ = profile$;
+        const saving = component.onTermsSubmit();
+        await vi.waitFor(() => expect(component.loadingLabel()).toBe('Finishing setup…'));
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        profile$.next({ ...mockUser, ...savedConsent, onboardingCompleted: true, acceptedTos: false });
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        profile$.next({ ...mockUser, ...savedConsent, onboardingCompleted: true });
+        await saving;
+        expect(mockRouter.navigate).toHaveBeenCalledExactlyOnceWith(['/dashboard']);
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledOnce();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
+    it.each(['destroy', 'account change'])('does not navigate after %s while awaiting the saved profile', async change => {
+        await setupComponent();
+        setRequiredPoliciesAccepted();
+        const profile$ = new Subject<any>();
+        mockUserService.user$ = profile$;
+        const saving = component.onTermsSubmit();
+        await vi.waitFor(() => expect(component.loadingLabel()).toBe('Finishing setup…'));
+        if (change === 'destroy') fixture.destroy();
+        else component.user = { ...mockUser, uid: 'another-account' } as any;
+        profile$.next({ ...mockUser, ...savedConsent, onboardingCompleted: true });
+        await saving;
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+        expect(profile$.observed).toBe(false);
+    });
+
+    it('keeps setup retryable if the authoritative completion snapshot never arrives', async () => {
+        await setupComponent();
+        setRequiredPoliciesAccepted();
+        mockUserService.user$ = new Subject();
+        vi.useFakeTimers();
+        try {
+            const saving = component.onTermsSubmit();
+            await vi.advanceTimersByTimeAsync(10_001);
+            await saving;
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            expect(component.isLoading).toBe(false);
+            expect(component.termsFormGroup.enabled).toBe(true);
+            expect(component.errorMessage()).toContain('Your choices are saved');
+            expect(component.errorMessage()).toContain('try again');
+            expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
+        } finally { vi.useRealTimers(); }
+    });
+
     it('keeps just-saved consent when the auth stream emits an older profile during the save', async () => {
         await setupComponent(false);
         const user$ = new Subject<any>();
@@ -505,6 +563,7 @@ describe('OnboardingComponent', () => {
         await setupComponent();
         expect(component.startChoice()).toBe('connect');
         component.canFinish = true;
+        component.user = { ...component.user, ...savedConsent } as any;
         await component.finishOnboarding();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/services']);
     });
@@ -553,18 +612,20 @@ describe('OnboardingComponent', () => {
         await fixture.whenStable();
     });
 
-    it.each(['destroy', 'account change'])('stops completion after %s during a membership read', async change => {
+    it.each(['destroy', 'account change'])('stops completion after %s during a save', async change => {
         await setupComponent();
-        let resolveAccess!: (value: boolean) => void;
-        mockUserService.hasPaidAccess.mockReturnValue(new Promise<boolean>(resolve => resolveAccess = resolve));
+        component.user = { ...component.user, ...savedConsent } as any;
+        let resolveSave!: () => void;
+        mockUserService.updateUserProperties.mockReturnValue(new Promise<void>(resolve => resolveSave = resolve));
         const finishing = component.finishOnboarding();
         if (change === 'destroy') fixture.destroy();
         else component.user = { ...mockUser, uid: 'another-account' } as any;
-        resolveAccess(false);
+        resolveSave();
         await finishing;
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
-        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -577,25 +638,20 @@ describe('OnboardingComponent', () => {
         if (step !== 'privacy') component.back();
         if (step === 'intro') component.showIntro();
         mockRouter.navigate.mockClear();
-        mockUserService.hasPaidAccess.mockResolvedValue(paid);
-        component.user = { ...component.user, acceptedPrivacyPolicy:true, acceptedDataPolicy:true, acceptedTos:true } as any;
-        await (component as any).checkAndAdvance();
+        component.user = { ...component.user, stripeRole: paid ? 'pro' : 'free', acceptedPrivacyPolicy:true, acceptedDataPolicy:true, acceptedTos:true } as any;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        await fixture.whenStable();
         expect(component.stage()).toBe(step);
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
-    it.each([false, true])('keeps an explicitly opened tour when the initial membership check resolves (paid: %s)', async paid => {
-        let resolveAccess!: (value: boolean) => void;
-        mockUserService.hasPaidAccess.mockReturnValue(new Promise<boolean>(resolve => resolveAccess = resolve));
-        fixture = TestBed.createComponent(OnboardingComponent);
-        component = fixture.componentInstance;
-        component.user = { ...mockUser, acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as any;
-        component.ngOnInit();
-        await vi.waitFor(() => expect(mockUserService.hasPaidAccess).toHaveBeenCalled());
+    it.each([false, true])('keeps an explicitly opened tour when a complete profile arrives (paid: %s)', async paid => {
+        await setupComponent();
         component.showIntro();
-        resolveAccess(paid);
-        await vi.waitFor(() => expect((component as any).advancing).toBe(false));
+        component.user = { ...mockUser, ...savedConsent, stripeRole: paid ? 'pro' : 'free' } as any;
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        await fixture.whenStable();
         expect(component.stage()).toBe('intro');
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
@@ -605,6 +661,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
         let resolveSave!: () => void;
         component.canFinish = true;
+        component.user = { ...component.user, ...savedConsent } as any;
         mockUserService.updateUserProperties.mockReturnValue(new Promise<void>(resolve => resolveSave = resolve));
         const finishing = component.finishOnboarding();
         await component.finishOnboarding();
@@ -616,18 +673,17 @@ describe('OnboardingComponent', () => {
 
     it.each(['paid', 'free'])('completes a %s account using saved consent while the auth profile is stale', async choice => {
         await setupComponent();
-        const original = {...mockUser};
+        const original = {...mockUser, stripeRole: choice === 'paid' ? 'pro' : 'free'};
         component.user = original as any;
-        mockUserService.hasPaidAccess.mockResolvedValue(choice === 'paid');
+        component.ngOnChanges({ user: { firstChange: false } as any });
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         expect(original.acceptedPrivacyPolicy).toBe(false);
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(expect.objectContaining({
-            acceptedPrivacyPolicy:true, acceptedDataPolicy:true, acceptedTos:true,
-            acceptedTrackingPolicy:false, acceptedMarketingPolicy:false,
-        }), {onboardingCompleted:true});
-        if (choice === 'free') expect(mockUserService.setFreeTier).toHaveBeenCalledWith(expect.objectContaining({acceptedTos:true}));
-        else expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining({
+            ...savedConsent, acceptedTrackingPolicy:false, acceptedMarketingPolicy:false,
+        }), {completeOnboarding:true});
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
         expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
@@ -780,7 +836,7 @@ describe('OnboardingComponent', () => {
 
         await component.onTermsSubmit();
 
-        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(component.user);
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
     });
 
     it('should not submit if form is invalid', async () => {
@@ -932,10 +988,10 @@ describe('OnboardingComponent', () => {
             acceptedDataPolicy: true,
             acceptedTos: true
         } as any;
-        mockUserService.hasPaidAccess.mockResolvedValue(true);
+        component.user = { ...component.user, stripeRole: 'pro' } as any;
         const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
-
-        await (component as any).checkAndAdvance();
+        component.ngOnChanges({ user: { firstChange: false } as any });
+        await fixture.whenStable();
 
         expect(component.canFinish).toBe(true);
         expect(finishSpy).toHaveBeenCalled();
@@ -991,12 +1047,11 @@ describe('OnboardingComponent', () => {
     it('should finish onboarding on terms submit when user is already subscribed', async () => {
         await setupComponent(false);
         setRequiredPoliciesAccepted();
-        mockUserService.hasPaidAccess.mockResolvedValue(true);
-        const finishSpy = vi.spyOn(component as any, 'finishOnboarding').mockResolvedValue(undefined);
-
+        component.user = { ...component.user, stripeRole: 'pro' } as any;
         await component.onTermsSubmit();
-
-        expect(finishSpy).toHaveBeenCalled();
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
@@ -1012,24 +1067,25 @@ describe('OnboardingComponent', () => {
         expect(mockPaymentService.getProducts).not.toHaveBeenCalled();
     });
 
-    it('should apply implicit free-tier in finishOnboarding when canFinish is false and user is not paid', async () => {
+    it('completes a returning free account with one write and no membership read', async () => {
         await setupComponent(false);
         component.canFinish = false;
-        mockUserService.hasPaidAccess.mockResolvedValue(false);
+        component.user = { ...component.user, ...savedConsent } as any;
 
         await component.finishOnboarding();
 
-        expect(mockUserService.setFreeTier).toHaveBeenCalledWith(component.user);
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
         expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { onboardingCompleted: true });
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('tutorial_complete');
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
         expect(component.isLoading).toBe(false);
     });
 
-    it('should skip implicit free-tier when canFinish is false but user has paid access', async () => {
+    it('completes a returning paid account without changing its plan', async () => {
         await setupComponent(false);
         component.canFinish = false;
-        mockUserService.hasPaidAccess.mockResolvedValue(true);
+        component.user = { ...component.user, ...savedConsent, stripeRole: 'pro' } as any;
 
         await component.finishOnboarding();
 
@@ -1054,9 +1110,9 @@ describe('OnboardingComponent', () => {
             await returningComponent.onTermsSubmit();
             await returningComponent.finishOnboarding();
 
-            expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(returningComponent.user);
-            expect(mockUserService.setFreeTier).toHaveBeenCalledWith(returningComponent.user);
-            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(returningComponent.user, { onboardingCompleted: true });
+            expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
+            expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
             expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
             returnFixture.detectChanges();
             expect(returnFixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain(path === '/tools/compare' ? 'Continue free' : `Continue to ${label}`);
@@ -1069,7 +1125,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: path });
             const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-            returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+            returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
 
             await returningComponent.finishOnboarding();
 
@@ -1092,7 +1148,7 @@ describe('OnboardingComponent', () => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: `/services?serviceName=${encodeURIComponent(serviceName)}` });
         const returnFixture = TestBed.createComponent(OnboardingComponent);
         const returningComponent = returnFixture.componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returningComponent.user = { ...mockUser, ...(onboardingCompleted ? savedConsent : {}), onboardingCompleted } as any;
         returnFixture.detectChanges();
         await returnFixture.whenStable();
         if (!onboardingCompleted) {
@@ -1115,7 +1171,7 @@ describe('OnboardingComponent', () => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id: 'request-1' });
         const returnFixture = TestBed.createComponent(OnboardingComponent);
         const returningComponent = returnFixture.componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted } as any;
+        returningComponent.user = { ...mockUser, ...(onboardingCompleted ? savedConsent : {}), onboardingCompleted } as any;
         returnFixture.detectChanges();
         await returnFixture.whenStable();
         if (!onboardingCompleted) {
@@ -1135,7 +1191,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions' });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
 
         await returningComponent.finishOnboarding();
 
@@ -1147,7 +1203,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_yearly&ignored=value' });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
 
         await returningComponent.finishOnboarding();
 
@@ -1165,7 +1221,7 @@ describe('OnboardingComponent', () => {
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/subscriptions?priceId=price_pro_monthly' });
         routeStub.queryParamMap = new BehaviorSubject(routeSnapshot.queryParamMap);
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
 
         // Angular reuses the routed component when only query parameters change.
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
@@ -1185,7 +1241,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
         routeSnapshot.queryParamMap = convertToParamMap({ returnUrl: '/mcp/authorize', request_id });
         const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-        returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+        returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
         await returningComponent.finishOnboarding();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
@@ -1195,7 +1251,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
             routeSnapshot.queryParamMap = convertToParamMap({ returnUrl });
             const returningComponent = TestBed.createComponent(OnboardingComponent).componentInstance;
-            returningComponent.user = { ...mockUser, onboardingCompleted: true } as any;
+            returningComponent.user = { ...mockUser, ...savedConsent, onboardingCompleted: true } as any;
 
             await returningComponent.finishOnboarding();
 
@@ -1208,6 +1264,7 @@ describe('OnboardingComponent', () => {
         await fixture.whenStable();
         vi.clearAllMocks();
         component.canFinish = true;
+        component.user = { ...component.user, ...savedConsent } as any;
 
         await component.finishOnboarding();
 
@@ -1219,6 +1276,7 @@ describe('OnboardingComponent', () => {
     it('should handle finishOnboarding errors and avoid dashboard navigation', async () => {
         await setupComponent(false);
         component.canFinish = true;
+        component.user = { ...component.user, ...savedConsent } as any;
         mockUserService.updateUserProperties.mockRejectedValue(new Error('update failed'));
 
         await component.finishOnboarding();
@@ -1232,7 +1290,7 @@ describe('OnboardingComponent', () => {
         await setupComponent(false);
         await fixture.whenStable();
         vi.clearAllMocks();
-        component.user = { ...component.user, onboardingCompleted: true } as any;
+        component.user = { ...component.user, ...savedConsent, onboardingCompleted: true } as any;
         component.canFinish = false;
 
         await component.finishOnboarding();
@@ -1244,17 +1302,22 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
-    it('should stop finishOnboarding when setFreeTier fails before updating onboarding flag', async () => {
-        await setupComponent(false);
-        component.canFinish = false;
-        mockUserService.hasPaidAccess.mockResolvedValue(false);
-        mockUserService.setFreeTier.mockRejectedValue(new Error('free-tier failed'));
-
+    it('does not let a direct completion call bypass required consent', async () => {
+        await setupComponent();
         await component.finishOnboarding();
-
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-        expect(mockLoggerService.error).toHaveBeenCalledWith('Error completing onboarding:', expect.any(Error));
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('shows a retryable navigation error after the setup write succeeds', async () => {
+        await setupComponent();
+        component.user = { ...component.user, ...savedConsent } as any;
+        mockRouter.navigate.mockResolvedValueOnce(false);
+        await component.finishOnboarding();
+        expect(component.errorMessage()).toContain('try again');
         expect(component.isLoading).toBe(false);
+        expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+        expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
     });
 
     it('should sign out and navigate to login on logout', async () => {
@@ -1269,13 +1332,27 @@ describe('OnboardingComponent', () => {
 
 
 
-    it('should set isPro in checkProStatus', async () => {
-        await setupComponent(false);
-        mockUserService.isPro.mockResolvedValue(true);
-
-        await component.checkProStatus();
-
-        expect(component.isPro).toBe(true);
+    it.each([
+        { access: {}, plans: true },
+        { access: { stripeRole: 'basic' }, plans: true },
+        { access: { stripeRole: 'pro' }, plans: false },
+        { access: { admin: true }, plans: false },
+        { access: { isPro: true }, plans: false },
+        { access: { gracePeriodUntil: new Date(Date.now() + 60_000) }, plans: false },
+    ])('routes sync according to existing access: $access', async ({ access, plans }) => {
+        routeSnapshot.queryParamMap = convertToParamMap({ start: 'sync' });
+        await setupComponent(true, access);
+        component.continueFromStart();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent)
+            .toContain(plans ? 'Choose a Pro plan' : 'Continue to Connections');
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        expect(mockRouter.navigate).toHaveBeenCalledWith([plans ? '/subscriptions' : '/services'], { queryParams: { setup: 'sync' } });
+        expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
+        expect(mockUserService.isPro).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockPaymentService.appendCheckoutSession).not.toHaveBeenCalled();
     });
 
     it('should return empty string for empty form control name mapping', async () => {
@@ -1318,7 +1395,7 @@ describe('OnboardingComponent', () => {
 
         await component.onTermsSubmit();
 
-        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(component.user);
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
     });
 
     it('should return false from getPolicyValue for unknown control mappings', async () => {

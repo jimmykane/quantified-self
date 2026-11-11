@@ -21,7 +21,8 @@ import { ShellNavigationEffectsService } from '../../services/shell-navigation-e
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
-import { of } from 'rxjs';
+import { filter, firstValueFrom, of, take, timeout } from 'rxjs';
+import { AppUserAccess } from '../../helpers/user-access.helper';
 import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.component';
 
 @Component({
@@ -76,7 +77,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
         }))
         .sort((a, b) => Number(!!a.isOptional) - Number(!!b.isOptional));
     termsFormGroup!: FormGroup;
-    isPro = false;
+    readonly hasProMembership = signal(false);
     readonly hasPaidMembership = signal(false);
 
     protected readonly navigationEffects = inject(ShellNavigationEffectsService);
@@ -102,6 +103,11 @@ export class OnboardingComponent implements OnInit, OnChanges {
         return this.startChoice() === 'connect'
             ? { ...target, path: '/services', label: 'Connections' } : target;
     });
+
+    readonly needsSyncPlan = computed(() => this.completionTarget().syncSetup && !this.hasProMembership());
+    readonly continueLabel = computed(() => this.needsSyncPlan() ? 'Choose a Pro plan'
+        : this.isCompareFlow() ? (this.hasPaidMembership() ? 'Open Compare' : 'Continue free')
+            : 'Continue to ' + this.completionTarget().label);
 
     get completionPath(): string { return this.completionTarget().path; }
     get completionLabel(): string { return this.completionTarget().label; }
@@ -143,6 +149,8 @@ export class OnboardingComponent implements OnInit, OnChanges {
             this.canFinish = false;
             this.formUserId = user.uid;
         }
+        this.hasProMembership.set(AppUserAccess.hasProAccess(user, (user as AppUserInterface).admin === true));
+        this.hasPaidMembership.set(AppUserAccess.hasPaidAccessUser(user, (user as AppUserInterface).admin === true));
         if (this.savedConsent) {
             const acknowledged = Object.entries(this.savedConsent.values).every(([key, value]) =>
                 (user as AppUserInterface)[key] === value);
@@ -206,8 +214,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
         this.advancing = true;
         const user = this.user;
         try {
-            this.isPro = await this.userService.isPro();
-            const isSubscribed = await this.userService.hasPaidAccess();
+            const isSubscribed = this.hasPaidMembership();
             if (this.destroyRef.destroyed || this.user !== user || this.isLoading) return;
             const termsAccepted = this.policies.filter(p => !p.isOptional).every(policy =>
                 (user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true);
@@ -319,11 +326,8 @@ export class OnboardingComponent implements OnInit, OnChanges {
         return formControlName.replace(/^accept/, 'accepted');
     }
 
-    async checkProStatus() {
-        this.isPro = await this.userService.isPro();
-    }
-
     isLoading = false;
+    readonly loadingLabel = signal('Saving your choices…');
 
     async onTermsSubmit() {
         if (this.isLoading || !this.user) return;
@@ -332,6 +336,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             return;
         }
         this.isLoading = true;
+        this.loadingLabel.set('Saving your choices…');
         this.hasNavigatedSetup = true;
         this.errorMessage.set('');
         this.haptics.selection();
@@ -344,26 +349,29 @@ export class OnboardingComponent implements OnInit, OnChanges {
             user[property] = submittedValues[property];
         });
         this.termsFormGroup.disable({ emitEvent: false });
+        let choicesSaved = false;
         try {
-            await this.userService.createOrUpdateUser(user);
+            await this.userService.createOrUpdateUser(user, { completeOnboarding: true });
+            choicesSaved = true;
             if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
             // Auth may emit an older profile while the consent write is in flight.
-            // Starter initialization must receive the choices that have just been saved.
+            // Keep the completed setup visible until the confirmed profile reaches this view.
+            submittedValues.onboardingCompleted = true;
             this.savedConsent = Object.entries(submittedValues).every(([key, value]) =>
                 (this.user as AppUserInterface)[key] === value) ? null : { uid: user.uid, values: submittedValues };
             this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, submittedValues);
             this.termsFormGroup.markAsPristine();
             this.analyticsService.logEvent('onboarding_step', { step_index: 1, step_label: 'Legal consent' });
-            const isSubscribed = await this.userService.hasPaidAccess();
-            if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-            this.hasPaidMembership.set(isSubscribed);
-            this.canFinish = isSubscribed;
-            this.isLoading = false;
-            await this.finishOnboarding();
+            this.analyticsService.logEvent('tutorial_complete');
+            const navigated = await this.navigateAfterOnboarding(true);
+            if (!navigated) throw new Error('Account setup saved but navigation was cancelled.');
+            if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error updating user terms:', error);
-            this.errorMessage.set('We couldn’t finish saving your choices. Please try again.');
+            this.errorMessage.set(choicesSaved
+                ? 'Your choices are saved, but we couldn’t open the next page. Please try again.'
+                : 'We couldn’t finish saving your choices. Please try again.');
             this.haptics.error();
         } finally {
             this.isLoading = false;
@@ -377,7 +385,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     async finishOnboarding() {
-        if (!this.user || this.completing || this.destroyRef.destroyed) return;
+        if (!this.user || this.isLoading || this.completing || this.destroyRef.destroyed) return;
+        if (!this.policies.filter(policy => !policy.isOptional).every(policy =>
+            (this.user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)) return;
         this.completing = true;
         this.isLoading = true;
         this.errorMessage.set('');
@@ -386,20 +396,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
             if ((this.user as AppUserInterface).onboardingCompleted === true) {
-                await this.navigateAfterOnboarding();
+                if (!await this.navigateAfterOnboarding()) throw new Error('Navigation was cancelled.');
                 return;
             }
-            // Complete the free account without a pricing step. Existing paid
-            // membership always takes precedence; connection/sync offers live in Connections.
-            if (!this.canFinish) {
-                const isPro = await this.userService.hasPaidAccess();
-                if (!this.isCurrentUser(user.uid)) return;
-                if (!isPro) {
-                    this.logger.log('[OnboardingComponent] Initializing Starter after account consent.');
-                    await this.userService.setFreeTier(user);
-                }
-            }
-
             // Mark onboarding as completed in the database (ensures consistency)
             if (!this.isCurrentUser(user.uid)) return;
             await this.userService.updateUserProperties(user, { onboardingCompleted: true });
@@ -408,8 +407,9 @@ export class OnboardingComponent implements OnInit, OnChanges {
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
-            const navigated = await this.navigateAfterOnboarding();
-            if (navigated) this.haptics.success();
+            const navigated = await this.navigateAfterOnboarding(true);
+            if (!navigated) throw new Error('Account setup saved but navigation was cancelled.');
+            if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
             this.logger.error('Error completing onboarding:', error);
@@ -425,8 +425,28 @@ export class OnboardingComponent implements OnInit, OnChanges {
         return !this.destroyRef.destroyed && this.user?.uid === uid;
     }
 
-    private navigateAfterOnboarding(): Promise<boolean> {
+    private async navigateAfterOnboarding(waitForSavedProfile = false): Promise<boolean> {
+        if (waitForSavedProfile) {
+            const uid = this.user.uid;
+            this.loadingLabel.set('Finishing setup…');
+            // Firestore can acknowledge a write before the merged account stream publishes it.
+            // The route guard consumes this same stream, so wait for it instead of navigating
+            // against an older profile and bouncing back to onboarding.
+            await firstValueFrom(this.userService.user$.pipe(
+                filter(profile => profile?.uid === uid && profile.onboardingCompleted === true
+                    && this.policies.filter(policy => !policy.isOptional).every(policy =>
+                        profile[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)),
+                take(1),
+                timeout(10_000),
+                takeUntilDestroyed(this.destroyRef),
+            ));
+            if (!this.isCurrentUser(uid)) return false;
+        }
         const target = this.completionTarget();
+        this.loadingLabel.set(this.needsSyncPlan() ? 'Opening Pro plans…' : `Opening ${target.label}…`);
+        if (target.syncSetup && !AppUserAccess.hasProAccess(this.user, (this.user as AppUserInterface)?.admin === true)) {
+            return this.router.navigate(['/subscriptions'], { queryParams: { setup: 'sync' } });
+        }
         if (target.priceId) {
             return this.router.navigate(['/subscriptions'], { queryParams: { priceId: target.priceId } });
         }

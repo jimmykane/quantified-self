@@ -674,7 +674,7 @@ export class AppPaymentService {
     /**
      * Opens the Stripe Customer Portal for managing subscriptions.
      */
-    async manageSubscriptions(expectedUserId?: string): Promise<void> {
+    async manageSubscriptions(expectedUserId?: string, setup?: 'sync'): Promise<void> {
         const userId = expectedUserId ?? this.auth.currentUser?.uid;
         if (!userId) {
             throw new Error('User must be authenticated to manage subscriptions.');
@@ -682,7 +682,7 @@ export class AppPaymentService {
         this.assertCheckoutUserStillCurrent(userId);
         await this.assertBillingAvailable();
         this.assertCheckoutUserStillCurrent(userId);
-        const returnUrl = `${this.windowService.currentDomain}/subscriptions`;
+        const returnUrl = `${this.windowService.currentDomain}/subscriptions${setup === 'sync' ? '?setup=sync' : ''}`;
 
         try {
             const result = await this.functionsService.call<{ returnUrl: string }, { url: string }>('createPortalLink', { returnUrl });

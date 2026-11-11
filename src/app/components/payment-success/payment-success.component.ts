@@ -25,7 +25,9 @@ export class PaymentSuccessComponent implements OnInit {
   private analyticsService = inject(AppAnalyticsService);
   private paymentService = inject(AppPaymentService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly resumeUrl = safeOnboardingResumeUrl(inject(ActivatedRoute).snapshot.queryParamMap.get('onboarding'));
+  private readonly route = inject(ActivatedRoute);
+  readonly syncSetup = this.route.snapshot.queryParamMap.get('setup') === 'sync';
+  private readonly resumeUrl = safeOnboardingResumeUrl(this.route.snapshot.queryParamMap.get('onboarding'));
   readonly onboardingResume = this.resumeUrl ? inject(Router).parseUrl(this.resumeUrl) : null;
   isRefreshing = true;
   assignedRole: SubscriptionPlan | null = null;

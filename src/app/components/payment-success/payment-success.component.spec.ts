@@ -301,6 +301,28 @@ describe('PaymentSuccessComponent', () => {
         expect(harness.routeNativeElement!.textContent).toContain('Membership still syncing');
     });
 
+    it('opens sync setup only after Pro access is confirmed', async () => {
+        const harness = await RouterTestingHarness.create('/payment/success?setup=sync');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        const button = harness.routeNativeElement!.querySelector('button[mat-flat-button]') as HTMLButtonElement;
+        expect(button.textContent).toContain('Open Connections');
+        button.click();
+        await harness.fixture.whenStable();
+        expect(TestBed.inject(Router).url).toBe('/services?setup=sync');
+    });
+
+    it('does not send Basic checkout to sync even if its URL requests sync', async () => {
+        authUser.getIdTokenResult.mockResolvedValue({ claims: { stripeRole: 'basic' } });
+        paymentService.getUserSubscriptions.mockReturnValue(of([{ id: 'sub_basic', role: 'basic', status: 'active' }]));
+        const harness = await RouterTestingHarness.create('/payment/success?setup=sync');
+        await harness.fixture.whenStable();
+        harness.detectChanges();
+        (harness.routeNativeElement!.querySelector('button[mat-flat-button]') as HTMLButtonElement).click();
+        await harness.fixture.whenStable();
+        expect(TestBed.inject(Router).url).toBe('/dashboard');
+    });
+
     it('ignores an external onboarding destination', async () => {
         const harness = await RouterTestingHarness.create('/payment/success?onboarding=https%3A%2F%2Fexample.com');
         await harness.fixture.whenStable();

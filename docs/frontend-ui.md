@@ -73,13 +73,22 @@ and warning budgets remain unchanged. This is bundle accounting, not a runtime s
 
 Onboarding offers **Analyze my training**, **Sync between services**, and **Compare device recordings**,
 with **Let me look around** as a secondary action. All paths retain the required account policies and
-unchecked optional consent. Saving valid preferences initializes Starter only for an unpaid account,
-marks onboarding complete and opens the chosen workspace; onboarding no longer mounts Pricing or
-requires a membership selection. Existing paid access is preserved. Failures keep consent and allow retry.
+unchecked optional consent. Saving valid preferences writes legal consent first, then includes
+`onboardingCompleted` in the main profile upsert (including when Sports Lib serialization omits that field).
+It does not repeat the completion write through `setFreeTier`. Onboarding reads access from the already
+loaded, claim-merged user through `AppUserAccess`; Basic access alone is not Pro access. Before navigation,
+it waits at most ten seconds for that same authoritative user stream to publish completed setup and required
+consent, preventing the route guard from redirecting against an older snapshot. This wait is cancelled when
+the view is destroyed; account changes prevent navigation. Failures retain consent and allow retry.
 
 Analysis and exploration open Dashboard, whose empty state already offers file upload and provider selection.
-Sync opens `/services?setup=sync`: a display-only hint that expands the existing data-flow panel and shows
-contextual Pro benefits for unpaid accounts. Provider tabs retain this hint, while MCP and OAuth callback,
+Compare opens its workspace directly. These paths have no plan step. Sync opens `/subscriptions?setup=sync`
+for Starter/Basic members, with the CTA **Choose a Pro plan**, Pro billing choices, and a free Dashboard exit.
+Existing Pro access (including existing admin, legacy and grace-period rules) goes straight to
+`/services?setup=sync` with **Continue to Connections**. Checkout success/cancellation and Basic's existing
+billing-portal upgrade preserve the sync hint; they do not create a second paid subscription. Confirmed Pro
+checkout offers Connections; Basic checkout still offers Dashboard. The hint only expands the existing
+data-flow panel. Provider tabs retain this hint, while MCP and OAuth callback,
 connect or reconnect navigation take precedence. It never connects providers, enables a sync path or starts
 checkout. After source and destination connections are established, the existing matrix and sync controls
 own path selection and explicit opt-in. Connection offers and provider entitlement checks remain in Connections.
@@ -93,6 +102,10 @@ checks. Training calculations, planning behavior and MCP permissions/contracts a
 Initial goal-based setup verification exceeded the preceding 14.82 MB total-script cap by 3.96 kB.
 The final production build passes matching beta/production `allScript` error caps of 14.83 MB; initial
 and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
+
+The conditional Sync plan handoff and saved-profile navigation fix measured 8.96 kB above the subsequent
+14.84 MB total-script cap. Beta and production now share a 14.85 MB `allScript` error cap. The measured initial
+bundle remains 1.41 MB (335.36 kB estimated transfer), below its unchanged 1474 kB cap. Warning budgets are unchanged.
 
 ## Field guide onboarding terrain and bundle allowance
 

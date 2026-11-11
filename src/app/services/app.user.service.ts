@@ -1124,17 +1124,21 @@ export class AppUserService implements OnDestroy {
       switchMap(documents => from(mergeUserProfileDocuments(userID, documents))));
   }
 
-  public async createOrUpdateUser(user: AppUserInterface) {
+  public async createOrUpdateUser(user: AppUserInterface, options: { completeOnboarding?: boolean } = {}) {
     if (this.hasIncompleteProfileReads(user?.uid)) {
       throw new Error('Cannot create or update user while the authoritative profile read is incomplete.');
     }
     if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy) {
       throw new Error('User has not accepted privacy or data policy');
     }
+    if (options.completeOnboarding && user.acceptedTos !== true) {
+      throw new Error('User has not accepted terms of service');
+    }
     // We must split writes for creation: 
     // 1. Write legal first (critical)
     await this.acceptPolicies(user);
     // 2. Write rest of user
+    if (options.completeOnboarding) return this.updateUser(user, options);
     return this.updateUser(user);
   }
 
@@ -1952,8 +1956,11 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  public async updateUser(user: AppUserInterface) {
+  public async updateUser(user: AppUserInterface, options: { completeOnboarding?: boolean } = {}) {
     const data = typeof user.toJSON === 'function' ? user.toJSON() : { ...user };
+    // Sports Lib serialization omits this app-owned field. Include it in the
+    // profile upsert only after the onboarding flow has persisted legal consent.
+    if (options.completeOnboarding) data['onboardingCompleted'] = true;
 
     // Filter out restricted fields that should live in sub-collections or system locations
     // This prevents accidental writes to the main doc and satisfying Security Rules

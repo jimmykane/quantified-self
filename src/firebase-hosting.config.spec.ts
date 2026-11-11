@@ -375,6 +375,7 @@ describe('Firebase Hosting configuration', () => {
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
     // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
+    // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
   });
 
@@ -718,7 +719,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.84mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.85mb',
     });
   });
 

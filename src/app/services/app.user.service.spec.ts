@@ -1939,6 +1939,40 @@ describe('AppUserService', () => {
             expect(acceptOrder).toBeLessThan(updateOrder);
         });
 
+        it('saves onboarding completion with the profile even when Sports Lib serialization omits it', async () => {
+            const user = Object.assign(new User('u1'), {
+                acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true,
+            }) as AppUserInterface;
+            expect(user.toJSON()).not.toHaveProperty('onboardingCompleted');
+            await service.createOrUpdateUser(user, { completeOnboarding: true });
+            const writes = vi.mocked(setDoc).mock.calls.map(call => call[1]);
+            expect(writes).toHaveLength(2);
+            expect(writes[0]).toMatchObject({ acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true });
+            expect(writes[0]).not.toHaveProperty('onboardingCompleted');
+            expect(writes[1]).toMatchObject({ uid: 'u1', onboardingCompleted: true });
+            expect(writes[1]).not.toHaveProperty('acceptedTos');
+        });
+
+        it('requires Terms of Service before completing onboarding in the profile save', async () => {
+            const user = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true } as AppUserInterface;
+            await expect(service.createOrUpdateUser(user, { completeOnboarding: true }))
+                .rejects.toThrow('User has not accepted terms of service');
+            expect(setDoc).not.toHaveBeenCalled();
+        });
+
+        it('does not complete onboarding in ordinary profile saves', async () => {
+            await service.createOrUpdateUser({ uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true } as AppUserInterface);
+            expect(vi.mocked(setDoc).mock.calls.every(call => !('onboardingCompleted' in call[1]))).toBe(true);
+        });
+
+        it('never persists onboarding completion when the preceding legal write fails', async () => {
+            vi.spyOn(service, 'acceptPolicies').mockRejectedValueOnce(new Error('offline'));
+            await expect(service.createOrUpdateUser({ uid: 'u1', acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true, acceptedTos: true } as AppUserInterface, { completeOnboarding: true }))
+                .rejects.toThrow('offline');
+            expect(setDoc).not.toHaveBeenCalled();
+        });
+
         it('should preserve creationDate during create-or-update onboarding upserts', async () => {
             const user = {
                 uid: 'u1',
