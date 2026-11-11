@@ -8,7 +8,8 @@ export interface TrainingThresholdValue {
   displayValue: string;
   displayUnit: string;
 }
-export type TrainingThresholdValues = Record<keyof Required<TrainingLoadThresholds>, TrainingThresholdValue | null>;
+export type TrainingThresholdValues = Record<Exclude<keyof Required<TrainingLoadThresholds>, 'runningThresholdSpeed'>,
+  TrainingThresholdValue | null> & { runningThresholdSpeed?: TrainingThresholdValue | null };
 export interface TrainingThresholdReview {
   family: string;
   familyLabel: string;
@@ -21,10 +22,13 @@ export function isTrainingThresholdReview(value: unknown): value is TrainingThre
   if (!record(value) || Object.keys(value).sort().join(',') !== 'after,before,family,familyLabel'
     || typeof value.family !== 'string' || !value.family.length || value.family.length > 64
     || typeof value.familyLabel !== 'string' || !value.familyLabel.length || value.familyLabel.length > 100) return false;
-  const units = { functionalThresholdPower: 'watt', lactateThresholdHR: 'bpm', swimThresholdSpeed: 'm/s' } as const;
+  const units = { functionalThresholdPower: 'watt', lactateThresholdHR: 'bpm', swimThresholdSpeed: 'm/s', runningThresholdSpeed: 'm/s' } as const;
+  // Retain saved Assistant reviews created before running threshold support.
+  const keys = TRAINING_LOAD_THRESHOLD_KEYS.filter(key => key !== 'runningThresholdSpeed'
+    || record(value.before) && key in value.before || record(value.after) && key in value.after);
   return [value.before, value.after].every(side => record(side)
-    && Object.keys(side).sort().join(',') === [...TRAINING_LOAD_THRESHOLD_KEYS].sort().join(',')
-    && TRAINING_LOAD_THRESHOLD_KEYS.every(key => {
+    && Object.keys(side).sort().join(',') === [...keys].sort().join(',')
+    && keys.every(key => {
       const quantity = side[key];
       return quantity === null || record(quantity)
         && Object.keys(quantity).sort().join(',') === 'displayUnit,displayValue,unit,value'

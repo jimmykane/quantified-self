@@ -22,6 +22,7 @@
             <mat-option value="AUTOMATIC">Automatic</mat-option>
             <mat-option value="HR">Heart rate</mat-option>
             @if (row.id === 'swimming') { <mat-option value="SWIM_PACE">Swim pace (CSS)</mat-option> }
+            @if (row.id === 'running') { <mat-option value="RUNNING_PACE">Running pace</mat-option> }
             <mat-option value="MET">Calories (MET estimate)</mat-option>
           </mat-select>
         </mat-form-field>
@@ -49,6 +50,21 @@
           <span matTextSuffix>{{ hrUnit }}</span>
           <mat-hint>Use your independently measured threshold; resting or maximum HR is not assumed.</mat-hint>
         </mat-form-field>
+        @if (row.id === 'running') {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Running threshold pace (optional)</mat-label>
+            <input matInput formControlName="runningPace" placeholder="4:30" inputmode="text" aria-describedby="running-pace-help">
+            <mat-hint>mm:ss per {{ row.runningPaceUnit === 'km' ? 'kilometre' : 'mile' }}</mat-hint>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Running pace unit</mat-label>
+            <mat-select [value]="row.runningPaceUnit" [disabled]="!!busy() || !validRunningPace(row)"
+              (selectionChange)="changeRunningPaceUnit(row, $event.value)">
+              <mat-option value="km">Per kilometre</mat-option><mat-option value="mi">Per mile</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <p id="running-pace-help">Use an independently measured threshold as mm:ss, not the workout’s average pace. Running pace uses recorded speed and grade with this threshold. Automatic keeps power and HR priority. Applies to eligible Running-family workouts starting after you save; existing workouts keep their saved inputs.</p>
+        }
         @if (row.id === 'swimming') {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Critical swim speed (optional)</mat-label>

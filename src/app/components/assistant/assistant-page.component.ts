@@ -114,9 +114,11 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
   if (proposal.kind === 'apply_training_threshold_change') {
     const review = proposal.thresholdReview;
     if (!review) return [];
-    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS' } as const;
-    const text = (value: import('@shared/training-thresholds').TrainingThresholdValue | null) => value ? `${value.displayValue} ${value.displayUnit}` : 'Not set';
-    return [review.familyLabel, ...Object.entries(labels).map(([key, label]) => {
+    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS',
+      runningThresholdSpeed: 'Running threshold pace' } as const;
+    const text = (value: import('@shared/training-thresholds').TrainingThresholdValue | null | undefined) => value ? `${value.displayValue} ${value.displayUnit}` : 'Not set';
+    return [review.familyLabel, ...Object.entries(labels).filter(([key]) =>
+      key in review.before || key in review.after).map(([key, label]) => {
       const metric = key as keyof typeof labels;
       return `${label}: ${text(review.before[metric])} → ${text(review.after[metric])}`;
     }), 'Applies to future workouts only. Imported TSS and valid file calibration keep priority.'];

@@ -457,6 +457,27 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(write('cycling', { functionalThresholdPower: 225 }));
             await assertSucceeds(write('team-sports', { lactateThresholdHR: 165 }));
         });
+        it('accepts running pace only for Running policies and keeps calculated load server-owned', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (family: string, speed: unknown, method = 'RUNNING_PACE') => {
+                const head = owner.doc(`users/owner/trainingLoadPolicies/${family}`);
+                const data = { revision: 1, revisionId: 'pace', method, included: true,
+                    runningThresholdSpeed: speed, effectiveAt: serverTimestamp() };
+                const batch = owner.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('pace'), data);
+                return batch.commit();
+            };
+            for (const speed of [0, -1, NaN, Infinity, '3.7']) await assertFails(write('running', speed));
+            await assertFails(write('walking-hiking', 1000 / 270));
+            await assertFails(write('cycling', 1000 / 270, 'AUTOMATIC'));
+            await assertSucceeds(write('running', 1000 / 270));
+            const editData = { ...await edit(), controls: { leg: { method: 'RUNNING_PACE' } } };
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).set(editData));
+            await assertFails(owner.doc(path).set({ ...editData, legs: { leg: { evaluations: { runningPace: { score: 100 } } } } }));
+            await assertSucceeds(owner.doc(path).set(editData));
+            await assertFails(owner.doc('users/owner/trainingLoadPolicies/running/revisions/pace').update({ runningThresholdSpeed: 4 }));
+        });
     });
 
     describe('Account deletion fences for existing client sessions', () => {

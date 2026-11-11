@@ -409,7 +409,8 @@ export function buildAssistantEvidence(
       summary: 'Training thresholds unavailable.', facts: [], links: [] };
     const policies = 'policies' in parsed.data ? parsed.data.policies
       : [{ familyLabel: parsed.data.review.familyLabel, thresholds: parsed.data.review.after }];
-    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS' } as const;
+    const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS',
+      runningThresholdSpeed: 'Running threshold pace' } as const;
     return { toolName: tool.name, title: truncate(tool.title, 160),
       summary: tool.name === 'get_training_thresholds' ? `${policies.length} sport threshold settings; existing workouts are unchanged.`
         : 'Proposed thresholds for future workouts. Review and Apply in Quantified Self; nothing has changed yet.',

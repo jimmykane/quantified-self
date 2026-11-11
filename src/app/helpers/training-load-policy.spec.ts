@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { displayRunningThresholdPace, parseRunningThresholdPace, runningThresholdSpeed } from '@shared/running-threshold-pace';
 import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
   validTrainingLoadPolicy, trainingLoadThresholds, sameTrainingLoadCalibration,
   type TrainingLoadMetadata } from '@shared/training-load-policy';
@@ -15,6 +16,35 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('validates Running-only pace defaults and converts explicit kilometre/mile input', () => {
+    const policy = { method: 'RUNNING_PACE' as const, included: true, runningThresholdSpeed: 1000 / 270 };
+    expect(validTrainingLoadPolicy('running', policy)).toBe(true);
+    for (const family of ['walking-hiking', 'cycling', 'swimming', 'performance-sports'])
+      expect(validTrainingLoadPolicy(family, policy)).toBe(false);
+    expect(trainingLoadThresholds(policy)).toEqual({ runningThresholdSpeed: 1000 / 270 });
+    expect(parseRunningThresholdPace('04:30', 'km')).toBeCloseTo(1000 / 270, 12);
+    expect(parseRunningThresholdPace('08:00', 'mi')).toBeCloseTo(1609.34 / 480, 12);
+    expect(displayRunningThresholdPace(runningThresholdSpeed(480, 'mi'), 'mi')).toBe('08:00');
+    expect(parseRunningThresholdPace('', 'km')).toBeUndefined();
+    for (const input of ['0:00', '4:99', '-1:30', '4.5', 'Infinity'])
+      expect(Number.isNaN(parseRunningThresholdPace(input, 'km'))).toBe(true);
+  });
+  it('uses stored running pace candidates and keeps legacy, override and exclusion semantics', () => {
+    const data = metadata(); const leg = data.legs!.walk;
+    const automatic = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 30, estimated: false,
+      provenance: 'calculated' as const, reasons: [] };
+    leg.evaluations = { version: 1, automatic, hr: { ...automatic, preference: 'HR' }, met: { ...automatic, preference: 'MET' } };
+    data.controls.walk = { method: 'RUNNING_PACE' };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    leg.evaluations.runningPace = { ...automatic, preference: 'RUNNING_PACE', method: 'PACE', score: 100 };
+    expect(resolveEffectiveTrainingLoad(source, JSON.parse(JSON.stringify(data)), activities, 'walk').score).toBe(100);
+    data.controls.walk.override = 0;
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+    data.controls.walk = { method: 'RUNNING_PACE', included: false };
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').status).toBe('excluded');
+    data.controls = {};
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(30);
+  });
   it('represents a selected deferred MET candidate as pending without affecting Automatic, overrides or exclusions', () => {
     const data = metadata(); const leg = data.legs!.walk;
     const hr = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 40, estimated: true,

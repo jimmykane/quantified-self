@@ -52,6 +52,31 @@ describe('dated Training load settings', () => {
       { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
     fixture.destroy();
   });
+  it('saves independently measured running pace and preserves precision through unit changes', async () => {
+    const speed = 3.7123456789;
+    policies$.next([{ id: 'running', revision: 4, method: 'HR', included: true, runningThresholdSpeed: speed }]);
+    const row = component.rows.find(row => row.id === 'running')!;
+    component.changeRunningPaceUnit(row, 'mi'); component.changeRunningPaceUnit(row, 'km');
+    expect(row.form.pristine).toBe(true);
+    row.form.controls.method.setValue('RUNNING_PACE'); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 4,
+      { method: 'RUNNING_PACE', included: true, runningThresholdSpeed: speed });
+    row.form.controls.runningPace.setValue('04:30'); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1000 / 270, 12);
+    component.changeRunningPaceUnit(row, 'mi');
+    row.form.controls.runningPace.setValue('08:00'); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1609.34 / 480, 12);
+  });
+  it('rejects invalid running pace and removes a cleared fallback only on Save', async () => {
+    const row = component.rows.find(row => row.id === 'running')!;
+    row.form.controls.runningPace.setValue('04:99'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(false); await component.save(row);
+    expect(savePolicy).not.toHaveBeenCalled();
+    component.changeRunningPaceUnit(row, 'mi'); expect(row.runningPaceUnit).toBe('km');
+    row.form.controls.runningPace.setValue(''); await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 0, { method: 'AUTOMATIC', included: true });
+  });
   it('ignores late suggestions for a previous account or destroyed editor without changing drafts', async () => {
     let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
     readFtpSuggestions.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
@@ -104,7 +129,7 @@ describe('dated Training load settings', () => {
   });
   it('loads existing defaults quietly and saves only a changed family with its revision', async () => {
     const row = component.rows.find(row => row.id === 'walking-hiking')!;
-    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '' });
     await component.save(row); expect(savePolicy).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenCalledWith('owner', 'walking-hiking', 4, { method: 'HR', included: true });
@@ -151,7 +176,7 @@ describe('dated Training load settings', () => {
     policies$.next([{ id: row.id, revision: 6, method: 'MET', included: false }]);
     finish(); await pending;
     expect(row.revision).toBe(6);
-    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '' });
     expect(row.form.pristine).toBe(true);
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', row.id, 6, { method: 'MET', included: true });

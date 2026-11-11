@@ -7713,7 +7713,8 @@ thresholds only fill missing or rejected calibration for new legs. A saved thres
 threshold-band estimate, never a guessed or mixed resting/max/threshold Banister tuple. A complete valid file tuple
 retains Banister priority. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
 
-Root and Functions pin the same published Sports Lib 23.10.0 artifact with matching lockfile integrity.
+Root and Functions must use the same Sports Lib artifact. This companion PR temporarily pins the immutable
+Running pace implementation commit; replace both pins with its published release during release adoption.
 New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
 This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
 changing recorded stats, parse options, original files or the file-only cache. Source finalization serializes each leg
@@ -7778,6 +7779,37 @@ Existing tool schemas remain frozen. The Assistant's independent default-off cho
 and preparation only; app Apply rechecks generation, proposal, expiry and authority. New chat turns it off. See
 `docs/mcp-server.md` and `docs/assistant.md`. The companion API is published and adopted; deployed-server update,
 registered-app rescan and plugin refresh remain separate rollout steps requiring their normal approval.
+
+
+### Running threshold pace (#1030)
+
+The Running family also accepts an independently measured threshold pace as `mm:ss` per kilometre or mile.
+The shared Training/Health editor stores `runningThresholdSpeed` in m/s in the same dated policy; it creates no
+Health observation, extra import query, trigger or rebuild source. Switching units without editing preserves full
+canonical precision. Clearing affects future workouts only. First import freezes the revision at the leg's recorded
+start, including delayed uploads; duplicate import, original-file reparse and Reset retain that saved policy.
+Older workouts without the field never adopt today's threshold through reparse. Imported TSS and valid file/parse
+threshold calibration keep priority.
+
+**Running pace** explicitly selects Sports Lib's independent `runningPace` candidate. Automatic keeps eligible
+power → HR → running pace → MET. Missing/ineligible pace falls through Automatic with the saved reason, while
+numeric override, exclusion and per-leg resolution retain priority. Running and Trail Running families share this
+setting; Walking/Hiking cannot use it. Track and Field retains its existing library pace eligibility and can use a
+file-backed per-leg candidate, but QS groups it under Performance Sports and does not offer that mixed family a
+Running threshold or default. The existing grade-adjusted rolling-speed formula, sample coverage, pause and gap
+checks are unchanged. No average workout pace is inferred as its own threshold.
+
+Existing threshold MCP tools accept explicit `runningPace: { paceSeconds, distanceUnit: 'km' | 'mi' }` (or null to
+clear), return canonical m/s with owner-aware pace display, and use the same read/preview/native-approval/apply
+boundaries. Old three-value saved reviews remain readable. No new tool, grant or Health API is introduced; the
+unregistered pending tools and their digest are extended while registered schemas and history stay frozen.
+
+A paired replay of 10,000 private originals against the published baseline checked 115,078 invariants without a
+detected regression. Default event/route JSON, existing evaluations, imported scores and paired JSON round trips
+were unchanged. Supplying the test running threshold added about 1.1 ms per leg in this local replay; this is a
+workload observation, not a production billing guarantee. A separate 300-file check measured about 160 additional
+JSON bytes per leg for the new candidate (95th percentile 214 bytes), plus the saved threshold scalar. No database
+read/write count, trigger or background task is added. Normal existing policy/metadata writes carry these fields.
 
 ### Sports Lib 23.9.0 R–R heart-rate adoption
 

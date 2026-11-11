@@ -233,7 +233,7 @@ export interface AssistantRuntimeDependencies {
 }
 
 const ASSISTANT_SYSTEM_INSTRUCTION_SECTIONS: Array<string | { tool: AssistantMcpToolName; text: string }> = [
-  { tool: 'get_training_thresholds', text: 'Training thresholds are dated calibration settings, separate from Health observations. Read current values before an explicit change; keep its policyRef and mutationId on retries. Use only athlete-supplied FTP, threshold HR or CSS and explicit CSS units; do not estimate a threshold from a workout. Valid file calibration and imported TSS take precedence. A historical policy read is not proof that its values were used by a workout. The preview only prepares an app review; only the user can Apply. Saving or clearing affects future workouts and never recalculates existing ones or changes provider settings or planned-workout targets.' },
+  { tool: 'get_training_thresholds', text: 'Training thresholds are dated calibration settings, separate from Health observations. Read current values before an explicit change; keep its policyRef and mutationId on retries. Use only athlete-supplied FTP, threshold HR, CSS or running threshold pace and explicit pace units; do not estimate a threshold from a workout. Valid file calibration and imported TSS take precedence. A historical policy read is not proof that its values were used by a workout. The preview only prepares an app review; only the user can Apply. Saving or clearing affects future workouts and never recalculates existing ones or changes provider settings or planned-workout targets.' },
   TRAINING_PRESCRIPTION_AUTHORING_GUIDANCE,
   TRAINING_PRESCRIPTION_VERIFICATION_GUIDANCE,
   TRAINING_PLAN_NEXT_STEPS_GUIDANCE,

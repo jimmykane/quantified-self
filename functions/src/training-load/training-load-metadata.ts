@@ -238,9 +238,10 @@ async function finalizeTrainingLoadMetadata(
       if (leg.calibration?.version === 2) {
         const weight = leg.calibration.weight;
         const thresholds = family === leg.policy.family ? trainingLoadThresholds(leg.policy) : {};
-        const { swimThresholdSpeed, ...rest } = thresholds;
+        const { swimThresholdSpeed, runningThresholdSpeed, ...rest } = thresholds;
+        const running = runningThresholdSpeed === undefined ? {} : { thresholdRunningSpeed: runningThresholdSpeed };
         leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithCalibration(activity, {
-          ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
+          ...rest, ...running, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
           ...(weight?.status === 'available' ? { bodyMassKg: weight.kilograms } : {}),
         });
         const energy = activity.getStat(DataEnergy.type)?.getValue();
@@ -264,7 +265,7 @@ async function finalizeTrainingLoadMetadata(
             leg.calibration!.weight = weightsByStart.get(leg.identity.startMs)!;
             const resolvedWeight = leg.calibration!.weight;
             if (resolvedWeight?.status === 'available') leg.evaluations = ActivityUtilities.evaluateTrainingStressScoreWithCalibration(activity, {
-              ...rest, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
+              ...rest, ...running, ...(swimThresholdSpeed !== undefined ? { thresholdSwimSpeed: swimThresholdSpeed } : {}),
               bodyMassKg: resolvedWeight.kilograms,
             });
           }

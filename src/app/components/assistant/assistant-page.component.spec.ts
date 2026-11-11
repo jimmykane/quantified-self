@@ -643,6 +643,18 @@ describe('AssistantPageComponent', () => {
     expect(assistantService.applyContentProposal).toHaveBeenCalledWith({ proposalRef: 'threshold-review',
       conversationId: chatResponse.conversation.conversationId, confirm: true });
   });
+  it('discloses canonical Running threshold changes using the owner pace units', () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null, runningThresholdSpeed: null };
+    component.pendingContentProposal.set({ proposalRef: 'running-review', kind: 'apply_training_threshold_change',
+      expiresAtMs: Date.now() + 60000, requiresConfirmation: true, summary: 'Review Running thresholds',
+      arguments: { proposalRef: 'PRIVATE-REF' }, thresholdReview: { family: 'running', familyLabel: 'Running',
+        before: empty, after: { ...empty, runningThresholdSpeed: { value: 1609.34 / 420, unit: 'm/s', displayValue: '07:00', displayUnit: 'min/mi' } } } });
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
+    expect(text).toContain('Running threshold pace: Not set → 07:00 min/mi');
+    expect(text).toContain('future workouts only'); expect(text).not.toContain('PRIVATE');
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+  });
   it('reviews private reflection text, then applies only explicit confirmation', async () => {
     const proposal: AssistantContentProposalPreview = {
       proposalRef: 'reflection-proposal', kind: 'save_workout_reflection',

@@ -14,6 +14,7 @@ const quantity = (unit: 'watt' | 'bpm' | 'm/s') => z.strictObject({ value: posit
 export const TRAINING_THRESHOLD_VALUES_SCHEMA = z.strictObject({
   functionalThresholdPower: quantity('watt').nullable(), lactateThresholdHR: quantity('bpm').nullable(),
   swimThresholdSpeed: quantity('m/s').nullable(),
+  runningThresholdSpeed: quantity('m/s').nullable().optional(),
 });
 export const TRAINING_THRESHOLD_REVIEW_SCHEMA = z.strictObject({ family, familyLabel: z.string().max(100),
   before: TRAINING_THRESHOLD_VALUES_SCHEMA, after: TRAINING_THRESHOLD_VALUES_SCHEMA });
@@ -26,6 +27,8 @@ export const TRAINING_THRESHOLD_INPUTS = {
     lactateThresholdHR: positive.nullable().optional().describe('Independent threshold HR in bpm. Null clears this fallback.'),
     css: z.strictObject({ paceSeconds: positive, distanceUnit: z.enum(['m', 'yd']) }).nullable().optional()
       .describe('CSS time in seconds per 100 metres or 100 yards, with an explicit unit. Null clears CSS.'),
+    runningPace: z.strictObject({ paceSeconds: positive, distanceUnit: z.enum(['km', 'mi']) }).nullable().optional()
+      .describe('Independent running threshold time in seconds per kilometre or mile. Running family only. Null clears the fallback.'),
   }).refine(value => Object.keys(value).length > 0, 'Choose at least one threshold to set or clear.') }),
   apply_training_threshold_change: z.strictObject({ proposalRef: ref }),
 };

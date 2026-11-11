@@ -310,4 +310,14 @@ describe('TrainingLoadService', () => {
     }
     await expect(service.save('u', 'e', 4, { key: 'leg', control: { override: -1 } })).rejects.toThrow('between 0 and 9999');
   });
+  it('copies running method/inclusion while preserving the current threshold and excluding the numeric override', async () => {
+    records['users/u/trainingLoadPolicies/running'] = { revision: 3, runningThresholdSpeed: 1000 / 270, functionalThresholdPower: 250 };
+    await service.save('u', 'e', 4, { key: 'leg', control: { method: 'RUNNING_PACE', override: 0 } },
+      { family: 'running', expectedRevision: 3, policy: { method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 5 } });
+    for (const [, policy] of set.mock.calls) {
+      expect(policy).toMatchObject({ revision: 4, method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 1000 / 270, functionalThresholdPower: 250 });
+      expect(policy).not.toHaveProperty('override');
+    }
+    await expect(service.savePolicy('u', 'walking-hiking', 0, { method: 'RUNNING_PACE', included: true })).rejects.toThrow();
+  });
 });

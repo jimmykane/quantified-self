@@ -51,6 +51,27 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.TrackAndField])('offers the existing running pace eligibility for %s', type => {
+    component.activities[0].type = type;
+    expect(component.runningPaceSupported).toBe(true);
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Cycling, ActivityTypes.Swimming])('does not offer running pace for %s', type => {
+    component.activities[0].type = type;
+    expect(component.runningPaceSupported).toBe(false);
+  });
+  it('explains an explicit running pace fallback without changing recorded TSS', () => {
+    component.activities[0].type = ActivityTypes.Running;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 70, method: 'HR' as const,
+      estimated: true, provenance: 'calculated' as const, reasons: [] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: { walk: { method: 'RUNNING_PACE' } }, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Running, duration: 3600, distance: null },
+      policy: defaultAppliedTrainingLoadPolicy(ActivityTypes.Running), recordedTss: 87.3,
+      evaluations: { version: 1, automatic: candidate, hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        runningPace: { ...candidate, preference: 'RUNNING_PACE', reasons: ['missing-pace-inputs'] } } } } });
+    expect(component.legModel).toMatchObject({ method: 'HR', score: 70 });
+    expect(component.reasonText).toContain('Pace calculation inputs are unavailable');
+    expect(component.recorded).toBe(87.3);
+  });
   it('explains saved FTP and unavailable frozen weight when MET falls back to power', () => {
     component.activities[0].type = ActivityTypes.Cycling;
     const candidate = { preference: 'AUTOMATIC' as const, score: 100, method: 'POWER' as const,

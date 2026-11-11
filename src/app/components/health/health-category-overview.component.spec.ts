@@ -62,7 +62,7 @@ describe('Health category overview', () => {
     fixture.componentRef.setInput('groups', []); fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
     fixture.componentInstance.selectCategory('fitness'); fixture.detectChanges();
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) =>
-      item.textContent?.includes('Manage FTP, threshold HR and CSS')) as HTMLButtonElement;
+      item.textContent?.includes('Manage Training thresholds')) as HTMLButtonElement;
     const open = vi.spyOn(fixture.componentInstance, 'openTrainingThresholds');
     expect(button).toBeDefined(); button.click();
     expect(open).toHaveBeenCalledOnce(); await open.mock.results[0].value;

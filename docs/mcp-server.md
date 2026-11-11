@@ -4,8 +4,8 @@
 
 `get_training_thresholds` reads one family or the bounded registry (at most 50). Optional offset-bearing `asOf` reads
 an immutable policy effective by that instant, with no editable reference. Outputs contain family labels, policy
-revision/effective instant and three nullable canonical/display quantities: FTP in watts (Running/Cycling), threshold
-HR in bpm and CSS in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
+revision/effective instant and canonical/display quantities: FTP in watts (Running/Cycling), threshold
+HR in bpm, CSS and Running threshold speed in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
 calibration a workout used. No method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
 Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
 reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
@@ -23,7 +23,9 @@ it does not widen MCP grants. This instruction change updates the compatible pen
 
 `preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
 `policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an
-ambiguous pace string. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
+ambiguous pace string. Running-family `runningPace` accepts positive `paceSeconds` with explicit `distanceUnit`
+`km` or `mi`; canonical `runningThresholdSpeed` is displayed as pace in the owner’s units. That nullable output
+field is optional only to retain saved previews from before this addition. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
 15-minute proposal shows exact before/after values and future-workout effect, preserving method, inclusion and other
 thresholds. `apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction
 rechecks grant generation, deletion, expiry and optimistic head revision, then appends a server-timestamped immutable
@@ -1250,7 +1252,7 @@ behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
-- `training-thresholds:read` independently reads safe current or dated FTP, threshold HR and CSS settings;
+- `training-thresholds:read` independently reads safe current or dated FTP, threshold HR, CSS and Running threshold pace settings;
 - `training-thresholds:write`, dependent on that read grant, previews and separately applies threshold-only changes
   for future workouts. Neither grant exposes private policies/controls, Health weight or provenance;
 

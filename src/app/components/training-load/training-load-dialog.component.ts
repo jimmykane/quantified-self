@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
 import { firstValueFrom, forkJoin, take } from 'rxjs';
-import { convertSpeedToSwimPace, DataSwimPace, DataTrainingStressScore, DataFTP, DataHeartRate, DataWeight, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { convertSpeedToSwimPace, convertSpeedToPace, supportsRunningPaceTrainingStressScore, DataPace, DataSwimPace, DataTrainingStressScore, DataFTP, DataHeartRate, DataWeight, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
   sameTrainingLoadCalibration,
@@ -87,6 +87,10 @@ export class TrainingLoadDialogComponent implements OnInit {
   get savedCalibration() { const saved = this.metadata()?.legs?.[this.selectedKey]; return saved ? saved.calibration : this.leg?.calibration; }
   get family() { return resolveTrainingDisciplineFromActivityType(this.activities.find(activity => activity.id === this.selectedId())?.type); }
   get familyLabel(): string { return TRAINING_SPORT_DEFINITIONS.find(family => family.id === this.family)?.label ?? 'this sport'; }
+  get runningPaceSupported(): boolean {
+    const activity = this.activities.find(activity => activity.id === this.selectedId());
+    return !!activity && supportsRunningPaceTrainingStressScore(activity.type);
+  }
   private resolveLoad(activityId?: string): EffectiveTrainingLoad {
     if (!this.sourceCurrent() && !this.metadata()?.excluded) return { score: null, status: 'unavailable' as const,
       method: null, estimated: false, reasons: ['source-updating'] };
@@ -97,7 +101,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   get actualMethodLabel(): string {
     const load = this.legModel;
     if (load.status === 'excluded') return 'Excluded';
-    const method = load.method === 'SWIM_PACE' ? 'Swim pace (CSS)' : load.method === 'HR' && load.hrAlgorithm
+    const method = load.method === 'PACE' ? 'Running pace' : load.method === 'SWIM_PACE' ? 'Swim pace (CSS)' : load.method === 'HR' && load.hrAlgorithm
       ? `HR · ${load.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold'}` : load.method ?? 'Unavailable';
     return method + (load.estimated ? ' (estimate)' : '');
   }
@@ -113,10 +117,13 @@ export class TrainingLoadDialogComponent implements OnInit {
       ['Saved FTP fallback', DataFTP.type, this.policy.functionalThresholdPower],
       ['Saved threshold HR fallback', DataHeartRate.type, this.policy.lactateThresholdHR],
     ];
-    return values.flatMap(([label, type, value]) => {
+    const labels = values.flatMap(([label, type, value]) => {
       const display = value === undefined ? null : resolveUnitAwareDisplayFromValue(type, value, this.data.unitSettings);
       return display ? [{ label, value: `${display.value} ${display.unit}` }] : [];
     });
+    const speed = this.policy.runningThresholdSpeed;
+    const pace = speed === undefined ? null : resolveUnitAwareDisplayFromValue(DataPace.type, convertSpeedToPace(speed), this.data.unitSettings);
+    return pace ? [...labels, { label: 'Saved running threshold pace fallback', value: `${pace.value} ${pace.unit}` }] : labels;
   }
   get savedHealthWeightLabel(): string | null {
     const weight = this.savedCalibration?.weight;
@@ -151,8 +158,9 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.reasons.includes('met-weight-pending')) return 'Preparing the MET estimate using a Health weight measured at or before this workout. Recorded data stays unchanged.';
     if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched activities below before using modeled load.';
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this activity’s saved policy.';
-    if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New FTP, threshold HR or CSS settings do not apply retroactively.';
+    if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New FTP, threshold HR, running threshold pace or CSS settings do not apply retroactively.';
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
+    if (this.legModel.method === 'PACE') return 'Calculated from recorded running speed and grade, using valid file threshold pace or the threshold saved with this workout’s policy. Active timing, gaps and rolling-window coverage remain required.';
     if (this.legModel.method === 'SWIM_PACE' && this.savedCalibration?.version === 2)
       return 'Calculated from swim speed and valid file CSS, or the saved CSS fallback when file calibration is missing or unusable.';
     if (this.legModel.method === 'SWIM_PACE') return this.policy.swimThresholdSpeed !== undefined

@@ -7,7 +7,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, DataPower, DataSpeedAvg, DataWeight, DataTrainingStressScore, DataTrainingStressScoreMethod, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, DataPower, DataSpeed, DataGradeSmooth, DataSpeedAvg, DataWeight, DataTrainingStressScore, DataTrainingStressScoreMethod, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -316,6 +316,44 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
     expect(saved.legs!.leg).toMatchObject({ activityId: 'changed-id', policy: { revision: 1, functionalThresholdPower: 200 },
       evaluations: { automatic: { score: 100 }, hr: { score: 100 } } });
+  });
+  it('uses the recorded-date running pace policy for delayed imports and preserves it on reparse', async () => {
+    const uid = setup();
+    const policy = db.collection(`users/${uid}/trainingLoadPolicies/running/revisions`);
+    await policy.doc('original').set({ revision: 1, method: 'RUNNING_PACE', included: true,
+      effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), runningThresholdSpeed: 3 });
+    await policy.doc('later').set({ revision: 2, method: 'MET', included: false,
+      effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), runningThresholdSpeed: 4 });
+    const make = (id = 'leg') => {
+      const event = workout(id); const activity = event.getFirstActivity(); activity.type = ActivityTypes.Running;
+      for (const [type, value] of [[DataSpeed.type, 3], [DataGradeSmooth.type, 0]] as const) {
+        const stream = activity.createStream(type); stream.setData(Array(3601).fill(value)); activity.addStream(stream);
+      }
+      ActivityUtilities.evaluateTrainingStressScore(activity); return event;
+    };
+    const original = make(); const recorded = JSON.stringify(original.toJSON()); await importWorkout(uid, original);
+    let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ policy: { revision: 1, method: 'RUNNING_PACE', runningThresholdSpeed: 3 },
+      evaluations: { runningPace: { method: 'PACE', score: 100 } } });
+    expect(resolveEffectiveTrainingLoad({}, saved)).toMatchObject({ method: 'PACE', score: 100 });
+    expect(JSON.stringify(original.toJSON())).toBe(recorded);
+    const next = make('changed-id'); const finish = await prepareTrainingLoadMetadata(uid, next); await source(uid, next); await finish();
+    saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg).toMatchObject({ activityId: 'changed-id', policy: { revision: 1, runningThresholdSpeed: 3 },
+      evaluations: { runningPace: { method: 'PACE', score: 100 } } });
+  });
+  it('does not adopt a newly added running threshold for an existing workout on reparse', async () => {
+    const uid = setup();
+    const original = workout(); original.getFirstActivity().type = ActivityTypes.Running;
+    ActivityUtilities.evaluateTrainingStressScore(original.getFirstActivity());
+    await importWorkout(uid, original);
+    await db.doc(`users/${uid}/trainingLoadPolicies/running/revisions/later`).set({ revision: 1,
+      method: 'RUNNING_PACE', included: true, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), runningThresholdSpeed: 3 });
+    const finish = await prepareTrainingLoadMetadata(uid, original); await source(uid, original); await finish();
+    const saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
+    expect(saved.legs!.leg.policy.runningThresholdSpeed).toBeUndefined();
+    expect(saved.legs!.leg.policy.method).toBe('AUTOMATIC');
+    expect(saved.legs!.leg.evaluations?.runningPace).toMatchObject({ method: 'MET', score: 9, reasons: expect.arrayContaining(['missing-pace-inputs']) });
   });
   it('initializes a newly recovered multisport leg without changing a matched legacy leg', async () => {
     const uid = setup(); await importWorkout(uid, workout());

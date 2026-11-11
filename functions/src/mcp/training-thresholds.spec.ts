@@ -6,6 +6,21 @@ import { requiredScopesForRequest } from './server';
 import { hasValidMcpScopeDependencies, MCP_OAUTH_SCOPES } from './oauth.service';
 
 describe('MCP training thresholds', () => {
+  it('accepts explicit running pace units and preserves unrelated thresholds', () => {
+    expect(trainingThresholdChanges({ runningPace: { paceSeconds: 270, distanceUnit: 'km' } }))
+      .toEqual({ runningThresholdSpeed: 1000 / 270 });
+    expect(trainingThresholdChanges({ runningPace: { paceSeconds: 480, distanceUnit: 'mi' } }).runningThresholdSpeed)
+      .toBeCloseTo(1609.34 / 480, 12);
+    expect(trainingThresholdChanges({ runningPace: null })).toEqual({ runningThresholdSpeed: null });
+    const policy = { method: 'HR' as const, included: true, runningThresholdSpeed: 3.7, functionalThresholdPower: 220 };
+    expect(applyTrainingThresholdChanges('running', policy, { lactateThresholdHR: 165 }))
+      .toEqual({ ...policy, lactateThresholdHR: 165 });
+    expect(() => applyTrainingThresholdChanges('walking-hiking', { method: 'HR', included: true }, { runningThresholdSpeed: 3.7 })).toThrow();
+    const request = { policyRef: 'opaque', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: {} };
+    for (const runningPace of [{ paceSeconds: 270, distanceUnit: 'm' }, { paceSeconds: 0, distanceUnit: 'km' },
+      { paceSeconds: 270, distanceUnit: 'km', uid: 'foreign' }])
+      expect(TRAINING_THRESHOLD_INPUTS.preview_training_threshold_change.safeParse({ ...request, changes: { runningPace } }).success).toBe(false);
+  });
   it('uses explicit metric/imperial CSS units and independent FTP/HR values', () => {
     expect(trainingThresholdChanges({ css: { paceSeconds: 113, distanceUnit: 'yd' }, lactateThresholdHR: 165 }))
       .toEqual({ swimThresholdSpeed: 91.44 / 113, lactateThresholdHR: 165 });
