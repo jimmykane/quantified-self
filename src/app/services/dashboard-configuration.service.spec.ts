@@ -32,6 +32,27 @@ describe('dashboard configuration writes', () => {
     await expect(TestBed.inject(DashboardConfigurationService).save('owner', { showTodaySummary: true }, { showTodaySummary: false })).rejects.toThrow(DashboardConfigurationConflict);
     expect(set).not.toHaveBeenCalled();
   });
+  it('saves and removes the recorded-activities opt-in over legacy defaults, retaining conflict protection', async () => {
+    const stored: Partial<AppDashboardSettingsInterface> = { tiles: [] };
+    const baseline = (await mergeUserProfileDocuments('owner', { settings: { dashboardSettings: structuredClone(stored) } }))!.settings.dashboardSettings;
+    const set = vi.fn((_reference, data, options) => {
+      expect(options).toEqual({ mergeFields: ['dashboardSettings.today'] });
+      stored.today = structuredClone(data.dashboardSettings.today);
+    });
+    vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
+      get: async () => ({ exists: () => true, data: () => ({ dashboardSettings: structuredClone(stored) }) }), set,
+    } as never));
+    const service = TestBed.inject(DashboardConfigurationService);
+    const enabled = { ...baseline.today, recordedActivities: true };
+    await service.save('owner', baseline, { today: enabled });
+    expect(stored.today.recordedActivities).toBe(true);
+    const disabled = { ...enabled, recordedActivities: false };
+    await service.save('owner', { ...baseline, today: enabled }, { today: disabled });
+    expect(stored.today.recordedActivities).toBe(false);
+    await expect(service.save('owner', { ...baseline, today: enabled }, { today: enabled }))
+      .rejects.toThrow(DashboardConfigurationConflict);
+    expect(set).toHaveBeenCalledTimes(2);
+  });
   it('accepts a legacy stored layout after profile hydration adds tile defaults', async () => {
     const tile = AppUserUtilities.getDefaultUserDashboardChartTile();
     delete tile['eventFilters'];
