@@ -21,7 +21,7 @@ canvas,
       transparent var(--terrain-top-fade-start),
       #000 var(--terrain-top-fade-end),
       #000 calc(100% - var(--terrain-bottom-fade)),
-      transparent 96%
+      transparent 100%
     ),
     linear-gradient(
       90deg,
