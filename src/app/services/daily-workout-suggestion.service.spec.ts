@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject, Subject, map, tap } from 'rxjs';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import { Auth } from 'app/firebase/auth';
+import { deleteField } from 'app/firebase/firestore';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '@shared/strength-workout';
@@ -332,6 +333,22 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
     expect(service.cached('owner')?.status?.state).toBe('dismissed'); expect(call).toHaveBeenCalledOnce();
   });
+  it('clears mutually exclusive duration fields when saving through the shared deep-merge settings writer', async () => {
+    const { service, user, updateUserProperties } = setup();
+    const automatic = service.preferences();
+    const legacyControls = { ...automatic.controls, minutes: 30 }; delete legacyControls.durationMode;
+    const legacy = { ...automatic, controls: legacyControls };
+    user.update(value => ({ ...value, settings: { appSettings: { dailyWorkoutSuggestion: legacy } } }));
+    await service.save('owner', automatic);
+    const autoPatch = updateUserProperties.mock.calls[0][1].settings.appSettings.dailyWorkoutSuggestion;
+    expect(autoPatch.controls).toEqual({ ...automatic.controls, minutes: deleteField() });
+    expect(automatic.controls).not.toHaveProperty('minutes');
+    await service.save('owner', legacy);
+    const legacyPatch = updateUserProperties.mock.calls[1][1].settings.appSettings.dailyWorkoutSuggestion;
+    expect(legacyPatch.controls).toEqual({ ...legacyControls, durationMode: deleteField() });
+    expect(legacy.controls).not.toHaveProperty('durationMode');
+    expect(updateUserProperties.mock.calls[1][1].settings.appSettings).not.toHaveProperty('dailyWorkoutDelivery');
+  });
   it('defaults off with all data selected, persists preferences and fences account changes', async () => {
     const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
     const preferences = service.preferences();
@@ -341,7 +358,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { acknowledge = resolve; }));
     const write = service.save('owner', { ...preferences, enabled: true }); await Promise.resolve();
     expect(service.saving()).toBe(true); acknowledge(); await write; expect(service.saving()).toBe(false);
-    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true } } } });
+    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true, controls: { ...preferences.controls, minutes: deleteField() } } } } });
     await service.request('owner', 'prepare', () => true);
     expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', resultVersion: 2, action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
@@ -503,7 +520,7 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     const delivery = { enabled: true, providers: ['garmin' as const] };
     await service.save('owner', service.preferences(), delivery);
     expect(updateUserProperties).toHaveBeenLastCalledWith(user(), { settings: { appSettings: {
-      dailyWorkoutSuggestion: service.preferences(), dailyWorkoutDelivery: delivery,
+      dailyWorkoutSuggestion: { ...service.preferences(), controls: { ...service.preferences().controls, minutes: deleteField() } }, dailyWorkoutDelivery: delivery,
     } } });
     user.update(value => ({ ...value, settings: { ...value.settings, appSettings: { ...value.settings.appSettings, dailyWorkoutDelivery: delivery } } }));
     expect(service.cached('owner')?.status).toEqual(cached);

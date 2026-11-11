@@ -1,7 +1,8 @@
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { runGenerateDayWorkout } from './day-workout-callable';
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { dailyWorkoutSuggestionMergePatch } from '../../../shared/daily-workout-suggestion';
+import { FieldValue, Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
@@ -23,6 +24,40 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('switches merged duration preferences without retaining incompatible fields or replacing the charged suggestion', async () => {
+    const uid = `duration-settings-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const settings = user.collection('config').doc('settings');
+    const automatic = { enabled: true, followRoutine: false, controls };
+    const legacy = { ...automatic, controls: { ...controls, minutes: 30 } }; delete legacy.controls.durationMode;
+    const delivery = { enabled: true, providers: ['garmin', 'suunto'] };
+    await user.set({});
+    await settings.set({ appSettings: { dailyWorkoutSuggestion: legacy, dailyWorkoutDelivery: delivery, otherSetting: 'keep' } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    try {
+      const first = (await store.read(uid)).preferences!;
+      const token = (await store.begin(uid, first))!;
+      await store.charge(uid, controls.localDate, token);
+      const result = response(`daily-suggestion:${controls.localDate}`);
+      await store.finish(uid, controls.localDate, token, 'ready', first.controls, result);
+      // Exercise the exact production merge patch, with the Admin SDK's matching delete sentinel.
+      await settings.set({ appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(automatic, FieldValue.delete()) } }, { merge: true });
+      const auto = await store.read(uid);
+      expect(auto.preferences?.controls).toEqual(automatic.controls);
+      expect((await settings.get()).get('appSettings.dailyWorkoutSuggestion.controls')).not.toHaveProperty('minutes');
+      expect(auto.status).toMatchObject({ state: 'ready', controls: first.controls, result });
+      expect(await store.begin(uid, auto.preferences!)).toBeNull();
+      const manual = { ...automatic, controls: { ...controls, durationMode: 'manual' as const, minutes: 45 } };
+      for (const preferences of [manual, automatic, legacy]) {
+        await settings.set({ appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(preferences, FieldValue.delete()) } }, { merge: true });
+        const saved = (await settings.get()).get('appSettings.dailyWorkoutSuggestion');
+        expect(saved).toEqual(preferences);
+        expect((await store.read(uid)).status.result).toEqual(result);
+      }
+      expect((await settings.get()).get('appSettings.dailyWorkoutDelivery')).toEqual(delivery);
+      expect((await settings.get()).get('appSettings.otherSetting')).toBe('keep');
+      expect((await user.collection('assistantUsage').get()).empty).toBe(true);
+    } finally { await db.recursiveDelete(user); }
+  }, 30000);
   it.each([false, true])('keeps one durable daily charge across concurrent views and transport recovery (recovered: %s)', async recover => {
     const uid = `daily-retry-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
     const preferences = { enabled: true, followRoutine: false, controls };

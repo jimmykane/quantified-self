@@ -70,3 +70,11 @@ export function parseDailyWorkoutSuggestionPreferences(value: unknown, now = new
   }
   return { enabled: input.enabled, followRoutine: input.followRoutine, controls };
 }
+
+/** Write-only patch for the shared deep-merge settings writer. Keep SDK sentinels out of request/cache controls. */
+export function dailyWorkoutSuggestionMergePatch<T>(preferences: DailyWorkoutSuggestionPreferences, deletedField: T) {
+  return { ...preferences, controls: { ...preferences.controls,
+    ...(preferences.controls.durationMode === 'auto' ? { minutes: deletedField } : {}),
+    ...(preferences.controls.durationMode === undefined ? { durationMode: deletedField } : {}),
+  } };
+}

@@ -115,8 +115,8 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
     estimatedMinutes = { minimum: range.minimum, maximum: range.maximum };
   }
   if (controls.durationMode === 'auto' && strength && (!estimatedMinutes || estimatedMinutes.minimum < 5 || estimatedMinutes.maximum > 240
-    || analysis.summary.duration.exactSubtotalSeconds > estimatedMinutes.maximum * 60)) {
-    throw new DayWorkoutSuggestionValidationError('Auto strength requires a planning estimate between 5 and 240 minutes covering all timed work and rests.');
+    || analysis.summary.duration.exactSubtotalSeconds > estimatedMinutes.minimum * 60)) {
+    throw new DayWorkoutSuggestionValidationError('Auto strength requires a planning estimate between 5 and 240 minutes with a lower bound covering all timed work and rests.');
   }
   return { kind: 'workout', rationale: row.rationale.trim(), previousLoads,
     draft: { title: row.title.trim(), structure, ...(strength ? { strength } : {}), ...(estimatedMinutes ? { estimatedMinutes } : {}) } };

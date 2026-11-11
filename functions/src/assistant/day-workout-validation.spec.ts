@@ -212,6 +212,9 @@ describe('Auto duration', () => {
     expect(() => validateDayWorkoutSuggestion(timed, options)).toThrow(/5 and 240/);
     timed.strength.exercises[0].sets[0].ending.seconds = 300;
     expect(validateDayWorkoutSuggestion(timed, options).draft).not.toBeNull();
+    value.strength.exercises[0].sets[0].restAfterSeconds = 1200;
+    expect(() => validateDayWorkoutSuggestion({ ...value, estimatedMinutes: { minimum: 5, maximum: 30 } }, options)).toThrow(/timed work/);
+    expect(validateDayWorkoutSuggestion({ ...value, estimatedMinutes: { minimum: 20, maximum: 30 } }, options).draft).not.toBeNull();
     value.strength.exercises[0].sets[0].restAfterSeconds = 3600;
     expect(() => validateDayWorkoutSuggestion({ ...value, estimatedMinutes: { minimum: 20, maximum: 40 } }, options)).toThrow(/timed work/);
   });

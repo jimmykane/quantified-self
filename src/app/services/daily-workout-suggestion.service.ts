@@ -1,8 +1,9 @@
 import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
+import { deleteField } from 'app/firebase/firestore';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest } from '@shared/day-workout';
-import { isDailyWorkoutFailureReason, isDailyWorkoutEventAdvice, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { isDailyWorkoutFailureReason, isDailyWorkoutEventAdvice, dailyWorkoutSuggestionMergePatch, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -311,7 +312,7 @@ export class DailyWorkoutSuggestionService {
       const changed = this.key(uid) !== JSON.stringify([uid, preferences]);
       this.saving.set(true);
       try {
-        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: preferences,
+        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: dailyWorkoutSuggestionMergePatch(preferences, deleteField()),
           ...(deliveryPreferences ? { dailyWorkoutDelivery: deliveryPreferences } : {}) } } });
         if (changed && this.isOwner(uid)) this.clear();
       }

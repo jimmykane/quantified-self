@@ -861,7 +861,11 @@ always means better recovery. Future suggestions require rechecking recovery clo
 `CompactSelectComponent` for Duration: Auto / Set minutes; Auto hides the minute input and manual timing choice.
 Switching back restores that dialog's last manual minutes/timing (30 minutes initially; strength stays approximate).
 Existing saved preferences and receipts without `durationMode` retain fixed-minute semantics and unchanged normalized
-request fingerprints. Explicit `durationMode: 'manual'` requires integer minutes 5–240; `durationMode: 'auto'` rejects a
+request fingerprints. The daily-preference save uses a write-only merge patch to explicitly remove obsolete minutes
+when selecting Auto, and to remove a stale mode when saving legacy fixed-minute controls. This reuses the profile
+writer and keeps SDK deletion sentinels out of canonical preferences and cache/request fingerprints. Emulator tests
+exercise the real deep-merge transitions and retain the charged suggestion and unrelated provider preferences.
+Explicit `durationMode: 'manual'` requires integer minutes 5–240; `durationMode: 'auto'` rejects a
 minute field or strict timing. The model receives neither minutes nor manual timing in Auto, including when reusing
 regeneration/replacement flows. Other contexts and provider preferences retain their existing authority.
 
@@ -874,7 +878,7 @@ enabled notes can change duration or justify rest; insufficient history is discl
 30-minute budget. This adds no history read, model call, provider query or punctuality/adherence inference.
 
 Auto endurance advertises only time endings and validates a complete 5–240-minute prescription including all repeat
-passes, warmup and cooldown. Auto strength requires a labelled 5–240-minute planning estimate covering known timed
+passes, warmup and cooldown. Auto strength requires a labelled 5–240-minute planning estimate whose lower bound covers all known timed
 work/rest, while keeping repetitions and unknown canonical durations unchanged. Existing manual duration behavior is
 preserved. Invalid outputs share the existing two-attempt correction ceiling; no independent duration request exists.
 The current day's charged cache survives preference changes. Regenerate remains explicit and uses the existing
