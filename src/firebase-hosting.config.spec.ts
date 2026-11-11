@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Help documents remembered Show/Hide performance charts, collapsing the plot and its tabs together (2026-11-11).
+// Help places Hide beside chart tabs or the single-chart title, with a Show row only while collapsed (2026-11-11).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);

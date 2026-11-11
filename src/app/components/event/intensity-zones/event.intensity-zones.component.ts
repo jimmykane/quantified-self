@@ -1,4 +1,5 @@
 import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -8,6 +9,7 @@ import {
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -46,9 +48,10 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 @Component({
   selector: 'app-event-intensity-zones',
   templateUrl: './event.intensity-zones.component.html',
-  styleUrls: ['./event.intensity-zones.component.css'],
+  styleUrls: ['./event.intensity-zones.component.css', '../performance-charts/performance-chart-header.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
+  imports: [NgTemplateOutlet],
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: StatsClassInterface[] = [];
@@ -56,6 +59,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   @Input() useAnimations = false;
   @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
   @Input() showHeader = true;
+  @Input() headerActions: TemplateRef<unknown> | null = null;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;

@@ -22,6 +22,15 @@ async function setup() {
   return { fixture, trigger, overlay, choices, changed, haptics, settle };
 }
 describe('compact select', () => {
+  it('can omit the separate label in an existing header while retaining its accessible name', async () => {
+    const c = await setup();
+    expect(c.fixture.nativeElement.querySelector('.compact-select-label')?.textContent).toBe('Linked plan');
+    c.fixture.componentRef.setInput('hideLabel', true); await c.settle();
+    expect(c.fixture.nativeElement.querySelector('.compact-select-label')).toBeNull();
+    expect(c.trigger.getAttribute('aria-label')).toBe('Linked plan: Independent goal');
+    expect(c.trigger.textContent).toContain('Independent goal');
+    expect(c.haptics.selection).not.toHaveBeenCalled();
+  });
   it('labels the current choice, marks it and returns focus after one accepted change', async () => {
     const c = await setup(); expect(c.haptics.selection).not.toHaveBeenCalled();
     expect(c.trigger.getAttribute('aria-label')).toBe('Linked plan: Independent goal');

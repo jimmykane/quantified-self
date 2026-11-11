@@ -554,6 +554,9 @@ progress mode, optional plan and status. It reuses the Connection History menu p
 allowlisted options and a disabled state; nullable values represent an explicit option such as Independent goal.
 The menu shows the selected checkmark and `menuitemradio`/`aria-checked`, supports keyboard/Escape and focus return,
 wraps long labels and keeps 44px targets. Do not recreate this dropdown with outlined fields or custom popup CSS.
+In an existing labelled header, `hideLabel` can omit the separate caption to keep the picker on that row. Keep the
+`label` input meaningful: the trigger still announces the label and current choice. Event Details uses this for the
+phone performance-chart picker beside Hide; standalone fields retain their visible labels.
 The component owns menu-opening haptics; the caller validates/commits the accepted change and owns its selection
 haptic. Unchanged, disabled and stale choices emit nothing. Retain `mat-select` where a Material form-field/CVA/error
 state is needed, searchable pickers for long catalogs, and segmented controls for immediately visible alternatives.

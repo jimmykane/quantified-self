@@ -1,4 +1,6 @@
+@if (!hideLabel()) {
 <span class="compact-select-label">{{ label() }}</span>
+}
 <button mat-button type="button" class="compact-select-button" #trigger="matMenuTrigger"
   [matMenuTriggerFor]="menu" [class.is-open]="trigger.menuOpen" [disabled]="disabled()"
   [attr.aria-label]="label() + ': ' + selectedLabel()" (menuOpened)="opened()">

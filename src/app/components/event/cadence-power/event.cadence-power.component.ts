@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -7,6 +8,7 @@ import {
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -51,15 +53,17 @@ const CADENCE_SYMBOLS = ['circle', 'diamond', 'triangle', 'rect', 'roundRect'];
 @Component({
   selector: 'app-event-cadence-power',
   templateUrl: './event.cadence-power.component.html',
-  styleUrls: ['./event.cadence-power.component.css'],
+  styleUrls: ['./event.cadence-power.component.css', '../performance-charts/performance-chart-header.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
+  imports: [NgTemplateOutlet],
 })
 export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
+  @Input() headerActions: TemplateRef<unknown> | null = null;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;

@@ -1,7 +1,10 @@
 <div class="cadence-power-container">
-  <div class="chart-intro">
+  <div class="chart-intro" [class.chart-intro-with-actions]="headerActions">
+    <div class="chart-intro-copy">
     <div class="chart-title">Cadence vs Power</div>
     <div class="chart-description">Point density shows where you spent most of your effort.</div>
+    </div>
+    <ng-container [ngTemplateOutlet]="headerActions"></ng-container>
   </div>
   <div class="cadence-power-chart" #chartDiv [style.min-width.%]="100" role="img"
     aria-label="Cadence versus power scatter chart showing where effort was concentrated."></div>

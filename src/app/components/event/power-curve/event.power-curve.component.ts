@@ -7,6 +7,7 @@ import {
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -53,7 +54,7 @@ const KEY_POWER_DURATION_MARKERS = [5, 15, 30, 60, 300, 1200, 3600, 7200];
 @Component({
   selector: 'app-event-power-curve',
   templateUrl: './event.power-curve.component.html',
-  styleUrls: ['./event.power-curve.component.css'],
+  styleUrls: ['./event.power-curve.component.css', '../performance-charts/performance-chart-header.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false,
 })
@@ -62,6 +63,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
+  @Input() headerActions: TemplateRef<unknown> | null = null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 

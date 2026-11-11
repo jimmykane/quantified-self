@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
 import { CommonModule } from '@angular/common';
+import { CompactSelectComponent } from '../components/shared/compact-select/compact-select.component';
 import { EventRoutingModule } from '../event.routing.module';
 import { EventCardComponent } from '../components/event/event.card.component';
 import { EventCardMapComponent } from '../components/event/map/event.card.map.component';
@@ -37,6 +38,7 @@ import { SummaryDisclosureComponent } from '../components/shared/summary-disclos
 
 @NgModule({
     imports: [
+        CompactSelectComponent,
         CommonModule,
         SharedModule,
         MaterialModule,

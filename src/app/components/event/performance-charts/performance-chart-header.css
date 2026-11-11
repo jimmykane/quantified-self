@@ -1,0 +1,16 @@
+.chart-intro.chart-intro-with-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: start;
+}
+
+.chart-intro-with-actions > .chart-intro-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+}
+
+.chart-intro-with-actions .chart-title-row {
+  justify-content: flex-start;
+}

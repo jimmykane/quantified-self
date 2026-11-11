@@ -46,7 +46,8 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const text of ['**Intensity**, **Power Curve**, **Durability**, and **Cadence vs Power**',
       '**Hide performance charts**', 'collapses the plot and its tabs', '**Show performance charts**',
-      'selected chart is kept', 'tab arrows to reach the full chart names',
+      'beside the chart tabs', 'beside the chart title', 'row appears only while collapsed',
+      'selected chart is kept', 'compact chart picker beside **Hide**',
       'remembered across activities and devices', 'Charts start visible until you hide them',
       'R–R & HRV keep their own visibility', 'anonymous shared link', 'previous saved visibility returns']) expect(content).toContain(text);
   });

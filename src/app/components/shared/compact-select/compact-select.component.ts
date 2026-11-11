@@ -10,6 +10,7 @@ export interface CompactSelectOption<T extends string | null = string | null> { 
   templateUrl: './compact-select.component.html', styleUrl: './compact-select.component.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class CompactSelectComponent<T extends string | null = string | null> {
   readonly label = input.required<string>();
+  readonly hideLabel = input(false);
   readonly value = input.required<T>();
   readonly options = input.required<readonly CompactSelectOption<T>[]>();
   readonly disabled = input(false);

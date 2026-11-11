@@ -1,5 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { Component, Input, NO_ERRORS_SCHEMA, TemplateRef, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { BehaviorSubject } from 'rxjs';
+import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,6 +19,16 @@ import { resolve } from 'node:path';
 import { EventPerformanceChartsComponent } from './event.performance-charts.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { CompactSelectComponent } from '../../shared/compact-select/compact-select.component';
+
+@Component({
+  selector: 'app-event-intensity-zones, app-event-power-curve, app-event-durability-curve, app-event-cadence-power',
+  imports: [NgTemplateOutlet],
+  template: '<div class="chart-intro"><ng-container [ngTemplateOutlet]="headerActions"></ng-container></div>',
+})
+class PerformanceChartStubComponent {
+  @Input() headerActions: TemplateRef<unknown> | null = null;
+}
 
 describe('EventPerformanceChartsComponent', () => {
   let fixture: ComponentFixture<EventPerformanceChartsComponent>;
@@ -23,14 +37,16 @@ describe('EventPerformanceChartsComponent', () => {
   const updateChartSettings = vi.fn();
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const snackBar = { open: vi.fn() };
+  const breakpoint = new BehaviorSubject({ matches: false, breakpoints: {} });
 
   beforeEach(async () => {
-    vi.clearAllMocks(); chartSettings.set({});
+    vi.clearAllMocks(); chartSettings.set({}); breakpoint.next({ matches: false, breakpoints: {} });
     updateChartSettings.mockImplementation(async settings => { chartSettings.set(settings); });
     await TestBed.configureTestingModule({
-      imports: [MatTabsModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, NoopAnimationsModule],
+      imports: [NgTemplateOutlet, CompactSelectComponent, PerformanceChartStubComponent, MatTabsModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, NoopAnimationsModule],
       declarations: [EventPerformanceChartsComponent],
       providers: [{ provide: AppUserSettingsQueryService, useValue: { chartSettings, updateChartSettings } },
+        { provide: BreakpointObserver, useValue: { observe: () => breakpoint.asObservable() } },
         { provide: AppHapticsService, useValue: haptics }, { provide: MatSnackBar, useValue: snackBar }],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -44,16 +60,18 @@ describe('EventPerformanceChartsComponent', () => {
     fixture.componentRef.setInput('viewer', new User('viewer'));
     component.hasIntensity = true; component.hasPowerCurve = true;
     fixture.detectChanges(); await fixture.whenStable();
-    const button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
+    let button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.getAttribute('aria-label')).toBe('Hide performance charts');
-    expect(button.textContent).toContain('Hide performance charts');
+    expect(button.querySelector('.performance-disclosure-label').textContent).toBe('Hide');
+    expect(button.closest('.performance-charts-toolbar').querySelector('nav')).not.toBeNull();
     const controlledRegion = fixture.nativeElement.querySelector(`#${button.getAttribute('aria-controls')}`) as HTMLElement;
     expect(controlledRegion.getAttribute('aria-label')).toBe('Performance charts');
     expect(controlledRegion.contains(fixture.nativeElement.querySelector('.performance-charts-tabs'))).toBe(true);
     expect(controlledRegion.contains(fixture.nativeElement.querySelector('app-event-intensity-zones'))).toBe(true);
     expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Show performance charts');
     expect(button.textContent).toContain('Show performance charts');
@@ -89,6 +107,8 @@ describe('EventPerformanceChartsComponent', () => {
       .map((label: Element) => label.textContent.trim());
     expect(labels()).toEqual(names.length > 1 ? names : []);
     expect(component.chartTitles).toEqual(names.map(name => name === 'Intensity' ? 'Intensity Zones' : name));
+    const hide = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
+    expect(hide.closest(names.length > 1 ? '.performance-charts-toolbar' : '.chart-intro')).not.toBeNull();
     await component.toggleExpanded(); fixture.detectChanges();
     expect(labels()).toEqual([]);
     expect(fixture.nativeElement.querySelector('.performance-disclosure').getAttribute('aria-label'))
@@ -150,8 +170,9 @@ describe('EventPerformanceChartsComponent', () => {
       finishSave = () => { chartSettings.set(settings); resolveSave(); };
     }));
     fixture.detectChanges(); await fixture.whenStable();
-    const button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
-    button.focus(); button.click(); fixture.detectChanges();
+    let button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
+    button.focus(); button.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    button = fixture.nativeElement.querySelector('.performance-disclosure') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     expect(button.getAttribute('aria-disabled')).toBe('true');
     expect(button.getAttribute('aria-busy')).toBe('true');
@@ -187,6 +208,25 @@ describe('EventPerformanceChartsComponent', () => {
     await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
     await component.toggleExpanded(); fixture.detectChanges(); await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('Power Curve');
+  });
+
+  it('uses one header row on phones and changes charts without changing saved visibility', async () => {
+    component.hasIntensity = true; component.hasPowerCurve = true; component.hasCadencePower = true;
+    breakpoint.next({ matches: true, breakpoints: {} });
+    fixture.detectChanges(); await fixture.whenStable();
+    const picker = fixture.debugElement.query(By.directive(CompactSelectComponent));
+    expect(fixture.nativeElement.querySelector('nav')).toBeNull();
+    expect(picker.nativeElement.closest('.performance-charts-toolbar').querySelector('.performance-disclosure')).not.toBeNull();
+    expect(picker.componentInstance.hideLabel()).toBe(true);
+    picker.componentInstance.select('cadencePower'); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.activeTab).toBe('cadencePower');
+    expect(fixture.nativeElement.querySelector('mat-tab-nav-panel').getAttribute('role')).toBe('region');
+    expect(fixture.nativeElement.querySelector('mat-tab-nav-panel').getAttribute('aria-label')).toBe('Cadence vs Power');
+    expect(updateChartSettings).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
+    picker.componentInstance.select('cadencePower');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.toggleExpanded(); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(CompactSelectComponent))).toBeNull();
   });
 
   it('should render tabs in locked order when multiple charts are available', async () => {

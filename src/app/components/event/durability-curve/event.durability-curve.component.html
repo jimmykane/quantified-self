@@ -1,5 +1,5 @@
 <div class="durability-curve-container">
-  <div class="chart-intro">
+  <div class="chart-intro" [class.chart-intro-with-actions]="headerActions">
     @if (!previewMode && isMobile && summaryViewModels.length) {
       <button type="button" mat-icon-button class="durability-summary-toggle"
         [attr.aria-expanded]="summaryDetailsExpanded"
@@ -17,6 +17,7 @@
       </div>
       <div class="chart-description">{{ chartDescription }}</div>
     </div>
+    <ng-container [ngTemplateOutlet]="headerActions"></ng-container>
   </div>
   @if (!previewMode && summaryViewModels.length && (!isMobile || summaryDetailsExpanded)) {
     <div class="durability-summary-list" aria-label="Durability eligibility summary">

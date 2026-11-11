@@ -1,9 +1,14 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, input, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { ChangeDetectionStrategy, Component, DestroyRef, Injector, Input, afterNextRender, computed, effect, inject, input, signal } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { AppBreakpoints } from '../../../constants/breakpoints';
 
 type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
 let nextContentId = 0;
@@ -18,10 +23,15 @@ let nextContentId = 0;
 export class EventPerformanceChartsComponent {
   readonly viewer = input<User | null>(null);
   readonly contentId = `event-performance-charts-${nextContentId++}`;
+  readonly disclosureId = `${this.contentId}-disclosure`;
+  readonly isMobile = toSignal(inject(BreakpointObserver).observe([AppBreakpoints.XSmall])
+    .pipe(map(state => state.matches)), { initialValue: false });
   private readonly settings = inject(AppUserSettingsQueryService);
   private readonly haptics = inject(AppHapticsService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly document = inject(DOCUMENT);
+  private readonly focusInjector = inject(Injector);
   private readonly visibilityOverride = signal<{ viewerID: string | null; shown: boolean } | null>(null);
   private readonly pendingSave = signal<{ viewerID: string; shown: boolean } | null>(null);
   readonly saving = computed(() => !!this.pendingSave() && this.pendingSave()?.viewerID === this.viewer()?.uid);
@@ -51,7 +61,9 @@ export class EventPerformanceChartsComponent {
     if (this.destroyRef.destroyed || this.saving() || !this.availableTabs.length) return;
     const viewerID = this.viewer()?.uid ?? null;
     const shown = !this.expanded();
+    const previousFocus = this.document.activeElement;
     this.visibilityOverride.set({ viewerID, shown });
+    this.restoreDisclosureFocus(previousFocus);
     this.haptics.selection();
     // Anonymous viewers can collapse their view without writing the shared owner's settings.
     if (!viewerID) return;
@@ -63,7 +75,9 @@ export class EventPerformanceChartsComponent {
       if (stillCurrent()) this.haptics.success();
     } catch {
       if (stillCurrent()) {
+        const previousFocus = this.document.activeElement;
         this.visibilityOverride.set(null);
+        this.restoreDisclosureFocus(previousFocus);
         this.haptics.error();
         this.snackBar.open('Could not save performance chart visibility. Please try again.', 'OK', { duration: 5000 });
       }
@@ -72,11 +86,21 @@ export class EventPerformanceChartsComponent {
     }
   }
 
+  private restoreDisclosureFocus(previous: Element | null): void {
+    if (previous?.id !== this.disclosureId) return;
+    afterNextRender(() => {
+      if (this.destroyRef.destroyed) return;
+      const active = this.document.activeElement;
+      if (active !== previous && active !== this.document.body) return;
+      this.document.getElementById(this.disclosureId)?.focus({ preventScroll: true });
+    }, { injector: this.focusInjector });
+  }
+
   get activeTab(): PerformanceTabId | null {
     return this.availableTabs.includes(this.selectedTab) ? this.selectedTab : this.availableTabs[0] ?? null;
   }
 
-  selectChart(tab: PerformanceTabId): void {
+  selectChart(tab: PerformanceTabId | null): void {
     if (this.destroyRef.destroyed || this.saving() || !this.expanded() || !this.availableTabs.includes(tab)) return;
     const changed = tab !== this.activeTab;
     this.selectedTab = tab;
@@ -101,6 +125,12 @@ export class EventPerformanceChartsComponent {
   get chartOptions(): { id: PerformanceTabId; label: string; icon: string }[] {
     return this.availableTabs.map(id => ({ id, label: this.getTabLabel(id), icon: this.getTabIcon(id) }));
   }
+
+  get chartChoices(): { value: PerformanceTabId; label: string }[] {
+    return this.chartOptions.map(({ id, label }) => ({ value: id, label }));
+  }
+
+  get activeChartLabel(): string { return this.activeTab ? this.getTabLabel(this.activeTab) : ''; }
 
   get disclosureLabel(): string { return `${this.expanded() ? 'Hide' : 'Show'} performance charts`; }
 

@@ -11,6 +11,7 @@
 }
 
 .performance-disclosure { max-width: 100%; height: auto; min-height: 48px; }
+.performance-disclosure-compact { flex-shrink: 0; min-height: 44px; }
 .performance-disclosure-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 24px; }
 .performance-disclosure-content > mat-icon { flex-shrink: 0; }
 .performance-disclosure-label { white-space: normal; text-align: left; }
@@ -26,9 +27,11 @@
 .performance-charts-tabs {
   /* Event Details already supplies the separator below this chart group. */
   --mat-tab-divider-height: 0px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .performance-chart-tab { padding-inline: 8px; }
+.performance-mobile-chart-picker { flex: 1 1 auto; min-width: 0; }
 
 .performance-durability-notice {
   display: flex;
