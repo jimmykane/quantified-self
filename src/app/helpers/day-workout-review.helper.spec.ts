@@ -5,11 +5,14 @@ import { analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
 import { dayWorkoutReview, dayWorkoutReviewTiming } from './day-workout-review.helper';
 
 describe('Calendar workout draft review', () => {
-  it('starts with explicit time and independent enabled context choices across sports', () => {
+  it('starts with Auto duration and independent enabled context choices across sports', () => {
     const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
-    expect(controls).toMatchObject({ minutes: 30, trainingContext: true, timelineContext: true, usePreviousWeights: true, sport: ActivityTypes.Running });
+    expect(controls).toMatchObject({ durationMode: 'auto', timing: 'approximate', trainingContext: true, timelineContext: true, usePreviousWeights: true, sport: ActivityTypes.Running });
+    expect(controls).not.toHaveProperty('minutes');
     expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, new Date('2026-10-27T23:00Z'))).toEqual({ requestId: 'request-123', controls });
-    expect(defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining)).toMatchObject({ equipment: ['bodyweight'], target: 'none' });
+    const strengthControls = defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining);
+    expect(strengthControls).toMatchObject({ durationMode: 'auto', timing: 'approximate', equipment: ['bodyweight'], target: 'none' });
+    expect(strengthControls).not.toHaveProperty('minutes');
   });
   it('preserves explicit context opt-outs and requires every choice in incoming requests', () => {
     const controls = { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), trainingContext: false, timelineContext: false, usePreviousWeights: false };
