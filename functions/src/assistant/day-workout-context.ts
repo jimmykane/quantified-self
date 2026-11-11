@@ -317,7 +317,10 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
       if (routine.recordedDayCount > 0) usedContext.push('Recorded ' + routine.sport + ' on ' + routine.recordedDayCount + ' of the previous '
         + routine.weekdayOpportunities + ' ' + routine.weekday + 's');
       if (routine.status === 'insufficient') missingContext.push('Training routine: too few matching recorded days to establish a usual pattern.');
-      if (routine.typicalDurationSeconds === null) missingContext.push('Training routine: usual session duration is unknown.');
+      if (controls.durationMode === 'auto' && routine.durationBaseline) {
+        usedContext.push(routine.durationBaseline.source === 'weekday'
+          ? 'Auto duration: matching sport and weekday session history' : 'Auto duration: recent same-sport sessions (weekday duration unavailable)');
+      } else if (routine.typicalDurationSeconds === null) missingContext.push('Training routine: usual session duration is unknown.');
     } else missingContext.push('Training routine could not be checked completely; no weekday habit was inferred.');
   } else missingContext.push('Training routine: turned off (requires Recent activities).');
   const evidence: RecordValue = { ...(training?.replacement ? { replacement: training.replacement } : {}), daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,

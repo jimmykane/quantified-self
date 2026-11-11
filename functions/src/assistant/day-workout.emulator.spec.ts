@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
@@ -275,7 +275,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const selected = { ...controls, sport: ActivityTypes.StrengthTraining, target: 'none' as const, trainingContext: true, equipment: ['dumbbells' as const] };
     const context = await readDayWorkoutTrainingContext(uid, selected, new Date('2026-10-28T12:00Z'), db);
     expect(context.previousStrength.map(item => item.localDate)).toEqual(['2026-10-27', '2026-10-26', '2026-10-25', '2026-10-24', '2026-10-23']);
-    const generatedStrength = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated strength', rationale: 'Familiar prescription.', strength }, selected, context.previousStrength);
+    const generatedStrength = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated strength', rationale: 'Familiar prescription.', strength, estimatedMinutes: { minimum: 20, maximum: 40 } }, selected, context.previousStrength);
     expect(generatedStrength.draft!.strength!.exercises[0].sets.map(set => set.externalLoadKg)).toEqual([0, 12.5]);
     expect(generatedStrength.previousLoads).toEqual([{ exerciseId: 'squat', localDate: '2026-10-27' }]);
     const generatedRun = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Generated run', rationale: 'Easy session.', structure: {
@@ -283,7 +283,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
         { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 120 }, targets: [], note: 'Comfortable effort' },
         { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, targets: [] },
       ] }],
-    } }, { ...controls, timing: 'strict' });
+    } }, controls);
     const reads = createFirestoreTrainingReads(() => db);
     const run = (tool: TrainingReadTool, args: unknown) => readTrainingPlans({ tool, arguments: args, uid,
       connectionId: 'connection', scopes: ['training-plans:read'] }, reads, { encode: JSON.stringify, decode: JSON.parse });
@@ -348,10 +348,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect((await store.read(uid)).status.result).toEqual(advice);
     expect(await store.begin(uid, saved)).toBeNull();
   }, 30000);
-  it('claims one included daily result after noon across devices, preserves preferences and never touches Assistant quota', async () => {
+  it.each(['manual', 'auto'] as const)('claims one included daily result after noon across devices and preference changes (%s)', async durationMode => {
     const uid = `daily-suggestion-${randomUUID()}`;
     let now = new Date('2026-10-30T13:00Z');
-    const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
+    const initialControls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+    if (durationMode === 'manual') { delete initialControls.durationMode; initialControls.minutes = 30; }
+    const saved = { enabled: true, followRoutine: true, controls: parseGenerateDayWorkoutRequest({ requestId: 'daily-options', controls: initialControls }, now).controls };
     const user = db.doc(`users/${uid}`); await user.set({});
     await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: saved } });
     const store = createDailyWorkoutSuggestionStore(() => db, () => now);
@@ -364,8 +366,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await store.finish(uid, '2026-10-30', token, 'ready', saved.controls, result);
     expect((await store.read(uid)).status).toMatchObject({ state: 'ready', result, controls: saved.controls });
     await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: { ...saved,
-      controls: { ...saved.controls, minutes: 60 } } } });
-    expect((await store.read(uid)).status.controls?.minutes).toBe(30);
+      controls: durationMode === 'auto' ? { ...saved.controls, durationMode: 'manual', minutes: 60 } : defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') } } });
+    expect((await store.read(uid)).status.controls).toEqual(saved.controls);
     expect(await store.begin(uid, (await store.read(uid)).preferences!)).toBeNull();
     expect((await user.collection('assistantUsage').get()).empty).toBe(true);
     const state = (await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).data()!;

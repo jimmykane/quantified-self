@@ -142,7 +142,22 @@ describe('Calendar generation context boundaries', () => {
     expect(result.evidence.daily).not.toHaveProperty('weekdayConsistency');
     expect(JSON.stringify(result.evidence)).not.toMatch(/PRIVATE-REF|PRIVATE-TITLE/);
     expect(result.usedContext).toContain('Recorded Strength Training on 3 of the previous 4 Mondays');
+    expect(result.usedContext).toContain('Auto duration: matching sport and weekday session history');
     expect(source.callTool.mock.calls.map(([name]) => name)).not.toContain('query_metric');
+  });
+  it('discloses the broader Auto duration fallback while withholding a weekday habit', async () => {
+    const source = session(), original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async (name, input) => name === 'query_activities' && input?.start
+      ? { structuredContent: { scanComplete: true, activities: ['2026-10-13', '2026-10-20'].map(date => ({
+        activityRef: date, activityType: ActivityTypes.StrengthTraining, startTimeMs: Date.parse(date + 'T10:00Z'),
+        stats: { durationSeconds: 2700 },
+      })) } } : original(name, input));
+    const result = await collectDayWorkoutContext({ ...controls, sport: ActivityTypes.StrengthTraining }, now, source, vi.fn());
+    expect(result.evidence.daily).toMatchObject({ trainingRoutine: { status: 'insufficient', typicalDurationSeconds: null,
+      durationBaseline: { source: 'sport', typicalDurationSeconds: 2700, recordedDayCount: 2 } } });
+    expect(result.usedContext).toContain('Auto duration: recent same-sport sessions (weekday duration unavailable)');
+    expect(result.missingContext).not.toContain('Training routine: usual session duration is unknown.');
+    expect(source.callTool.mock.calls.filter(([name, input]) => name === 'query_activities' && input?.start)).toHaveLength(1);
   });
   it('makes the routine opt-out independent of recovery and stops its historical reads when activities are off', async () => {
     for (const overrides of [{ routineContext: false }, { activityContext: false }]) {

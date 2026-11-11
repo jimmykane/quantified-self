@@ -857,6 +857,35 @@ compares the requested sport with its recorded baseline where available, treats 
 which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
 always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
 
+**Auto duration** is the default for new manual generations and new daily preferences. The shared dialog uses
+`CompactSelectComponent` for Duration: Auto / Set minutes; Auto hides the minute input and manual timing choice.
+Switching back restores that dialog's last manual minutes/timing (30 minutes initially; strength stays approximate).
+Existing saved preferences and receipts without `durationMode` retain fixed-minute semantics and unchanged normalized
+request fingerprints. Explicit `durationMode: 'manual'` requires integer minutes 5–240; `durationMode: 'auto'` rejects a
+minute field or strict timing. The model receives neither minutes nor manual timing in Auto, including when reusing
+regeneration/replacement flows. Other contexts and provider preferences retain their existing authority.
+
+Auto first uses the selected sport's matching-weekday median below, then a same-sport median from all 28 complete
+local days when the weekday duration is unknown. Each baseline needs positive persisted duration on at least two
+distinct dates. Both summaries share the existing bounded read; partial scans withhold them, and disabling Training
+routine or Recent activities prevents both. The private `durationBaseline` identifies weekday/sport provenance without
+activity identity. The final daily sport is selected before context collection. Recovery, goals, nearby sessions and
+enabled notes can change duration or justify rest; insufficient history is disclosed and never supplies an implicit
+30-minute budget. This adds no history read, model call, provider query or punctuality/adherence inference.
+
+Auto endurance advertises only time endings and validates a complete 5–240-minute prescription including all repeat
+passes, warmup and cooldown. Auto strength requires a labelled 5–240-minute planning estimate covering known timed
+work/rest, while keeping repetitions and unknown canonical durations unchanged. Existing manual duration behavior is
+preserved. Invalid outputs share the existing two-attempt correction ceiling; no independent duration request exists.
+The current day's charged cache survives preference changes. Regenerate remains explicit and uses the existing
+Assistant allowance and revision-bound replacement review; sleep/import blockers and daily admission are unchanged.
+
+MCP impact review: no public wire or consent impact. Auto and its private history baseline are generation controls,
+not canonical recipe/metric fields. Emulator read-back covers Auto endurance and strength through existing strict MCP
+workout reads; proposal/apply schemas and delivery are unchanged. No plugin rebuild, data migration, Firestore Rules
+or index change is needed. Release the compatible `generateDayWorkout` backend before the frontend; deployment needs
+separate authorization. Help explains Auto, Set minutes, missing history and cached-day behavior.
+
 **Training routine** is selected by default and requires **Recent activities**. Its private reader reuses existing
 `query_activities` projections and server-side sport filtering, with at most two pages of 100 summaries. The query pads
 its UTC start to cover the complete first local day; the reducer keeps only the previous 28 complete local dates,
@@ -873,7 +902,7 @@ opportunities, session count, optional median duration and an explicit missing-d
 looping/missing cursors, overlarge pages or tool failures withhold the entire routine and disclose the gap. Recorded
 weekday frequency appears under review Context; it never proves location, start-time punctuality, missed training or
 adherence. The prompt uses the routine as descriptive preference context within explicit sport, equipment, purpose
-and minutes, subordinate to recovery and existing planned sessions. Turning off Training routine removes its history
+and any explicit manual minutes, subordinate to recovery and existing planned sessions. Turning off Training routine removes its history
 reads and model evidence; turning off Recent activities also disables it. No new stored feedback, scores, provider
 calls or model calls are added. The old all-sport duration-bucket query is skipped for this generator.
 

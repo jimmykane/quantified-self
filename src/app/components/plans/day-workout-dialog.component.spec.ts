@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url';
+import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
 import { signal } from '@angular/core';
 import { By, DomSanitizer } from '@angular/platform-browser';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
@@ -53,9 +55,13 @@ function exportDailySuggestionDialogQa(element: HTMLElement, name: string) {
   const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
   const css = (MatDialogContainer as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('\n')
     + [[`#${element.id}`, 'plans/day-workout-dialog'], ['app-compact-row', 'shared/compact-row/compact-row'],
-      ['app-training-delivery-button', 'plans/training-delivery-button']]
-      .map(([selector, path]) => sass.compileString(`${selector} {` + readFileSync(`src/app/components/${path}.component.scss`, 'utf8')
-        .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('');
+      ['app-training-delivery-button', 'plans/training-delivery-button'], ['app-compact-select', 'shared/compact-select/compact-select']]
+      .map(([selector, path]) => {
+        const file = resolve(`src/app/components/${path}.component.scss`), source = readFileSync(file, 'utf8');
+        const uses = source.match(/^@use .+;$/gm) ?? [];
+        return sass.compileString(uses.join('\n') + '\n' + `${selector} {` + source.replace(/^@use .+;$/gm, '')
+          .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}', { url: pathToFileURL(file) }).css;
+      }).join('');
   const markup = element.cloneNode(true) as HTMLElement;
   const inputs: HTMLInputElement[] = [...element.querySelectorAll('input')];
   markup.querySelectorAll('input').forEach((input, i) => { input.setAttribute('value', inputs[i].value); input.toggleAttribute('checked', inputs[i].checked); });
@@ -138,6 +144,47 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+
+  it('starts Auto without a minute input, supports manual limits and restores them when toggling', async () => {
+    TestBed.inject(MAT_DIALOG_DATA).sport = ActivityTypes.Running;
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.durationMode()).toBe('auto');
+    expect(component.valid()).toBe(true);
+    expect(fixture.nativeElement.querySelector('input[type="number"]')).toBeNull();
+    expect(component.moreChoices().some(choice => choice.key === 'timing')).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const selector = fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance as CompactSelectComponent;
+    selector.selectionChange.emit('manual'); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.controls()).toMatchObject({ durationMode: 'manual', minutes: 30 });
+    expect(fixture.nativeElement.querySelector('input[type="number"]').value).toBe('30');
+    expect(fixture.nativeElement.querySelector('input[type="number"]')).not.toBeNull();
+    component.set('minutes', 55, false); component.set('timing', 'strict'); fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('input[type="number"]').value).toBe('55');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'duration-manual');
+    selector.selectionChange.emit('auto'); fixture.detectChanges();
+    expect(component.controls()).not.toHaveProperty('minutes');
+    expect(component.controls().timing).toBe('approximate');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'duration-auto');
+    await component.generate();
+    expect(generate.mock.calls[0][1].controls).toMatchObject({ durationMode: 'auto' });
+    expect(generate.mock.calls[0][1].controls).not.toHaveProperty('minutes');
+    selector.selectionChange.emit('manual'); fixture.detectChanges();
+    expect(component.controls()).toMatchObject({ minutes: 55, timing: 'strict' });
+    expect(component.result()).toBeNull();
+    const feedback = haptics.selection.mock.calls.length;
+    selector.selectionChange.emit('manual'); expect(haptics.selection).toHaveBeenCalledTimes(feedback);
+  });
+  it('opens legacy saved minutes unchanged and keeps Auto estimates separate from sport selection', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), minutes: 42 };
+    delete controls.durationMode; data.initialControls = controls;
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.durationMode()).toBe('manual'); expect(component.controls().minutes).toBe(42);
+    component.set('durationMode', 'auto'); component.set('sport', ActivityTypes.StrengthTraining);
+    expect(component.controls()).toMatchObject({ durationMode: 'auto', timing: 'approximate' });
+    expect(component.controls()).not.toHaveProperty('minutes');
+    component.set('durationMode', 'manual'); expect(component.controls().minutes).toBe(42);
+  });
 
   it('checks explicit Power in daily preferences, warns outside More options, and preserves the choices while rechecking', async () => {
     const controls = { ...defaultDayWorkoutControls('2026-10-28', 'Europe/Athens', ActivityTypes.Cycling), target: 'power', garminPowerAveragingSeconds: 3 };
@@ -724,7 +771,7 @@ describe('DayWorkoutDialogComponent', () => {
     expect(close).not.toHaveBeenCalled(); // Cancelling provider review leaves the saved confirmation available.
     exportDailySuggestionDialogQa(fixture.nativeElement, 'workout-added-send');
     await component.add(); await component.primaryAction(); await component.generate(); component.edit(); component.set('minutes', 90);
-    expect(component.controls().minutes).toBe(30);
+    expect(component.controls().durationMode).toBe('auto'); expect(component.controls()).not.toHaveProperty('minutes');
     expect(mutate).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled(); expect(loadQuotaStatus).toHaveBeenCalledOnce();
   });
 
@@ -863,7 +910,7 @@ describe('DayWorkoutDialogComponent', () => {
   });
   it('renders enabled defaults, independent opt-outs and full reviewed strength without writing', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
-    expect(component.controls()).toMatchObject({ minutes: 30, destinationPlanId: 'plan', equipment: ['bodyweight'], trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    expect(component.controls()).toMatchObject({ durationMode: 'auto', destinationPlanId: 'plan', equipment: ['bodyweight'], trainingContext: true, timelineContext: true, usePreviousWeights: true });
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('8 reps');
@@ -1196,7 +1243,7 @@ describe('DayWorkoutDialogComponent', () => {
     expect(retry.textContent).toContain('Retry Add'); expect(retry.disabled).toBe(false);
     const command = mutate.mock.calls[0][0]; expect(command.operation.confirmPlanRangeExtension).toBe(true);
     schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8 } });
-    component.set('minutes', 50); expect(component.controls().minutes).toBe(30);
+    component.set('minutes', 50); expect(component.controls().durationMode).toBe('auto'); expect(component.controls()).not.toHaveProperty('minutes');
     await component.add();
     expect(mutate.mock.calls[1][0]).toEqual(command); expect(dialogOpen).toHaveBeenCalledOnce();
     expect(close).not.toHaveBeenCalled();

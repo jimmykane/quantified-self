@@ -14,7 +14,7 @@ describe('Recorded sport and weekday routine', () => {
       activity('2026-10-15', 5000, ActivityTypes.Running), activity('2026-10-21'), activity('2026-10-29'), activity('2026-09-24')]);
     expect(routine).toEqual({ status: 'available', sport: ActivityTypes.StrengthTraining, weekday: 'Thursday',
       windowStartDate: '2026-10-01', windowEndDate: '2026-10-28', weekdayOpportunities: 4,
-      recordedDayCount: 3, sessionCount: 3, typicalDurationSeconds: 3600, missingDatesAreUnknown: true });
+      recordedDayCount: 3, sessionCount: 3, typicalDurationSeconds: 3600, durationBaseline: { source: 'weekday', typicalDurationSeconds: 3600, recordedDayCount: 3 }, missingDatesAreUnknown: true });
   });
   it('does not mix distinct strength disciplines or running variants into the requested sport', () => {
     expect(routineActivityTypes(ActivityTypes.Calisthenics)).toEqual([ActivityTypes.Calisthenics]);
@@ -68,4 +68,17 @@ describe('Recorded sport and weekday routine', () => {
     }
     expect(await readDayWorkoutRoutine(controls, now, vi.fn().mockRejectedValue(new Error('offline')))).toBeNull();
   });
+});
+
+
+it('uses broader same-sport history only when matching weekday durations are insufficient', () => {
+  const activities = [activity('2026-10-08', 3000), activity('2026-10-09', 3600), activity('2026-10-10', 4200),
+    activity('2026-10-10', 4200), activity('2026-10-11', 99999, ActivityTypes.Running), activity('2026-10-29', 99999)];
+  expect(buildDayWorkoutRoutine(controls, now, activities)).toMatchObject({ typicalDurationSeconds: null,
+    durationBaseline: { source: 'sport', typicalDurationSeconds: 3600, recordedDayCount: 3 } });
+  activities.push(activity('2026-10-15', 1800));
+  expect(buildDayWorkoutRoutine(controls, now, activities).durationBaseline)
+    .toEqual({ source: 'weekday', typicalDurationSeconds: 2400, recordedDayCount: 2 });
+  expect(buildDayWorkoutRoutine(controls, now, [activity('2026-10-09'), activity('2026-10-09', 7200, ActivityTypes.WeightTraining, 'second')]).durationBaseline).toBeNull();
+  expect(buildDayWorkoutRoutine({ ...controls, durationMode: 'manual', minutes: 30 }, now, activities)).not.toHaveProperty('durationBaseline');
 });

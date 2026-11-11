@@ -4,7 +4,12 @@ import { DAY_WORKOUT_SIGNAL_OPTIONS, defaultDayWorkoutControls, parseGenerateDay
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 
-const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
+// A real legacy shape guards byte-for-byte replay compatibility after new defaults change.
+const controls = { localDate: '2026-10-28', timeZone: 'Europe/Helsinki', sport: ActivityTypes.Running, minutes: 30,
+  purpose: 'suggest' as const, timing: 'approximate' as const, target: 'auto' as const, structure: 'auto' as const, destinationPlanId: null,
+  equipment: ['bodyweight' as const], strengthFocus: 'full-body' as const, usePreviousWeights: true, trainingContext: true, timelineContext: true,
+  ...Object.fromEntries(DAY_WORKOUT_SIGNAL_OPTIONS.map(({ key }) => [key, true])) };
+const automatic = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
 const step = (seconds = 600) => ({ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds }, targets: [] });
 const endurance = () => ({ kind: 'workout', title: 'Easy session', rationale: 'Keep the effort comfortable.',
   structure: { version: 1, sport: ActivityTypes.Running, nodes: [step()] } });
@@ -159,5 +164,55 @@ describe('explicit generation power averaging', () => {
       controls: { ...controls, target, garminPowerAveragingSeconds: 10 } }, new Date('2026-10-28T12:00Z'))).toThrow('averaging');
     const row = { ...endurance(), structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ ...step(), targets: [{ ...power, garminPowerAveragingSeconds: 10 }] }] } };
     expect(() => validateDayWorkoutSuggestion(row, controls, [], [power])).toThrow('explicit controls');
+  });
+});
+
+
+describe('Auto duration', () => {
+  it('defaults to Auto without a budget and preserves legacy/manual semantics', () => {
+    const now = new Date('2026-10-28T12:00Z');
+    expect(automatic.durationMode).toBe('auto'); expect(automatic).not.toHaveProperty('minutes');
+    const parse = (value: object) => parseGenerateDayWorkoutRequest({ requestId: 'duration-test', controls: value }, now).controls;
+    expect(parse(automatic)).toEqual(automatic);
+    expect(parse(controls)).not.toHaveProperty('durationMode');
+    expect(parse({ ...controls, durationMode: 'manual' })).toMatchObject({ minutes: 30, durationMode: 'manual' });
+    for (const value of [null, undefined, 'invalid', ['auto']]) expect(() => parse({ ...controls, durationMode: value })).toThrow();
+    for (const patch of [{ minutes: 30 }, { minutes: undefined }, { timing: 'strict' }]) expect(() => parse({ ...automatic, ...patch })).toThrow();
+    expect(() => parse({ ...automatic, durationMode: 'manual' })).toThrow();
+  });
+  it('validates the entire timed prescription including repeat passes without imposing 30 minutes', () => {
+    const value = endurance();
+    value.structure.nodes = [{ kind: 'repeat', id: 'repeat', count: 4, steps: [step(900)] }] as never;
+    expect(validateDayWorkoutSuggestion(value, automatic).draft).not.toBeNull();
+    for (const seconds of [299, 14401]) {
+      value.structure.nodes = [step(seconds)];
+      expect(() => validateDayWorkoutSuggestion(value, automatic)).toThrow(/5 and 240/);
+    }
+    for (const seconds of [300, 14400]) {
+      value.structure.nodes = [step(seconds)];
+      expect(validateDayWorkoutSuggestion(value, automatic).draft).not.toBeNull();
+    }
+    value.structure.nodes = [{ kind: 'repeat', id: 'repeat', count: 2, steps: [step(7500)] }] as never;
+    expect(() => validateDayWorkoutSuggestion(value, automatic)).toThrow(/5 and 240/);
+    value.structure.nodes = [{ ...step(), ending: { kind: 'distance', meters: 1000 } }] as never;
+    expect(() => validateDayWorkoutSuggestion(value, automatic)).toThrow(/timed/);
+    expect(validateDayWorkoutSuggestion({ kind: 'rest', rationale: 'Recovery today.' }, automatic).draft).toBeNull();
+  });
+  it('requires a bounded strength estimate without converting reps to time', () => {
+    const options = { ...automatic, sport: ActivityTypes.StrengthTraining, target: 'none' as const };
+    const value = { kind: 'workout', title: 'Strength', rationale: 'Usual session.', strength: strength() };
+    for (const range of [undefined, { minimum: 4, maximum: 20 }, { minimum: 20, maximum: 241 }]) {
+      expect(() => validateDayWorkoutSuggestion({ ...value, ...(range ? { estimatedMinutes: range } : {}) }, options)).toThrow(/estimate/);
+    }
+    const result = validateDayWorkoutSuggestion({ ...value, estimatedMinutes: { minimum: 20, maximum: 40 } }, options);
+    expect(result.draft?.strength?.exercises[0].sets[0].ending.kind).toBe('repetitions');
+    const timed = { ...value, strength: { version: 1, exercises: [{ id: 'hold', name: 'Hold', sets: [
+      { id: 'one', ending: { kind: 'time', seconds: 60 } },
+    ] }] }, estimatedMinutes: { minimum: 5, maximum: 10 } };
+    expect(() => validateDayWorkoutSuggestion(timed, options)).toThrow(/5 and 240/);
+    timed.strength.exercises[0].sets[0].ending.seconds = 300;
+    expect(validateDayWorkoutSuggestion(timed, options).draft).not.toBeNull();
+    value.strength.exercises[0].sets[0].restAfterSeconds = 3600;
+    expect(() => validateDayWorkoutSuggestion({ ...value, estimatedMinutes: { minimum: 20, maximum: 40 } }, options)).toThrow(/timed work/);
   });
 });

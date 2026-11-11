@@ -43,7 +43,8 @@ vi.mock('../utils', async original => ({ ...await original<typeof import('../uti
   if (!context.app) throw Error('App Check required');
 }, getUserRoleAndGracePeriod: vi.fn() }));
 const dailyNow = new Date('2026-10-30T07:00:00Z');
-const dailyControls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+// Saved fixed-duration preferences remain supported alongside the new Auto default.
+const dailyControls = { ...defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki'), durationMode: 'manual' as const, minutes: 30 };
 function evidence(): DayWorkoutContext {
   return { evidence: { daily: { dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } }, activitiesToday: { scanComplete: true, activities: [] },
     plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
@@ -62,6 +63,23 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('generates Auto for the final selected sport once and keeps the charged result after preferences change', async () => {
+    const deps = dependencies(), read = deps.store.read.getMockImplementation()!;
+    const automatic = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', ActivityTypes.Cycling);
+    let selected = automatic;
+    deps.store.read.mockImplementation(async () => ({ ...await read(), preferences: { enabled: true, followRoutine: true, controls: selected } }));
+    deps.selectSport.mockResolvedValue(automatic as never);
+    deps.generate.mockResolvedValue({ kind: 'workout', title: 'Usual ride', rationale: 'Fits recent rides and recovery.',
+      structure: { version: 1, sport: ActivityTypes.Cycling, nodes: [{ kind: 'step', id: 'ride', purpose: 'work',
+        ending: { kind: 'time', seconds: 3600 }, targets: [] }] } } as never);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    const result = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(result).toMatchObject({ state: 'ready', controls: { durationMode: 'auto', sport: ActivityTypes.Cycling } });
+    expect(deps.generate.mock.calls[0][0].controls).not.toHaveProperty('minutes');
+    selected = { ...automatic, durationMode: 'manual', minutes: 20 };
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
   it.each([false, true])('recovers a temporary outage within one daily charge (event guidance: %s)', async eventDay => {
     const deps = dependencies();
     if (eventDay) {

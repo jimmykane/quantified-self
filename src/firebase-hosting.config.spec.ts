@@ -374,6 +374,7 @@ describe('Firebase Hosting configuration', () => {
     // Hidden sections also reopen for chart moves and explicit Health-to-dashboard navigation (2026-11-10).
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
+    // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
   });
 

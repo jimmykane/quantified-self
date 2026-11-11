@@ -39,7 +39,7 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
   generate.mockImplementation(options => ai.generate({ ...options as object, model }) as never);
   return { provider, generate };
 }
-const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
+const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), durationMode: 'manual' as const, minutes: 30 } };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
   it.each(['UNAVAILABLE', 'RESOURCE_EXHAUSTED', 'DEADLINE_EXCEEDED'] as const)('recovers a transient %s inside one quota reservation and two model attempts', async status => {
@@ -327,7 +327,7 @@ describe('generateDayWorkout callable', () => {
   });
   it.each(['schema', 'JSON syntax'])('corrects a strength reply rejected by real Genkit %s validation', async kind => {
     const deps = dependencies();
-    const reply = { kind: 'workout', title: 'Bodyweight session', rationale: 'A gentle session.',
+    const reply = { kind: 'workout', title: 'Bodyweight session', rationale: 'A gentle session.', estimatedMinutes: { minimum: 10, maximum: 20 },
       strength: { version: 1, exercises: [{ id: 'squat', name: 'Bodyweight squat',
         sets: [{ id: 'set1', ending: { kind: 'repetitions', repetitions: 10 } }] }] } };
     const malformed = kind === 'schema' ? JSON.stringify({ ...reply,
@@ -492,4 +492,20 @@ describe('generateDayWorkout callable', () => {
     expect(deps.generate).toHaveBeenCalledTimes(2);
     expect(deps.finalize).toHaveBeenCalledTimes(2);
   });
+});
+
+
+it('sends Auto without a numeric budget or timing anchor and constrains its endurance decoder', async () => {
+  const autoRequest = { ...request, controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
+  const evidence = await dependencies().context('owner', autoRequest, new Date());
+  const mock = vi.mocked(assistantGenkit.generate).mockReset().mockResolvedValue({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
+  try {
+    await generateDayWorkoutSuggestion(autoRequest, evidence);
+    const options = mock.mock.calls[0][0] as { prompt: string; output: { jsonSchema: object } };
+    expect(JSON.parse(options.prompt).controls).toMatchObject({ durationMode: 'auto' });
+    expect(JSON.parse(options.prompt).controls).not.toHaveProperty('minutes');
+    expect(JSON.parse(options.prompt).controls).not.toHaveProperty('timing');
+    const schema = JSON.stringify(options.output.jsonSchema);
+    expect(schema).toContain('"time"'); expect(schema).not.toContain('"manual"'); expect(schema).not.toContain('"distance"');
+  } finally { mock.mockReset(); }
 });
