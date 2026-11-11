@@ -1814,6 +1814,14 @@ outcomes, not HTTP 200 or diagnostic logs. Existing Help retry guidance stays ac
 Deploy only `importActivityToSuuntoApp` and `processActivitySyncTask`; rollback restores their previous revisions.
 Any replay is a separate authorized operation and must prove the exact job has no accepted upload before clearing its blocker.
 
+A Suunto blob PUT HTTP 404 is retryable with `retryMode: resume`: retain the existing upload ID and signed continuation
+and use the unchanged bounded queue budget/backoff, without an immediate 404 retry loop or replacement initialization.
+Resume checks the same upload's status before loading/sending bytes; completed operations are not uploaded again.
+Initialization/status 404s, signed-URL 401/403s and terminal content errors retain their existing handling.
+Monitoring remains **covered/unchanged** by #832's committed retry, exhaustion and reconciliation outcomes; existing Help
+already describes bounded background recovery. MCP/Training, scopes, queues and resources are unchanged. Release only
+`processActivitySyncTask` and `importActivityToSuuntoApp`; recovery of old terminal markers is a separate authorized operation.
+
 Provider-upload progress jobs belong to the uploader's local monitoring lifecycle. Closing/clearing the view, changing
 destination, or discarding an in-flight result after an account switch removes its active local jobs; it must not leave
 the global progress indicator active indefinitely or mark unconfirmed provider work complete/failed. Destination changes

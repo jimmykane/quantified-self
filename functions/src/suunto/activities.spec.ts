@@ -770,6 +770,51 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
+    it('keeps a blob 404 retryable with the existing upload identity and no immediate retry loop', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'blob-not-found-upload-id',
+            url: 'https://storage.suunto.com/blob-not-found?signature=keep%2Bexact',
+            headers: { 'x-ms-blob-type': 'BlockBlob' },
+        });
+        requestMocks.put.mockRejectedValue(createStatusCodeError('Not Found', 404));
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                operation: 'activity_upload_blob',
+                disposition: 'retryable',
+                retryMode: 'resume',
+                code: 'unavailable',
+                statusCode: 404,
+                providerOperationId: 'blob-not-found-upload-id',
+                providerUserId: 'token1',
+            });
+        expect(requestMocks.post).toHaveBeenCalledTimes(1);
+        expect(requestMocks.put).toHaveBeenCalledTimes(1);
+        expect(requestMocks.get).not.toHaveBeenCalled();
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['initialization', 'status'])('keeps a Suunto %s 404 terminal', async phase => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockRejectedValue(createStatusCodeError('Not Found', 404));
+        requestMocks.get.mockRejectedValue(createStatusCodeError('Not Found', 404));
+        if (phase === 'status') {
+            const admin = await import('firebase-admin');
+            (admin.firestore() as any).collection('suuntoAppAccessTokens').doc('test-user-id')
+                .collection('tokens').doc('token1').get.mockResolvedValueOnce({
+                    exists: true, id: 'token1', data: () => ({}),
+                });
+        }
+
+        await expect(phase === 'initialization'
+            ? uploadActivityFileToSuunto('test-user-id', Buffer.from('data'))
+            : getSuuntoActivityUploadStatus('test-user-id', 'missing-upload-id', 'token1'))
+            .rejects.toMatchObject({ disposition: 'permanent', retryMode: 'none', statusCode: 404 });
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
     it.each([401, 403])('should not classify a signed blob HTTP %s as an OAuth failure', async (statusCode) => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
         requestMocks.post.mockResolvedValue({

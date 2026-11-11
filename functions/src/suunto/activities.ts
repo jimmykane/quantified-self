@@ -473,6 +473,10 @@ function toSuuntoProviderOperationError(
     isTemporarilyRetryableAuthFailure
     || statusCode === 408
     || statusCode === 429
+    // A fresh provider-issued blob endpoint can temporarily return 404.
+    // Resume the same signed PUT through the existing bounded queue policy;
+    // initialization/status 404s must not authorize replacement uploads.
+    || (context.operation === 'activity_upload_blob' && statusCode === 404)
     || (statusCode !== undefined && statusCode >= 500 && !isLikelyPermanentSuunto500(error))
     || (statusCode === undefined && isTransientProviderTransportError(error))
   ) {
