@@ -83,11 +83,12 @@ const nativeZoneRecipe = z.strictObject({
 
 export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRequest, context: DayWorkoutContext,
   correction?: string, onUsage?: (usage: { inputTokens: number; outputTokens: number; thoughtsTokens: number; available: boolean }) => void): Promise<unknown> {
-  const { destinationPlanId: _destination, ...controls } = request.controls;
-  // Defence in depth: never anchor Auto to a stale UI minute value or manual timing choice.
-  const promptControls = controls.durationMode === 'auto'
-    ? (({ minutes: _minutes, timing: _timing, ...automatic }) => automatic)(controls) : controls;
+  const controls = request.controls;
   const automatic = controls.durationMode === 'auto';
+  const promptControls: Partial<typeof controls> = { ...controls };
+  delete promptControls.destinationPlanId;
+  // Never anchor Auto to a stale UI minute value or manual timing choice.
+  if (automatic) { delete promptControls.minutes; delete promptControls.timing; }
   const baseRecipe = controls.target === 'garmin-power-zone' ? nativeZoneRecipe : generationRecipe;
   const timedStep = (controls.target === 'garmin-power-zone' ? nativeZoneGenerationStep : generationStep)
     .extend({ ending: generationStep.shape.ending.options[0] });
