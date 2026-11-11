@@ -69,6 +69,7 @@ export function defaultDashboardTodaySettings(): AppDashboardTodaySettings {
     readiness: true,
     recovery: false,
     suggestion: false,
+    recordedActivities: false,
     metrics: ['load'],
   };
 }
@@ -83,6 +84,7 @@ export function normalizeDashboardTodaySettings(
     readiness: true,
     recovery: false,
     suggestion: true,
+    recordedActivities: false,
     metrics: ['load', 'sleep', 'hrv', 'overnight-hr'],
   };
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -94,6 +96,7 @@ export function normalizeDashboardTodaySettings(
     'readiness',
     'recovery',
     'suggestion',
+    'recordedActivities',
   ] as const) {
     if (typeof source[key] === 'boolean') legacy[key] = source[key];
   }
@@ -126,7 +129,7 @@ export function dashboardTodayDependencies(
       has('hrv') ||
       has('overnight-hr'),
     recovery: settings.recovery,
-    activities: ['tss', 'ascent', 'duration', 'distance', 'activities'].some(
+    activities: settings.recordedActivities === true || ['tss', 'ascent', 'duration', 'distance', 'activities'].some(
       (id) => settings.metrics.includes(id as DashboardTodayMetricId)
     ),
     weight: has('weight'),

@@ -10,7 +10,7 @@ import { resolveRemainingRecoverySeconds } from './dashboard-recovery-now.helper
 import { isDerivedMetricPendingStatus, type DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { DASHBOARD_TODAY_METRICS } from './dashboard-today-settings.helper';
 
-export type DashboardTodayAvailabilityId = DashboardTodayMetricId | 'trainingState' | 'readiness' | 'recovery';
+export type DashboardTodayAvailabilityId = DashboardTodayMetricId | 'trainingState' | 'readiness' | 'recovery' | 'recordedActivities';
 export type DashboardTodayAvailability = Record<DashboardTodayAvailabilityId, DashboardChartAvailability>;
 export type TodayAvailabilitySnapshots = Pick<DashboardDerivedMetricsState,
   'formPoints' | 'formStatus' | 'formNow' | 'formNowStatus' | 'rampRate' | 'rampRateStatus' | 'recoveryNow' | 'recoveryNowStatus'>;
@@ -49,6 +49,7 @@ export function buildDashboardTodayAvailability(input: {
       ? availability('error', hasData ? 'Partial data available' : 'Unable to load data', hasData, metric.detail)
       : hasData ? ready() : noData(metric.detail);
   }
+  result.recordedActivities = result.activities;
   const derived = input.derived;
   const training = buildCurrentTrainingStateContext({
     formPoints: derived?.formStatus === 'ready' ? derived.formPoints : null,

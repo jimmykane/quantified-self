@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { marked } from 'marked';
-import { ACTIVITY_MAP_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
+import { ACTIVITY_MAP_PRERENDER_METADATA, PRICING_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -477,10 +477,7 @@ function assertReleasesDocument(documentRef) {
 }
 
 function assertPricingDocument(documentRef) {
-  assertPublicSnapshotMetadata(documentRef, '/pricing', {
-    title: 'Membership', h1: 'Choose your plan',
-    description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-  });
+  assertPublicSnapshotMetadata(documentRef, '/pricing', PRICING_PRERENDER_METADATA);
   for (const role of ['basic', 'pro']) {
     const plan = documentRef.querySelector(`[data-plan="${role}"]`);
     if (!plan?.querySelector('.price-amount')?.textContent?.trim()

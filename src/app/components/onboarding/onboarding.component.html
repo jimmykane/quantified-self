@@ -98,7 +98,7 @@
                                 <div class="onboarding-actions">
                                     <button mat-button type="button" [disabled]="isLoading" (click)="back()">Back</button>
                                     <button mat-flat-button type="submit" class="qs-mat-primary" [disabled]="!termsFormGroup.valid || isLoading || !user">
-                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? 'Saving your choices…' : isCompareFlow() ? (hasPaidMembership() ? 'Open Compare' : 'Continue free') : 'Continue to ' + completionLabel }}</span></span>
+                                        <span class="action-content">@if (isLoading) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }<span>{{ isLoading ? loadingLabel() : continueLabel() }}</span></span>
                                     </button>
                                 </div>
                             </form>

@@ -1,0 +1,23 @@
+@use '../calendar-day-presentation' as day;
+
+:host { display: block; min-width: 0; }
+.calendar-day-context-preview-entry {
+  @include day.entry-row;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 4px 0;
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+
+  &:hover .calendar-day-context-preview-title { text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+}
+.calendar-day-context-preview-icon { @include day.entry-icon; }
+.calendar-day-context-preview-copy { min-width: 0; overflow-wrap: anywhere; }
+.calendar-day-context-preview-title { @include day.entry-title; }
+.calendar-day-context-preview-copy small { @include day.supporting-text; }
+.calendar-day-context-preview-copy app-training-impact {
+  display: block;
+  max-width: 100%;
+  --training-impact-compact-white-space: normal;
+}

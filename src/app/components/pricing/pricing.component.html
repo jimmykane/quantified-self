@@ -6,12 +6,23 @@
   </div>
   } @else {
   @if (!isOnboarding) {
+  @if (syncSetup()) {
+  <h1>{{ currentRole === 'pro' ? 'Your Pro access is ready' : 'Choose Pro for activity sync' }}</h1>
+  <p class="pricing-intro">Sync activities between supported services with Pro. After choosing your plan, connect your accounts and choose what to sync.</p>
+  <div class="sync-setup-actions">
+    @if (currentRole === 'pro') {
+    <a mat-flat-button class="qs-mat-primary" routerLink="/services" [queryParams]="{ setup: 'sync' }">Continue to Connections</a>
+    }
+    <a mat-button routerLink="/dashboard">Use QS without sync</a>
+  </div>
+  } @else {
   <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
   @if (currentRole !== 'pro' && currentRole !== 'basic') {
   <p class="pricing-intro">Analysis, training plans, workouts, and manual uploads are included with Starter. AI workout generation uses your shared Assistant allowance. Pro also includes an opt-in daily workout suggestion, separately from that allowance, alongside connected provider services.</p>
   }
   }
 
+  }
   @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
     <mat-card class="product-card subscription-card qs-glass-card-panel" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
@@ -101,7 +112,7 @@
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            Manage & Change Plan
+            {{ syncSetup() ? 'Upgrade to Pro' : 'Manage & Change Plan' }}
             }
           </button>
           } @else {
@@ -124,7 +135,10 @@
   } @else if (selectionUnavailable()) {
   <p class="pricing-intro" role="status">That plan option is no longer available. Choose a current option below.</p>
   }
-  <div class="products-grid">
+  @if (syncSetup() && products.length === 0) {
+  <p role="status">Pro plans are unavailable right now. Please try again later, or continue with free analysis and Compare.</p>
+  }
+  <div class="products-grid" [class.sync-products]="syncSetup()">
     @for (product of products; track product.id) {
     <div class="product-card-shell">
       @if (product.metadata['role'] === 'pro') {

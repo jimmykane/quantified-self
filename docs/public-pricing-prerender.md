@@ -123,6 +123,25 @@ flags may use the existing empty server placeholders.
 
 ## Verification
 
+### Release sitemap dates
+
+Before changing `/releases` in `src/sitemap.xml`, verify when the published
+content actually changed. Check the published source documents' Firestore
+creation/update timestamps and the page's Git history, then verify that the
+freshly built HTML includes that content. The editor's release date alone,
+snapshot generation time and Hosting's HTTP `Last-Modified` header are not
+evidence of a content update. Update the exact date assertion in
+`src/firebase-hosting.config.spec.ts` alongside the sitemap.
+
+The 2026-11-11 check found that November 4 was the prerendering implementation
+date. Published version 10.21.9 was created on November 6 at 08:09:17 UTC and
+updated at 08:54:12 UTC. A newer published version, 10.23.0, was created on
+November 11 at 12:20:51 UTC and updated at 12:22:53 UTC. The sitemap therefore
+uses `2026-11-11` for a build containing that release. These are verified source
+document timestamps, not inferred publication times for each revision.
+
+### Automated checks
+
 `npm run test:public-snapshots` covers ADC headers, read-only request boundaries,
 redaction, protected WIF workflow wiring, build prerequisites, pagination and
 negative leakage fixtures. Frontend tests cover snapshot validation, resolver

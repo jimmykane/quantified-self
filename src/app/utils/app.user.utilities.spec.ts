@@ -272,7 +272,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.dashboardSettings?.showTodaySummary).toBe(true);
-            expect(settings.dashboardSettings?.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: false, suggestion: true, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
+            expect(settings.dashboardSettings?.today).toEqual({ version: 1, trainingState: true, readiness: true, recovery: false, suggestion: true, recordedActivities: false, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
                 searchTerm: null,
                 dateRange: DateRanges.thisWeek,
@@ -295,6 +295,15 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.tripSortDirection).toBe('desc');
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
+        });
+
+        it.each([false, true])('preserves a saved Today activities choice of %s during profile hydration', (recordedActivities) => {
+            const saved = { version: 1, trainingState: false, readiness: false, recovery: false,
+                suggestion: false, recordedActivities, metrics: ['activities', 'duration'] };
+            const user = { settings: { dashboardSettings: { tiles: [], today: JSON.parse(JSON.stringify(saved)) } } } as unknown as User;
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect(settings.dashboardSettings.today).toEqual(saved);
+            expect(AppUserUtilities.fillMissingAppSettings(user).dashboardSettings.today).toEqual(saved);
         });
 
         it.each([false, true])('preserves an explicit comparison line pattern preference of %s', (enabled) => {

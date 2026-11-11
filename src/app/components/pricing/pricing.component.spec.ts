@@ -7,7 +7,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router, provideRouter } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -90,6 +90,7 @@ describe('PricingComponent', () => {
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
+                provideRouter([]),
                 { provide: AppHapticsService, useValue: haptics },
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
@@ -103,12 +104,6 @@ describe('PricingComponent', () => {
                     provide: Auth,
                     useValue: {
                         currentUser: { uid: 'test-uid' }
-                    }
-                },
-                {
-                    provide: Router,
-                    useValue: {
-                        navigate: vi.fn()
                     }
                 },
                 {
@@ -128,6 +123,7 @@ describe('PricingComponent', () => {
             ]
         }).compileComponents();
 
+        vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
         fixture = TestBed.createComponent(PricingComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();
@@ -153,6 +149,54 @@ describe('PricingComponent', () => {
         expect(checkout).toHaveBeenCalledWith('price_pro',
             `${window.location.origin}/payment/success?onboarding=%2Fonboarding%3Fstart%3Dupload`,
             `${window.location.origin}/onboarding?start=upload`, expect.any(Function), expect.any(Function));
+    });
+
+    it('preserves sync setup through checkout success and cancellation', async () => {
+        routeParams.next(convertToParamMap({ setup: 'sync' }));
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        await component.subscribe('price_pro');
+        expect(checkout).toHaveBeenCalledWith('price_pro',
+            `${window.location.origin}/payment/success?setup=sync`,
+            `${window.location.origin}/subscriptions?setup=sync`, expect.any(Function), expect.any(Function));
+    });
+
+    it('offers only Pro for sync while keeping a free Dashboard exit', async () => {
+        routeParams.next(convertToParamMap({ setup: 'sync' }));
+        const payment = TestBed.inject(AppPaymentService);
+        vi.spyOn(payment, 'getProducts').mockReturnValue(of(['basic', 'pro'].map(role => ({
+            id: role, active: true, name: role, metadata: { role }, role, prices: [],
+        } as unknown as StripeProduct))));
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Choose Pro for activity sync');
+        expect(Array.from(fixture.nativeElement.querySelectorAll('.plan-title')).map((el: Element) => el.textContent.trim())).toEqual(['Pro']);
+        const freeExit = fixture.nativeElement.querySelector('.sync-setup-actions a');
+        expect(freeExit.textContent).toContain('Use QS without sync');
+        expect(freeExit.getAttribute('href')).toBe('/dashboard');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('keeps sync intent when a Basic member upgrades through the existing billing portal', async () => {
+        routeParams.next(convertToParamMap({ setup: 'sync' }));
+        await fixture.whenStable();
+        component.currentRole = 'basic' as any;
+        const portal = vi.spyOn(TestBed.inject(AppPaymentService), 'manageSubscriptions');
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        await component.changePlanAndBilling();
+        expect(portal).toHaveBeenCalledWith(undefined, 'sync');
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('preserves sync intent if required policies must be completed first', async () => {
+        routeParams.next(convertToParamMap({ setup: 'sync' }));
+        authServiceMock.user$ = of({ ...acceptedPoliciesUser, acceptedTos: false } as any);
+        await component.subscribe('price_pro');
+        expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/onboarding'], {
+            queryParams: { returnUrl: '/services?setup=sync' },
+        });
     });
 
     it('rechecks parent completion after the asynchronous policy lookup', async () => {

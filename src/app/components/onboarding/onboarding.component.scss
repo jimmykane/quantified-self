@@ -8,7 +8,8 @@
     grid-template-columns: minmax(260px, 38fr) minmax(0, 62fr);
     max-width: 1320px;
     margin: 0 auto;
-    min-height: min(800px, calc(100dvh - var(--qs-effective-top-offset, 0px) - 48px));
+    // Let each step set its height instead of reserving an empty footer.
+    min-height: 0;
     overflow: clip;
 }
 

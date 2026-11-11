@@ -375,6 +375,7 @@ describe('Firebase Hosting configuration', () => {
     // Elevation help explains independent metre/feet display, presets and canonical storage (2026-11-10).
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
     // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
+    // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
   });
 
@@ -522,9 +523,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
-    // My Tracks is included on Starter; pricing and the public map overview now agree (2026-11-09).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
+    // Pricing now explicitly names plans and pricing in its title and heading.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-11');
+    // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
@@ -533,7 +535,8 @@ describe('Firebase Hosting configuration', () => {
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
+    // Both overview CTAs now open the comparison tool directly.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
@@ -718,7 +721,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.84mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.85mb',
     });
   });
 

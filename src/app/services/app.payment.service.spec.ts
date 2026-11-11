@@ -216,6 +216,16 @@ describe('AppPaymentService', () => {
             } });
         });
 
+        it('returns the billing portal to sync plan selection when requested', async () => {
+            mockWindowService.currentDomain = 'https://quantified-self.io';
+            const stop = new Error('Synthetic portal request stopped');
+            mockFunctionsService.call.mockRejectedValueOnce(stop);
+            await expect(service.manageSubscriptions(undefined, 'sync')).rejects.toBe(stop);
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('createPortalLink', {
+                returnUrl: 'https://quantified-self.io/subscriptions?setup=sync',
+            });
+        });
+
         it.each(['http://localhost:4210', 'https://beta.quantified-self.io'])('does not initialize Analytics for Checkout returns on %s', async currentDomain => {
             mockWindowService.currentDomain = currentDomain;
             await service.appendCheckoutSession('price_123', undefined, undefined, () => false);

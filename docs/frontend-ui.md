@@ -73,13 +73,22 @@ and warning budgets remain unchanged. This is bundle accounting, not a runtime s
 
 Onboarding offers **Analyze my training**, **Sync between services**, and **Compare device recordings**,
 with **Let me look around** as a secondary action. All paths retain the required account policies and
-unchecked optional consent. Saving valid preferences initializes Starter only for an unpaid account,
-marks onboarding complete and opens the chosen workspace; onboarding no longer mounts Pricing or
-requires a membership selection. Existing paid access is preserved. Failures keep consent and allow retry.
+unchecked optional consent. Saving valid preferences writes legal consent first, then includes
+`onboardingCompleted` in the main profile upsert (including when Sports Lib serialization omits that field).
+It does not repeat the completion write through `setFreeTier`. Onboarding reads access from the already
+loaded, claim-merged user through `AppUserAccess`; Basic access alone is not Pro access. Before navigation,
+it waits at most ten seconds for that same authoritative user stream to publish completed setup and required
+consent, preventing the route guard from redirecting against an older snapshot. This wait is cancelled when
+the view is destroyed; account changes prevent navigation. Failures retain consent and allow retry.
 
 Analysis and exploration open Dashboard, whose empty state already offers file upload and provider selection.
-Sync opens `/services?setup=sync`: a display-only hint that expands the existing data-flow panel and shows
-contextual Pro benefits for unpaid accounts. Provider tabs retain this hint, while MCP and OAuth callback,
+Compare opens its workspace directly. These paths have no plan step. Sync opens `/subscriptions?setup=sync`
+for Starter/Basic members, with the CTA **Choose a Pro plan**, Pro billing choices, and a free Dashboard exit.
+Existing Pro access (including existing admin, legacy and grace-period rules) goes straight to
+`/services?setup=sync` with **Continue to Connections**. Checkout success/cancellation and Basic's existing
+billing-portal upgrade preserve the sync hint; they do not create a second paid subscription. Confirmed Pro
+checkout offers Connections; Basic checkout still offers Dashboard. The hint only expands the existing
+data-flow panel. Provider tabs retain this hint, while MCP and OAuth callback,
 connect or reconnect navigation take precedence. It never connects providers, enables a sync path or starts
 checkout. After source and destination connections are established, the existing matrix and sync controls
 own path selection and explicit opt-in. Connection offers and provider entitlement checks remain in Connections.
@@ -93,6 +102,10 @@ checks. Training calculations, planning behavior and MCP permissions/contracts a
 Initial goal-based setup verification exceeded the preceding 14.82 MB total-script cap by 3.96 kB.
 The final production build passes matching beta/production `allScript` error caps of 14.83 MB; initial
 and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
+
+The conditional Sync plan handoff and saved-profile navigation fix measured 8.96 kB above the subsequent
+14.84 MB total-script cap. Beta and production now share a 14.85 MB `allScript` error cap. The measured initial
+bundle remains 1.41 MB (335.36 kB estimated transfer), below its unchanged 1474 kB cap. Warning budgets are unchanged.
 
 ## Field guide onboarding terrain and bundle allowance
 
@@ -368,7 +381,13 @@ row. Compact metrics follow the saved order, with at most four columns on deskto
 expands to use the available width. The editor separates shown metrics from Add metrics. Reordering uses handles plus
 accessible up/down buttons, announces the resulting position and keeps focus on the moved metric. Checkbox focus is
 also retained when a metric moves between the shown and available lists. Recovery left and Today's suggestion remain optional full-width
-context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
+context/footer blocks. **Today’s activities** is an independent opt-in under Additional information, disabled for both
+new and legacy profiles. It renders recorded rows between metrics and the suggestion; Calendar keeps planning and
+selected-day details. `CalendarActivityRowComponent` and `buildCalendarActivityRow` own the same sport icon, title,
+tags, duration, navigation and optional compact impact presentation for Calendar and Today. Today does not fetch
+additional Training impact snapshots for this list. The rows use two columns on desktop and one on phones, with
+wrapping rather than clipping. Loading, empty, partial and failed reads stay distinct, with an explicit activity-only
+Retry. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
 An empty Today explains that no items are selected, offers Customize Today and retains the existing title, date and
 calendar action. Save is enabled only for a changed draft. Restore defaults explains the three-block layout before
 saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
@@ -379,7 +398,7 @@ layout. Readiness still uses all its existing drivers when a driver cell is hidd
 assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
 
 Today scopes its derived and Sleep subscriptions to enabled consumers, independently of visible charts' dependencies.
-`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals share Calendar's bounded
+`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals and recorded rows share Calendar's bounded
 summary listener for the current browser-local day, across all sports, using the same exclusions/TSS/ascent rules.
 They do not follow event-table or chart filters. Weight uses a bounded newest-first query for actual Health point
 measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection

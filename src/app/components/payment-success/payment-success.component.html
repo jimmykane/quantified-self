@@ -62,7 +62,7 @@
       @if (assignedRole && onboardingResume) {
       <button mat-flat-button class="qs-mat-primary" [routerLink]="onboardingResume">Continue setup</button>
       } @else if (assignedRole === 'pro') {
-      <button mat-flat-button class="qs-mat-primary" routerLink="/services">
+      <button mat-flat-button class="qs-mat-primary" routerLink="/services" [queryParams]="syncSetup ? { setup: 'sync' } : null">
         Open Connections
       </button>
       } @else if (assignedRole === 'basic') {
@@ -70,7 +70,7 @@
         Go to Dashboard
       </button>
       } @else {
-      <button mat-flat-button class="qs-mat-primary" routerLink="/subscriptions" [disabled]="isRefreshing">
+      <button mat-flat-button class="qs-mat-primary" routerLink="/subscriptions" [queryParams]="syncSetup ? { setup: 'sync' } : null" [disabled]="isRefreshing">
         View membership
       </button>
       }

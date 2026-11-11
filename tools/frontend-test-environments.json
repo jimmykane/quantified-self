@@ -34,6 +34,7 @@
     "src/app/helpers/benchmark-rr-chart.helper.spec.ts",
     "src/app/helpers/benchmark-rr-worker-bundle.spec.ts",
     "src/app/helpers/benchmark-rr.helper.spec.ts",
+    "src/app/helpers/calendar-activity-row.helper.spec.ts",
     "src/app/helpers/calendar-day-story.helper.spec.ts",
     "src/app/helpers/calendar-period-summary.helper.spec.ts",
     "src/app/helpers/calendar-read-error.helper.spec.ts",

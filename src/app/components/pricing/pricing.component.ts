@@ -1,3 +1,4 @@
+import { toSignal } from '@angular/core/rxjs-interop';
 import { safeOnboardingResumeUrl } from '../../helpers/onboarding-navigation.helper';
 import { AppWindowService } from '../../services/app.window.service';
 import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
@@ -20,7 +21,7 @@ import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { BehaviorSubject, Observable, Subscription, combineLatest, firstValueFrom, map, of, shareReplay, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
@@ -54,6 +55,7 @@ interface SubscriptionSummary {
         CommonModule,
         MatCardModule,
         MatButtonModule,
+        RouterLink,
         MatProgressSpinnerModule,
         MatProgressBarModule,
         MatIconModule,
@@ -100,6 +102,11 @@ export class PricingComponent implements OnInit, OnDestroy {
     private logger = inject(LoggerService);
     private router = inject(Router);
     private readonly route = inject(ActivatedRoute, { optional: true });
+
+    readonly syncSetup = toSignal(
+        (this.route?.queryParamMap ?? of(this.route?.snapshot?.queryParamMap)).pipe(map(params => params?.get('setup') === 'sync')),
+        { initialValue: false },
+    );
 
     constructor(
         private paymentService: AppPaymentService,
@@ -148,7 +155,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             map(([products, params]) => {
                 const requestedPriceId = membershipPriceId(params?.get('priceId'))
                     ?? membershipPriceIdFromReturnUrl(params?.get('returnUrl'));
-                const offeredProducts = [freeProduct, ...products].sort((left, right) => (
+                const availableProducts = params?.get('setup') === 'sync'
+                    ? products.filter(product => (product.metadata?.role ?? product.role) === 'pro')
+                    : [freeProduct, ...products];
+                const offeredProducts = availableProducts.sort((left, right) => (
                     (PLAN_DISPLAY_ORDER[left.metadata?.role ?? left.role] ?? 3)
                     - (PLAN_DISPLAY_ORDER[right.metadata?.role ?? right.role] ?? 3)
                 ));
@@ -558,8 +568,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             );
             const resume = this.isOnboarding ? safeOnboardingResumeUrl(this.onboardingResumeUrl) : null;
             const successUrl = resume
-                ? `${this.windowService.currentDomain}/payment/success?onboarding=${encodeURIComponent(resume)}` : undefined;
-            const cancelUrl = resume ? `${this.windowService.currentDomain}${resume}` : undefined;
+                ? `${this.windowService.currentDomain}/payment/success?onboarding=${encodeURIComponent(resume)}`
+                : this.syncSetup() ? `${this.windowService.currentDomain}/payment/success?setup=sync` : undefined;
+            const cancelUrl = resume ? `${this.windowService.currentDomain}${resume}`
+                : this.syncSetup() ? `${this.windowService.currentDomain}/subscriptions?setup=sync` : undefined;
             await this.paymentService.appendCheckoutSession(price, successUrl, cancelUrl, () => !this.destroyed, () => {
                 if (!this.destroyed) this.checkoutProgress.set('Updating your checkout…');
             });
@@ -611,7 +623,8 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.analyticsService.logManageSubscription();
         this.setLoadingState(true);
         try {
-            await this.paymentService.manageSubscriptions();
+            if (this.syncSetup()) await this.paymentService.manageSubscriptions(undefined, 'sync');
+            else await this.paymentService.manageSubscriptions();
         } catch (error) {
             this.haptics.error();
             if (!(error instanceof CheckoutStartError)) {
@@ -648,10 +661,12 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        this.haptics.selection();
         this.analyticsService.logManageSubscription();
         this.setLoadingState(true);
         try {
-            await this.paymentService.manageSubscriptions();
+            if (this.syncSetup()) await this.paymentService.manageSubscriptions(undefined, 'sync');
+            else await this.paymentService.manageSubscriptions();
         } catch (error) {
             this.haptics.error();
             if (!(error instanceof CheckoutStartError)) {
@@ -747,7 +762,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.logger.log('[PricingComponent] App user is unavailable during onboarding. Staying on onboarding.');
                 return null;
             }
-            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
+            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: this.syncSetup() ? '/services?setup=sync' : membershipReturnUrl(selectedPriceId) } });
             return null;
         }
 
@@ -766,7 +781,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.logger.log('[PricingComponent] Required legal policies are missing. Redirecting to onboarding.');
-        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
+        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: this.syncSetup() ? '/services?setup=sync' : membershipReturnUrl(selectedPriceId) } });
         return null;
     }
 

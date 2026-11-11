@@ -1266,3 +1266,18 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.pricing-container {
+  .sync-setup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .products-grid.sync-products {
+    grid-template-columns: minmax(0, 640px);
+    justify-content: center;
+  }
+}

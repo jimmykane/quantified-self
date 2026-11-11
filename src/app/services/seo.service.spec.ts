@@ -110,19 +110,28 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image:alt', content: DEFAULT_SOCIAL_IMAGE_ALT });
     });
 
-    it('applies GPX comparison metadata with one brand suffix and matching social tags', () => {
-        const title = 'Compare GPX & FIT Files';
-        const description = 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.';
+    it.each([
+        {
+            path: '/tools/compare',
+            title: 'Compare GPX & FIT Files',
+            description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
+        },
+        {
+            path: '/pricing',
+            title: 'Plans & Pricing',
+            description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
+        },
+    ])('applies $path metadata with one brand suffix and matching social tags', ({ path, title, description }) => {
         mockActivatedRoute.data = of({ title, description });
-        mockRouter.url = '/tools/compare';
+        mockRouter.url = path;
 
         service.init();
         routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
 
-        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('Compare GPX & FIT Files - Quantified Self');
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith(`${title} - Quantified Self`);
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'description', content: description });
-        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Compare GPX & FIT Files - Quantified Self' });
-        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:title', content: 'Compare GPX & FIT Files - Quantified Self' });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: `${title} - Quantified Self` });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:title', content: `${title} - Quantified Self` });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: description });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:description', content: description });
     });

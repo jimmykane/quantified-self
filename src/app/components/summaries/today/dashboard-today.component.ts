@@ -1,11 +1,17 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   input,
   output,
 } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { AppUserService } from '../../../services/app.user.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { CalendarActivityRowComponent } from '../../calendar/calendar-activity-row/calendar-activity-row.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -31,6 +37,8 @@ import type {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
+    CalendarActivityRowComponent,
     MatIconModule,
     MatButtonModule,
     MatProgressBarModule,
@@ -62,6 +70,32 @@ export class DashboardTodayComponent {
     DASHBOARD_TODAY_METRICS.map((item) => [item.id, item.label])
   );
   readonly data = inject(DashboardTodayDataService);
+  private readonly users = inject(AppUserService);
+  private readonly router = inject(Router);
+  private readonly navigation = inject(CalendarDayDetailsNavigationService);
+  private readonly haptics = inject(AppHapticsService);
+  readonly showActivities = computed(() => this.settings().recordedActivities === true && this.owner()
+    && !!this.account()?.uid && this.account().uid === this.users.user()?.uid);
+  readonly recordedActivities = computed(() => {
+    if (!this.showActivities()) return null;
+    const state = this.data.activities();
+    return state.ownerUid === this.account()?.uid && state.date === this.localDate() ? state : null;
+  });
+  readonly fullDayRoute = computed(() => ['/calendar/day', this.localDate()]);
+
+  prepareActivityNavigation(): void {
+    this.navigation.prepareReturn(this.router.url, this.localDate());
+  }
+
+  openDay(): void {
+    this.haptics.selection();
+    this.prepareActivityNavigation();
+  }
+
+  retryActivities(): void {
+    if (this.showActivities() && this.data.retryActivities()) this.haptics.selection();
+  }
+
   constructor() {
     effect(() =>
       this.data.connect(

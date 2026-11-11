@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { LOCALE_ID, signal } from '@angular/core';
-import { WeightUnits } from '@sports-alliance/sports-lib';
+import { AppEventSummary } from '@shared/event-summary';
+import { WeightUnits, ActivityTypes, FileType, Privacy } from '@sports-alliance/sports-lib';
 import type { HealthSourceRecord } from '@shared/health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import type { EventInterface } from '@sports-alliance/sports-lib';
 import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardTodayDataService } from './dashboard-today-data.service';
@@ -108,4 +110,50 @@ describe('Today optional data', () => {
     expect(service.metrics().weight.value).toBe(value);
     expect(service.metrics().weight.hasData).toBe(true);
   });
+  it('shares the opt-in rows and totals query, preserves partial evidence, and removes rows when disabled', () => {
+    const service = TestBed.inject(DashboardTodayDataService);
+    const stream = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    calendar.watchSummaryEvents.mockReturnValue(stream);
+    const config = { ...settings(['activities', 'tss']), recordedActivities: true };
+    service.connect(user, config, '2026-11-09');
+    expect(service.activities().status).toBe('loading');
+    const ride = new AppEventSummary({ id: 'ride', name: 'Morning ride', description: null,
+      startDate: new Date(2026, 10, 9, 8).getTime(), endDate: new Date(2026, 10, 9, 9).getTime(),
+      srcFileType: FileType.FIT, privacy: Privacy.Private, isMerge: false,
+      stats: { 'Activity Types': [ActivityTypes.Cycling], Duration: 3600, 'Training Stress Score': 50 } });
+    // ActivityCalendarService owns this historical projection contract.
+    stream.next({ events: [ride, ride] as unknown as EventInterface[], complete: false });
+    expect(service.activities()).toMatchObject({ ownerUid: 'owner', date: '2026-11-09', status: 'ready', complete: false });
+    expect(service.activities().rows).toHaveLength(1);
+    expect(service.activities().rows[0]).toMatchObject({ name: 'Morning ride', duration: '1h' });
+    expect(service.metrics().activities).toMatchObject({ value: '1', status: 'error' });
+    service.connect(user, { ...config }, '2026-11-09');
+    expect(calendar.watchSummaryEvents).toHaveBeenCalledTimes(1);
+    service.connect(user, settings([]), '2026-11-09');
+    expect(stream.observed).toBe(false); expect(service.activities().rows).toEqual([]);
+    expect(service.retryActivities()).toBe(false);
+  });
+  it('supports activity rows alone, local-day rollover, read failure and an explicit activity-only retry', () => {
+    const service = TestBed.inject(DashboardTodayDataService);
+    const stream = new Subject<{ events: EventInterface[]; complete: boolean }>();
+    calendar.watchSummaryEvents.mockReturnValueOnce(stream);
+    const config = { ...settings(['weight']), recordedActivities: true };
+    service.connect(user, config, '2026-11-09');
+    stream.error(new Error('offline'));
+    expect(service.activities().status).toBe('error');
+    expect(service.retryActivities()).toBe(true);
+    expect(health.loadLatestMeasurement).toHaveBeenCalledTimes(1);
+    expect(service.activities()).toMatchObject({ status: 'ready', rows: [], complete: true });
+    expect(service.retryActivities()).toBe(false);
+    service.connect(user, { ...settings([]), recordedActivities: true }, '2026-11-10');
+    expect(service.activities().date).toBe('2026-11-10');
+    const bounds = calendar.watchSummaryEvents.mock.calls.at(-1)[1];
+    expect(bounds.startMs).toBe(new Date(2026, 10, 10).getTime());
+    expect(bounds.endExclusiveMs).toBe(new Date(2026, 10, 11).getTime());
+    users.user.set({ ...user, uid: 'other' });
+    service.connect(user, config, '2026-11-10');
+    expect(service.activities()).toMatchObject({ status: 'idle', rows: [], ownerUid: null });
+    expect(service.retryActivities()).toBe(false);
+  });
+
 });

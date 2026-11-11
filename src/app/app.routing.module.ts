@@ -180,7 +180,7 @@ const topLevelRoutes: Routes = [
       jsonLd: lazyPublicPricingJsonLdResolver,
     },
     data: {
-      title: 'Membership',
+      title: 'Plans & Pricing',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
     }

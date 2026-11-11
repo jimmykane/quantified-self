@@ -179,7 +179,7 @@ describe('AppRoutingModule routes', () => {
     expect(subscriptionsRoute?.canMatch).toEqual([authGuard]);
     expect(await pricingRoute?.loadComponent?.()).toBe(PublicPricingComponent);
     expect(await subscriptionsRoute?.loadComponent?.()).toBe(PricingComponent);
-    expect(pricingRoute?.data?.['title']).toBe('Membership');
+    expect(pricingRoute?.data?.['title']).toBe('Plans & Pricing');
     expect(pricingRoute?.data?.['description']).toContain('Support the development of Quantified Self');
     expect(pricingRoute?.data?.['keywords']).toBeUndefined();
     expect(pricingRoute?.data?.['jsonLd']).toBeUndefined();

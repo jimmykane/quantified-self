@@ -129,6 +129,9 @@ describe('help.content', () => {
     expect(content).toContain('Your starting point is kept when you reload or return from checkout');
     expect(content).toContain('without a plan-selection screen');
     expect(content).toContain('Connections shows the relevant Pro offer');
+    expect(content).toContain('takes Starter and Basic members to Pro plan selection');
+    expect(content).toContain('If you already have Pro access');
+    expect(content).toContain('**Use QS without sync**');
   });
   it('explains explicit notification opt-in, self-test limits and origin separation', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;

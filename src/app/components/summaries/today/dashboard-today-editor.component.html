@@ -104,14 +104,14 @@
     @for (block of context; track block.id) {
       <div class="today-editor-available">
         <mat-checkbox
-          [aria-describedby]="block.id === 'recovery' ? 'today-data-recovery' : null"
+          [aria-describedby]="block.id === 'recovery' ? 'today-data-recovery' : block.id === 'recordedActivities' ? 'today-data-recordedActivities' : null"
           [checked]="draft()[block.id]"
           [disabled]="saving()"
           (change)="toggleBlock(block.id, $event.checked)"
           >{{ block.label }}</mat-checkbox
         >
         <small>{{ block.detail }}</small>
-        @if (block.id === 'recovery') {
+        @if (block.id === 'recovery' || block.id === 'recordedActivities') {
           <ng-container [ngTemplateOutlet]="dataStatus" [ngTemplateOutletContext]="{ $implicit: block.id }" />
         }
       </div>
