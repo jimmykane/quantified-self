@@ -427,12 +427,50 @@
         }
       </dl>
     }
+    @if (showActivities()) {
+      @let activityState = recordedActivities();
+      <section class="dashboard-today-activities" aria-labelledby="today-activities-heading"
+        [attr.aria-busy]="!activityState || activityState.status === 'loading'">
+        <header>
+          <h3 id="today-activities-heading">Today’s activities</h3>
+          <a mat-button [routerLink]="fullDayRoute()" [queryParams]="{ from: 'dashboard' }" (click)="openDay()">
+            Full day <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+          </a>
+        </header>
+        @if (!activityState || activityState.status === 'loading') {
+          <p role="status">Loading today’s activities…</p>
+          <mat-progress-bar mode="indeterminate" aria-label="Loading today’s activities" />
+        } @else if (activityState.status === 'error') {
+          <div class="dashboard-today-activities-status" role="status">
+            <p>Unable to load today’s activities.</p>
+            <button mat-button type="button" (click)="retryActivities()">Retry</button>
+          </div>
+        } @else {
+          @if (!activityState.complete) {
+            <div class="dashboard-today-activities-status" role="status">
+              <p>Some activities could not be loaded.</p>
+              <button mat-button type="button" (click)="retryActivities()">Retry</button>
+            </div>
+          }
+          @if (activityState.rows.length) {
+            <ul class="dashboard-today-activity-list">
+              @for (activity of activityState.rows; track activity.id) {
+                <li><app-calendar-activity-row [activity]="activity" (navigationRequested)="prepareActivityNavigation()" /></li>
+              }
+            </ul>
+          } @else if (activityState.complete) {
+            <p>No activities recorded today.</p>
+          }
+        }
+      </section>
+    }
     @if (
       !settings().trainingState &&
       !settings().readiness &&
       !settings().metrics.length &&
       !settings().recovery &&
       !settings().suggestion &&
+      !showActivities() &&
       isOwnerDashboard
     ) {
       <div class="dashboard-today-empty">

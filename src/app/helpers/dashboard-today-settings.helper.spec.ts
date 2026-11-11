@@ -4,9 +4,9 @@ import { defaultDashboardTodaySettings, normalizeDashboardTodaySettings, dashboa
 describe('Today configuration', () => {
   it('keeps legacy summaries and metrics with Recovery off while new-account defaults contain only the two large summaries and Load', () => {
     expect(normalizeDashboardTodaySettings(undefined)).toEqual({ version: 1, trainingState: true, readiness: true,
-      recovery: false, suggestion: true, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
+      recovery: false, suggestion: true, recordedActivities: false, metrics: ['load', 'sleep', 'hrv', 'overnight-hr'] });
     expect(defaultDashboardTodaySettings()).toEqual({ version: 1, trainingState: true, readiness: true,
-      recovery: false, suggestion: false, metrics: ['load'] });
+      recovery: false, suggestion: false, recordedActivities: false, metrics: ['load'] });
   });
   it.each([
     null, [], false, {},
@@ -22,6 +22,15 @@ describe('Today configuration', () => {
   it.each([true, false])('preserves an explicit Recovery choice of %s', recovery => {
     expect(normalizeDashboardTodaySettings({ version: 1, recovery }).recovery).toBe(recovery);
   });
+  it('keeps recorded activity rows opt-in independently of the activity count metric', () => {
+    for (const value of [undefined, { version: 1 }, { version: 1, recordedActivities: 'true' }]) {
+      expect(normalizeDashboardTodaySettings(value).recordedActivities).toBe(false);
+    }
+    const settings = normalizeDashboardTodaySettings({ version: 1, recordedActivities: true, metrics: [] });
+    expect(settings.recordedActivities).toBe(true);
+    expect(dashboardTodayDependencies(settings).activities).toBe(true);
+    expect(settings.metrics).toEqual([]);
+  });
   it('preserves explicit empty selections, order and false flags, without duplicates or unknown IDs', () => {
     const settings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight', 'tss', 'weight', 'unknown'] };
     expect(normalizeDashboardTodaySettings(settings)).toMatchObject({ trainingState: false, readiness: false, metrics: ['weight', 'tss'] });
@@ -30,7 +39,7 @@ describe('Today configuration', () => {
   });
   it('loads evidence for visible readiness despite hidden drivers, and skips it for measurement-only layouts', () => {
     expect(dashboardTodayDependencies(defaultDashboardTodaySettings())).toMatchObject({ load: true, sleep: true, recovery: false, activities: false });
-    expect(dashboardTodayDependencies({ version: 1, trainingState: false, readiness: false, recovery: false, suggestion: false, metrics: ['weight', 'steps'] }))
+    expect(dashboardTodayDependencies({ version: 1, trainingState: false, readiness: false, recovery: false, suggestion: false, recordedActivities: false, metrics: ['weight', 'steps'] }))
       .toEqual({ load: false, sleep: false, recovery: false, activities: false, weight: true, steps: true });
     expect(dashboardTodayDependencies({ ...defaultDashboardTodaySettings(), metrics: ['tss', 'ascent'] }).activities).toBe(true);
   });

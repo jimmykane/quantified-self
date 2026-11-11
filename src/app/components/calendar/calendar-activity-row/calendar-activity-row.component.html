@@ -1,0 +1,25 @@
+<ng-template #content>
+  <app-activity-type-icon class="calendar-day-context-preview-icon" [activityType]="activity().activityType"
+    size="20px" aria-hidden="true" />
+  <div class="calendar-day-context-preview-copy">
+    <span class="calendar-day-context-preview-title">{{ activity().name }}</span>
+    @if (activity().tags.length) {
+      <app-calendar-activity-tags [tags]="activity().tags" />
+    }
+    <small>{{ activity().duration }}</small>
+    @if (activity().trainingImpact; as impact) {
+      @if (impact.availability !== 'private') {
+        <app-training-impact [impact]="impact" variant="compact" />
+      }
+    }
+  </div>
+</ng-template>
+@if (activity().route) {
+  <a class="calendar-day-context-preview-entry" [routerLink]="activity().route" (click)="prepareNavigation()">
+    <ng-container [ngTemplateOutlet]="content" />
+  </a>
+} @else {
+  <div class="calendar-day-context-preview-entry">
+    <ng-container [ngTemplateOutlet]="content" />
+  </div>
+}

@@ -456,3 +456,20 @@
 .dashboard-today-empty p { font: var(--mat-sys-title-small); margin: 0 0 0.25rem; }
 .dashboard-today-empty small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .dashboard-today-empty button { display: flex; margin-top: 0.5rem; }
+
+
+.dashboard-today-activities {
+  margin: 0 1rem;
+  padding-block: 0.5rem 0.75rem;
+  border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  min-width: 0;
+}
+.dashboard-today-activities header,
+.dashboard-today-activities-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 0.75rem; }
+.dashboard-today-activities h3 { margin: 0; font: var(--mat-sys-title-small); }
+.dashboard-today-activities p { margin: 0.25rem 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.dashboard-today-activity-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1.5rem; list-style: none; margin: 0.25rem 0 0; padding: 0; }
+.dashboard-today-activity-list li { min-width: 0; }
+@media (max-width: 720px) {
+  .dashboard-today-activity-list { grid-template-columns: minmax(0, 1fr); }
+}

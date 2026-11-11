@@ -246,4 +246,19 @@ describe('Customize Today', () => {
     expect(persistence.save).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('offers recorded activities as a separate opt-in with data availability, draft saving and reset', async () => {
+    const fixture = render(), editor = fixture.componentInstance;
+    expect(editor.draft().recordedActivities).toBe(false);
+    const checkbox = [...fixture.nativeElement.querySelectorAll('mat-checkbox')].find(
+      (node: HTMLElement) => node.textContent?.trim() === 'Today’s activities') as HTMLElement;
+    expect(checkbox.querySelector('input')?.getAttribute('aria-describedby')).toContain('today-data-recordedActivities');
+    checkbox.querySelector('input').click(); fixture.detectChanges();
+    expect(editor.draft().recordedActivities).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(user.settings.dashboardSettings.today).toBeUndefined();
+    await editor.save();
+    expect(persistence.save.mock.calls[0][2].today.recordedActivities).toBe(true);
+    editor.reset(); expect(editor.draft().recordedActivities).toBe(false);
+  });
+
 });

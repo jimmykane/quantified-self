@@ -368,7 +368,13 @@ row. Compact metrics follow the saved order, with at most four columns on deskto
 expands to use the available width. The editor separates shown metrics from Add metrics. Reordering uses handles plus
 accessible up/down buttons, announces the resulting position and keeps focus on the moved metric. Checkbox focus is
 also retained when a metric moves between the shown and available lists. Recovery left and Today's suggestion remain optional full-width
-context/footer blocks. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
+context/footer blocks. **Today’s activities** is an independent opt-in under Additional information, disabled for both
+new and legacy profiles. It renders recorded rows between metrics and the suggestion; Calendar keeps planning and
+selected-day details. `CalendarActivityRowComponent` and `buildCalendarActivityRow` own the same sport icon, title,
+tags, duration, navigation and optional compact impact presentation for Calendar and Today. Today does not fetch
+additional Training impact snapshots for this list. The rows use two columns on desktop and one on phones, with
+wrapping rather than clipping. Loading, empty, partial and failed reads stay distinct, with an explicit activity-only
+Retry. Selected missing metrics keep an explicit empty/error/loading slot; disabled blocks leave none.
 An empty Today explains that no items are selected, offers Customize Today and retains the existing title, date and
 calendar action. Save is enabled only for a changed draft. Restore defaults explains the three-block layout before
 saving; errors remain visible outside the scrolling editor content and use actionable, nontechnical copy.
@@ -379,7 +385,7 @@ layout. Readiness still uses all its existing drivers when a driver cell is hidd
 assessments. No formulas, source observations, API/MCP contracts or stored derived snapshots change.
 
 Today scopes its derived and Sleep subscriptions to enabled consumers, independently of visible charts' dependencies.
-`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals share Calendar's bounded
+`DashboardTodayDataService` is scoped to the rendered card. All enabled activity totals and recorded rows share Calendar's bounded
 summary listener for the current browser-local day, across all sports, using the same exclusions/TSS/ascent rules.
 They do not follow event-table or chart filters. Weight uses a bounded newest-first query for actual Health point
 measurements, without a chart-window cutoff or workout-profile fallback. Steps uses today's daily Health projection

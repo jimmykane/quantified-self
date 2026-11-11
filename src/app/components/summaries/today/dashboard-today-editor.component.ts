@@ -99,6 +99,11 @@ export class DashboardTodayEditorComponent {
   ] as const;
   readonly context = [
     {
+      id: 'recordedActivities',
+      label: 'Today’s activities',
+      detail: 'Recorded activities with their sport, tags and duration, as shown in Calendar.',
+    },
+    {
       id: 'recovery',
       label: 'Recovery left',
       detail: 'Estimated recovery time remaining. Does not affect Readiness.',
@@ -122,7 +127,7 @@ export class DashboardTodayEditorComponent {
     return ids.map((id) => this.catalog.find((row) => row.id === id)!);
   }
   toggleBlock(
-    key: 'trainingState' | 'readiness' | 'recovery' | 'suggestion',
+    key: 'trainingState' | 'readiness' | 'recovery' | 'suggestion' | 'recordedActivities',
     checked: boolean
   ): void {
     if (this.saving() || this.draft()[key] === checked) return;
