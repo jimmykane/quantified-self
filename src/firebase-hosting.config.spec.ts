@@ -203,7 +203,7 @@ function findHtmlFiles(directory: string): string[] {
   });
 }
 
-// Help names the available Event Details charts in the remembered Show/Hide control (2026-11-11).
+// Help keeps all available Event Details chart tabs discoverable while the remembered plot is collapsed (2026-11-11).
 describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
     const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);

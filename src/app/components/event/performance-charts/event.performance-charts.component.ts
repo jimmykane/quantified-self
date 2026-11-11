@@ -72,8 +72,17 @@ export class EventPerformanceChartsComponent {
     }
   }
 
-  get selectedTabIndex(): number { return Math.max(0, this.availableTabs.indexOf(this.selectedTab)); }
-  selectTab(index: number): void { this.selectedTab = this.availableTabs[index] ?? null; }
+  get activeTab(): PerformanceTabId | null {
+    return this.availableTabs.includes(this.selectedTab) ? this.selectedTab : this.availableTabs[0] ?? null;
+  }
+
+  async selectChart(tab: PerformanceTabId): Promise<void> {
+    if (this.destroyRef.destroyed || this.saving() || !this.availableTabs.includes(tab)) return;
+    const changed = tab !== this.activeTab;
+    this.selectedTab = tab;
+    if (!this.expanded()) { await this.toggleExpanded(); return; }
+    if (changed) this.haptics.selection();
+  }
 
   @Input() activities: ActivityInterface[] = [];
   @Input() darkTheme = false;
@@ -90,18 +99,16 @@ export class EventPerformanceChartsComponent {
     return this.availableTabs.map(tab => tab === 'intensity' ? 'Intensity Zones' : this.getTabLabel(tab));
   }
 
-  get sectionTitle(): string { return this.chartTitles.join(' · '); }
+  get chartOptions(): { id: PerformanceTabId; label: string; icon: string }[] {
+    return this.availableTabs.map(id => ({ id, label: this.getTabLabel(id), icon: this.getTabIcon(id) }));
+  }
+
+  get activeChartIcon(): string { return this.activeTab ? this.getTabIcon(this.activeTab) : ''; }
 
   get disclosureLabel(): string { return `${this.expanded() ? 'Hide' : 'Show'} ${this.chartTitles.join(', ')}`; }
 
   get shouldShowTabs(): boolean {
     return this.availableTabs.length > 1;
-  }
-
-  get singleChartTab(): PerformanceTabId | null {
-    return this.availableTabs.length === 1
-      ? this.availableTabs[0]
-      : null;
   }
 
   get availableTabs(): PerformanceTabId[] {

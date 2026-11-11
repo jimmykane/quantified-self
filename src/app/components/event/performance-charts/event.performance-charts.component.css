@@ -6,19 +6,29 @@
 }
 
 .performance-charts-container {
-  --event-section-header-padding: 0;
-  --event-section-header-actions-flex: 0 0 auto;
   display: block;
   width: 100%;
 }
 
-.performance-disclosure { min-height: 44px; flex-shrink: 0; }
-.performance-disclosure-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.performance-disclosure-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+.performance-disclosure { flex-shrink: 0; }
+.performance-disclosure-content { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+
+.performance-charts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 
 .performance-charts-tabs {
-  width: 100%;
+  /* Event Details already supplies the separator below this chart group. */
+  --mat-tab-divider-height: 0px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+.performance-chart-tab { padding-inline: 8px; }
+.performance-single-chart-title { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
+.performance-single-chart-title mat-icon { flex-shrink: 0; }
 
 .performance-durability-notice {
   display: flex;
@@ -63,52 +73,6 @@
   font-size: 18px;
 }
 
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-header-pagination {
-  display: none !important;
-}
-
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-label-container {
-  overflow: visible !important;
-}
-
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-labels {
-  display: flex;
-  flex-wrap: nowrap;
-}
-
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-right: 8px;
-  padding-left: 8px;
-}
-
-:host ::ng-deep .performance-charts-tabs .mdc-tab__text-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-wrapper {
-  overflow: hidden;
-}
-
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body,
-:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-content {
-  overflow: hidden !important;
-}
-
-@media (max-width: 599.98px) {
-  .performance-tab-label {
-    justify-content: center;
-  }
-
-  .performance-tab-text {
-    display: none;
-  }
-
-  :host ::ng-deep .performance-charts-tabs .mat-mdc-tab {
-    min-width: 44px;
-    padding-inline: 8px;
-  }
+@media (max-width: 359.98px) {
+  .performance-tab-icon { display: none; }
 }

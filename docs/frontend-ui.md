@@ -1018,11 +1018,15 @@ reserved space. Keep its host measurable and observable (visibility/ARIA hiding,
 refresh can recover. Pass the same concise description to the HTML host and ECharts ARIA option; do not replace the
 excerpt/full-recording context with an automatically generated list of coordinates.
 
-`EventPerformanceChartsComponent` names the available charts in the shared Event section header, for example
-**Intensity Zones · Power Curve**, with a surface-free **Show/Hide** Material button. The heading follows chart
-availability and retains every title while collapsed; the accessible button name includes those same chart titles.
-The header reserves its action width through `--event-section-header-actions-flex: 0 0 auto`, letting long title lists
-wrap at phone widths while keeping the Show/Hide control separate and reachable.
+`EventPerformanceChartsComponent` keeps its available **Intensity**, **Power Curve**, **Durability** and
+**Cadence vs Power** choices visible in a native Material tab navigation bar beside an expand/collapse icon button
+with **Show charts/Hide charts** tooltips and a complete accessible name. Hiding unmounts only the plot children;
+the navigation stays mounted and retains its active chart. Selecting
+a collapsed tab opens that chart and saves Show with one accepted-action haptic. Selecting another already visible
+chart produces one selection haptic without a preference write; selecting the current visible tab is silent.
+Phones retain full tab names and Material's pagination, keyboard focus and associated tab panel instead of replacing
+names with icons or joining them into a long heading. At widths below 360px, decorative tab icons yield space to the
+full names. A single available chart keeps its own title beside the expand/collapse button.
 `chartSettings.showPerformanceCharts` is an optional account preference: only explicit `false`
 collapses the section, preserving the visible default for existing accounts. The signed-in viewer owns this preference,
 including while viewing another owner's shared activity; anonymous viewers use transient local state and never write

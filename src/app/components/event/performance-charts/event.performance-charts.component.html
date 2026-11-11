@@ -1,89 +1,69 @@
 <div class="performance-charts-container">
   @if (availableTabs.length) {
-  <app-event-section-header icon="monitoring" [title]="sectionTitle">
-    <button mat-button type="button" class="performance-disclosure" [disabled]="saving()"
+  <div class="performance-charts-toolbar">
+    @if (shouldShowTabs) {
+    <nav mat-tab-nav-bar [tabPanel]="chartPanel" [mat-stretch-tabs]="false" class="performance-charts-tabs"
+      aria-label="Activity analysis charts">
+      @for (chart of chartOptions; track chart.id) {
+      <button mat-tab-link type="button" class="performance-chart-tab" [active]="activeTab === chart.id" [disabled]="saving()"
+        [attr.aria-label]="chart.label" (click)="selectChart(chart.id)">
+        <span class="performance-tab-label">
+          <mat-icon aria-hidden="true" class="performance-tab-icon">{{ chart.icon }}</mat-icon>
+          <span class="performance-tab-text">{{ chart.label }}</span>
+        </span>
+      </button>
+      }
+    </nav>
+    } @else {
+    <div class="performance-single-chart-title">
+      <mat-icon aria-hidden="true">{{ activeChartIcon }}</mat-icon>
+      <span class="performance-single-chart-label">{{ chartTitles[0] }}</span>
+    </div>
+    }
+    <button mat-icon-button type="button" class="performance-disclosure" [disabled]="saving()"
       [attr.aria-expanded]="expanded()" [attr.aria-controls]="contentId" [attr.aria-busy]="saving()"
+      [matTooltip]="expanded() ? 'Hide charts' : 'Show charts'"
       [attr.aria-label]="disclosureLabel" (click)="toggleExpanded()">
       <span class="performance-disclosure-content">
-        <span>{{ expanded() ? 'Hide' : 'Show' }}</span>
-        <span class="performance-disclosure-icon">
-          @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
-          @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
-        </span>
+        @if (saving()) { <mat-spinner diameter="20" aria-label="Saving chart visibility"></mat-spinner> }
+        @else { <mat-icon aria-hidden="true">{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon> }
       </span>
     </button>
-  </app-event-section-header>
-  <div [id]="contentId" [hidden]="!expanded()">
-  @if (expanded()) {
-  @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
-  <section class="performance-durability-notice" aria-label="Durability unavailable">
-    <mat-icon aria-hidden="true">info_outline</mat-icon>
-    <div>
-      <strong>Durability unavailable</strong>
-      <span>No selected activity has supported output data. Durability compares sustained power, pace, or speed with heart rate.</span>
-    </div>
-  </section>
-  }
-  @if (shouldShowTabs) {
-  <mat-tab-group class="performance-charts-tabs" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectTab($event)">
-    @for (tab of availableTabs; track tab) {
-    <mat-tab [aria-label]="getTabLabel(tab)">
-      <ng-template mat-tab-label>
-        <span class="performance-tab-label">
-          <mat-icon aria-hidden="true" class="performance-tab-icon">{{ getTabIcon(tab) }}</mat-icon>
-          <span class="performance-tab-text">{{ getTabLabel(tab) }}</span>
-        </span>
-      </ng-template>
-      <ng-template matTabContent>
-        @switch (tab) {
-        @case ('intensity') {
-        <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-        </app-event-intensity-zones>
-        }
-        @case ('powerCurve') {
-        <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-power-curve>
-        }
-        @case ('durability') {
-        <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-durability-curve>
-        }
-        @case ('cadencePower') {
-        <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-          [isMerge]="isMerge">
-        </app-event-cadence-power>
-        }
-        }
-      </ng-template>
-    </mat-tab>
-    }
-  </mat-tab-group>
-  } @else if (singleChartTab) {
-  @switch (singleChartTab) {
-  @case ('intensity') {
-  <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-  </app-event-intensity-zones>
-  }
-  @case ('powerCurve') {
-  <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-power-curve>
-  }
-  @case ('durability') {
-  <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-durability-curve>
-  }
-  @case ('cadencePower') {
-  <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
-    [isMerge]="isMerge">
-  </app-event-cadence-power>
-  }
-  }
-  }
-  }
   </div>
+  <mat-tab-nav-panel #chartPanel [id]="contentId" [hidden]="!expanded()"
+    [attr.aria-label]="shouldShowTabs ? null : chartTitles[0]">
+  @if (expanded()) {
+    @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
+    <section class="performance-durability-notice" aria-label="Durability unavailable">
+      <mat-icon aria-hidden="true">info_outline</mat-icon>
+      <div>
+        <strong>Durability unavailable</strong>
+        <span>No selected activity has supported output data. Durability compares sustained power, pace, or speed with heart rate.</span>
+      </div>
+    </section>
+    }
+    @switch (activeTab) {
+    @case ('intensity') {
+    <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
+    </app-event-intensity-zones>
+    }
+    @case ('powerCurve') {
+    <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge">
+    </app-event-power-curve>
+    }
+    @case ('durability') {
+    <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge">
+    </app-event-durability-curve>
+    }
+    @case ('cadencePower') {
+    <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+      [isMerge]="isMerge">
+    </app-event-cadence-power>
+    }
+    }
+  }
+  </mat-tab-nav-panel>
   }
 </div>
