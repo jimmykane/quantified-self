@@ -86,7 +86,10 @@ describe('WorkoutDataComparisonPageComponent', () => {
     const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
-    expect(hrefs).toContain('/login');
+    const primaryLinks = links.filter(link => link.hasAttribute('mat-flat-button'));
+    expect(primaryLinks.map(link => link.getAttribute('href'))).toEqual(['/tools/compare', '/tools/compare']);
+    for (const link of primaryLinks) expect(link.textContent).toContain('Compare recordings');
+    expect(hrefs).not.toContain('/login');
     expect(hrefs).toContain('/integrations');
     expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(hrefs).toContain('/help#service-connections');

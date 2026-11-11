@@ -523,9 +523,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
-    // My Tracks is included on Starter; pricing and the public map overview now agree (2026-11-09).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-04');
+    // Pricing now explicitly names plans and pricing in its title and heading.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-11');
+    // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
@@ -534,7 +535,8 @@ describe('Firebase Hosting configuration', () => {
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
+    // Both overview CTAs now open the comparison tool directly.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.

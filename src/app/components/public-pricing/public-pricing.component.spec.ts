@@ -106,6 +106,7 @@ describe('PublicPricingComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent as string;
+        expect(fixture.nativeElement.querySelector('h1').textContent).toBe('Plans & pricing');
         expect(text).toContain('Starter');
         expect(text).toContain('Basic');
         expect(text).toContain('Pro');

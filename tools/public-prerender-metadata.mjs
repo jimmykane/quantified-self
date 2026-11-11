@@ -1,4 +1,10 @@
 /** Exact build-output expectations, checked against route content by the Node helper tests. */
+export const PRICING_PRERENDER_METADATA = {
+  title: 'Plans & Pricing',
+  description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
+  h1: 'Plans & pricing',
+};
+
 export const RELEASES_PRERENDER_METADATA = {
   title: 'Release Notes',
   description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
