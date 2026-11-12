@@ -7714,8 +7714,7 @@ threshold-band estimate, never a guessed or mixed resting/max/threshold Banister
 choice, a complete valid file tuple retains Banister priority; the manual formula option below can deliberately choose
 the threshold estimate instead. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
 
-Root and Functions must use the same Sports Lib artifact. This companion PR temporarily pins the immutable
-Running pace/HR calibration implementation commit; replace both pins with its published release during release adoption.
+Root and Functions pin the same published Sports Lib 23.12.0 artifact with matching lockfile integrity.
 New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
 This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
 changing recorded stats, parse options, original files or the file-only cache. Source finalization serializes each leg
@@ -7845,9 +7844,8 @@ app-owned Assistant review shows before/after values and formula. Tool-scoped mo
 manual resting/max HR and deliberate formula edits, forbids inferring them from activity peaks/daily Health, and
 retains preview-only preparation with app-owned Apply. Older saved reviews remain readable. Generic Health,
 measurement, activity and Training impact projections gain no private calibration fields. Registered schemas/history
-stay frozen; only the compatible pending digest changes. Publication, deployment, client refresh and historical reparse
-remain separately authorized. Before QS merge, app and Functions must adopt the same published companion release;
-the review branches temporarily use its immutable implementation commit.
+stay frozen; only the compatible pending digest changes. The companion API is published and adopted in Sports Lib
+23.12.0. Deployment, client refresh and historical reparse remain separately authorized.
 
 ### Sports Lib 23.9.0 R–R heart-rate adoption
 

@@ -13,7 +13,7 @@
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
-    "@sports-alliance/sports-lib": "git+https://github.com/sports-alliance/sports-lib.git#f873fbca1aa68c4ac5be7abff1ac8aafe64bd960",
+    "@sports-alliance/sports-lib": "23.12.0",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
