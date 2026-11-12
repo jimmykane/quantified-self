@@ -149,7 +149,7 @@ export function createTerrainRenderer(
     let reduced = options.reducedMotion;
     // The entry glide eases into a small, seamless orbit rather than coming to rest.
     const entryDuration = 4500;
-    const driftDuration = 24000;
+    const driftDuration = 24000 / 1.1;
     let entryTime = reduced ? entryDuration : 0;
     let driftTime = 0;
     let lastTime: number | undefined;
@@ -196,7 +196,8 @@ export function createTerrainRenderer(
         camera.position.set(
           baseCamera.x + currentX - entryOffset * 2.2 + drift * 2.4,
           baseCamera.y + currentY + entryOffset * 0.22 + drift * 0.12,
-          baseCamera.z + entryOffset * 0.45 + (1 - Math.cos(phase)) * 0.32
+          // Keep moving in depth as the lateral pan turns around, avoiding a perceived pause.
+          baseCamera.z + entryOffset * 0.45 + (1 - Math.cos(phase)) * 1.2
         );
         camera.lookAt(target);
         try {
