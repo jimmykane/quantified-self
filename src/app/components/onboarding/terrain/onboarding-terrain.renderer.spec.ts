@@ -22,6 +22,7 @@ vi.mock('three', async (importOriginal) => {
 });
 
 describe('onboarding terrain renderer lifecycle', () => {
+  const driftDuration = 24000 / 1.1;
   let stage: HTMLElement;
   let canvas: HTMLCanvasElement;
   let frames: Map<number, FrameRequestCallback>;
@@ -160,7 +161,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     for (let i = 0; i < 200; i++) frame();
     stage.dispatchEvent(new Event('pointerleave'));
     for (let i = 0; i < 200; i++) frame();
-    frame(initialTime + 24000);
+    frame(initialTime + driftDuration);
     expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
     expect(frames.size).toBe(1);
   });
@@ -175,7 +176,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     frame(frameTime + 5000);
     const initial = camera.position.clone();
     move('touch');
-    frame(frameTime + 24000);
+    frame(frameTime + driftDuration);
     expect(camera.position.distanceTo(initial)).toBeLessThan(0.001);
     move();
     frame();
@@ -188,7 +189,7 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(frames.size).toBe(0);
   });
 
-  it('continues a bounded, seamless drift after the entry glide', () => {
+  it('continues a bounded, seamless drift without lingering at lateral turns', () => {
     options.reducedMotion = false;
     create();
     frame();
@@ -201,8 +202,16 @@ describe('onboarding terrain renderer lifecycle', () => {
     expect(camera.position.x).toBeGreaterThan(afterEntry.x);
     frame(frameTime + 12000);
     expect(camera.position.x).toBeLessThan(afterEntry.x);
-    frame(frameTime + 10500);
+    frame(frameTime + driftDuration - 13500);
     expect(camera.position.distanceTo(afterEntry)).toBeLessThan(0.001);
+    const orbitStart = frameTime - 4500;
+    for (const turn of [1.25, 1.75, 2.25, 2.75]) {
+      frame(orbitStart + driftDuration * turn - 100);
+      const beforeTurn = camera.position.clone();
+      frame(frameTime + 200);
+      // Depth travel must remain noticeable while sideways movement reverses.
+      expect(camera.position.distanceTo(beforeTurn)).toBeGreaterThan(0.06);
+    }
     expect(frames.size).toBe(1);
     expect(options.onReady).toHaveBeenCalledTimes(1);
   });
