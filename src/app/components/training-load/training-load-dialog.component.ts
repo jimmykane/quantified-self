@@ -7,7 +7,7 @@ import { convertSpeedToSwimPace, convertSpeedToPace, supportsRunningPaceTraining
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
   sameTrainingLoadCalibration,
-  unresolvedTrainingLoadLegs, validTrainingLoadOverride, type TrainingLoadMetadata, type TrainingLoadMethod,
+  unresolvedTrainingLoadLegs, validTrainingLoadOverride, validTrainingLoadPolicy, type TrainingLoadMetadata, type TrainingLoadMethod,
   type EffectiveTrainingLoad } from '@shared/training-load-policy';
 import { resolveTrainingDisciplineFromActivityType, TRAINING_SPORT_DEFINITIONS } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
@@ -87,6 +87,10 @@ export class TrainingLoadDialogComponent implements OnInit {
   get savedCalibration() { const saved = this.metadata()?.legs?.[this.selectedKey]; return saved ? saved.calibration : this.leg?.calibration; }
   get family() { return resolveTrainingDisciplineFromActivityType(this.activities.find(activity => activity.id === this.selectedId())?.type); }
   get familyLabel(): string { return TRAINING_SPORT_DEFINITIONS.find(family => family.id === this.family)?.label ?? 'this sport'; }
+  get canCopyToFuture(): boolean {
+    const { method, included } = this.form.getRawValue();
+    return validTrainingLoadPolicy(this.family, { method, included });
+  }
   get runningPaceSupported(): boolean {
     const activity = this.activities.find(activity => activity.id === this.selectedId());
     return !!activity && supportsRunningPaceTrainingStressScore(activity.type);
@@ -209,6 +213,10 @@ export class TrainingLoadDialogComponent implements OnInit {
     this.selectedId.set(id); this.resetDraft(); this.haptics.selection();
   }
   selection(): void { this.haptics.selection(); }
+  changeMethod(): void {
+    if (!this.canCopyToFuture) this.form.controls.future.setValue(false, { emitEvent: false });
+    this.selection();
+  }
   private resetDraft(): void {
     const control = this.metadata()?.controls[this.selectedKey];
     this.form.reset({ method: control?.method ?? this.policy.method, included: control?.included ?? this.policy.included,
@@ -221,7 +229,7 @@ export class TrainingLoadDialogComponent implements OnInit {
     await this.mutate(() => this.service.save(this.data.user.uid, this.data.event.getID() as string, this.metadata()?.revision ?? 0,
       { key: this.selectedKey, control: { ...((this.metadata()?.controls[this.selectedKey]?.activityId) ? { activityId: this.selectedId() } : {}), method: value.method, included: value.included,
         ...(this.hasOverride ? { override: Math.round(Number(value.override) * 10) / 10 } : {}) } },
-      value.future && family ? { family, policy: { method: value.method, included: value.included },
+      value.future && family && this.canCopyToFuture ? { family, policy: { method: value.method, included: value.included },
         expectedRevision: this.policies().find(policy => policy.id === family)?.revision ?? 0 } : undefined));
   }
   async resetLeg(): Promise<void> {

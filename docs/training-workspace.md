@@ -7804,6 +7804,8 @@ setting; Walking/Hiking cannot use it. Track and Field retains its existing libr
 file-backed per-leg candidate, but QS groups it under Performance Sports and does not offer that mixed family a
 Running threshold or default. The existing grade-adjusted rolling-speed formula, sample coverage, pause and gap
 checks are unchanged. No average workout pace is inferred as its own threshold.
+Selecting a per-activity-only method clears any checked future-default copy, so saving the activity cannot attempt
+an unsupported family default. Supported-family selections retain that explicit copy choice.
 
 Existing threshold MCP tools accept explicit `runningPace: { paceSeconds, distanceUnit: 'km' | 'mi' }` (or null to
 clear), return canonical m/s with owner-aware pace display, and use the same read/preview/native-approval/apply

@@ -30,7 +30,7 @@
     <p role="status">{{ explanation }} {{ reasonText }}</p>
     <div [formGroup]="form" class="load-fields">
       <mat-form-field appearance="outline"><mat-label>Preferred method</mat-label>
-        <mat-select formControlName="method" (selectionChange)="selection()">
+        <mat-select formControlName="method" (selectionChange)="changeMethod()">
           <mat-option value="AUTOMATIC">Automatic</mat-option>
           @if (runningPaceSupported || form.controls.method.value === 'RUNNING_PACE') {
             <mat-option value="RUNNING_PACE" [disabled]="!runningPaceSupported || !leg?.evaluations?.runningPace">Running pace</mat-option>
@@ -48,9 +48,8 @@
       </mat-form-field>
       <mat-slide-toggle formControlName="included" (change)="selection()">Include this activity in modeled load</mat-slide-toggle>
       @if (family) {
-        @if ((family !== 'swimming' && form.controls.method.value === 'SWIM_PACE') ||
-          (family !== 'running' && form.controls.method.value === 'RUNNING_PACE')) {
-          <p class="hint">Choose a method supported by this sport before copying preferences to future workouts.</p>
+        @if (!canCopyToFuture) {
+          <p class="hint">Save applies this method to this activity only. It is not available as a default for {{ familyLabel }} workouts.</p>
         } @else {
           <mat-checkbox formControlName="future" (change)="selection()">Also use these preferences for future {{ familyLabel }} workouts</mat-checkbox>
           <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity. Your current thresholds and HR formula preference stay unchanged.</p>
