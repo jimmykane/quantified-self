@@ -24,7 +24,8 @@ it does not widen MCP grants. This instruction change updates the compatible pen
 `preview_training_threshold_change` requires both independent threshold scopes, a current owner/connection/grant-bound
 `policyRef`, stable mutation UUID and explicit set/clear fields. CSS input is seconds per 100 `m` or `yd`, never an
 ambiguous pace string. Running-family `runningPace` accepts positive `paceSeconds` with explicit `distanceUnit`
-`km` or `mi`; canonical `runningThresholdSpeed` is displayed as pace in the owner’s units. That nullable output
+`km` or `mi`; canonical `runningThresholdSpeed` is displayed as pace in the owner’s units, rounded to the nearest
+whole second after conversion to match the editor and Event Details. Canonical speed stays unchanged. That nullable output
 field is optional only to retain saved previews from before this addition. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
 15-minute proposal shows exact before/after values and future-workout effect, preserving method, inclusion and other
 thresholds. `apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction

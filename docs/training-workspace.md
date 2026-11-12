@@ -7786,7 +7786,9 @@ registered-app rescan and plugin refresh remain separate rollout steps requiring
 The Running family also accepts an independently measured threshold pace as `mm:ss` per kilometre or mile.
 The shared Training/Health editor stores `runningThresholdSpeed` in m/s in the same dated policy; it creates no
 Health observation, extra import query, trigger or rebuild source. Switching units without editing preserves full
-canonical precision. Clearing affects future workouts only. First import freezes the revision at the leg's recorded
+canonical precision. Editor, Event Details and MCP threshold displays round to the nearest whole second after
+unit conversion; normal activity pace displays and canonical calculations are unchanged. Clearing affects future
+workouts only. First import freezes the revision at the leg's recorded
 start, including delayed uploads; duplicate import, original-file reparse and Reset retain that saved policy.
 Older workouts without the field never adopt today's threshold through reparse. Imported TSS and valid file/parse
 threshold calibration keep priority.

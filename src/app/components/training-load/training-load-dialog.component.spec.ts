@@ -12,7 +12,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits, WeightUnits,
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits, PaceUnits, WeightUnits,
   convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -106,6 +106,19 @@ describe('Training load editor', () => {
     }
     delete leg.calibration;
     expect(component.savedHealthWeightLabel).toBeNull();
+  });
+  it.each([
+    [PaceUnits.MinutesPerKilometer, '04:46 min/km'],
+    [PaceUnits.MinutesPerMile, '07:40 min/m'],
+  ] as const)('shows the saved Running threshold in %s without changing its canonical value', (unit, value) => {
+    const leg: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000,
+      type: ActivityTypes.Running, duration: 3600, distance: null }, recordedTss: 87.3, evaluations: null,
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Running), runningThresholdSpeed: 3.5 } };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: leg } });
+    component.data.unitSettings = normalizeUserUnitSettings({ paceUnits: [unit] });
+    expect(component.savedThresholdLabels).toEqual([{ label: 'Saved running threshold pace fallback', value }]);
+    expect(leg.policy.runningThresholdSpeed).toBe(3.5);
+    expect(component.recorded).toBe(87.3);
   });
   it('uses one modeled score and activity wording for a single-activity workout', async () => {
     const fixture = TestBed.createComponent(TrainingLoadDialogComponent);

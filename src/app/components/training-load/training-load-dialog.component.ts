@@ -122,7 +122,8 @@ export class TrainingLoadDialogComponent implements OnInit {
       return display ? [{ label, value: `${display.value} ${display.unit}` }] : [];
     });
     const speed = this.policy.runningThresholdSpeed;
-    const pace = speed === undefined ? null : resolveUnitAwareDisplayFromValue(DataPace.type, convertSpeedToPace(speed), this.data.unitSettings);
+    const pace = speed === undefined ? null : resolveUnitAwareDisplayFromValue(DataPace.type, convertSpeedToPace(speed), this.data.unitSettings,
+      { roundPaceSeconds: true });
     return pace ? [...labels, { label: 'Saved running threshold pace fallback', value: `${pace.value} ${pace.unit}` }] : labels;
   }
   get savedHealthWeightLabel(): string | null {

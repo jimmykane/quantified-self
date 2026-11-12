@@ -156,6 +156,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP trans
     expect((await head.get()).get('runningThresholdSpeed')).toBeUndefined();
     expect((await head.get()).get('functionalThresholdPower')).toBe(220);
   });
+  it.each([
+    [PaceUnits.MinutesPerKilometer, '04:46', 'min/km'],
+    [PaceUnits.MinutesPerMile, '07:40', 'min/m'],
+  ] as const)('keeps Running threshold display consistent in %s through read, preview and apply', async (unit, displayValue, displayUnit) => {
+    await db.doc(`users/${uid}/config/settings`).set({ unitSettings: { paceUnits: [unit] } });
+    const head = db.doc(`users/${uid}/trainingLoadPolicies/running`);
+    await head.set({ revision: 1, revisionId: 'initial', method: 'RUNNING_PACE', included: true,
+      effectiveAt: Timestamp.fromMillis(0), runningThresholdSpeed: 3.5 });
+    const expected = { value: 3.5, unit: 'm/s', displayValue, displayUnit };
+    const current = await read('running');
+    expect(current.thresholds.runningThresholdSpeed).toEqual(expected);
+    const proposal = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: current.policyRef, mutationId: randomUUID(), changes: { lactateThresholdHR: 165 } }));
+    expect(proposal.review.before.runningThresholdSpeed).toEqual(expected);
+    expect(proposal.review.after.runningThresholdSpeed).toEqual(expected);
+    const applied = TRAINING_THRESHOLD_OUTPUTS.apply_training_threshold_change.parse(await call('apply_training_threshold_change',
+      { proposalRef: proposal.proposalRef }));
+    expect(applied.policy.thresholds.runningThresholdSpeed).toEqual(expected);
+    expect((await head.get()).get('runningThresholdSpeed')).toBe(3.5);
+  });
   it('binds Assistant reads/previews and app apply to the same active conversation', async () => {
     const conversationId = 'current-chat';
     const conversation = db.doc(`users/${uid}/assistantConversations/active`);

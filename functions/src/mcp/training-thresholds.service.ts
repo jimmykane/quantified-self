@@ -39,7 +39,7 @@ function publicValues(policy: TrainingLoadPolicy, settings: unknown): TrainingTh
     if (number === undefined) return null;
     const display = resolveUnitAwareDisplayFromValue(type, type === DataSwimPace.type ? convertSpeedToSwimPace(number)
       : type === DataPace.type ? convertSpeedToPace(number) : number,
-      settings as Parameters<typeof resolveUnitAwareDisplayFromValue>[2], { roundSwimPaceSeconds: true });
+      settings as Parameters<typeof resolveUnitAwareDisplayFromValue>[2], { roundSwimPaceSeconds: true, roundPaceSeconds: true });
     if (!display) invalid('A threshold cannot be displayed safely.');
     return { value: number, unit, displayValue: String(display.value), displayUnit: display.unit };
   };
