@@ -110,6 +110,13 @@ bundle remains 1.41 MB (335.36 kB estimated transfer), below its unchanged 1474 
 Consent-gated onboarding goal events and bounded App Check recovery exceeded that total-script cap by
 1.11 kB. Beta and production now share a 14.86 MB `allScript` error cap; initial-load and warning caps stay unchanged.
 
+## Dated Training calibration bundle allowance
+
+The Running pace and manual HR controls, published Sports Lib 23.12.0 and latest public-guide integration measure
+14.87 MB of total scripts, 11.11 kB above the previous 14.86 MB cap. Matching beta/production `allScript` error caps
+are 14.88 MB. The initial bundle remains 1.41 MB (335.55 kB estimated transfer), below the unchanged 1474 kB cap.
+Warning budgets stay unchanged. This is compiled-output accounting, not a runtime performance claim.
+
 ## Field guide onboarding terrain and bundle allowance
 
 The optional Field guide and general account setup use `OnboardingTerrainComponent`. Its native 3D mountain
