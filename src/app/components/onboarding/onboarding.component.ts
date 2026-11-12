@@ -350,7 +350,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     readonly loadingLabel = signal('Saving your choices…');
 
     async onTermsSubmit() {
-        if (this.isLoading || !this.user) return;
+        if (this.isLoading || !this.user || !this.isCurrentUser(this.user.uid)) return;
         if (!this.termsFormGroup.valid) {
             this.termsFormGroup.markAllAsTouched();
             return;
@@ -381,12 +381,14 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 (this.user as AppUserInterface)[key] === value) ? null : { uid: user.uid, values: submittedValues };
             this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, submittedValues);
             this.termsFormGroup.markAsPristine();
-            const navigated = await this.navigateAfterOnboarding(true, true);
+            const navigated = await this.navigateAfterOnboarding(true, true, submittedValues);
             if (!navigated) throw new Error('Account setup saved but navigation was cancelled.');
             if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
-            if (!choicesSaved) this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
+            if (!choicesSaved && user.acceptedTrackingPolicy === true) {
+                this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
+            }
             this.logger.error('Error updating user terms:', error);
             this.errorMessage.set(choicesSaved
                 ? 'Your choices are saved, but we couldn’t open the next page. Please try again.'
@@ -404,18 +406,19 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     async finishOnboarding() {
-        if (!this.user || this.isLoading || this.completing || this.destroyRef.destroyed) return;
+        if (!this.user || this.isLoading || this.completing || !this.isCurrentUser(this.user.uid)) return;
         if (!this.policies.filter(policy => !policy.isOptional).every(policy =>
             (this.user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)) return;
         this.completing = true;
         this.isLoading = true;
         this.errorMessage.set('');
         const user = this.user;
+        const alreadyCompleted = (user as AppUserInterface).onboardingCompleted === true;
         let choicesSaved = false;
         try {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
-            if ((this.user as AppUserInterface).onboardingCompleted === true) {
+            if (alreadyCompleted) {
                 if (!await this.navigateAfterOnboarding()) throw new Error('Navigation was cancelled.');
                 return;
             }
@@ -430,7 +433,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
-            if (!choicesSaved) this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
+            if (!choicesSaved && !alreadyCompleted) this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
             this.logger.error('Error completing onboarding:', error);
             this.errorMessage.set('We couldn’t finish setting up your account. Please try again.');
             this.haptics.error();
@@ -441,10 +444,11 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     private isCurrentUser(uid: string): boolean {
-        return !this.destroyRef.destroyed && this.user?.uid === uid;
+        return !this.destroyRef.destroyed && this.user?.uid === uid && this.authService.currentUser?.uid === uid;
     }
 
-    private async navigateAfterOnboarding(waitForSavedProfile = false, recordCompletion = false): Promise<boolean> {
+    private async navigateAfterOnboarding(waitForSavedProfile = false, recordCompletion = false,
+        submittedConsent?: Partial<AppUserInterface>): Promise<boolean> {
         const uid = this.user.uid;
         const flow = this.trackingFlow();
         let failureStage: 'profile' | 'navigation' = 'profile';
@@ -457,7 +461,10 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 await firstValueFrom(this.userService.user$.pipe(
                     filter(profile => profile?.uid === uid && profile.onboardingCompleted === true
                         && this.policies.filter(policy => !policy.isOptional).every(policy =>
-                            profile[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)),
+                            profile[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)
+                        // Completion may arrive before the separately saved optional preferences.
+                        // Do not measure with stale consent, including a just-submitted opt-out.
+                        && Object.entries(submittedConsent ?? {}).every(([key, value]) => profile[key] === value)),
                     take(1),
                     timeout(10_000),
                     takeUntilDestroyed(this.destroyRef),
@@ -510,7 +517,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             }
             return reached;
         } catch (error) {
-            if (recordCompletion && this.authService.currentUser?.uid === uid
+            if (recordCompletion && submittedConsent?.acceptedTrackingPolicy !== false && this.authService.currentUser?.uid === uid
                 && !(failureStage === 'profile' && this.destroyRef.destroyed)) {
                 this.analyticsService.logOnboardingFlow(flow, 'failed', { failureStage });
             }

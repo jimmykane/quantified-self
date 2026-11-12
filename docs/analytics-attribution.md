@@ -95,14 +95,17 @@ IDs, file data, return URLs, request IDs or selected Stripe price IDs are includ
 
 Selection is recorded once per goal per mounted setup view, only when analytics consent already exists. For
 first-time opt-in, the selected goal is recorded after the authoritative profile confirms saved preferences.
+The acknowledgement must match the submitted optional preferences as well as required policies and completion.
+An opt-out awaiting acknowledgement, or a failed opt-out save, cannot emit a failure event using older consent.
 No pre-consent history is transmitted or persisted as a queue. People who decline analytics are not measured;
 the resulting funnel must not be described as conversion for all signups or abandonment before consent.
 
 `destination_reached` and the legacy `tutorial_complete` are emitted only after navigation completes and the final
 route and intended setup parameters match. A cancelled navigation, guard redirect back to setup/login or lost
 Sync hint records failure, never completion. A different signed-in account cannot inherit the completion event.
-An already-complete account automatically leaving onboarding does not repeat completion analytics. Completion
-means the destination route activated, not that checkout, provider connection or a comparison succeeded.
+An already-complete account automatically leaving onboarding emits no flow events, including when its redirect
+fails. Account checks use both the component profile and the current Auth account before resuming a saved setup.
+Completion means the destination route activated, not that checkout, provider connection or a comparison succeeded.
 
 For Windsor, use the production hostname and stream, `event_name`, `event_count` and `totalusers`; compare the
 three prefixes and their destination suffixes. Event counts include retry attempts; distinct users across events

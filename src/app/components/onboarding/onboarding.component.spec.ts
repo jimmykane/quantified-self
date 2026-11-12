@@ -61,9 +61,12 @@ describe('OnboardingComponent', () => {
     beforeEach(async () => {
         routeSnapshot = { queryParamMap: convertToParamMap({}) };
         routeStub = { snapshot: routeSnapshot };
+        const savedProfile$ = new BehaviorSubject({ ...mockUser, ...savedConsent, onboardingCompleted: true });
         mockUserService = {
-            user$: of({ ...mockUser, ...savedConsent, onboardingCompleted: true }),
-            createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
+            user$: savedProfile$,
+            createOrUpdateUser: vi.fn().mockImplementation(async user => {
+                savedProfile$.next({ ...user, onboardingCompleted: true });
+            }),
             isPro: vi.fn().mockResolvedValue(false),
             hasPaidAccess: vi.fn().mockResolvedValue(false),
             setFreeTier: vi.fn().mockResolvedValue(undefined),
@@ -515,6 +518,72 @@ describe('OnboardingComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
         expect(profile$.observed).toBe(false);
+    });
+
+    it.each([true, false])('waits for the submitted analytics preference (%s) before recording setup', async acceptedTrackingPolicy => {
+        await setupComponent();
+        component.chooseStart('analyze');
+        mockRouter.navigate.mockClear();
+        mockAnalyticsService.logOnboardingFlow.mockClear();
+        setRequiredPoliciesAccepted();
+        component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(acceptedTrackingPolicy);
+        const profile$ = new BehaviorSubject({ ...mockUser, ...savedConsent, onboardingCompleted: true,
+            acceptedTrackingPolicy: !acceptedTrackingPolicy });
+        mockUserService.user$ = profile$;
+        const saving = component.onTermsSubmit();
+        await vi.waitFor(() => expect(component.loadingLabel()).toBe('Finishing setup…'));
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
+        profile$.next({ ...profile$.value, acceptedTrackingPolicy });
+        await saving;
+        expect(mockRouter.navigate).toHaveBeenCalledExactlyOnceWith(['/dashboard']);
+    });
+
+    it('does not record a failure under old consent if an analytics opt-out acknowledgement times out', async () => {
+        await setupComponent(false, { acceptedTrackingPolicy: true });
+        setRequiredPoliciesAccepted();
+        component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(false);
+        mockUserService.user$ = new BehaviorSubject({ ...mockUser, ...savedConsent, onboardingCompleted: true,
+            acceptedTrackingPolicy: true });
+        vi.useFakeTimers();
+        try {
+            const saving = component.onTermsSubmit();
+            await vi.advanceTimersByTimeAsync(10_001);
+            await saving;
+            expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            expect(component.errorMessage()).toContain('Your choices are saved');
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('does not record a failed consent save using the analytics preference the user is opting out of', async () => {
+        await setupComponent(false, { acceptedTrackingPolicy: true });
+        setRequiredPoliciesAccepted();
+        component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(false);
+        mockUserService.createOrUpdateUser.mockRejectedValueOnce(new Error('Save failed'));
+        await component.onTermsSubmit();
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
+        expect(component.errorMessage()).toContain('saving your choices');
+    });
+
+    it('does not record or navigate for the previous account while the component input is stale', async () => {
+        await setupComponent();
+        component.chooseStart('sync');
+        setRequiredPoliciesAccepted();
+        const profile$ = new Subject<any>();
+        mockUserService.user$ = profile$;
+        mockRouter.navigate.mockClear();
+        mockAnalyticsService.logOnboardingFlow.mockClear();
+        const saving = component.onTermsSubmit();
+        await vi.waitFor(() => expect(component.loadingLabel()).toBe('Finishing setup…'));
+        mockAuthService.currentUser = { uid: 'another-account' };
+        profile$.next({ ...mockUser, ...savedConsent, onboardingCompleted: true });
+        await saving;
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
     });
 
     it('keeps setup retryable if the authoritative completion snapshot never arrives', async () => {
@@ -1309,6 +1378,18 @@ describe('OnboardingComponent', () => {
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it.each(['cancel', 'throw'])('does not label an already completed account redirect failure as a consent-save failure (%s)', async failure => {
+        await setupComponent(false, { acceptedTrackingPolicy: true });
+        component.user = { ...component.user, ...savedConsent, onboardingCompleted: true } as any;
+        if (failure === 'cancel') mockRouter.navigate.mockResolvedValueOnce(false);
+        else mockRouter.navigate.mockRejectedValueOnce(new Error('Navigation failed'));
+        await component.finishOnboarding();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
+        expect(component.errorMessage()).toContain('try again');
     });
 
     it('does not let a direct completion call bypass required consent', async () => {
