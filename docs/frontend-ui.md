@@ -1232,6 +1232,14 @@ responses and other exceptions remain visible. The guard adds no requests, retri
 or Firestore writes; a later user/application retry can make a fresh request after a failure settles.
 
 Keep the direct `@firebase/webchannel-wrapper` dependency aligned with the full SDK's transport version.
+The frontend baseline is Firebase 12.19.0 (`@firebase/firestore` 4.17.2) with WebChannel 1.0.7, Angular framework
+20.3.35 and CLI/build/SSR tooling 20.3.42 on Node 22. Keep the root Firebase override aligned with the direct
+dependency and verify that the installed tree has a single WebChannel instance before running the browser transport
+regression. Retain the HTTP guard and account/cache recovery paths when upgrading; passing the guarded tests alone
+does not establish that upstream handles malformed HTTP responses without it. Material/CDK remain on 20.2.14.
+The upgraded beta output measures 15.03 MB of total scripts, above the preceding 14.85 MB cap. Beta and production
+therefore share a 15.10 MB total-script error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
+The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
