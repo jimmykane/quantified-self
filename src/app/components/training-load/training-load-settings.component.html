@@ -44,18 +44,18 @@
             </div>
           }
         }
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Threshold heart rate (optional)</mat-label>
           <input matInput formControlName="thresholdHr" inputmode="decimal" aria-label="Threshold heart rate">
           <span matTextSuffix>{{ hrUnit }}</span>
           <mat-hint>Use your independently measured threshold; resting or maximum HR is not assumed.</mat-hint>
         </mat-form-field>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Resting heart rate (optional)</mat-label>
           <input matInput formControlName="restingHr" inputmode="decimal" aria-label="Resting heart rate">
           <span matTextSuffix>{{ hrUnit }}</span>
         </mat-form-field>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" floatLabel="always">
           <mat-label>Maximum heart rate (optional)</mat-label>
           <input matInput formControlName="maxHr" inputmode="decimal" aria-label="Maximum heart rate">
           <span matTextSuffix>{{ hrUnit }}</span>

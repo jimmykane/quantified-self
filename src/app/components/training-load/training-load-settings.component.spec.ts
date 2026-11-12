@@ -4,6 +4,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
+import { MatFormField } from '@angular/material/form-field';
 import { BehaviorSubject } from 'rxjs';
 import { TrainingLoadSettingsComponent } from './training-load-settings.component';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
@@ -53,6 +54,20 @@ describe('dated Training load settings', () => {
     expect(savePolicy).toHaveBeenCalledExactlyOnceWith('owner', 'cycling', 5,
       { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
     fixture.destroy();
+  });
+  it.each([false, true])('keeps empty HR labels above their unit suffixes (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy(); policies$.next([]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable();
+    const family = fixture.debugElement.query(By.css('section[aria-label="Cycling"]'));
+    for (const name of ['thresholdHr', 'restingHr', 'maxHr']) {
+      const field = family.queryAll(By.directive(MatFormField)).find(field => field.query(By.css(`input[formControlName="${name}"]`)))!;
+      expect(field.componentInstance.floatLabel).toBe('always');
+      expect(field.query(By.css('input')).nativeElement.value).toBe('');
+      expect(field.nativeElement.textContent).toContain('bpm');
+    }
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled(); fixture.destroy();
   });
   it.each([false, true])('edits manual HR calibration and formula only on Save (Health editor: %s)', async thresholdsOnly => {
     component.ngOnDestroy();
