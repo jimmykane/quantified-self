@@ -2,7 +2,8 @@ import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { DataFTP, DataHeartRate, DataSwimPace, convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
+import { DataFTP, DataHeartRate, DataPace, DataSwimPace, convertSpeedToPace, convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
+import { runningThresholdSpeed } from '../../../shared/running-threshold-pace';
 import { resolveUnitAwareDisplayFromValue } from '../../../shared/unit-aware-display';
 import { TRAINING_SPORT_DEFINITIONS, isTrainingDiscipline } from '../../../shared/training-disciplines';
 import { DEFAULT_TRAINING_LOAD_POLICY, trainingLoadThresholds, validTrainingLoadPolicy,
@@ -26,22 +27,28 @@ function invalid(message: string): never { throw new McpDataError('invalid_reque
 const defaults = (): TrainingThresholdDependencies => ({ db: admin.firestore(), now: Date.now });
 
 export function trainingThresholdChanges(args: z.infer<typeof TRAINING_THRESHOLD_INPUTS.preview_training_threshold_change>['changes']): TrainingThresholdChanges {
-  const { css, ...rest } = args;
-  return { ...rest, ...(css === undefined ? {} : { swimThresholdSpeed: css === null ? null
+  const { css, runningPace, ...rest } = args;
+  return { ...rest, ...(runningPace === undefined ? {} : { runningThresholdSpeed: runningPace === null ? null
+    : runningThresholdSpeed(runningPace.paceSeconds, runningPace.distanceUnit) }),
+    ...(css === undefined ? {} : { swimThresholdSpeed: css === null ? null
     : (css.distanceUnit === 'yd' ? 91.44 : 100) / css.paceSeconds }) };
 }
 
 function publicValues(policy: TrainingLoadPolicy, settings: unknown): TrainingThresholdValues {
   const value = (number: number | undefined, type: string, unit: 'watt' | 'bpm' | 'm/s') => {
     if (number === undefined) return null;
-    const display = resolveUnitAwareDisplayFromValue(type, type === DataSwimPace.type ? convertSpeedToSwimPace(number) : number,
-      settings as Parameters<typeof resolveUnitAwareDisplayFromValue>[2], { roundSwimPaceSeconds: true });
+    const display = resolveUnitAwareDisplayFromValue(type, type === DataSwimPace.type ? convertSpeedToSwimPace(number)
+      : type === DataPace.type ? convertSpeedToPace(number) : number,
+      settings as Parameters<typeof resolveUnitAwareDisplayFromValue>[2], { roundSwimPaceSeconds: true, roundPaceSeconds: true });
     if (!display) invalid('A threshold cannot be displayed safely.');
     return { value: number, unit, displayValue: String(display.value), displayUnit: display.unit };
   };
   return { functionalThresholdPower: value(policy.functionalThresholdPower, DataFTP.type, 'watt'),
     lactateThresholdHR: value(policy.lactateThresholdHR, DataHeartRate.type, 'bpm'),
-    swimThresholdSpeed: value(policy.swimThresholdSpeed, DataSwimPace.type, 'm/s') };
+    restingHeartRate: value(policy.restingHeartRate, DataHeartRate.type, 'bpm'),
+    maxHeartRate: value(policy.maxHeartRate, DataHeartRate.type, 'bpm'), hrAlgorithm: policy.hrAlgorithm ?? null,
+    swimThresholdSpeed: value(policy.swimThresholdSpeed, DataSwimPace.type, 'm/s'),
+    runningThresholdSpeed: value(policy.runningThresholdSpeed, DataPace.type, 'm/s') };
 }
 function policyFields(family: string, data: FirebaseFirestore.DocumentData | undefined): TrainingLoadPolicy {
   if (!data) return { ...DEFAULT_TRAINING_LOAD_POLICY };

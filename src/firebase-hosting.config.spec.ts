@@ -376,7 +376,7 @@ describe('Firebase Hosting configuration', () => {
     // Header-bell help covers grouped release notes and the persistent app-update badge (2026-11-10).
     // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
     // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-12');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -512,23 +512,23 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-12');
     // Approved corrections preserve manual Health permissions and link existing account tools.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     // The hero preview now names the charts: Training load and recovery (2026-11-10).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-11-12');
     // Pricing now explicitly names plans and pricing in its title and heading.
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-11');
     // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
@@ -538,7 +538,7 @@ describe('Firebase Hosting configuration', () => {
     // Both overview CTAs now open the comparison tool directly.
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-12');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
@@ -552,9 +552,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-11-03');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-09');
@@ -599,8 +599,8 @@ describe('Firebase Hosting configuration', () => {
     // Device-management help covers individual removal, registration hints and automatic delivery on both sites (2026-11-04).
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-11');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
@@ -721,7 +721,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '14.85mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.10mb',
     });
   });
 

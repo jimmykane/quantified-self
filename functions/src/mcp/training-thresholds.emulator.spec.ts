@@ -5,7 +5,7 @@ import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines
 import { runMcpTrainingThresholds } from './training-thresholds.service';
 import { TRAINING_THRESHOLD_OUTPUTS, type TrainingThresholdTool } from './training-thresholds.schemas';
 import type { McpContentWriteInput } from './content-write.service';
-import { SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP transactions', { timeout: 30_000 }, () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -87,6 +87,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP trans
     expect((await event.get()).data()).toEqual({ stats: { 'Training Stress Score': 87.3 } });
     expect(result.policy.effectiveAt).toBeTruthy();
   });
+  it('reviews and applies a complete manual HR tuple and formula, preserving historical policies and controls', async () => {
+    const current = await read('cycling');
+    const changes = { restingHeartRate: 55, lactateThresholdHR: 165, maxHeartRate: 190, hrAlgorithm: 'BANISTER' };
+    const previewed = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: current.policyRef, mutationId: randomUUID(), changes }));
+    expect(previewed.review.after).toMatchObject({ hrAlgorithm: 'BANISTER', restingHeartRate: { value: 55, unit: 'bpm' }, maxHeartRate: { value: 190 } });
+    expect(previewed.review.before.hrAlgorithm).toBeNull();
+    const applied = TRAINING_THRESHOLD_OUTPUTS.apply_training_threshold_change.parse(await call('apply_training_threshold_change', { proposalRef: previewed.proposalRef }));
+    expect(applied.policy.thresholds).toEqual(previewed.review.after);
+    expect((await db.doc(`users/${uid}/trainingLoadPolicies/cycling`).get()).data()).toMatchObject({ ...changes, method: 'AUTOMATIC', included: true });
+    const next = await read('cycling');
+    const removed = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: next.policyRef, mutationId: randomUUID(), changes: { hrAlgorithm: null, maxHeartRate: null } }));
+    expect(removed.review.after.hrAlgorithm).toBeNull(); expect(removed.review.after.maxHeartRate).toBeNull();
+    expect(removed.review.after.restingHeartRate?.value).toBe(55);
+    await expect(call('preview_training_threshold_change', { policyRef: next.policyRef, mutationId: randomUUID(),
+      changes: { maxHeartRate: 150 } })).rejects.toThrow(/positive finite thresholds/);
+  });
   it('rejects competing edits instead of overwriting the winner', async () => {
     const a = await preview(), b = await preview({ functionalThresholdPower: 230 });
     const outcomes = await Promise.allSettled([a, b].map(proposal => call('apply_training_threshold_change', { proposalRef: proposal.proposalRef })));
@@ -130,6 +148,51 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP trans
     const result = await read('swimming');
     expect(result.thresholds.swimThresholdSpeed).toEqual({ value: 91.44 / 113, unit: 'm/s', displayValue: '01:53', displayUnit: 'min/100yd' });
     expect(JSON.stringify(result)).not.toMatch(/PRIVATE|privateWeight|included|method/);
+  });
+  it('reads, previews and applies Running pace with explicit imperial units without changing existing workouts', async () => {
+    await db.doc(`users/${uid}/config/settings`).set({ unitSettings: { paceUnits: [PaceUnits.MinutesPerMile] } });
+    const head = db.doc(`users/${uid}/trainingLoadPolicies/running`);
+    const original = { revision: 1, revisionId: 'old', method: 'RUNNING_PACE', included: true,
+      effectiveAt: Timestamp.fromMillis(0), runningThresholdSpeed: 3, functionalThresholdPower: 220 };
+    await head.set(original); await head.collection('revisions').doc('old').set(original);
+    const event = db.doc(`users/${uid}/events/existing`); const recorded = { stats: { 'Training Stress Score': 42 } }; await event.set(recorded);
+    const current = await read('running');
+    const proposal = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: current.policyRef, mutationId: randomUUID(), changes: { runningPace: { paceSeconds: 420, distanceUnit: 'mi' } } }));
+    expect(proposal.review.after.runningThresholdSpeed).toEqual({ value: 1609.34 / 420, unit: 'm/s', displayValue: '07:00', displayUnit: 'min/m' });
+    expect((await head.get()).get('runningThresholdSpeed')).toBe(3);
+    const applied = TRAINING_THRESHOLD_OUTPUTS.apply_training_threshold_change.parse(await call('apply_training_threshold_change', { proposalRef: proposal.proposalRef }));
+    expect(applied.policy.thresholds.runningThresholdSpeed).toEqual(proposal.review.after.runningThresholdSpeed);
+    expect((await head.get()).data()).toMatchObject({ revision: 2, method: 'RUNNING_PACE', functionalThresholdPower: 220, runningThresholdSpeed: 1609.34 / 420 });
+    expect((await event.get()).data()).toEqual(recorded);
+    const historical = TRAINING_THRESHOLD_OUTPUTS.get_training_thresholds.parse(await call('get_training_thresholds',
+      { family: 'running', asOf: '2020-01-01T00:00:00Z' })).policies[0];
+    expect(historical.thresholds.runningThresholdSpeed?.value).toBe(3); expect(historical.policyRef).toBeNull();
+    const clear = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: (await read('running')).policyRef, mutationId: randomUUID(), changes: { runningPace: null } }));
+    await call('apply_training_threshold_change', { proposalRef: clear.proposalRef });
+    expect((await head.get()).get('runningThresholdSpeed')).toBeUndefined();
+    expect((await head.get()).get('functionalThresholdPower')).toBe(220);
+  });
+  it.each([
+    [PaceUnits.MinutesPerKilometer, '04:46', 'min/km'],
+    [PaceUnits.MinutesPerMile, '07:40', 'min/m'],
+  ] as const)('keeps Running threshold display consistent in %s through read, preview and apply', async (unit, displayValue, displayUnit) => {
+    await db.doc(`users/${uid}/config/settings`).set({ unitSettings: { paceUnits: [unit] } });
+    const head = db.doc(`users/${uid}/trainingLoadPolicies/running`);
+    await head.set({ revision: 1, revisionId: 'initial', method: 'RUNNING_PACE', included: true,
+      effectiveAt: Timestamp.fromMillis(0), runningThresholdSpeed: 3.5 });
+    const expected = { value: 3.5, unit: 'm/s', displayValue, displayUnit };
+    const current = await read('running');
+    expect(current.thresholds.runningThresholdSpeed).toEqual(expected);
+    const proposal = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: current.policyRef, mutationId: randomUUID(), changes: { lactateThresholdHR: 165 } }));
+    expect(proposal.review.before.runningThresholdSpeed).toEqual(expected);
+    expect(proposal.review.after.runningThresholdSpeed).toEqual(expected);
+    const applied = TRAINING_THRESHOLD_OUTPUTS.apply_training_threshold_change.parse(await call('apply_training_threshold_change',
+      { proposalRef: proposal.proposalRef }));
+    expect(applied.policy.thresholds.runningThresholdSpeed).toEqual(expected);
+    expect((await head.get()).get('runningThresholdSpeed')).toBe(3.5);
   });
   it('binds Assistant reads/previews and app apply to the same active conversation', async () => {
     const conversationId = 'current-chat';

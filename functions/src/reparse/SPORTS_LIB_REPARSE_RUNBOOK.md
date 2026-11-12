@@ -1,5 +1,17 @@
 # Sports-Lib Reparse Runbook
 
+## Sports Lib 23.12.0: running pace and explicit HR formula calibration
+
+Root and Functions pin the same published 23.12.0 artifact with matching lockfile integrity. Runtime detection and
+strict activity/route reparse targets follow the installed package; version-mismatch checks remain unchanged.
+No historical reparse, persisted-data migration or Training rebuild is required. Existing legs retain their saved
+thresholds, HR formula choice or absence, imported scores, controls and calibration across reparse and retries.
+Reparse refreshes candidates from retained file inputs and that saved policy, never today's settings. Older saved
+evaluations without a running-pace candidate can prepare it through the existing original-file reimport workflow;
+this does not authorize backfilling current thresholds into old workouts. Route parsing is unchanged.
+Review already-enabled scanners before a separately approved deployment, because the version increase can make
+older records eligible. This adoption does not enable scanners, start a production reparse or change queue settings.
+
 ## Sports Lib 23.11.0: independent elevation units
 
 Root and Functions pin the same published 23.11.0 artifact with matching lockfile integrity. Runtime detection and

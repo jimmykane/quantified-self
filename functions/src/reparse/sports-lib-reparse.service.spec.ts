@@ -747,13 +747,26 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('parseFromOriginalFilesStrict should parse all supported extensions and merge multiple events', async () => {
-        await parseFromOriginalFilesStrict([
-            { path: 'a.fit' },
-            { path: 'a.gpx' },
-            { path: 'a.tcx' },
-            { path: 'a.json' },
-            { path: 'a.sml' },
-        ]);
+        const contents: Record<string, string> = {
+            'a.fit': 'fit-data', 'a.gpx': '<gpx/>', 'a.tcx': '<TrainingCenterDatabase/>',
+            'a.json': '{}', 'a.sml': '<sml/>',
+        };
+        const originalFile = hoisted.mockFile.getMockImplementation()!;
+        hoisted.mockFile.mockImplementation((path?: string) => {
+            if (!path || !Object.hasOwn(contents, path)) throw new Error('Unexpected synthetic source');
+            return { download: vi.fn().mockResolvedValue([Buffer.from(contents[path])]), getMetadata: hoisted.mockGetMetadata };
+        });
+        try {
+            await parseFromOriginalFilesStrict([
+                { path: 'a.fit' },
+                { path: 'a.gpx' },
+                { path: 'a.tcx' },
+                { path: 'a.json' },
+                { path: 'a.sml' },
+            ]);
+        } finally {
+            hoisted.mockFile.mockImplementation(originalFile);
+        }
 
         expect(hoisted.fitImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
         expect(hoisted.gpxImporter.getFromString).toHaveBeenCalledTimes(1);
@@ -3129,7 +3142,7 @@ describe('sports-lib-reparse.service', () => {
             const extension = kind === 'tcx-single-zero' ? 'tcx' : 'fit';
             const origin = new Date('2026-01-01T10:00:00Z');
             if (kind === 'tcx-single-zero') {
-                const { DOMParser } = await import('xmldom');
+                const { DOMParser } = await import('@xmldom/xmldom');
                 // Only the first recorded point has distance. Later HR timestamps
                 // must retain missing distance rather than suggest no travel.
                 const xml = `<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">

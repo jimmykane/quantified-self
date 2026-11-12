@@ -80,7 +80,7 @@ describe('help.content', () => {
   });
   it('explains one dated threshold setting and independent reviewed MCP/Assistant changes', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
-    for (const text of ['Health → Fitness → Manage FTP, threshold HR and CSS', 'Running and Cycling FTP are independent',
+    for (const text of ['Health → Fitness → Manage Training thresholds', 'Running and Cycling FTP are independent',
       'not a duplicate Health measurement', 'no age expiry', 'training-thresholds:read', 'training-thresholds:write',
       'resets off on New chat', 'Later weigh-ins or edits do not recalculate that saved result',
       'only when MET is selected or needed as a fallback', 'without reparsing the original file']) expect(copy).toContain(text);

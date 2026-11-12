@@ -315,3 +315,12 @@ describe('workout context Health policy', () => {
     expect(content).toContain('excludes workout identifiers, names, locations, provider account IDs, and raw creator details');
   });
 });
+
+describe('Manual Training HR disclosure', () => {
+  it('discloses manual HR calibration and formula under independent Training permissions', () => {
+    const copy = JSON.stringify(CONNECTED_SERVICES_POLICY_SECTION);
+    expect(copy).toContain('threshold/resting/maximum HR'); expect(copy).toContain('HR formula');
+    expect(copy).toContain('training-thresholds:read'); expect(copy).toContain('training-thresholds:write');
+    expect(copy).toContain('Health history'); expect(copy).toContain('client-approved Apply for future workouts');
+  });
+});

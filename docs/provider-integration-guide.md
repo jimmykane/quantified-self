@@ -6,6 +6,15 @@ This document is the durable implementation guide for adding or materially chang
 
 Keep it current in the same change whenever a provider is added, removed, renamed, gains a capability, changes a lifecycle rule, or changes operational support. The root `AGENTS.md` makes that update mandatory.
 
+Functions GPX/TCX parsing and Suunto route-content comparison use maintained `@xmldom/xmldom` 0.8.15 rather than
+unpatched `xmldom` 0.6.0. `XmlDOMParser` rejects reported XML warnings/errors and emits only a generic failure,
+without logging original-file content. Keep parser injection into Sports Lib and existing malformed-input failure paths;
+multiple XML roots must not produce an imported activity or route. Synthetic real-importer regressions cover valid
+GPX/TCX recordings, GPX routes and rejection of a second root. Provider capabilities, canonical identity, provenance,
+sanitized writes, account/deletion fences and retry policy are unchanged. Monitoring is **unchanged**: existing import,
+route and reparse failures already own parser errors, with no new queue, outcome, telemetry label or cloud resource.
+No historical reprocessing or provider request is part of this maintenance change.
+
 Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions; [Suunto 24/7 Health integration](suunto-integration.md) records its metric mapping, bounded pulls, webhooks, lifecycle fencing, production-wide polling, and rollback switch; [Garmin Health integration](garmin-integration.md) records its Health API 1.2.4 family mapping, Ping/Pull trust boundary, callback credential handling, lifecycle fencing, production-wide availability, rollback switch, and Summary Resender procedure.
 
 The adopted Sports Lib 23.0.0 profile corrections refine Garmin Breathwork and Polar explicit sport names, including
@@ -1813,6 +1822,14 @@ Monitoring is **covered/unchanged**: the reviewed activity-delivery bundle count
 outcomes, not HTTP 200 or diagnostic logs. Existing Help retry guidance stays accurate; MCP and Training have no impact.
 Deploy only `importActivityToSuuntoApp` and `processActivitySyncTask`; rollback restores their previous revisions.
 Any replay is a separate authorized operation and must prove the exact job has no accepted upload before clearing its blocker.
+
+A Suunto blob PUT HTTP 404 is retryable with `retryMode: resume`: retain the existing upload ID and signed continuation
+and use the unchanged bounded queue budget/backoff, without an immediate 404 retry loop or replacement initialization.
+Resume checks the same upload's status before loading/sending bytes; completed operations are not uploaded again.
+Initialization/status 404s, signed-URL 401/403s and terminal content errors retain their existing handling.
+Monitoring remains **covered/unchanged** by #832's committed retry, exhaustion and reconciliation outcomes; existing Help
+already describes bounded background recovery. MCP/Training, scopes, queues and resources are unchanged. Release only
+`processActivitySyncTask` and `importActivityToSuuntoApp`; recovery of old terminal markers is a separate authorized operation.
 
 Provider-upload progress jobs belong to the uploader's local monitoring lifecycle. Closing/clearing the view, changing
 destination, or discarding an in-flight result after an account switch removes its active local jobs; it must not leave

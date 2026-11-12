@@ -1,19 +1,23 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, type SimpleChanges, inject, signal } from '@angular/core';
 import { FormControl, FormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { TRAINING_SPORT_DEFINITIONS, type TrainingSportId } from '@shared/training-disciplines';
-import { convertSpeedToSwimPace, convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard, DataSwimPace, DataFTP, DataHeartRate } from '@sports-alliance/sports-lib';
-import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPolicy, type TrainingLoadMethod } from '@shared/training-load-policy';
+import { convertSpeedToSwimPace, convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard, DataSwimPace, DataFTP, DataHeartRate, PaceUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPolicy, type TrainingLoadMethod, type TrainingLoadHrAlgorithm } from '@shared/training-load-policy';
 import { SharedModule } from '../../modules/shared.module';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import type { TrainingFtpSuggestions } from '../../helpers/training-capacity.helper';
+import { displayRunningThresholdPace, parseRunningThresholdPace, type RunningPaceUnit } from '@shared/running-threshold-pace';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { parsePaceDurationSeconds } from '@shared/pace-input';
 
 @Component({ selector: 'app-training-load-settings', standalone: true, imports: [SharedModule],
   templateUrl: './training-load-settings.component.html', styleUrls: ['./training-load-settings.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) uid!: string;
+  @Input() unitSettings?: UserUnitSettingsInterface;
   /** Health reuses this editor without exposing load-method or inclusion changes. */
   @Input() thresholdsOnly = false;
   readonly selectedFamily = signal<TrainingSportId>('cycling');
@@ -29,12 +33,34 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   readonly message = signal('');
   readonly ftpSuggestions = signal<TrainingFtpSuggestions>({});
   readonly rows = TRAINING_SPORT_DEFINITIONS.map(family => ({ ...family, revision: 0, cssUnit: 'm' as 'm' | 'yd', cssOriginalSpeed: undefined as number | undefined, cssOriginalText: '',
+    runningPaceUnit: 'km' as RunningPaceUnit, runningOriginalSpeed: undefined as number | undefined, runningOriginalText: '',
     form: new FormGroup({ method: new FormControl<TrainingLoadMethod>('AUTOMATIC', { nonNullable: true }),
       included: new FormControl(true, { nonNullable: true }), cssPace: new FormControl('', { nonNullable: true }),
-      ftp: new FormControl('', { nonNullable: true }), thresholdHr: new FormControl('', { nonNullable: true }) }) }));
+      ftp: new FormControl('', { nonNullable: true }), thresholdHr: new FormControl('', { nonNullable: true }),
+      restingHr: new FormControl('', { nonNullable: true }), maxHr: new FormControl('', { nonNullable: true }),
+      hrAlgorithm: new FormControl<TrainingLoadHrAlgorithm | ''>('', { nonNullable: true }),
+      runningPace: new FormControl('', { nonNullable: true }) }) }));
   get visibleRows() { return this.thresholdsOnly ? this.rows.filter(row => row.id === this.selectedFamily()) : this.rows; }
   selectFamily(value: TrainingSportId): void { if (value !== this.selectedFamily()) { this.selectedFamily.set(value); this.selection(); } }
-  ngOnChanges(): void {
+  ngOnChanges(changes?: SimpleChanges): void {
+    const units = normalizeUserUnitSettings(this.unitSettings);
+    const runningUnit = units.paceUnits[0] === PaceUnits.MinutesPerMile ? 'mi' : 'km';
+    const swimUnit = units.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard ? 'yd' : 'm';
+    if (changes?.unitSettings && !changes.uid) {
+      // A profile-unit change is presentation only. Never reinterpret an in-progress draft,
+      // restart the policy listener or fetch the optional FTP suggestions again.
+      const previous = normalizeUserUnitSettings(changes.unitSettings.previousValue);
+      for (const row of this.rows) {
+        if (row.form.dirty) continue;
+        if (previous.paceUnits[0] !== units.paceUnits[0]) {
+          const speed = this.runningSpeed(row); row.runningPaceUnit = runningUnit; this.showRunningPace(row, speed);
+        }
+        if (previous.swimPaceUnits[0] !== units.swimPaceUnits[0]) {
+          const speed = this.cssSpeed(row); row.cssUnit = swimUnit; this.showCss(row, speed);
+        }
+      }
+      return;
+    }
     this.generation++; this.subscription?.unsubscribe(); this.policies = [];
     const generation = this.generation;
     this.ftpSuggestions.set({});
@@ -43,7 +69,7 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     });
     this.loaded.set(false); this.message.set(''); this.busy.set(null);
     for (const row of this.rows) {
-      row.revision = 0; row.cssUnit = 'm'; row.form.enable({ emitEvent: false }); this.loadPolicy(row, { method: 'AUTOMATIC', included: true });
+      row.revision = 0; row.cssUnit = swimUnit; row.runningPaceUnit = runningUnit; row.form.enable({ emitEvent: false }); this.loadPolicy(row, { method: 'AUTOMATIC', included: true });
     }
     this.subscription = this.service.watchPolicies(this.uid).subscribe({ next: policies => {
       this.policies = policies;
@@ -66,24 +92,45 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     this.haptics.selection();
   }
   private cssSpeed(row: typeof this.rows[number]): number | undefined {
-    const text = row.form.controls.cssPace.value.trim();
-    if (!text) return undefined;
-    if (text === row.cssOriginalText) return row.cssOriginalSpeed;
-    if (!/^\d{1,2}:[0-5]\d$/.test(text)) return NaN;
-    const [minutes, seconds] = text.split(':').map(Number);
-    const pace = minutes * 60 + seconds;
+    const pace = parsePaceDurationSeconds(row.form.controls.cssPace.value);
+    if (pace === undefined) return undefined;
+    // Equivalent clock text retains the exact saved speed behind its rounded display.
+    if (pace === parsePaceDurationSeconds(row.cssOriginalText)) return row.cssOriginalSpeed;
     return convertSwimPaceToSpeed(row.cssUnit === 'yd' ? pace / convertSwimPaceToSwimPacePer100Yard(1) : pace);
   }
   validCss(row: typeof this.rows[number]): boolean {
     const speed = this.cssSpeed(row);
     return row.id !== 'swimming' || speed === undefined || validSwimThresholdSpeed(speed);
   }
+  private runningSpeed(row: typeof this.rows[number]): number | undefined {
+    const text = row.form.controls.runningPace.value.trim();
+    return parsePaceDurationSeconds(text) === parsePaceDurationSeconds(row.runningOriginalText)
+      ? row.runningOriginalSpeed : parseRunningThresholdPace(text, row.runningPaceUnit);
+  }
+  validRunningPace(row: typeof this.rows[number]): boolean {
+    const speed = this.runningSpeed(row);
+    return speed === undefined || Number.isFinite(speed) && speed > 0;
+  }
+  changeRunningPaceUnit(row: typeof this.rows[number], unit: RunningPaceUnit): void {
+    const speed = this.runningSpeed(row);
+    if (unit === row.runningPaceUnit || !this.validRunningPace(row)) return;
+    row.runningPaceUnit = unit; this.showRunningPace(row, speed); this.selection();
+  }
+  private showRunningPace(row: typeof this.rows[number], speed?: number): void {
+    row.runningOriginalSpeed = speed;
+    row.runningOriginalText = speed === undefined ? '' : displayRunningThresholdPace(speed, row.runningPaceUnit);
+    row.form.controls.runningPace.setValue(row.runningOriginalText, { emitEvent: false });
+  }
   private policyDraft(row: typeof this.rows[number]): TrainingLoadPolicy {
-    const { method, included, ftp, thresholdHr } = row.form.getRawValue();
+    const { method, included, ftp, thresholdHr, restingHr, maxHr, hrAlgorithm } = row.form.getRawValue();
     const speed = row.id === 'swimming' ? this.cssSpeed(row) : undefined;
+    const running = row.id === 'running' ? this.runningSpeed(row) : undefined;
     return { method, included, ...(speed !== undefined ? { swimThresholdSpeed: speed } : {}),
+      ...(running !== undefined ? { runningThresholdSpeed: running } : {}),
       ...((row.id === 'running' || row.id === 'cycling') && ftp.trim() ? { functionalThresholdPower: Number(ftp) } : {}),
-      ...(thresholdHr.trim() ? { lactateThresholdHR: Number(thresholdHr) } : {}) };
+      ...(thresholdHr.trim() ? { lactateThresholdHR: Number(thresholdHr) } : {}),
+      ...(restingHr.trim() ? { restingHeartRate: Number(restingHr) } : {}),
+      ...(maxHr.trim() ? { maxHeartRate: Number(maxHr) } : {}), ...(hrAlgorithm ? { hrAlgorithm } : {}) };
   }
   validThresholds(row: typeof this.rows[number]): boolean { return validTrainingLoadPolicy(row.id, this.policyDraft(row)); }
   private showCss(row: typeof this.rows[number], speed?: number): void {
@@ -94,10 +141,13 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     row.form.controls.cssPace.setValue(row.cssOriginalText, { emitEvent: false });
   }
   private loadPolicy(row: typeof this.rows[number], policy: TrainingLoadPolicy): void {
-    row.form.reset({ method: policy.method, included: policy.included, cssPace: '',
+    row.form.reset({ method: policy.method, included: policy.included, cssPace: '', runningPace: '',
       ftp: policy.functionalThresholdPower === undefined ? '' : String(policy.functionalThresholdPower),
-      thresholdHr: policy.lactateThresholdHR === undefined ? '' : String(policy.lactateThresholdHR) });
+      thresholdHr: policy.lactateThresholdHR === undefined ? '' : String(policy.lactateThresholdHR),
+      restingHr: policy.restingHeartRate === undefined ? '' : String(policy.restingHeartRate),
+      maxHr: policy.maxHeartRate === undefined ? '' : String(policy.maxHeartRate), hrAlgorithm: policy.hrAlgorithm ?? '' });
     this.showCss(row, policy.swimThresholdSpeed);
+    this.showRunningPace(row, policy.runningThresholdSpeed);
   }
   changeCssUnit(row: typeof this.rows[number], unit: 'm' | 'yd'): void {
     if (unit === row.cssUnit || !this.validCss(row)) return;

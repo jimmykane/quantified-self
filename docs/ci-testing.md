@@ -45,6 +45,16 @@ repeat dependency setup and consume concurrent runner capacity. Measure the full
 All check jobs use Node 22, matching `functions/package.json` rather than testing Functions on an older
 runtime. `npm run test:workflows` checks that alignment against the actual YAML.
 
+Frontend and Functions use Vitest 3.2.7 with matching `@vitest/coverage-v8`, including the backported UI-server
+security fix. Keep both packages aligned when applying patch updates. Angular 20's builder declares a Vitest
+`^3.1.1` peer, while Vitest 3 requires Tinypool `^1.1.1`. The remaining
+[Tinypool worker-options advisory](https://github.com/advisories/GHSA-85c8-ppgw-ccpr) is fixed in 2.1.2, outside that
+range; it needs a separately verified runner migration rather than an incompatible override.
+For dependency maintenance, inspect both full and `--omit=dev` npm audits for the root and Functions installs,
+and the separate plugin tool install. Apply compatible updates through normal resolution and verify clean Node 22
+`npm ci` installs. Preserve declared peer/engine compatibility instead of using force or legacy-peer-deps to clear
+an advisory. Historical benchmark versions below remain measurements of their original toolchains.
+
 Ordinary Functions tests use at most two isolated Vitest fork workers, with a minimum of one. This bounds concurrent
 imports and worker reporting on shared CI runners instead of scaling automatically with the runner's CPU count.
 The cap addresses runner pressure after a CI run passed every test but failed with an unhandled

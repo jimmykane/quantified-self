@@ -8,6 +8,13 @@ import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from '../shared/policy-con
 import { AppUserAccess } from '../helpers/user-access.helper';
 import { firstValueFrom, from, throwError, timeout } from 'rxjs';
 
+const LITE_FETCH_REJECTION_MESSAGES = new Set([
+  'Request failed with error: undefined',
+  'Request failed with error: Failed to fetch',
+  'Request failed with error: Load failed',
+  'Request failed with error: NetworkError when attempting to fetch resource.',
+]);
+
 export interface UserProfileDocuments {
   user?: Partial<AppUserInterface>;
   legal?: Record<string, unknown>;
@@ -117,12 +124,12 @@ export class UserProfileVerificationService {
       const reference = doc(firestore, path);
       const snapshot = await getDoc(reference).catch((cause: unknown) => {
         assertCurrentUser();
-        // Lite loses fetch rejection details when the native error has no HTTP status.
-        // Normalize only that SDK signature at the read boundary, so the existing
-        // account retry budget applies without retrying unrelated unknown errors.
+        // Lite uses unknown for fetch rejections without HTTP status. Newer SDKs
+        // preserve the browser's message instead of the old undefined signature.
+        // Keep an exact allowlist at the read boundary for the existing retry budget.
         if (cause instanceof Error && cause.name === 'FirebaseError'
           && (cause as Error & { code?: unknown }).code === 'unknown'
-          && cause.message === 'Request failed with error: undefined') {
+          && LITE_FETCH_REJECTION_MESSAGES.has(cause.message)) {
           throw Object.assign(new Error('Could not reach the account profile server.'), {
             code: 'unavailable', cause,
           });

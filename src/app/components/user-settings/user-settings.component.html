@@ -114,7 +114,7 @@
         <ng-template #trainingLoadSettings>
           <div class="settings-panel-body">
             @defer (when activeSection === 'training') {
-              <app-training-load-settings [uid]="user.uid"></app-training-load-settings>
+              <app-training-load-settings [uid]="user.uid" [unitSettings]="user.settings.unitSettings"></app-training-load-settings>
             } @error {
               <app-deferred-load-error area="training-settings" />
             }
