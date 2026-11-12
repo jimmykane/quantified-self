@@ -1356,8 +1356,11 @@ Complete profile snapshots add no Firestore reads. Incomplete snapshots require 
 reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
 and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
 restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
-Firestore Lite's fetch-rejection signature (`FirebaseError`, code `unknown`, exact message
-`Request failed with error: undefined`) is normalized to `unavailable` only where `getDoc` rejects. The original
+Firestore Lite's fetch-rejection signatures (`FirebaseError`, code `unknown`, exact message
+`Request failed with error: undefined`, or the same prefix with `Failed to fetch`, `Load failed`, or
+`NetworkError when attempting to fetch resource.`) are normalized to `unavailable` only where `getDoc` rejects.
+Firebase 12.19 preserves those browser messages instead of losing them as `undefined`; the real SDK regression
+checks every listed browser message with a rejecting fetch stub and no network requests. The original
 error remains its cause. This uses the existing four retries with backoff and the same account/session fences;
 it adds no nested retry budget. Other unknown errors, settings imports/merges and permanent read failures retain
 their original classification. Exhaustion exposes the existing manual **Retry** without publishing missing data.

@@ -168,12 +168,13 @@ describe('UserProfileVerificationService', () => {
     expect(sdk.getDoc).toHaveBeenCalledTimes(8);
   });
 
-  it('normalizes a real Lite SDK fetch rejection without making any network requests', async () => {
+  it.each(['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'])(
+    'normalizes a real Lite SDK fetch rejection (%s) without making any network requests', async message => {
     const { initializeApp, deleteApp } = await import('firebase/app');
     const lite = await vi.importActual<typeof import('firebase/firestore/lite')>('firebase/firestore/lite');
     const firebaseApp = initializeApp({ projectId: 'demo-profile-recovery', apiKey: 'demo-key' }, 'profile-transport-test');
     const firestore = lite.getFirestore(firebaseApp);
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError(message));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -182,7 +183,7 @@ describe('UserProfileVerificationService', () => {
       sdk.getDoc.mockImplementation(lite.getDoc);
       await expect(service.verifyIfIncomplete('u1', null)).rejects.toMatchObject({
         code: 'unavailable',
-        cause: { name: 'FirebaseError', code: 'unknown', message: 'Request failed with error: undefined' },
+        cause: { name: 'FirebaseError', code: 'unknown', message: `Request failed with error: ${message}` },
       });
       expect(fetchMock).toHaveBeenCalledTimes(4);
       for (const [url, request] of fetchMock.mock.calls) {
@@ -204,7 +205,13 @@ describe('UserProfileVerificationService', () => {
     new FirebaseError('permission-denied', 'Request failed with error: undefined'),
     new FirebaseError('unauthenticated', 'Request failed with error: undefined'),
     new FirebaseError('invalid-argument', 'Request failed with error: undefined'),
+    new FirebaseError('permission-denied', 'Request failed with error: Failed to fetch'),
+    new FirebaseError('unauthenticated', 'Request failed with error: Load failed'),
+    new FirebaseError('invalid-argument', 'Request failed with error: NetworkError when attempting to fetch resource.'),
+    new FirebaseError('unknown', 'Request failed with error: Failed to fetch private-resource'),
+    new FirebaseError('unknown', 'Request failed with error: fetch failed (arbitrary cause)'),
     Object.assign(new Error('Request failed with error: undefined'), { code: 'unknown' }),
+    Object.assign(new Error('Request failed with error: Failed to fetch'), { code: 'unknown' }),
     new TypeError('Failed to fetch'),
   ])('preserves errors outside the exact Lite transport signature: %s', async error => {
     sdk.getDoc.mockRejectedValueOnce(error);
