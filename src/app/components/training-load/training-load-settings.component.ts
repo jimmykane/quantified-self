@@ -91,7 +91,8 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   private cssSpeed(row: typeof this.rows[number]): number | undefined {
     const text = row.form.controls.cssPace.value.trim();
     if (!text) return undefined;
-    if (text === row.cssOriginalText) return row.cssOriginalSpeed;
+    // Optional minute zero padding does not change the displayed pace.
+    if (text.replace(/^(\d):/, '0$1:') === row.cssOriginalText) return row.cssOriginalSpeed;
     if (!/^\d{1,2}:[0-5]\d$/.test(text)) return NaN;
     const [minutes, seconds] = text.split(':').map(Number);
     const pace = minutes * 60 + seconds;
@@ -103,7 +104,7 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   }
   private runningSpeed(row: typeof this.rows[number]): number | undefined {
     const text = row.form.controls.runningPace.value.trim();
-    return text === row.runningOriginalText ? row.runningOriginalSpeed : parseRunningThresholdPace(text, row.runningPaceUnit);
+    return text.replace(/^(\d):/, '0$1:') === row.runningOriginalText ? row.runningOriginalSpeed : parseRunningThresholdPace(text, row.runningPaceUnit);
   }
   validRunningPace(row: typeof this.rows[number]): boolean {
     const speed = this.runningSpeed(row);

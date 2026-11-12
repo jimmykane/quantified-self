@@ -70,6 +70,29 @@ describe('dated Training load settings', () => {
     row.form.controls.runningPace.setValue('08:00'); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1609.34 / 480, 12);
   });
+  it.each([
+    ['running', 'runningPace', '7:40', 'runningThresholdSpeed', 3.5],
+    ['swimming', 'cssPace', '1:43', 'swimThresholdSpeed', 100 / 113],
+  ] as const)('preserves exact %s threshold when only minute zero padding changes', async (family, control, text, property, speed) => {
+    component.unitSettings = normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    component.ngOnChanges();
+    policies$.next([{ id: family, revision: 2, method: 'HR', included: true, [property]: speed }]);
+    const row = component.rows.find(row => row.id === family)!;
+    row.form.controls[control].setValue(text); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', family, 2,
+      { method: 'HR', included: true, [property]: speed });
+  });
+  it.each([
+    ['running', 'runningPace'], ['swimming', 'cssPace'],
+  ] as const)('rejects invalid %s pace when the saved threshold is empty', async (family, control) => {
+    const row = component.rows.find(row => row.id === family)!;
+    row.form.controls[control].setValue('00000'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(false); await component.save(row);
+    expect(savePolicy).not.toHaveBeenCalled();
+  });
   it('rejects invalid running pace and removes a cleared fallback only on Save', async () => {
     const row = component.rows.find(row => row.id === 'running')!;
     row.form.controls.runningPace.setValue('04:99'); row.form.markAsDirty();
