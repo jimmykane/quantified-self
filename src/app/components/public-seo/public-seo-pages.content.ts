@@ -6,6 +6,7 @@ import {
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { STRAVA_IMPORT_GUIDE_PAGES } from './strava-import-guides.content';
+import { WAHOO_GARMIN_GUIDE_CONTENT } from './wahoo-garmin-guide.content';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 import { WORKOUT_GENERATION_SECTION } from './workout-generation.content';
@@ -289,7 +290,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'date_range',
             title: 'Week, Month, and Year views',
-            copy: 'Move one week, month, or year at a time, return to today, and keep the selected view and date in the URL.',
+            copy: 'Move one week, month, or year at a time, return to today, and keep the selected view and date in the URL. See your swims, rides and runs in the same week, including sessions recorded on different devices.',
           },
           {
             icon: 'bubble_chart',
@@ -410,7 +411,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
         preview: 'training-explorer',
-        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
+        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines. Training for a triathlon? Review your overall workload, then explore swimming, cycling and running separately.',
         items: [
           {
             icon: 'directions_run',
@@ -1153,6 +1154,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Garmin to Wahoo', '/guides/sync-garmin-to-wahoo'),
       routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
       routeAction('Wahoo to Suunto', '/guides/sync-wahoo-to-suunto'),
+      routeAction('Wahoo + Garmin Analysis', '/guides/wahoo-garmin-training-data'),
       routeAction('Suunto Routes to Garmin', '/guides/sync-suunto-routes-to-garmin-courses'),
       routeAction('Centralize Data', '/guides/centralize-garmin-suunto-coros-workout-data'),
       routeAction('Strava to Suunto', '/guides/strava-to-suunto'),
@@ -1256,6 +1258,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Feature Hub', '/features'),
     ],
   },
+  wahooGarminTrainingData: WAHOO_GARMIN_GUIDE_CONTENT,
   syncGarminToSuunto: {
     key: 'syncGarminToSuunto',
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
@@ -1575,6 +1578,25 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         ],
       },
       {
+        eyebrow: 'Mixed-device example',
+        title: 'Using Wahoo with a Suunto watch?',
+        copy: 'Quantified Self keeps eligible workouts from both services in one history. You can analyze them together whether or not you enable Wahoo-to-Suunto activity delivery.',
+        items: [
+          {
+            icon: 'directions_bike',
+            title: 'For cyclists and triathletes',
+            copy: 'Review Wahoo rides alongside runs, swims or other workouts recorded on Suunto. Explore individual sessions and your overall training load.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Training analysis',
+        title: 'Review activities from both sources.',
+        copy: 'Explore fitness, fatigue and form across the activities in your QS history. The preview below uses sample data.',
+        items: [],
+        preview: 'training-hero',
+      },
+      {
         eyebrow: 'Past activities',
         title: 'Preview older Wahoo workouts before sending',
         copy: 'Use a one-time send for eligible activities already saved in Quantified Self. Automatic sync can stay off.',
@@ -1644,6 +1666,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         question: 'What if my workout does not appear in Suunto?',
         answer: 'Check the Wahoo and Suunto connections and confirm that the activity has an eligible retained FIT original. For a past send, review excluded activities and Recent sends. Queued, sending, or waiting for the provider is not confirmed delivery. Use Check status when offered for an accepted operation; if acceptance is unknown, check Suunto before attempting another transfer.',
       },
+      {
+        question: 'Can I analyze Wahoo and Suunto together without sending activities between them?',
+        answer: 'Yes. With Pro, connecting both services brings eligible activities into Quantified Self. Sending Wahoo activities to Suunto is a separate choice that you explicitly enable.',
+      },
     ],
     closingTitle: 'Ready to bring your Wahoo workouts into Suunto?',
     closingCopy: 'Get started in Connections, review Pro pricing and terms, then choose automatic sync or a reviewed one-time send. Opening setup does not connect an account or send activities for you.',
@@ -1651,6 +1677,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: WAHOO_SETUP_QUERY_PARAMS },
       routeAction('View Pricing', '/pricing'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
+      routeAction('Wahoo + Garmin guide', '/guides/wahoo-garmin-training-data', 'stroked', 'arrow_forward'),
     ],
     howToSteps: [
       'With Pro, connect Wahoo and Suunto in Connections and review the optional history import.',
@@ -2155,6 +2182,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   syncGarminToWahoo: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToWahoo),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),
   syncWahooToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncWahooToSuunto),
+  wahooGarminTrainingData: buildRouteData(PUBLIC_SEO_PAGES.wahooGarminTrainingData),
   importActivitiesToSuunto: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToSuunto),
   importActivitiesToWahoo: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToWahoo),
   syncSuuntoRoutesToGarmin: buildRouteData(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin),

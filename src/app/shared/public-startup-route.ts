@@ -45,6 +45,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/guides/sync-garmin-to-wahoo',
   '/guides/sync-coros-to-suunto',
   '/guides/sync-wahoo-to-suunto',
+  '/guides/wahoo-garmin-training-data',
   '/guides/import-activities-to-suunto',
   '/guides/import-activities-to-wahoo',
   '/guides/sync-suunto-routes-to-garmin-courses',
