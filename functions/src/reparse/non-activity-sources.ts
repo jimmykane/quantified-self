@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { readFitMessages, readFitUnsignedField } from 'fit-file-parser/raw';
 import { RouteImporterFIT, RouteImporterGPX } from '@sports-alliance/sports-lib';
-import { DOMParser } from 'xmldom';
+import { XmlDOMParser } from '../shared/xml-parser';
 import { getActivityFileBaseExtension } from '../shared/activity-file-parser';
 import { MAX_ACTIVITY_DECOMPRESSED_BYTES } from '../shared/activity-processing-config';
 
@@ -57,7 +57,7 @@ export async function classifyRejectedActivitySource(
     try {
         const extension = getActivityFileBaseExtension(path);
         if (extension === 'gpx' && error.message === 'No activities found in GPX; use importRoutesFromGPX for routes') {
-            const routes = await RouteImporterGPX.getFromString(bytes.toString('utf8'), DOMParser);
+            const routes = await RouteImporterGPX.getFromString(bytes.toString('utf8'), XmlDOMParser);
             return routes.getRoutes().length > 0 ? 'route' : null;
         }
         if (extension !== 'fit' || error.message !== 'FIT file is not an activity file') return null;

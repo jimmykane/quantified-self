@@ -1,4 +1,4 @@
-import * as xmldom from 'xmldom';
+import { XmlDOMParser } from './xml-parser';
 import {
     EventImporterFIT,
     EventImporterGPX,
@@ -45,10 +45,10 @@ export async function parseActivityFilePayload(
 
     const text = decodeText(payload);
     if (baseExtension === 'gpx') {
-        return EventImporterGPX.getFromString(text, xmldom.DOMParser, options);
+        return EventImporterGPX.getFromString(text, XmlDOMParser, options);
     }
     if (baseExtension === 'tcx') {
-        const xml = new xmldom.DOMParser().parseFromString(text, 'application/xml');
+        const xml = new XmlDOMParser().parseFromString(text, 'application/xml');
         return EventImporterTCX.getFromXML(xml, options);
     }
     if (baseExtension === 'json') {

@@ -14,6 +14,7 @@
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@sports-alliance/sports-lib": "23.11.0",
+    "@xmldom/xmldom": "^0.8.15",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
@@ -29,7 +30,6 @@
     "simple-oauth2": "^5.0.0",
     "stripe": "22.4.0",
     "web-push": "^3.6.7",
-    "xmldom": "^0.6.0",
     "zod": "^4.3.6"
   },
   "scripts": {
@@ -95,19 +95,18 @@
     "@types/semver": "^7.7.1",
     "@types/simple-oauth2": "^5.0.0",
     "@types/web-push": "^3.6.4",
-    "@types/xmldom": "^0.1.31",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.7",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "eslint": "^9.39.1",
     "eslint-config-google": "^0.14.0",
     "eslint-plugin-import": "^2.29.1",
     "firebase-functions-test": "^3.4.1",
-    "handlebars": "^4.7.8",
+    "handlebars": "^4.7.10",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.49.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.7"
   }
 }

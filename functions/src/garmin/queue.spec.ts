@@ -834,6 +834,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
         it('should successfully process a TCX file', async () => {
             queueItem.activityFileType = 'TCX';
+            mockRequestGet.mockResolvedValue('<TrainingCenterDatabase/>');
             const { EventImporterTCX } = await import('@sports-alliance/sports-lib');
             vi.mocked(EventImporterTCX.getFromXML).mockResolvedValue({
                 getID: () => 'event-id',

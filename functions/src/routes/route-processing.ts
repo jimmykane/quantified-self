@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import * as xmldom from 'xmldom';
+import { XmlDOMParser } from '../shared/xml-parser';
 
 import {
   AppRouteInterface,
@@ -223,7 +223,7 @@ export async function parseRoutePayload(payload: Buffer, resolvedExtension: stri
   }
 
   if (baseExtension === 'gpx') {
-    return routeImporter.importRoutesFromGPX(decodeText(payload), xmldom.DOMParser, parsingOptions);
+    return routeImporter.importRoutesFromGPX(decodeText(payload), XmlDOMParser, parsingOptions);
   }
 
   throw new RouteProcessingHttpStatusError(400, `Unsupported route file extension: ${baseExtension}.`);

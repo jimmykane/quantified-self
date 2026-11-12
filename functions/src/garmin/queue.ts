@@ -23,7 +23,7 @@ import {
 } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
-import * as xmldom from 'xmldom';
+import { XmlDOMParser } from '../shared/xml-parser';
 import {
   GarminAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
@@ -454,7 +454,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         break;
       case 'GPX':
         try {
-          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser, createParsingOptions());
+          event = await EventImporterGPX.getFromString(result, XmlDOMParser, createParsingOptions());
         } catch {
           logger.error('Could not decode as GPX trying as FIT');
         }
@@ -475,7 +475,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         break;
       case 'TCX':
         event = await EventImporterTCX.getFromXML(
-          new xmldom.DOMParser().parseFromString(result, 'application/xml'),
+          new XmlDOMParser().parseFromString(result, 'application/xml'),
           createParsingOptions(),
         );
         break;
