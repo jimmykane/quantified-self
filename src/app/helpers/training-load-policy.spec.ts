@@ -1,3 +1,4 @@
+import { isTrainingThresholdReview } from '@shared/training-thresholds';
 import { describe, expect, it } from 'vitest';
 import { displayRunningThresholdPace, parseRunningThresholdPace, runningThresholdSpeed } from '@shared/running-threshold-pace';
 import { defaultAppliedTrainingLoadPolicy, resolveEffectiveTrainingLoad, validTrainingLoadOverride,
@@ -16,6 +17,33 @@ function metadata(): TrainingLoadMetadata {
   }])) };
 }
 describe('modeled Training load', () => {
+  it('retains old threshold reviews and validates explicit formula review fields without accepting private extras', () => {
+    const old = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    const review = { family: 'cycling', familyLabel: 'Cycling', before: old, after: old };
+    expect(isTrainingThresholdReview(review)).toBe(true);
+    const values = { ...old, restingHeartRate: null, maxHeartRate: null, hrAlgorithm: 'BANISTER' };
+    expect(isTrainingThresholdReview({ ...review, before: values, after: values })).toBe(true);
+    expect(isTrainingThresholdReview({ ...review, before: values, after: { ...values, hrAlgorithm: 'UNKNOWN' } })).toBe(false);
+    expect(isTrainingThresholdReview({ ...review, before: values, after: { ...values, sourceRecordId: 'PRIVATE' } })).toBe(false);
+  });
+  it('requires reparse when reassociation changes only the saved HR formula, while zero overrides remain usable', () => {
+    const data = metadata(); data.legs!.old = { ...data.legs!.walk, activityId: null,
+      policy: { ...data.legs!.walk.policy, hrAlgorithm: 'BANISTER' } };
+    data.controls.old = { activityId: 'walk' };
+    expect(sameTrainingLoadCalibration(data.legs!.old, data.legs!.walk)).toBe(false);
+    expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').reasons).toEqual(['reparse-required']);
+    data.controls.old.override = 0; expect(resolveEffectiveTrainingLoad(source, data, activities, 'walk').score).toBe(0);
+  });
+  it('validates and retains complete or partial manual HR inputs without inferring an algorithm', () => {
+    const base = { method: 'HR' as const, included: true, lactateThresholdHR: 165 };
+    expect(validTrainingLoadPolicy('cycling', { ...base, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' })).toBe(true);
+    expect(validTrainingLoadPolicy('cycling', { ...base, maxHeartRate: 190 })).toBe(true);
+    expect(validTrainingLoadPolicy('cycling', { ...base, restingHeartRate: 170, maxHeartRate: 190 })).toBe(false);
+    expect(validTrainingLoadPolicy('cycling', { ...base, restingHeartRate: 55, maxHeartRate: 160 })).toBe(false);
+    expect(validTrainingLoadPolicy('cycling', { ...base, restingHeartRate: NaN })).toBe(false);
+    expect(trainingLoadThresholds({ ...base, hrAlgorithm: 'BANISTER', restingHeartRate: 55, maxHeartRate: 190 }))
+      .toEqual({ lactateThresholdHR: 165, hrAlgorithm: 'BANISTER', restingHeartRate: 55, maxHeartRate: 190 });
+  });
   it('validates Running-only pace defaults and converts explicit kilometre/mile input', () => {
     const policy = { method: 'RUNNING_PACE' as const, included: true, runningThresholdSpeed: 1000 / 270 };
     expect(validTrainingLoadPolicy('running', policy)).toBe(true);

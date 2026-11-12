@@ -643,6 +643,21 @@ describe('AssistantPageComponent', () => {
     expect(assistantService.applyContentProposal).toHaveBeenCalledWith({ proposalRef: 'threshold-review',
       conversationId: chatResponse.conversation.conversationId, confirm: true });
   });
+  it('reviews the explicit HR formula and calibration before app Apply without exposing private inputs', () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null,
+      restingHeartRate: null, maxHeartRate: null, hrAlgorithm: null };
+    component.pendingContentProposal.set({ proposalRef: 'hr-review', kind: 'apply_training_threshold_change',
+      expiresAtMs: Date.now() + 60000, requiresConfirmation: true, summary: 'Review Cycling HR calibration',
+      arguments: { proposalRef: 'PRIVATE-REF' }, thresholdReview: { family: 'cycling', familyLabel: 'Cycling', before: empty,
+        after: { ...empty, hrAlgorithm: 'BANISTER', restingHeartRate: { value: 55, unit: 'bpm', displayValue: '55', displayUnit: 'bpm' },
+          maxHeartRate: { value: 190, unit: 'bpm', displayValue: '190', displayUnit: 'bpm' },
+          lactateThresholdHR: { value: 165, unit: 'bpm', displayValue: '165', displayUnit: 'bpm' } } } });
+    fixture.detectChanges(); const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
+    expect(text).toContain('Resting HR: Not set → 55 bpm'); expect(text).toContain('Maximum HR: Not set → 190 bpm');
+    expect(text).toContain('HR formula: Automatic (existing behavior) → Banister');
+    expect(text).toContain('future workouts only'); expect(text).not.toContain('PRIVATE');
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+  });
   it('discloses canonical Running threshold changes using the owner pace units', () => {
     const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null, runningThresholdSpeed: null };
     component.pendingContentProposal.set({ proposalRef: 'running-review', kind: 'apply_training_threshold_change',

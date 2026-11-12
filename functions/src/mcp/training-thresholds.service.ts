@@ -45,6 +45,8 @@ function publicValues(policy: TrainingLoadPolicy, settings: unknown): TrainingTh
   };
   return { functionalThresholdPower: value(policy.functionalThresholdPower, DataFTP.type, 'watt'),
     lactateThresholdHR: value(policy.lactateThresholdHR, DataHeartRate.type, 'bpm'),
+    restingHeartRate: value(policy.restingHeartRate, DataHeartRate.type, 'bpm'),
+    maxHeartRate: value(policy.maxHeartRate, DataHeartRate.type, 'bpm'), hrAlgorithm: policy.hrAlgorithm ?? null,
     swimThresholdSpeed: value(policy.swimThresholdSpeed, DataSwimPace.type, 'm/s'),
     runningThresholdSpeed: value(policy.runningThresholdSpeed, DataPace.type, 'm/s') };
 }

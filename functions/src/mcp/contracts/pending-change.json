@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "86f4c0044aba9cdefc699458933fc690064f0cad3cf1d3897f593f94b5599288",
+  "candidateSha256": "c526ef006a32cb3e1fde9bd2b49c18674dcf2f2c78ae15142d75946364a0958a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain pending Sports Lib/Training, Calendar goals and dated threshold tools. Add Running threshold pace with explicit km/mi units and owner display. Keep Garmin zones/averaging, independent threshold grants, shared FTP for new recipes and frozen targets. Registered baseline/history remain unchanged. Backend release, app rescan and validated plugin refresh are separate.",
+  "summary": "Retain pending Sports Lib/Training, Calendar goals and dated threshold tools. Add Running threshold pace with explicit km/mi units, manual resting/maximum HR and explicit HR formula preferences. Preserve coherent file-first calibration, dated snapshots, separate threshold grants, reviewed Apply and existing workouts. Registered schemas/history stay unchanged. Backend release, app rescan and validated plugin refresh remain separate.",
   "rescanRequired": true
 }

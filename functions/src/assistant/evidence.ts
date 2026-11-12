@@ -410,14 +410,15 @@ export function buildAssistantEvidence(
     const policies = 'policies' in parsed.data ? parsed.data.policies
       : [{ familyLabel: parsed.data.review.familyLabel, thresholds: parsed.data.review.after }];
     const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS',
-      runningThresholdSpeed: 'Running threshold pace' } as const;
+      runningThresholdSpeed: 'Running threshold pace', restingHeartRate: 'Resting HR', maxHeartRate: 'Maximum HR' } as const;
     return { toolName: tool.name, title: truncate(tool.title, 160),
       summary: tool.name === 'get_training_thresholds' ? `${policies.length} sport threshold settings; existing workouts are unchanged.`
         : 'Proposed thresholds for future workouts. Review and Apply in Quantified Self; nothing has changed yet.',
-      facts: policies.flatMap(policy => Object.entries(labels).flatMap(([key, label]) => {
+      facts: policies.flatMap(policy => [...Object.entries(labels).flatMap(([key, label]) => {
         const value = policy.thresholds[key as keyof typeof labels];
         return value ? [{ label: `${policy.familyLabel}: ${label}`, value: `${value.displayValue} ${value.displayUnit}`.trim() }] : [];
-      })).slice(0, MAX_FACTS), links: [] };
+      }), ...(policy.thresholds.hrAlgorithm ? [{ label: `${policy.familyLabel}: HR formula`,
+        value: policy.thresholds.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold HR (estimate)' }] : [])]).slice(0, MAX_FACTS), links: [] };
   }
   if (tool.name === 'get_workout_reflection') {
     const textLength = typeof structuredContent.note === 'string' ? structuredContent.note.length : 0;

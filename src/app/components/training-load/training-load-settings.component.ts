@@ -3,7 +3,7 @@ import { FormControl, FormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { TRAINING_SPORT_DEFINITIONS, type TrainingSportId } from '@shared/training-disciplines';
 import { convertSpeedToSwimPace, convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard, DataSwimPace, DataFTP, DataHeartRate, PaceUnits, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPolicy, type TrainingLoadMethod } from '@shared/training-load-policy';
+import { validSwimThresholdSpeed, validTrainingLoadPolicy, type TrainingLoadPolicy, type TrainingLoadMethod, type TrainingLoadHrAlgorithm } from '@shared/training-load-policy';
 import { SharedModule } from '../../modules/shared.module';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -36,6 +36,8 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     form: new FormGroup({ method: new FormControl<TrainingLoadMethod>('AUTOMATIC', { nonNullable: true }),
       included: new FormControl(true, { nonNullable: true }), cssPace: new FormControl('', { nonNullable: true }),
       ftp: new FormControl('', { nonNullable: true }), thresholdHr: new FormControl('', { nonNullable: true }),
+      restingHr: new FormControl('', { nonNullable: true }), maxHr: new FormControl('', { nonNullable: true }),
+      hrAlgorithm: new FormControl<TrainingLoadHrAlgorithm | ''>('', { nonNullable: true }),
       runningPace: new FormControl('', { nonNullable: true }) }) }));
   get visibleRows() { return this.thresholdsOnly ? this.rows.filter(row => row.id === this.selectedFamily()) : this.rows; }
   selectFamily(value: TrainingSportId): void { if (value !== this.selectedFamily()) { this.selectedFamily.set(value); this.selection(); } }
@@ -121,13 +123,15 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     row.form.controls.runningPace.setValue(row.runningOriginalText, { emitEvent: false });
   }
   private policyDraft(row: typeof this.rows[number]): TrainingLoadPolicy {
-    const { method, included, ftp, thresholdHr } = row.form.getRawValue();
+    const { method, included, ftp, thresholdHr, restingHr, maxHr, hrAlgorithm } = row.form.getRawValue();
     const speed = row.id === 'swimming' ? this.cssSpeed(row) : undefined;
     const running = row.id === 'running' ? this.runningSpeed(row) : undefined;
     return { method, included, ...(speed !== undefined ? { swimThresholdSpeed: speed } : {}),
       ...(running !== undefined ? { runningThresholdSpeed: running } : {}),
       ...((row.id === 'running' || row.id === 'cycling') && ftp.trim() ? { functionalThresholdPower: Number(ftp) } : {}),
-      ...(thresholdHr.trim() ? { lactateThresholdHR: Number(thresholdHr) } : {}) };
+      ...(thresholdHr.trim() ? { lactateThresholdHR: Number(thresholdHr) } : {}),
+      ...(restingHr.trim() ? { restingHeartRate: Number(restingHr) } : {}),
+      ...(maxHr.trim() ? { maxHeartRate: Number(maxHr) } : {}), ...(hrAlgorithm ? { hrAlgorithm } : {}) };
   }
   validThresholds(row: typeof this.rows[number]): boolean { return validTrainingLoadPolicy(row.id, this.policyDraft(row)); }
   private showCss(row: typeof this.rows[number], speed?: number): void {
@@ -140,7 +144,9 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   private loadPolicy(row: typeof this.rows[number], policy: TrainingLoadPolicy): void {
     row.form.reset({ method: policy.method, included: policy.included, cssPace: '', runningPace: '',
       ftp: policy.functionalThresholdPower === undefined ? '' : String(policy.functionalThresholdPower),
-      thresholdHr: policy.lactateThresholdHR === undefined ? '' : String(policy.lactateThresholdHR) });
+      thresholdHr: policy.lactateThresholdHR === undefined ? '' : String(policy.lactateThresholdHR),
+      restingHr: policy.restingHeartRate === undefined ? '' : String(policy.restingHeartRate),
+      maxHr: policy.maxHeartRate === undefined ? '' : String(policy.maxHeartRate), hrAlgorithm: policy.hrAlgorithm ?? '' });
     this.showCss(row, policy.swimThresholdSpeed);
     this.showRunningPace(row, policy.runningThresholdSpeed);
   }

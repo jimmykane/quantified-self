@@ -175,7 +175,7 @@ service cloud.firestore {
             'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports',
             'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports',
             'motorized-activities', 'other-training']
-            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed', 'functionalThresholdPower', 'lactateThresholdHR', 'runningThresholdSpeed'])
+            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed', 'functionalThresholdPower', 'lactateThresholdHR', 'runningThresholdSpeed', 'restingHeartRate', 'maxHeartRate', 'hrAlgorithm'])
             && data.revision is int && data.revision > 0
             && data.revisionId is string && data.revisionId.matches('^[a-zA-Z0-9-]{1,64}$')
             && data.method in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE', 'RUNNING_PACE'] && data.included is bool
@@ -191,6 +191,13 @@ service cloud.firestore {
               && data.functionalThresholdPower - data.functionalThresholdPower == 0))
             && (!('lactateThresholdHR' in data) || (data.lactateThresholdHR is number
               && data.lactateThresholdHR > 0 && data.lactateThresholdHR - data.lactateThresholdHR == 0))
+            && (!('restingHeartRate' in data) || (data.restingHeartRate is number
+              && data.restingHeartRate > 0 && data.restingHeartRate - data.restingHeartRate == 0))
+            && (!('maxHeartRate' in data) || (data.maxHeartRate is number
+              && data.maxHeartRate > 0 && data.maxHeartRate - data.maxHeartRate == 0))
+            && (!('hrAlgorithm' in data) || data.hrAlgorithm in ['BANISTER', 'THRESHOLD'])
+            && (!(data.keys().hasAll(['restingHeartRate', 'lactateThresholdHR', 'maxHeartRate']))
+              || (data.restingHeartRate < data.lactateThresholdHR && data.lactateThresholdHR < data.maxHeartRate))
             && data.effectiveAt == request.time;
         }
         function matchingRevision() {

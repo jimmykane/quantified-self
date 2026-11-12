@@ -87,6 +87,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dated threshold MCP trans
     expect((await event.get()).data()).toEqual({ stats: { 'Training Stress Score': 87.3 } });
     expect(result.policy.effectiveAt).toBeTruthy();
   });
+  it('reviews and applies a complete manual HR tuple and formula, preserving historical policies and controls', async () => {
+    const current = await read('cycling');
+    const changes = { restingHeartRate: 55, lactateThresholdHR: 165, maxHeartRate: 190, hrAlgorithm: 'BANISTER' };
+    const previewed = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: current.policyRef, mutationId: randomUUID(), changes }));
+    expect(previewed.review.after).toMatchObject({ hrAlgorithm: 'BANISTER', restingHeartRate: { value: 55, unit: 'bpm' }, maxHeartRate: { value: 190 } });
+    expect(previewed.review.before.hrAlgorithm).toBeNull();
+    const applied = TRAINING_THRESHOLD_OUTPUTS.apply_training_threshold_change.parse(await call('apply_training_threshold_change', { proposalRef: previewed.proposalRef }));
+    expect(applied.policy.thresholds).toEqual(previewed.review.after);
+    expect((await db.doc(`users/${uid}/trainingLoadPolicies/cycling`).get()).data()).toMatchObject({ ...changes, method: 'AUTOMATIC', included: true });
+    const next = await read('cycling');
+    const removed = TRAINING_THRESHOLD_OUTPUTS.preview_training_threshold_change.parse(await call('preview_training_threshold_change',
+      { policyRef: next.policyRef, mutationId: randomUUID(), changes: { hrAlgorithm: null, maxHeartRate: null } }));
+    expect(removed.review.after.hrAlgorithm).toBeNull(); expect(removed.review.after.maxHeartRate).toBeNull();
+    expect(removed.review.after.restingHeartRate?.value).toBe(55);
+    await expect(call('preview_training_threshold_change', { policyRef: next.policyRef, mutationId: randomUUID(),
+      changes: { maxHeartRate: 150 } })).rejects.toThrow(/positive finite thresholds/);
+  });
   it('rejects competing edits instead of overwriting the winner', async () => {
     const a = await preview(), b = await preview({ functionalThresholdPower: 230 });
     const outcomes = await Promise.allSettled([a, b].map(proposal => call('apply_training_threshold_change', { proposalRef: proposal.proposalRef })));

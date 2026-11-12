@@ -1,4 +1,4 @@
-import type { TrainingStressScoreEvaluations, TrainingStressScorePreference } from '@sports-alliance/sports-lib';
+import { isValidTrainingStressScoreHrCalibration, type TrainingStressScoreEvaluations, type TrainingStressScorePreference } from '@sports-alliance/sports-lib';
 import { isTrainingDiscipline, resolveTrainingDisciplineFromActivityType, type TrainingSportId } from './training-disciplines';
 import { canonicalTrainingLoadValue } from './training-load-source';
 
@@ -12,6 +12,11 @@ export interface TrainingLoadThresholds {
   functionalThresholdPower?: number;
   /** Independently measured threshold HR in bpm. */
   lactateThresholdHR?: number;
+  /** Manual Training calibration, never daily Health observations. */
+  restingHeartRate?: number;
+  maxHeartRate?: number;
+  /** Absent retains the original file-first/threshold-only formula behavior. */
+  hrAlgorithm?: TrainingLoadHrAlgorithm;
   /** Independent CSS in metres/second, valid only for the Swimming family. */
   swimThresholdSpeed?: number;
   /** Independent running threshold speed in metres/second, only for Running family defaults. */
@@ -114,7 +119,7 @@ export function isTrainingLoadMethod(value: unknown): value is TrainingLoadMetho
 export function validSwimThresholdSpeed(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100;
 }
-export const TRAINING_LOAD_THRESHOLD_KEYS = ['functionalThresholdPower', 'lactateThresholdHR', 'swimThresholdSpeed', 'runningThresholdSpeed'] as const;
+export const TRAINING_LOAD_THRESHOLD_KEYS = ['functionalThresholdPower', 'lactateThresholdHR', 'swimThresholdSpeed', 'runningThresholdSpeed', 'restingHeartRate', 'maxHeartRate', 'hrAlgorithm'] as const;
 export function validTrainingThreshold(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
@@ -142,7 +147,12 @@ export function validTrainingLoadPolicy(family: unknown, policy: TrainingLoadPol
     && (policy.runningThresholdSpeed === undefined || family === 'running' && validTrainingThreshold(policy.runningThresholdSpeed))
     && (policy.swimThresholdSpeed === undefined || family === 'swimming' && validSwimThresholdSpeed(policy.swimThresholdSpeed))
     && (policy.functionalThresholdPower === undefined || (family === 'running' || family === 'cycling') && validTrainingThreshold(policy.functionalThresholdPower))
-    && (policy.lactateThresholdHR === undefined || validTrainingThreshold(policy.lactateThresholdHR));
+    && (policy.lactateThresholdHR === undefined || validTrainingThreshold(policy.lactateThresholdHR))
+    && (policy.restingHeartRate === undefined || validTrainingThreshold(policy.restingHeartRate))
+    && (policy.maxHeartRate === undefined || validTrainingThreshold(policy.maxHeartRate))
+    && (policy.hrAlgorithm === undefined || policy.hrAlgorithm === 'BANISTER' || policy.hrAlgorithm === 'THRESHOLD')
+    && ([policy.restingHeartRate, policy.lactateThresholdHR, policy.maxHeartRate].some(value => value === undefined)
+      || isValidTrainingStressScoreHrCalibration(policy));
 }
 export function recordedTrainingStressScore(source: { stats?: unknown; getStat?: TrainingLoadActivity['getStat'] }): number | null {
   const stats = source.stats && typeof source.stats === 'object' ? source.stats as Record<string, unknown> : {};

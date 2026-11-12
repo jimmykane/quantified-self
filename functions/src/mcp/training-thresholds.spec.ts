@@ -21,6 +21,15 @@ describe('MCP training thresholds', () => {
       { paceSeconds: 270, distanceUnit: 'km', uid: 'foreign' }])
       expect(TRAINING_THRESHOLD_INPUTS.preview_training_threshold_change.safeParse({ ...request, changes: { runningPace } }).success).toBe(false);
   });
+  it('supports explicit HR formula inputs without changing unrelated settings or accepting malformed tuples', () => {
+    const tuple = { lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' as const };
+    expect(trainingThresholdChanges(tuple)).toEqual(tuple);
+    const policy = { method: 'MET' as const, included: false, functionalThresholdPower: 220 };
+    expect(applyTrainingThresholdChanges('cycling', policy, tuple)).toEqual({ ...policy, ...tuple });
+    expect(applyTrainingThresholdChanges('cycling', { ...policy, ...tuple }, { hrAlgorithm: null })).toEqual({ ...policy,
+      lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190 });
+    expect(() => applyTrainingThresholdChanges('cycling', policy, { ...tuple, maxHeartRate: 150 })).toThrow();
+  });
   it('uses explicit metric/imperial CSS units and independent FTP/HR values', () => {
     expect(trainingThresholdChanges({ css: { paceSeconds: 113, distanceUnit: 'yd' }, lactateThresholdHR: 165 }))
       .toEqual({ swimThresholdSpeed: 91.44 / 113, lactateThresholdHR: 165 });

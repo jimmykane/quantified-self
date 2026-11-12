@@ -116,6 +116,8 @@ export class TrainingLoadDialogComponent implements OnInit {
     const values: Array<[string, string, number | undefined]> = [
       ['Saved FTP fallback', DataFTP.type, this.policy.functionalThresholdPower],
       ['Saved threshold HR fallback', DataHeartRate.type, this.policy.lactateThresholdHR],
+      ['Saved resting HR fallback', DataHeartRate.type, this.policy.restingHeartRate],
+      ['Saved maximum HR fallback', DataHeartRate.type, this.policy.maxHeartRate],
     ];
     const labels = values.flatMap(([label, type, value]) => {
       const display = value === undefined ? null : resolveUnitAwareDisplayFromValue(type, value, this.data.unitSettings);
@@ -124,6 +126,8 @@ export class TrainingLoadDialogComponent implements OnInit {
     const speed = this.policy.runningThresholdSpeed;
     const pace = speed === undefined ? null : resolveUnitAwareDisplayFromValue(DataPace.type, convertSpeedToPace(speed), this.data.unitSettings,
       { roundPaceSeconds: true });
+    if (this.policy.hrAlgorithm) labels.push({ label: 'Saved HR formula preference',
+      value: this.policy.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold HR (estimate)' });
     return pace ? [...labels, { label: 'Saved running threshold pace fallback', value: `${pace.value} ${pace.unit}` }] : labels;
   }
   get savedHealthWeightLabel(): string | null {
@@ -178,7 +182,8 @@ export class TrainingLoadDialogComponent implements OnInit {
     const messages: Record<string, string> = {
       'unsupported-sport': 'This calculation is not supported for this sport.',
       'missing-hr-calibration': 'The file is missing required HR calibration.',
-      'threshold-hr-fallback': 'Full Banister calibration is unavailable; the threshold-HR estimate was used.',
+      'threshold-hr-fallback': 'The threshold-HR estimate was used with an independently valid threshold; resting and maximum HR are not assumed.',
+      'requested-hr-algorithm-unavailable': 'The saved HR formula could not run with its required inputs or recorded coverage. Another eligible calculation was used.',
       'invalid-hr-calibration': 'The file HR calibration is inconsistent or invalid.',
       'ambiguous-hr-calibration': 'The file has ambiguous HR calibration records.',
       'missing-hr-samples': 'No usable heart-rate samples are available.',

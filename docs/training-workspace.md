@@ -7710,11 +7710,12 @@ Each save uses the existing owner transaction, revision check, deletion fence, s
 First import selects the policy at each leg's recorded start time, so delayed uploads cannot borrow a later setting.
 Imported nonnegative TSS, including zero, wins for every method. Valid independent file calibration comes next; saved
 thresholds only fill missing or rejected calibration for new legs. A saved threshold HR uses the existing sports-lib
-threshold-band estimate, never a guessed or mixed resting/max/threshold Banister tuple. A complete valid file tuple
-retains Banister priority. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
+threshold-band estimate, never a guessed or mixed resting/max/threshold Banister tuple. With no explicit HR formula
+choice, a complete valid file tuple retains Banister priority; the manual formula option below can deliberately choose
+the threshold estimate instead. File HR ambiguity is never used to infer the saved threshold. Unsupported sports stay unsupported.
 
 Root and Functions must use the same Sports Lib artifact. This companion PR temporarily pins the immutable
-Running pace implementation commit; replace both pins with its published release during release adoption.
+Running pace/HR calibration implementation commit; replace both pins with its published release during release adoption.
 New legs use `ActivityUtilities.evaluateTrainingStressScoreWithCalibration` after ordinary file candidates are cached.
 This pure API reuses the existing calculators, observed timer/sample coverage, eligibility and method order, without
 changing recorded stats, parse options, original files or the file-only cache. Source finalization serializes each leg
@@ -7814,6 +7815,35 @@ were unchanged. Supplying the test running threshold added about 1.1 ms per leg 
 workload observation, not a production billing guarantee. A separate 300-file check measured about 160 additional
 JSON bytes per leg for the new candidate (95th percentile 214 bytes), plus the saved threshold scalar. No database
 read/write count, trigger or background task is added. Normal existing policy/metadata writes carry these fields.
+
+### Manual HR calibration and formula preference (#1031)
+
+The same dated Training/Health editor accepts optional resting and maximum HR in bpm plus an **HR formula** choice:
+Automatic (existing behavior), Threshold HR (estimate), or Banister. These are manual Training calibration settings,
+not daily Health observations. There are no Health HR queries, additional policy reads, collections, triggers, caches,
+or rebuilds on settings read/save. Existing workouts retain their saved policy, including absence of the new fields.
+First import freezes the revision at each leg's recorded start. Delayed uploads, duplicates, reparse, changed IDs,
+multisport reconciliation, merges and retry/deletion/revision fences reuse the existing preservation paths.
+Reset restores the saved policy; future-default copying preserves the current family's calibration and formula.
+
+Sports Lib owns formula and coherent-source selection. Imported TSS, including zero, remains authoritative.
+Banister needs a complete valid file tuple or, failing that, a complete consumer tuple with
+`0 < restingHeartRate < lactateThresholdHR < maxHeartRate`. Never assemble a tuple across sources or derive rest/max
+from activity samples. Explicit Threshold prefers an independently valid file threshold, then the saved threshold.
+Automatic formula behavior is unchanged: complete valid file calibration can use Banister; saved threshold-only inputs
+remain the threshold estimate. Entering rest/max without choosing Banister does not switch that behavior.
+If the chosen formula is unusable, Sports Lib tries the other usable HR formula then normal eligible sport methods.
+Event Details shows the actual HR formula, saved values/choice and fallback explanation. The two models are not
+interchangeable; no universal accuracy improvement or historical correction is claimed. Existing power, swim CSS,
+pace and calorie method order, coverage, pauses/gaps, zero, overrides, exclusions and recorded stats stay unchanged.
+
+MCP's existing unregistered threshold tools add resting/max HR and nullable HR formula set/clear inputs and safe
+current/dated outputs. Independent threshold grants, bounded reads, revision-bound preview and separate Apply remain;
+app-owned Assistant review shows before/after values and formula. Older saved reviews remain readable. Generic Health,
+measurement, activity and Training impact projections gain no private calibration fields. Registered schemas/history
+stay frozen; only the compatible pending digest changes. Publication, deployment, client refresh and historical reparse
+remain separately authorized. Before QS merge, app and Functions must adopt the same published companion release;
+the review branches temporarily use its immutable implementation commit.
 
 ### Sports Lib 23.9.0 R–R heart-rate adoption
 

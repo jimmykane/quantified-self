@@ -42,6 +42,16 @@ describe('Assistant evidence', () => {
       { asOf: '2026-11-04T00:00:00Z', policies: [{ ...policy, healthWeight: 'PRIVATE-HEALTH' }] });
     expect(invalid.facts).toEqual([]);
   });
+  it('shows manual HR calibration and the actual requested formula without private policy data', () => {
+    const read = buildAssistantEvidence({ name: 'get_training_thresholds', title: 'Training thresholds' },
+      { asOf: '2026-11-12T00:00:00Z', policies: [{ family: 'cycling', familyLabel: 'Cycling', revision: 1,
+        effectiveAt: null, policyRef: 'PRIVATE', thresholds: { functionalThresholdPower: null, lactateThresholdHR: null,
+          swimThresholdSpeed: null, restingHeartRate: { value: 55, unit: 'bpm', displayValue: '55', displayUnit: 'bpm' },
+          maxHeartRate: { value: 190, unit: 'bpm', displayValue: '190', displayUnit: 'bpm' }, hrAlgorithm: 'BANISTER' } }] });
+    expect(read.facts).toEqual([{ label: 'Cycling: Resting HR', value: '55 bpm' },
+      { label: 'Cycling: Maximum HR', value: '190 bpm' }, { label: 'Cycling: HR formula', value: 'Banister' }]);
+    expect(JSON.stringify(read)).not.toMatch(/PRIVATE|revision|source|Health/);
+  });
   it('shows Running threshold pace in owner units without private canonical calibration', () => {
     const read = buildAssistantEvidence({ name: 'get_training_thresholds', title: 'Training thresholds' },
       { asOf: '2026-11-11T00:00:00Z', policies: [{ family: 'running', familyLabel: 'Running', revision: 1,

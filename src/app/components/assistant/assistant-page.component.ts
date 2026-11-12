@@ -115,13 +115,17 @@ function contentProposalDetails(proposal: AssistantContentProposalPreview): stri
     const review = proposal.thresholdReview;
     if (!review) return [];
     const labels = { functionalThresholdPower: 'FTP', lactateThresholdHR: 'Threshold HR', swimThresholdSpeed: 'CSS',
-      runningThresholdSpeed: 'Running threshold pace' } as const;
+      runningThresholdSpeed: 'Running threshold pace', restingHeartRate: 'Resting HR', maxHeartRate: 'Maximum HR' } as const;
     const text = (value: import('@shared/training-thresholds').TrainingThresholdValue | null | undefined) => value ? `${value.displayValue} ${value.displayUnit}` : 'Not set';
+    const formula = (value: typeof review.before.hrAlgorithm) => value === 'BANISTER' ? 'Banister'
+      : value === 'THRESHOLD' ? 'Threshold HR (estimate)' : 'Automatic (existing behavior)';
     return [review.familyLabel, ...Object.entries(labels).filter(([key]) =>
       key in review.before || key in review.after).map(([key, label]) => {
       const metric = key as keyof typeof labels;
       return `${label}: ${text(review.before[metric])} → ${text(review.after[metric])}`;
-    }), 'Applies to future workouts only. Imported TSS and valid file calibration keep priority.'];
+    }), ...('hrAlgorithm' in review.before || 'hrAlgorithm' in review.after
+      ? [`HR formula: ${formula(review.before.hrAlgorithm)} → ${formula(review.after.hrAlgorithm)}`] : []),
+      'Applies to future workouts only. Imported TSS and valid file calibration keep priority.'];
   }
   const args = proposal.arguments as Record<string, unknown>;
   if (proposal.kind === 'update_event_tags') {

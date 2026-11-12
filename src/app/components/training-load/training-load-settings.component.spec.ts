@@ -54,6 +54,30 @@ describe('dated Training load settings', () => {
       { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
     fixture.destroy();
   });
+  it.each([false, true])('edits manual HR calibration and formula only on Save (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'cycling', revision: 5, method: 'MET', included: false,
+      lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' }]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'cycling')!;
+    expect(row.form.pristine).toBe(true); expect(selection).not.toHaveBeenCalled();
+    expect(row.form.controls.hrAlgorithm.value).toBe('BANISTER');
+    expect(fixture.nativeElement.textContent).toContain('Maximum HR alone is insufficient');
+    row.form.controls.restingHr.setValue('60'); row.form.markAsDirty();
+    await fixture.componentInstance.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 5,
+      { method: 'MET', included: false, lactateThresholdHR: 165, restingHeartRate: 60, maxHeartRate: 190, hrAlgorithm: 'BANISTER' });
+    row.form.controls.maxHr.setValue('160'); row.form.markAsDirty();
+    expect(fixture.componentInstance.validThresholds(row)).toBe(false);
+    await fixture.componentInstance.save(row); expect(savePolicy).toHaveBeenCalledOnce();
+    row.form.controls.maxHr.setValue(''); row.form.controls.hrAlgorithm.setValue('');
+    await fixture.componentInstance.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 6,
+      { method: 'MET', included: false, lactateThresholdHR: 165, restingHeartRate: 60 });
+    fixture.destroy();
+  });
   it('saves independently measured running pace and preserves precision through unit changes', async () => {
     const speed = 3.7123456789;
     policies$.next([{ id: 'running', revision: 4, method: 'HR', included: true, runningThresholdSpeed: speed }]);
@@ -234,7 +258,7 @@ describe('dated Training load settings', () => {
   });
   it('loads existing defaults quietly and saves only a changed family with its revision', async () => {
     const row = component.rows.find(row => row.id === 'walking-hiking')!;
-    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' });
     await component.save(row); expect(savePolicy).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenCalledWith('owner', 'walking-hiking', 4, { method: 'HR', included: true });
@@ -250,7 +274,7 @@ describe('dated Training load settings', () => {
     await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 5,
       { method: 'MET', included: false, functionalThresholdPower: 220.5, lactateThresholdHR: 166 });
-    row.form.patchValue({ ftp: '', thresholdHr: '' }); row.form.markAsDirty(); await component.save(row);
+    row.form.patchValue({ ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 6, { method: 'MET', included: false });
   });
   it('rejects invalid thresholds without a write and keeps sport FTP values independent', async () => {
@@ -281,7 +305,7 @@ describe('dated Training load settings', () => {
     policies$.next([{ id: row.id, revision: 6, method: 'MET', included: false }]);
     finish(); await pending;
     expect(row.revision).toBe(6);
-    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' });
     expect(row.form.pristine).toBe(true);
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', row.id, 6, { method: 'MET', included: true });
@@ -349,7 +373,7 @@ describe('CSS input and units', () => {
     const fixture = open();
     const row = fixture.componentInstance.rows.find(row => row.id === 'swimming')!;
     const swimming = fixture.debugElement.query(By.css('section[aria-label="Swimming"]'));
-    const unit = swimming.queryAll(By.directive(MatSelect))[1].componentInstance as MatSelect;
+    const unit = swimming.query(By.css('mat-select:not([formControlName])')).componentInstance as MatSelect;
     expect(selection).not.toHaveBeenCalled();
     unit.selectionChange.emit({ source: unit, value: 'yd' }); fixture.detectChanges();
     expect(swimming.nativeElement.textContent).toContain('mm:ss per 100 yd');

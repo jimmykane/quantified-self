@@ -5,8 +5,8 @@
 `get_training_thresholds` reads one family or the bounded registry (at most 50). Optional offset-bearing `asOf` reads
 an immutable policy effective by that instant, with no editable reference. Outputs contain family labels, policy
 revision/effective instant and canonical/display quantities: FTP in watts (Running/Cycling), threshold
-HR in bpm, CSS and Running threshold speed in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
-calibration a workout used. No method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
+HR in bpm, optional manual resting/maximum HR and explicit HR formula preference, CSS and Running threshold speed in m/s, displayed through sports-lib unit preferences. These settings do not prove which file
+calibration a workout used. No overall load method, inclusion, raw policy, Health measurement, source identity or account ID is returned.
 Current all-family reads use a single bounded collection query and synthesize defaults for absent heads; one-family
 reads fetch one head. Historical reads retain per-family revision queries, including histories without a current head.
 
@@ -28,7 +28,11 @@ ambiguous pace string. Running-family `runningPace` accepts positive `paceSecond
 whole second after conversion to match the editor and Event Details. Canonical speed stays unchanged. That nullable output
 field is optional only to retain saved previews from before this addition. Unknown/identity/backdate fields and empty edits fail closed. Null clears a fallback. The
 15-minute proposal shows exact before/after values and future-workout effect, preserving method, inclusion and other
-thresholds. `apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction
+thresholds. Optional resting/maximum HR inputs use bpm and `hrAlgorithm` explicitly selects BANISTER or THRESHOLD;
+null restores existing automatic behavior. Banister needs a complete valid tuple from one source; rest/max alone never
+select it. Formula preference is calibration, not the overall load method. Current/dated reads and before/after reviews
+include the choice and values; older saved reviews remain readable. No daily Health HR lookup is added.
+`apply_training_threshold_change` is a separate native-approval-gated idempotent write. Its transaction
 rechecks grant generation, deletion, expiry and optimistic head revision, then appends a server-timestamped immutable
 revision. A competing edit requires reread/review. A replay returns the same saved revision; receipts expire after
 30 days through the existing proposal TTL. Thresholds do not create Health observations, retarget plan recipes,

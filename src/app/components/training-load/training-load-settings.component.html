@@ -50,6 +50,27 @@
           <span matTextSuffix>{{ hrUnit }}</span>
           <mat-hint>Use your independently measured threshold; resting or maximum HR is not assumed.</mat-hint>
         </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Resting heart rate (optional)</mat-label>
+          <input matInput formControlName="restingHr" inputmode="decimal" aria-label="Resting heart rate">
+          <span matTextSuffix>{{ hrUnit }}</span>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Maximum heart rate (optional)</mat-label>
+          <input matInput formControlName="maxHr" inputmode="decimal" aria-label="Maximum heart rate">
+          <span matTextSuffix>{{ hrUnit }}</span>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>HR formula</mat-label>
+          <mat-select formControlName="hrAlgorithm" (selectionChange)="selection()">
+            <mat-option value="">Automatic (existing behavior)</mat-option>
+            <mat-option value="THRESHOLD">Threshold HR (estimate)</mat-option>
+            <mat-option value="BANISTER">Banister</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <p>Banister needs resting HR &lt; threshold HR &lt; maximum HR from one source. Maximum HR alone is insufficient.
+          If the chosen formula is unavailable, another usable HR formula or the normal sport fallback is used.
+          Automatic keeps existing behavior; entering rest/max alone does not select Banister.</p>
         @if (row.id === 'running') {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Running threshold pace (optional)</mat-label>
@@ -81,7 +102,7 @@
           <p id="css-help">Use independently measured CSS, not a workout’s average pace. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS.</p>
           @if (!validCss(row)) { <p role="alert">Enter a positive pace as mm:ss, for example 1:53, or leave blank.</p> }
         }
-        @if (!validThresholds(row) && validCss(row)) { <p role="alert">Enter positive values. Pace must use mm:ss. Leave a field blank to remove that fallback for future workouts.</p> }
+        @if (!validThresholds(row) && validCss(row)) { <p role="alert">Enter positive values. A complete HR set must have resting HR &lt; threshold HR &lt; maximum HR. Pace must use mm:ss. Leave a field blank to remove that fallback for future workouts.</p> }
         @if (!thresholdsOnly) { <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle> }
         <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validThresholds(row)" (click)="save(row)">{{ busy() === row.id ? 'Saving ' + row.label + '…' : 'Save ' + row.label + (thresholdsOnly ? ' thresholds' : ' preferences') }}</button>
       </section>
