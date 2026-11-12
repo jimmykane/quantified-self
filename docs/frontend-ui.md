@@ -1240,6 +1240,9 @@ does not establish that upstream handles malformed HTTP responses without it. Ma
 The upgraded beta output measures 15.03 MB of total scripts, above the preceding 14.85 MB cap. Beta and production
 therefore share a 15.10 MB total-script error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
 The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
+Production Home plus its deferred signal preview measures 3101.6 KiB, so its combined static-graph cap is 3120 KiB
+(previously 3050 KiB). The preview itself adds 181.3 KiB and retains its separate 192 KiB limit. All public dependency
+exclusions remain in force; these are dependency-update size allowances, not runtime performance measurements.
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.

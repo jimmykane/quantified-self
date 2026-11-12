@@ -11,7 +11,9 @@ const sourceMapCache = new Map();
 // Moving account-only initialization out of startup also moves shared chart code
 // into the preview. Bound both its first use and the combined page journey.
 const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 192 * 1024;
-const HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES = 3050 * 1024;
+// Firebase 12.19 / Angular 20 patch output measures 3101.6 KiB combined.
+// Keep the preview's independent incremental bound unchanged.
+const HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES = 3120 * 1024;
 const TRAINING_PLANS_ROUTE = '/features/training-plans';
 const TRAINING_PLANS_SOCIAL_IMAGE_PATH = path.join(
   outputDirectory,
