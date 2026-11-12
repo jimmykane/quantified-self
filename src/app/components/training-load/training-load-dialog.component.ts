@@ -3,11 +3,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormControl, FormGroup } from '@angular/forms';
 import { firstValueFrom, forkJoin, take } from 'rxjs';
-import { convertSpeedToSwimPace, DataSwimPace, DataTrainingStressScore, DataFTP, DataHeartRate, DataWeight, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { convertSpeedToSwimPace, convertSpeedToPace, supportsRunningPaceTrainingStressScore, DataPace, DataSwimPace, DataTrainingStressScore, DataFTP, DataHeartRate, DataWeight, type User, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { AppEventInterface } from '@shared/app-event.interface';
 import { defaultAppliedTrainingLoadPolicy, recordedTrainingStressScore, resolveEffectiveTrainingLoad,
   sameTrainingLoadCalibration,
-  unresolvedTrainingLoadLegs, validTrainingLoadOverride, type TrainingLoadMetadata, type TrainingLoadMethod,
+  unresolvedTrainingLoadLegs, validTrainingLoadOverride, validTrainingLoadPolicy, type TrainingLoadMetadata, type TrainingLoadMethod,
   type EffectiveTrainingLoad } from '@shared/training-load-policy';
 import { resolveTrainingDisciplineFromActivityType, TRAINING_SPORT_DEFINITIONS } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
@@ -87,6 +87,14 @@ export class TrainingLoadDialogComponent implements OnInit {
   get savedCalibration() { const saved = this.metadata()?.legs?.[this.selectedKey]; return saved ? saved.calibration : this.leg?.calibration; }
   get family() { return resolveTrainingDisciplineFromActivityType(this.activities.find(activity => activity.id === this.selectedId())?.type); }
   get familyLabel(): string { return TRAINING_SPORT_DEFINITIONS.find(family => family.id === this.family)?.label ?? 'this sport'; }
+  get canCopyToFuture(): boolean {
+    const { method, included } = this.form.getRawValue();
+    return validTrainingLoadPolicy(this.family, { method, included });
+  }
+  get runningPaceSupported(): boolean {
+    const activity = this.activities.find(activity => activity.id === this.selectedId());
+    return !!activity && supportsRunningPaceTrainingStressScore(activity.type);
+  }
   private resolveLoad(activityId?: string): EffectiveTrainingLoad {
     if (!this.sourceCurrent() && !this.metadata()?.excluded) return { score: null, status: 'unavailable' as const,
       method: null, estimated: false, reasons: ['source-updating'] };
@@ -97,7 +105,7 @@ export class TrainingLoadDialogComponent implements OnInit {
   get actualMethodLabel(): string {
     const load = this.legModel;
     if (load.status === 'excluded') return 'Excluded';
-    const method = load.method === 'SWIM_PACE' ? 'Swim pace (CSS)' : load.method === 'HR' && load.hrAlgorithm
+    const method = load.method === 'PACE' ? 'Running pace' : load.method === 'SWIM_PACE' ? 'Swim pace (CSS)' : load.method === 'HR' && load.hrAlgorithm
       ? `HR · ${load.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold'}` : load.method ?? 'Unavailable';
     return method + (load.estimated ? ' (estimate)' : '');
   }
@@ -112,11 +120,19 @@ export class TrainingLoadDialogComponent implements OnInit {
     const values: Array<[string, string, number | undefined]> = [
       ['Saved FTP fallback', DataFTP.type, this.policy.functionalThresholdPower],
       ['Saved threshold HR fallback', DataHeartRate.type, this.policy.lactateThresholdHR],
+      ['Saved resting HR fallback', DataHeartRate.type, this.policy.restingHeartRate],
+      ['Saved maximum HR fallback', DataHeartRate.type, this.policy.maxHeartRate],
     ];
-    return values.flatMap(([label, type, value]) => {
+    const labels = values.flatMap(([label, type, value]) => {
       const display = value === undefined ? null : resolveUnitAwareDisplayFromValue(type, value, this.data.unitSettings);
       return display ? [{ label, value: `${display.value} ${display.unit}` }] : [];
     });
+    const speed = this.policy.runningThresholdSpeed;
+    const pace = speed === undefined ? null : resolveUnitAwareDisplayFromValue(DataPace.type, convertSpeedToPace(speed), this.data.unitSettings,
+      { roundPaceSeconds: true });
+    if (this.policy.hrAlgorithm) labels.push({ label: 'Saved HR formula preference',
+      value: this.policy.hrAlgorithm === 'BANISTER' ? 'Banister' : 'Threshold HR (estimate)' });
+    return pace ? [...labels, { label: 'Saved running threshold pace fallback', value: `${pace.value} ${pace.unit}` }] : labels;
   }
   get savedHealthWeightLabel(): string | null {
     const weight = this.savedCalibration?.weight;
@@ -151,8 +167,9 @@ export class TrainingLoadDialogComponent implements OnInit {
     if (this.legModel.reasons.includes('met-weight-pending')) return 'Preparing the MET estimate using a Health weight measured at or before this workout. Recorded data stays unchanged.';
     if (this.legModel.reasons.includes('activity-match-needs-review')) return 'Review the unmatched activities below before using modeled load.';
     if (this.legModel.method === 'OVERRIDE') return 'The numeric override sets modeled load. Reset restores this activity’s saved policy.';
-    if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New FTP, threshold HR or CSS settings do not apply retroactively.';
+    if (this.legModel.reasons.includes('reparse-required') || !this.leg?.evaluations) return 'Recorded values are retained until reparse. Use “Reimport activity from file” in the activity menu to calculate available method candidates using the policy already saved for this workout. New FTP, threshold HR, running threshold pace or CSS settings do not apply retroactively.';
     if (this.legModel.method === 'IMPORTED') return 'The file supplied this score. Imported TSS takes precedence over the selected calculation method.';
+    if (this.legModel.method === 'PACE') return 'Calculated from recorded running speed and grade, using valid file threshold pace or the threshold saved with this workout’s policy. Active timing, gaps and rolling-window coverage remain required.';
     if (this.legModel.method === 'SWIM_PACE' && this.savedCalibration?.version === 2)
       return 'Calculated from swim speed and valid file CSS, or the saved CSS fallback when file calibration is missing or unusable.';
     if (this.legModel.method === 'SWIM_PACE') return this.policy.swimThresholdSpeed !== undefined
@@ -169,7 +186,8 @@ export class TrainingLoadDialogComponent implements OnInit {
     const messages: Record<string, string> = {
       'unsupported-sport': 'This calculation is not supported for this sport.',
       'missing-hr-calibration': 'The file is missing required HR calibration.',
-      'threshold-hr-fallback': 'Full Banister calibration is unavailable; the threshold-HR estimate was used.',
+      'threshold-hr-fallback': 'The threshold-HR estimate was used with an independently valid threshold; resting and maximum HR are not assumed.',
+      'requested-hr-algorithm-unavailable': 'The saved HR formula could not run with its required inputs or recorded coverage. Another eligible calculation was used.',
       'invalid-hr-calibration': 'The file HR calibration is inconsistent or invalid.',
       'ambiguous-hr-calibration': 'The file has ambiguous HR calibration records.',
       'missing-hr-samples': 'No usable heart-rate samples are available.',
@@ -195,6 +213,10 @@ export class TrainingLoadDialogComponent implements OnInit {
     this.selectedId.set(id); this.resetDraft(); this.haptics.selection();
   }
   selection(): void { this.haptics.selection(); }
+  changeMethod(): void {
+    if (!this.canCopyToFuture) this.form.controls.future.setValue(false, { emitEvent: false });
+    this.selection();
+  }
   private resetDraft(): void {
     const control = this.metadata()?.controls[this.selectedKey];
     this.form.reset({ method: control?.method ?? this.policy.method, included: control?.included ?? this.policy.included,
@@ -207,7 +229,7 @@ export class TrainingLoadDialogComponent implements OnInit {
     await this.mutate(() => this.service.save(this.data.user.uid, this.data.event.getID() as string, this.metadata()?.revision ?? 0,
       { key: this.selectedKey, control: { ...((this.metadata()?.controls[this.selectedKey]?.activityId) ? { activityId: this.selectedId() } : {}), method: value.method, included: value.included,
         ...(this.hasOverride ? { override: Math.round(Number(value.override) * 10) / 10 } : {}) } },
-      value.future && family ? { family, policy: { method: value.method, included: value.included },
+      value.future && family && this.canCopyToFuture ? { family, policy: { method: value.method, included: value.included },
         expectedRevision: this.policies().find(policy => policy.id === family)?.revision ?? 0 } : undefined));
   }
   async resetLeg(): Promise<void> {

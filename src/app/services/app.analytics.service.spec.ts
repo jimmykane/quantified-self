@@ -137,6 +137,21 @@ describe('AppAnalyticsService', () => {
         expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), true);
     });
 
+    it.each(['analyze', 'sync', 'compare'] as const)('makes the %s onboarding flow reportable by event name, with consent', flow => {
+        expect(service.logOnboardingFlow(flow, 'selected')).toBe(false);
+        expect(logEvent).not.toHaveBeenCalled();
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+        expect(service.logOnboardingFlow(flow, 'destination_reached', { destination: 'dashboard' })).toBe(true);
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), `onboarding_${flow}_destination_reached`, {
+            onboarding_goal: flow, destination: 'dashboard',
+        });
+        expect(`onboarding_${flow}_destination_reached`.length).toBeLessThanOrEqual(40);
+        userSubject.next({ acceptedTrackingPolicy: false } as User);
+        vi.mocked(logEvent).mockClear();
+        expect(service.logOnboardingFlow(flow, 'failed', { failureStage: 'navigation' })).toBe(false);
+        expect(logEvent).not.toHaveBeenCalled();
+    });
+
     it('should log route metadata when toggling an activity sync route', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 

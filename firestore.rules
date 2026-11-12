@@ -175,11 +175,15 @@ service cloud.firestore {
             'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports',
             'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports',
             'motorized-activities', 'other-training']
-            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed', 'functionalThresholdPower', 'lactateThresholdHR'])
+            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed', 'functionalThresholdPower', 'lactateThresholdHR', 'runningThresholdSpeed', 'restingHeartRate', 'maxHeartRate', 'hrAlgorithm'])
             && data.revision is int && data.revision > 0
             && data.revisionId is string && data.revisionId.matches('^[a-zA-Z0-9-]{1,64}$')
-            && data.method in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE'] && data.included is bool
+            && data.method in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE', 'RUNNING_PACE'] && data.included is bool
             && (data.method != 'SWIM_PACE' || family == 'swimming')
+            && (data.method != 'RUNNING_PACE' || family == 'running')
+            && (!('runningThresholdSpeed' in data) || (family == 'running'
+              && data.runningThresholdSpeed is number && data.runningThresholdSpeed > 0
+              && data.runningThresholdSpeed - data.runningThresholdSpeed == 0))
             && (!('swimThresholdSpeed' in data) || (family == 'swimming'
               && data.swimThresholdSpeed is number && data.swimThresholdSpeed > 0 && data.swimThresholdSpeed <= 100))
             && (!('functionalThresholdPower' in data) || (family in ['running', 'cycling']
@@ -187,6 +191,13 @@ service cloud.firestore {
               && data.functionalThresholdPower - data.functionalThresholdPower == 0))
             && (!('lactateThresholdHR' in data) || (data.lactateThresholdHR is number
               && data.lactateThresholdHR > 0 && data.lactateThresholdHR - data.lactateThresholdHR == 0))
+            && (!('restingHeartRate' in data) || (data.restingHeartRate is number
+              && data.restingHeartRate > 0 && data.restingHeartRate - data.restingHeartRate == 0))
+            && (!('maxHeartRate' in data) || (data.maxHeartRate is number
+              && data.maxHeartRate > 0 && data.maxHeartRate - data.maxHeartRate == 0))
+            && (!('hrAlgorithm' in data) || data.hrAlgorithm in ['BANISTER', 'THRESHOLD'])
+            && (!(data.keys().hasAll(['restingHeartRate', 'lactateThresholdHR', 'maxHeartRate']))
+              || (data.restingHeartRate < data.lactateThresholdHR && data.lactateThresholdHR < data.maxHeartRate))
             && data.effectiveAt == request.time;
         }
         function matchingRevision() {
@@ -353,7 +364,7 @@ service cloud.firestore {
                 return key is string && key.matches('^[a-zA-Z0-9_-]{1,128}$')
                   && (key in legs || (legacy && exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
                   && control is map && control.keys().hasOnly(['method', 'included', 'override', 'activityId', 'dismissed'])
-                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE']
+                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE', 'RUNNING_PACE']
                   && control.get('included', true) is bool
                   && (!('override' in control) || (control.override is number && control.override >= 0 && control.override <= 9999))
                   && (!('activityId' in control) || (key in legs && legs[key].activityId == null

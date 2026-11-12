@@ -235,7 +235,12 @@
     </div>
     <div class="compact-row-stack integration-details">
       <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
-        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
+        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider.">
+        <aside class="mixed-device-note" aria-label="Mixed-device example">
+          <p><strong>Using a bike computer and a watch?</strong> Cyclists and triathletes can review Wahoo rides alongside workouts recorded on Suunto or Garmin in the same QS history.</p>
+          <div><a mat-button routerLink="/guides/sync-wahoo-to-suunto">Wahoo + Suunto guide <mat-icon iconPositionEnd>arrow_forward</mat-icon></a><a mat-button routerLink="/guides/wahoo-garmin-training-data">Wahoo + Garmin guide <mat-icon iconPositionEnd>arrow_forward</mat-icon></a></div>
+        </aside>
+      </app-compact-row>
       <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
         summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
         <app-public-feature-preview [prepareAhead]="true" previewKey="provider-flow"></app-public-feature-preview>

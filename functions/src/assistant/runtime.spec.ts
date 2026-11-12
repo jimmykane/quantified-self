@@ -2369,6 +2369,23 @@ describe('Assistant runtime', () => {
     })).rejects.toThrow('selected a non-jump map');
   });
 
+  it.each([false, true])('advertises independent resting/max HR and deliberate formula choice only with threshold access: %s', async enabled => {
+    const generate = vi.spyOn(assistantGenkit, 'generate').mockResolvedValueOnce({
+      toolRequests: [{ toolRequest: { name: 'get_daily_report', input: {} } }], messages: [] } as never)
+      .mockResolvedValueOnce({ toolRequests: [], text: JSON.stringify({ answer: 'Review the HR calibration settings before Apply.', visuals: { chart: null, map: null } }) } as never);
+    const tool: AssistantRuntimeTool = { name: 'get_training_thresholds', description: 'Read independent calibration.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({}) };
+    const grounding: AssistantRuntimeTool = { name: 'get_daily_report', description: 'Read granted account context.',
+      inputJsonSchema: { type: 'object', properties: {} }, execute: vi.fn().mockResolvedValue({ readiness: { score: 72 } }) };
+    await generateAssistantModelAnswer({ currentTime: '2026-11-12T12:00:00Z', timeZone: 'UTC',
+      prompt: 'Explain my available HR formula settings.', history: [], mcpInstructions: 'Use current granted tools only.',
+      tools: enabled ? [grounding, tool] : [grounding], workflow: null, onBillableAttempt: vi.fn().mockResolvedValue(undefined) });
+    const system = String(generate.mock.calls[0][0].system);
+    expect(system.includes('athlete-supplied resting and maximum HR')).toBe(enabled);
+    expect(system.includes('Never infer rest/max from activity peaks or daily Health readings')).toBe(enabled);
+    expect(system.includes('Choose Banister only when explicitly requested')).toBe(enabled);
+  });
+
   it('requires an initial tool request and then permits a final model answer', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',

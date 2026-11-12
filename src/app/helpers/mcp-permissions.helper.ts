@@ -39,11 +39,11 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'training-thresholds:read': {
     title: 'Training thresholds',
-    description: 'Read current or dated FTP, threshold HR and CSS settings by sport family. These are saved calibration settings; valid file calibration takes precedence. This does not grant Health measurement history or private activity metadata.',
+    description: 'Read current or dated FTP, threshold/resting/maximum HR, HR formula, CSS and running threshold pace settings by sport family. These are manual Training calibration settings, not daily Health readings; valid file calibration takes precedence. This does not grant Health measurement history or private activity metadata.',
   },
   'training-thresholds:write': {
     title: 'Change Training thresholds',
-    description: 'Preview and apply explicit FTP, threshold HR or CSS changes for future workouts using your client’s approval controls. Requires Training thresholds read access. Changes create dated revisions and preserve existing workouts, TSS controls, recorded scores and Health measurements. Existing connections must reauthorize; token refresh cannot add permission.',
+    description: 'Preview and apply explicit FTP, threshold/resting/maximum HR, HR formula, CSS or running threshold pace changes for future workouts using your client’s approval controls. Requires Training thresholds read access. Changes create dated revisions and preserve existing workouts, TSS controls, recorded scores and Health measurements. Existing connections must reauthorize; token refresh cannot add permission.',
   },
   'workout-reflections:read': {
     title: 'Private workout reflections',

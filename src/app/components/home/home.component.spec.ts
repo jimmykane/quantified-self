@@ -98,6 +98,7 @@ describe('HomeComponent', () => {
       .map((link: Element) => link.getAttribute('href')!);
     expect(paths.every(path => path === '/login' || path === '/integrations' || path === '/pricing'
       || path === '/help' || path === '/help#data-and-privacy'
+      || path === '/guides/sync-wahoo-to-suunto' || path === '/guides/wahoo-garmin-training-data'
       || fixture.componentInstance.features.some(feature => path === '#home-' + feature.id)
       || path.startsWith('/features/'))).toBe(true);
     expect(paths).not.toContain('/demo');

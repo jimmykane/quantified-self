@@ -12,7 +12,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits, WeightUnits,
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits, PaceUnits, WeightUnits,
   convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -51,6 +51,27 @@ describe('Training load editor', () => {
     await component.ngOnInit();
   });
   afterEach(() => vi.unstubAllGlobals());
+  it.each([ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.TrackAndField])('offers the existing running pace eligibility for %s', type => {
+    component.activities[0].type = type;
+    expect(component.runningPaceSupported).toBe(true);
+  });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Cycling, ActivityTypes.Swimming])('does not offer running pace for %s', type => {
+    component.activities[0].type = type;
+    expect(component.runningPaceSupported).toBe(false);
+  });
+  it('explains an explicit running pace fallback without changing recorded TSS', () => {
+    component.activities[0].type = ActivityTypes.Running;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 70, method: 'HR' as const,
+      estimated: true, provenance: 'calculated' as const, reasons: [] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: { walk: { method: 'RUNNING_PACE' } }, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Running, duration: 3600, distance: null },
+      policy: defaultAppliedTrainingLoadPolicy(ActivityTypes.Running), recordedTss: 87.3,
+      evaluations: { version: 1, automatic: candidate, hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        runningPace: { ...candidate, preference: 'RUNNING_PACE', reasons: ['missing-pace-inputs'] } } } } });
+    expect(component.legModel).toMatchObject({ method: 'HR', score: 70 });
+    expect(component.reasonText).toContain('Pace calculation inputs are unavailable');
+    expect(component.recorded).toBe(87.3);
+  });
   it('explains saved FTP and unavailable frozen weight when MET falls back to power', () => {
     component.activities[0].type = ActivityTypes.Cycling;
     const candidate = { preference: 'AUTOMATIC' as const, score: 100, method: 'POWER' as const,
@@ -85,6 +106,19 @@ describe('Training load editor', () => {
     }
     delete leg.calibration;
     expect(component.savedHealthWeightLabel).toBeNull();
+  });
+  it.each([
+    [PaceUnits.MinutesPerKilometer, '04:46 min/km'],
+    [PaceUnits.MinutesPerMile, '07:40 min/m'],
+  ] as const)('shows the saved Running threshold in %s without changing its canonical value', (unit, value) => {
+    const leg: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000,
+      type: ActivityTypes.Running, duration: 3600, distance: null }, recordedTss: 87.3, evaluations: null,
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Running), runningThresholdSpeed: 3.5 } };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: leg } });
+    component.data.unitSettings = normalizeUserUnitSettings({ paceUnits: [unit] });
+    expect(component.savedThresholdLabels).toEqual([{ label: 'Saved running threshold pace fallback', value }]);
+    expect(leg.policy.runningThresholdSpeed).toBe(3.5);
+    expect(component.recorded).toBe(87.3);
   });
   it('uses one modeled score and activity wording for a single-activity workout', async () => {
     const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
@@ -161,6 +195,43 @@ describe('Training load editor', () => {
     expect(save).toHaveBeenCalledWith('u', 'e', 0, { key: 'walk', control: { override: 0, method: 'AUTOMATIC', included: true } },
       { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'AUTOMATIC', included: true } });
     expect(success).toHaveBeenCalledOnce(); expect(error).not.toHaveBeenCalled();
+  });
+  it('saves per-activity running pace without copying it into mixed-family defaults', async () => {
+    component.activities[0].type = ActivityTypes.TrackAndField;
+    component.form.patchValue({ method: 'RUNNING_PACE', future: true }); component.form.markAsDirty();
+    await component.save();
+    expect(save).toHaveBeenCalledWith('u', 'e', 0,
+      { key: 'walk', control: { method: 'RUNNING_PACE', included: true } }, undefined);
+  });
+  it.each([
+    [ActivityTypes.TrackAndField, false], [ActivityTypes.Running, true],
+  ])('keeps the future-copy draft eligible when selecting running pace for %s', async (type, eligible) => {
+    const candidate = { preference: 'AUTOMATIC' as const, score: 60, method: 'HR' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    watch.mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(type), method: 'HR' }, recordedTss: 87.3,
+      evaluations: { version: 1, automatic: candidate, hr: { ...candidate, preference: 'HR' },
+        met: { ...candidate, preference: 'MET' }, runningPace: { ...candidate, preference: 'RUNNING_PACE', method: 'PACE' } },
+    } } }));
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded()).toBe(true));
+    const instance = fixture.componentInstance;
+    instance.activities[0].type = type;
+    instance.form.controls.future.setValue(true); instance.form.markAsDirty(); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(MatCheckbox)).componentInstance.checked).toBe(true);
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(select.options.find(option => option.value === 'RUNNING_PACE')?.disabled).toBe(false);
+    instance.form.controls.method.setValue('RUNNING_PACE');
+    select.selectionChange.emit({ source: select, value: 'RUNNING_PACE' }); fixture.detectChanges();
+    expect(instance.form.controls.future.value).toBe(eligible);
+    expect(!!fixture.debugElement.query(By.directive(MatCheckbox))).toBe(eligible);
+    expect(selection).toHaveBeenCalledOnce(); expect(save).not.toHaveBeenCalled();
+    await instance.save();
+    expect(save.mock.calls.at(-1)?.[4]).toEqual(eligible
+      ? { family: 'running', expectedRevision: 0, policy: { method: 'RUNNING_PACE', included: true } } : undefined);
+    fixture.destroy();
   });
   it('keeps a distinct legacy parent score when copying neutral preferences to future workouts', async () => {
     vi.spyOn(component.data.event, 'getStat').mockReturnValue(new DataTrainingStressScore(120));
@@ -346,7 +417,7 @@ describe('Training load editor', () => {
     expect(fixture.componentInstance.legModel).toMatchObject({ score: 60, method: 'HR', reasons: ['unsupported-sport'] });
     expect(fixture.nativeElement.textContent).toContain('This calculation is not supported for this sport.');
     expect(fixture.debugElement.query(By.directive(MatCheckbox))).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Choose a method supported by this sport before copying preferences');
+    expect(fixture.nativeElement.textContent).toContain('not available as a default for');
     expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
     fixture.componentInstance.form.controls.method.setValue('HR');
     fixture.changeDetectorRef.markForCheck(); fixture.detectChanges();

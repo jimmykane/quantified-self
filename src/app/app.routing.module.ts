@@ -546,6 +546,15 @@ const topLevelRoutes: Routes = [
     },
   },
   {
+    path: PUBLIC_GUIDE_PATHS.wahooGarminTrainingData,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('wahooGarminTrainingData'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
     path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('importActivitiesToSuunto'),

@@ -80,6 +80,13 @@ export type SavedRouteActionSource =
     | 'routes_page_map';
 export type SubscriptionPlan = 'basic' | 'pro';
 export type SubscriptionStartStatus = 'active' | 'trialing';
+export type OnboardingFlow = 'analyze' | 'sync' | 'compare' | 'explore' | 'other';
+export type OnboardingFlowStep = 'selected' | 'consent_saved' | 'destination_reached' | 'failed';
+export type OnboardingDestination = 'dashboard' | 'compare' | 'saved_comparisons' | 'pro_plans' | 'connections' | 'membership' | 'assistant';
+export interface OnboardingFlowContext {
+    destination?: OnboardingDestination;
+    failureStage?: 'save' | 'profile' | 'navigation';
+}
 export type SavedRouteSortColumn =
     | 'activityTypes'
     | 'ascent'
@@ -206,6 +213,17 @@ export class AppAnalyticsService {
             this.logger.warn('Analytics logEvent error:', error);
             return false;
         }
+    }
+
+    /** Goal-specific event names remain reportable without GA4 custom dimensions. */
+    logOnboardingFlow(flow: OnboardingFlow, step: OnboardingFlowStep, context: OnboardingFlowContext = {}): boolean {
+        if (!['analyze', 'sync', 'compare', 'explore', 'other'].includes(flow)
+            || !['selected', 'consent_saved', 'destination_reached', 'failed'].includes(step)) return false;
+        return this.logEvent(`onboarding_${flow}_${step}`, {
+            onboarding_goal: flow,
+            ...(context.destination ? { destination: context.destination } : {}),
+            ...(context.failureStage ? { failure_stage: context.failureStage } : {}),
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

@@ -688,6 +688,8 @@ describe('UserSettingsComponent', () => {
         fixture.detectChanges();
         const preferences = fixture.nativeElement.querySelector('app-training-load-settings');
         expect(preferences).toBeTruthy();
+        expect(fixture.debugElement.query(By.css('app-training-load-settings')).properties['unitSettings'])
+            .toBe(component.user.settings.unitSettings);
         expect(fixture.nativeElement.querySelector('#settings-training-content').hidden).toBe(false);
         expect(component.userSettingsFormGroup.pristine).toBe(true);
         expect(fixture.nativeElement.querySelector('.settings-save-bar')).toBeNull();

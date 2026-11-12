@@ -7,6 +7,7 @@ import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 
 const hoisted = vi.hoisted(() => ({
   mockGetAppCheckToken: vi.fn(),
+  mockOnTokenChanged: vi.fn(),
 }));
 
 vi.mock('app/firebase/app-check', async (importOriginal) => {
@@ -14,6 +15,7 @@ vi.mock('app/firebase/app-check', async (importOriginal) => {
   return {
     ...actual,
     getToken: (...args: unknown[]) => hoisted.mockGetAppCheckToken(...args),
+    onTokenChanged: (...args: unknown[]) => hoisted.mockOnTokenChanged(...args),
   };
 });
 
@@ -38,6 +40,8 @@ describe('AppCheckReadinessService', () => {
     diagnostics.failureRevision = 0;
     diagnostics.reportFailure.mockReset();
     hoisted.mockGetAppCheckToken.mockReset();
+    hoisted.mockOnTokenChanged.mockReset();
+    hoisted.mockOnTokenChanged.mockReturnValue(vi.fn());
     hoisted.mockGetAppCheckToken.mockResolvedValue({ token: 'app-check-token' });
     service = configureTestingModule();
   });
@@ -107,6 +111,69 @@ describe('AppCheckReadinessService', () => {
     await expect(service.ensureReady()).resolves.toBeUndefined();
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+
+  it('waits for SDK recovery after a reCAPTCHA failure without making another token request', async () => {
+    const stop = vi.fn();
+    diagnostics.reportFailure.mockImplementationOnce(() => { throw new Error('Diagnostics unavailable'); });
+    hoisted.mockOnTokenChanged.mockReturnValue(stop);
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce({ code: 'appCheck/recaptcha-error' });
+    const token = service.getToken();
+    await vi.waitFor(() => expect(hoisted.mockOnTokenChanged).toHaveBeenCalledOnce());
+    const onNext = hoisted.mockOnTokenChanged.mock.calls[0][1];
+    onNext({ token: '' });
+    onNext({ token: 'verified-recovery-token' });
+    await expect(token).resolves.toBe('verified-recovery-token');
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('stops waiting immediately if SDK recovery reports a rejected attestation cooldown', async () => {
+    const stop = vi.fn();
+    hoisted.mockOnTokenChanged.mockReturnValue(stop);
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce({ code: 'appCheck/recaptcha-error' });
+    const token = service.getToken();
+    const cooldown = { code: 'appCheck/initial-throttle', customData: { httpStatus: 403, time: '01d:00m:00s' } };
+    const rejection = expect(token).rejects.toBe(cooldown);
+    await vi.waitFor(() => expect(hoisted.mockOnTokenChanged).toHaveBeenCalledOnce());
+    hoisted.mockOnTokenChanged.mock.calls[0][2](cooldown);
+    await rejection;
+    expect(stop).toHaveBeenCalledOnce();
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledOnce();
+  });
+
+  it('bounds the recovery observer by the original deadline and releases it', async () => {
+    vi.useFakeTimers();
+    try {
+      const stop = vi.fn();
+      hoisted.mockOnTokenChanged.mockReturnValue(stop);
+      hoisted.mockGetAppCheckToken.mockRejectedValueOnce({ code: 'appCheck/recaptcha-error' });
+      const rejection = expect(service.getToken()).rejects.toMatchObject({ code: 'appCheck/token-timeout' });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejection;
+      expect(stop).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('never turns a forced refresh into waiting for a potentially cached observer token', async () => {
+    const error = { code: 'appCheck/recaptcha-error' };
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce(error);
+    await expect(service.getToken(true)).rejects.toBe(error);
+    expect(hoisted.mockOnTokenChanged).not.toHaveBeenCalled();
+  });
+
+  it('does not attach a recovery observer if the original SDK request fails after its deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      let fail!: (error: unknown) => void;
+      hoisted.mockGetAppCheckToken.mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }));
+      const rejection = expect(service.getToken()).rejects.toMatchObject({ code: 'appCheck/token-timeout' });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejection;
+      fail({ code: 'appCheck/recaptcha-error' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(hoisted.mockOnTokenChanged).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
   });
 
   it('should return a usable token through getToken', async () => {
@@ -189,7 +256,7 @@ describe('AppCheckReadinessService', () => {
   });
 
   it('does not replace a verification failure when diagnostics throw', async () => {
-    const failure = { code: 'appCheck/recaptcha-error' };
+    const failure = { code: 'appCheck/initial-throttle', customData: { httpStatus: 403, time: '01d:00m:00s' } };
     hoisted.mockGetAppCheckToken.mockRejectedValueOnce(failure);
     diagnostics.reportFailure.mockImplementationOnce(() => { throw new Error('diagnostics unavailable'); });
     await expect(service.getToken()).rejects.toBe(failure);

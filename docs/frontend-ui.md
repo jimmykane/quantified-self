@@ -104,8 +104,19 @@ The final production build passes matching beta/production `allScript` error cap
 and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
 
 The conditional Sync plan handoff and saved-profile navigation fix measured 8.96 kB above the subsequent
-14.84 MB total-script cap. Beta and production now share a 14.85 MB `allScript` error cap. The measured initial
+14.84 MB total-script cap, raising beta and production to 14.85 MB. The measured initial
 bundle remains 1.41 MB (335.36 kB estimated transfer), below its unchanged 1474 kB cap. Warning budgets are unchanged.
+
+Consent-gated onboarding goal events and bounded App Check recovery exceeded that total-script cap by
+1.11 kB. Beta and production now share a 14.86 MB `allScript` error cap; initial-load and warning caps stay unchanged.
+
+## Dated Training calibration bundle allowance
+
+The Running pace and manual HR controls, published Sports Lib 23.12.0 and public-guide integration measured
+14.87 MB of total scripts, 11.11 kB above the previous 14.86 MB cap. This raised matching beta/production `allScript`
+error caps to 14.88 MB before the Firebase/Angular patch upgrade documented below. At that stage the initial bundle
+measured 1.41 MB (335.55 kB estimated transfer), below the unchanged 1474 kB cap. Warning budgets stay unchanged.
+This is compiled-output accounting, not a runtime performance claim.
 
 ## Field guide onboarding terrain and bundle allowance
 
@@ -1237,11 +1248,12 @@ The frontend baseline is Firebase 12.19.0 (`@firebase/firestore` 4.17.2) with We
 dependency and verify that the installed tree has a single WebChannel instance before running the browser transport
 regression. Retain the HTTP guard and account/cache recovery paths when upgrading; passing the guarded tests alone
 does not establish that upstream handles malformed HTTP responses without it. Material/CDK remain on 20.2.14.
-The upgraded beta output measures 15.03 MB of total scripts, above the preceding 14.85 MB cap. Beta and production
-therefore share a 15.10 MB total-script error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
+After integrating develop's Sports Lib 23.12.0 and dated Training calibration changes, the upgraded production output
+measures 15.05 MB of total scripts, above develop's 14.88 MB cap. Beta and production share a 15.10 MB total-script
+error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
 The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
-Production Home plus its deferred signal preview measures 3101.6 KiB, so its combined static-graph cap is 3120 KiB
-(previously 3050 KiB). The preview itself adds 181.3 KiB and retains its separate 192 KiB limit. All public dependency
+Production Home plus its deferred signal preview measures 3104.5 KiB, so its combined static-graph cap is 3120 KiB
+(previously 3050 KiB). The preview itself adds 181.4 KiB and retains its separate 192 KiB limit. All public dependency
 exclusions remain in force; these are dependency-update size allowances, not runtime performance measurements.
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
@@ -1388,6 +1400,19 @@ fresh token arrives; repeated notifications of the same cached token do not rese
 is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
 diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
 warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+For an ordinary token request that fails specifically with `appCheck/recaptcha-error`, readiness can wait for the
+SDK's next valid `onTokenChanged` result within the remainder of its original 15-second deadline. This avoids
+turning a transient challenge failure into a permanent profile-loading failure when the existing SDK refresh
+recovers shortly afterwards. The fallback makes no additional token request. It never applies to forced refresh,
+and a subsequent rejection or cooldown fails immediately. The observer is removed on success, failure or timeout;
+an original request rejecting after its deadline cannot attach a late observer. Other failure classifications,
+App Check enforcement and the SDK's attestation/cooldown policy remain unchanged.
+
+A shell startup warning with `profile_state=initializing`, no active profile stage and `startup_stage=auth-state`
+means Auth has not finished restoring; it does not prove that App Check caused the stall. A 403 attestation
+rejection and a script-level reCAPTCHA error are different diagnoses. Check the existing build tags, Auth/profile
+stage and token/operation outcomes before attributing a login failure or changing provider configuration.
 
 App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
 resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is

@@ -277,6 +277,7 @@ describe('public-seo-pages.content', () => {
       syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
+      wahooGarminTrainingData: 'guides/wahoo-garmin-training-data',
       importActivitiesToSuunto: 'guides/import-activities-to-suunto',
       importActivitiesToWahoo: 'guides/import-activities-to-wahoo',
       syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',

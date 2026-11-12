@@ -457,6 +457,44 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(write('cycling', { functionalThresholdPower: 225 }));
             await assertSucceeds(write('team-sports', { lactateThresholdHR: 165 }));
         });
+        it('validates HR tuple and formula while retaining dated revision and owner guards', async () => {
+            await seed(); const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (extra: Record<string, unknown>, uid = 'owner') => {
+                const head = owner.doc(`users/${uid}/trainingLoadPolicies/cycling`);
+                const data = { revision: 1, revisionId: 'hr', method: 'HR', included: true,
+                    effectiveAt: serverTimestamp(), ...extra };
+                const batch = owner.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('hr'), data);
+                return batch.commit();
+            };
+            for (const extra of [{ restingHeartRate: 0 }, { maxHeartRate: Infinity }, { hrAlgorithm: 'UNKNOWN' },
+                { restingHeartRate: 170, lactateThresholdHR: 165, maxHeartRate: 190 },
+                { restingHeartRate: 55, lactateThresholdHR: 165, maxHeartRate: 160 }]) await assertFails(write(extra));
+            const tuple = { restingHeartRate: 55, lactateThresholdHR: 165, maxHeartRate: 190, hrAlgorithm: 'BANISTER' };
+            await assertFails(write(tuple, 'other')); await assertSucceeds(write(tuple));
+            await assertFails(owner.doc('users/owner/trainingLoadPolicies/cycling/revisions/hr').update({ maxHeartRate: 195 }));
+        });
+        it('accepts running pace only for Running policies and keeps calculated load server-owned', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            const write = (family: string, speed: unknown, method = 'RUNNING_PACE') => {
+                const head = owner.doc(`users/owner/trainingLoadPolicies/${family}`);
+                const data = { revision: 1, revisionId: 'pace', method, included: true,
+                    runningThresholdSpeed: speed, effectiveAt: serverTimestamp() };
+                const batch = owner.batch(); batch.set(head, data); batch.set(head.collection('revisions').doc('pace'), data);
+                return batch.commit();
+            };
+            for (const speed of [0, -1, NaN, Infinity, '3.7']) await assertFails(write('running', speed));
+            await assertFails(write('walking-hiking', 1000 / 270));
+            await assertFails(write('cycling', 1000 / 270, 'AUTOMATIC'));
+            await assertSucceeds(write('running', 1000 / 270));
+            const editData = { ...await edit(), controls: { leg: { method: 'RUNNING_PACE' } } };
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).set(editData));
+            await assertFails(owner.doc(path).set({ ...editData, legs: { leg: { evaluations: { runningPace: { score: 100 } } } } }));
+            await assertSucceeds(owner.doc(path).set(editData));
+            await assertFails(owner.doc('users/owner/trainingLoadPolicies/running/revisions/pace').update({ runningThresholdSpeed: 4 }));
+        });
     });
 
     describe('Account deletion fences for existing client sessions', () => {
