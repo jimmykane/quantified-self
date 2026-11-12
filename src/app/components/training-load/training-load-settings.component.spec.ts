@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { DistanceUnits, SpeedUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
@@ -76,6 +78,86 @@ describe('dated Training load settings', () => {
     component.changeRunningPaceUnit(row, 'mi'); expect(row.runningPaceUnit).toBe('km');
     row.form.controls.runningPace.setValue(''); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 0, { method: 'AUTOMATIC', included: true });
+  });
+  it.each([false, true])('starts in the owner pace preferences without changing canonical values (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy(); readFtpSuggestions.mockClear();
+    policies$.next([
+      { id: 'running', revision: 2, method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 3.5 },
+      { id: 'swimming', revision: 3, method: 'SWIM_PACE', included: true, swimThresholdSpeed: 100 / 113 },
+    ]);
+    const watch = vi.spyOn(TestBed.inject(TrainingLoadService), 'watchPolicies');
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    }));
+    fixture.detectChanges(); await fixture.whenStable();
+    const instance = fixture.componentInstance, running = instance.rows.find(row => row.id === 'running')!, swimming = instance.rows.find(row => row.id === 'swimming')!;
+    instance.selectedFamily.set('running'); fixture.detectChanges();
+    expect(running.runningPaceUnit).toBe('mi'); expect(running.form.controls.runningPace.value).toBe('07:40');
+    expect(swimming.cssUnit).toBe('yd'); expect(swimming.form.controls.cssPace.value).toBe('01:43');
+    const input = fixture.nativeElement.querySelector('input[formControlName="runningPace"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('7:15'); expect(input.closest('section')?.textContent).toContain('mm:ss per mile');
+    expect(watch).toHaveBeenCalledOnce(); expect(readFtpSuggestions).toHaveBeenCalledOnce();
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+    running.form.controls.ftp.setValue('250'); running.form.markAsDirty(); await instance.save(running);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 2,
+      { method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 3.5, functionalThresholdPower: 250 });
+  });
+  it('updates pristine units silently without reloading policies or reinterpreting a dirty draft', () => {
+    component.ngOnDestroy(); readFtpSuggestions.mockClear();
+    policies$.next([
+      { id: 'running', revision: 2, method: 'HR', included: true, runningThresholdSpeed: 3.5 },
+      { id: 'swimming', revision: 3, method: 'SWIM_PACE', included: true, swimThresholdSpeed: 100 / 113 },
+    ]);
+    const watch = vi.spyOn(TestBed.inject(TrainingLoadService), 'watchPolicies');
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const running = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    const swimming = fixture.componentInstance.rows.find(row => row.id === 'swimming')!;
+    running.form.controls.runningPace.setValue('04:30'); running.form.markAsDirty();
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    })); fixture.detectChanges();
+    expect(running.runningPaceUnit).toBe('km'); expect(running.form.controls.runningPace.value).toBe('04:30');
+    expect(swimming.cssUnit).toBe('yd'); expect(swimming.form.controls.cssPace.value).toBe('01:43');
+    expect(watch).toHaveBeenCalledOnce(); expect(readFtpSuggestions).toHaveBeenCalledOnce();
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('keeps an explicit input-unit choice when unrelated profile units change', () => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'running', revision: 2, method: 'HR', included: true, runningThresholdSpeed: 3.5 }]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    fixture.componentInstance.changeRunningPaceUnit(row, 'mi');
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }));
+    fixture.detectChanges();
+    expect(row.runningPaceUnit).toBe('mi'); expect(row.form.controls.runningPace.value).toBe('07:40');
+    expect(row.form.pristine).toBe(true); expect(selection).toHaveBeenCalledOnce(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('uses pace preferences independently of distance and speed preferences', () => {
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles,
+      speedUnits: [SpeedUnits.MilesPerHour], paceUnits: [PaceUnits.MinutesPerKilometer] });
+    component.ngOnChanges();
+    expect(component.rows.find(row => row.id === 'running')!.runningPaceUnit).toBe('km');
+    expect(component.rows.find(row => row.id === 'swimming')!.cssUnit).toBe('m');
+  });
+  it('shows Saving next to the edited values until the save actually succeeds', async () => {
+    component.ngOnDestroy(); let finish!: () => void;
+    savePolicy.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    row.form.controls.ftp.setValue('250'); row.form.markAsDirty();
+    const pending = fixture.componentInstance.save(row); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('section[aria-label="Running"] button[mat-stroked-button]') as HTMLButtonElement;
+    try {
+      expect(button.textContent).toContain('Saving Running'); expect(button.disabled).toBe(true);
+      expect(success).not.toHaveBeenCalled();
+    } finally { finish(); await pending; }
+    fixture.detectChanges();
+    expect(button.textContent).toContain('Save Running preferences'); expect(success).toHaveBeenCalledOnce();
   });
   it('ignores late suggestions for a previous account or destroyed editor without changing drafts', async () => {
     let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;

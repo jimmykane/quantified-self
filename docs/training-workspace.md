@@ -7784,7 +7784,9 @@ registered-app rescan and plugin refresh remain separate rollout steps requiring
 ### Running threshold pace (#1030)
 
 The Running family also accepts an independently measured threshold pace as `mm:ss` per kilometre or mile.
-The shared Training/Health editor stores `runningThresholdSpeed` in m/s in the same dated policy; it creates no
+The shared Training/Health editor starts in the owner's preferred Running and swim pace units, independently of
+distance/speed preferences. Input-unit choices preserve exact speeds; profile updates leave dirty drafts unchanged
+and do not restart policy/suggestion reads. The editor stores `runningThresholdSpeed` in m/s in the same dated policy; it creates no
 Health observation, extra import query, trigger or rebuild source. Switching units without editing preserves full
 canonical precision. Editor, Event Details and MCP threshold displays round to the nearest whole second after
 unit conversion; normal activity pace displays and canonical calculations are unchanged. Clearing affects future

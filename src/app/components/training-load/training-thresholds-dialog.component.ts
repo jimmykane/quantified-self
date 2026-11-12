@@ -5,16 +5,17 @@ import { TrainingLoadSettingsComponent } from './training-load-settings.componen
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 
 /** Health and Training use the same dated policy editor and persistence service. */
 @Component({ selector: 'app-training-thresholds-dialog', standalone: true,
   imports: [MatDialogModule, MatButtonModule, TrainingLoadSettingsComponent],
   template: `<h2 mat-dialog-title>Training thresholds</h2>
-    <mat-dialog-content><app-training-load-settings [uid]="data.uid" [thresholdsOnly]="true" /></mat-dialog-content>
+    <mat-dialog-content><app-training-load-settings [uid]="data.uid" [unitSettings]="data.unitSettings" [thresholdsOnly]="true" /></mat-dialog-content>
     <mat-dialog-actions align="end"><button mat-button type="button" (click)="close()">Close</button></mat-dialog-actions>`,
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class TrainingThresholdsDialogComponent {
-  readonly data = inject<{ uid: string }>(MAT_DIALOG_DATA);
+  readonly data = inject<{ uid: string; unitSettings?: UserUnitSettingsInterface }>(MAT_DIALOG_DATA);
   private readonly dialog = inject(MatDialogRef<TrainingThresholdsDialogComponent>);
   private readonly haptics = inject(AppHapticsService);
   constructor() {

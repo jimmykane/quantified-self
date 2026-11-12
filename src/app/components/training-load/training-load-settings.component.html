@@ -1,6 +1,6 @@
-<h4>{{ thresholdsOnly ? 'Training thresholds' : 'Training load defaults' }}</h4>
-<p>Choose how each sport contributes to fitness and fatigue. These preferences apply to workouts starting from the time you save them, including delayed uploads. Existing workouts keep their saved policy.</p>
-<p>Imported TSS takes precedence. Valid file calibration is used first; saved thresholds fill missing calibration for new workouts. MET uses file calories and duration, with file weight or a saved prior Health measurement. Existing workouts keep their saved inputs.</p>
+@if (!thresholdsOnly) { <h4>Training load defaults</h4> }
+<p>{{ thresholdsOnly ? 'Enter independently measured thresholds for each sport.' : 'Choose training load preferences and optional thresholds for each sport.' }} Changes apply to future workouts; existing workouts keep their saved settings.</p>
+<p>File-supplied TSS and valid file thresholds take priority.</p>
 @if (thresholdsOnly) {
   <mat-form-field appearance="outline"><mat-label>Sport family</mat-label>
     <mat-select [value]="selectedFamily()" [disabled]="!!busy()" (selectionChange)="selectFamily($event.value)">
@@ -53,7 +53,7 @@
         @if (row.id === 'running') {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Running threshold pace (optional)</mat-label>
-            <input matInput formControlName="runningPace" placeholder="4:30" inputmode="text" aria-describedby="running-pace-help">
+            <input matInput formControlName="runningPace" [placeholder]="row.runningPaceUnit === 'mi' ? '7:15' : '4:30'" inputmode="text" aria-describedby="running-pace-help">
             <mat-hint>mm:ss per {{ row.runningPaceUnit === 'km' ? 'kilometre' : 'mile' }}</mat-hint>
           </mat-form-field>
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -63,12 +63,12 @@
               <mat-option value="km">Per kilometre</mat-option><mat-option value="mi">Per mile</mat-option>
             </mat-select>
           </mat-form-field>
-          <p id="running-pace-help">Use an independently measured threshold as mm:ss, not the workout’s average pace. Running pace uses recorded speed and grade with this threshold. Automatic keeps power and HR priority. Applies to eligible Running-family workouts starting after you save; existing workouts keep their saved inputs.</p>
+          <p id="running-pace-help">Use an independently measured threshold, not a workout’s average pace. Automatic prefers power and HR; select Running pace to prefer this threshold.</p>
         }
         @if (row.id === 'swimming') {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Critical swim speed (optional)</mat-label>
-            <input matInput formControlName="cssPace" placeholder="1:53" inputmode="text" aria-describedby="css-help">
+            <input matInput formControlName="cssPace" [placeholder]="row.cssUnit === 'yd' ? '1:43' : '1:53'" inputmode="text" aria-describedby="css-help">
             <mat-hint>mm:ss per 100 {{ row.cssUnit }}</mat-hint>
           </mat-form-field>
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -78,12 +78,12 @@
               <mat-option value="yd">Per 100 yards</mat-option>
             </mat-select>
           </mat-form-field>
-          <p id="css-help">Use your independently measured CSS. Applies to pool and open-water swims starting after you save. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS. Imported scores take precedence. Clearing CSS affects future swims only.</p>
+          <p id="css-help">Use independently measured CSS, not a workout’s average pace. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS.</p>
           @if (!validCss(row)) { <p role="alert">Enter a positive pace as mm:ss, for example 1:53, or leave blank.</p> }
         }
-        @if (!validThresholds(row) && validCss(row)) { <p role="alert">Enter positive finite thresholds, or leave them blank to remove the fallback for future workouts.</p> }
+        @if (!validThresholds(row) && validCss(row)) { <p role="alert">Enter positive values. Pace must use mm:ss. Leave a field blank to remove that fallback for future workouts.</p> }
         @if (!thresholdsOnly) { <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle> }
-        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validThresholds(row)" (click)="save(row)">Save {{ row.label }} {{ thresholdsOnly ? 'thresholds' : 'preferences' }}</button>
+        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validThresholds(row)" (click)="save(row)">{{ busy() === row.id ? 'Saving ' + row.label + '…' : 'Save ' + row.label + (thresholdsOnly ? ' thresholds' : ' preferences') }}</button>
       </section>
     }
   </div>
