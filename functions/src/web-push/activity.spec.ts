@@ -47,7 +47,8 @@ describe('bounded activity notification scheduler', () => {
     mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/activitySync` } })) });
     vi.mocked(sendActivityNotification).mockImplementation(async uid => { if (uid === 'one') throw new Error('private-canary'); });
     await expect(run()).rejects.toThrow('Activity sync notification sweep failed.'); expect(sendActivityNotification).toHaveBeenCalledTimes(2);
-    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
+      failureStage: 'account_processing', errorCode: 'unknown' });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/private-canary|ActivitySyncPushSweep/);
   });
 });

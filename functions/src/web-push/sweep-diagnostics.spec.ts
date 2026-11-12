@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { SECRET_PARAMS } from '../secrets';
 import { automaticPushConfiguration } from './history-consent';
+import { sendActivitySyncNotifications } from './activity';
+import { sendActivityNotification } from './activity-service';
 import { sendActivityDeliveryNotifications } from './delivery';
 import { sendDeliveryNotification } from './delivery-service';
 import { sendTrainingSyncNotifications } from './training';
@@ -14,6 +16,7 @@ vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGr
 }) }) }));
 vi.mock('firebase-functions/logger', () => ({ info: mocks.log, error: mocks.log }));
 vi.mock('./history-consent', () => ({ automaticPushConfiguration: vi.fn() }));
+vi.mock('./activity-service', () => ({ sendActivityNotification: vi.fn() }));
 vi.mock('./delivery-service', () => ({ sendDeliveryNotification: vi.fn() }));
 vi.mock('./training-service', () => ({ sendTrainingNotification: vi.fn() }));
 
@@ -21,6 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.get.mockResolvedValue({ empty: true, docs: [] });
   vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: false, publicKey: '' });
+  vi.mocked(sendActivityNotification).mockResolvedValue();
   vi.mocked(sendDeliveryNotification).mockResolvedValue();
   vi.mocked(sendTrainingNotification).mockResolvedValue();
 });
@@ -52,6 +56,8 @@ describe('notification sweep error-code privacy', () => {
 });
 
 describe.each([
+  { name: 'activity', scheduler: sendActivitySyncNotifications, prepare: sendActivityNotification,
+    state: 'activitySync', tag: '[ActivitySyncPush]', failure: 'Activity sync notification sweep failed.' },
   { name: 'delivery', scheduler: sendActivityDeliveryNotifications, prepare: sendDeliveryNotification,
     state: 'activityDelivery', tag: '[ActivityDeliveryPush]', failure: 'Activity delivery notification sweep failed.' },
   { name: 'training', scheduler: sendTrainingSyncNotifications, prepare: sendTrainingNotification,
@@ -66,10 +72,13 @@ describe.each([
     expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/private-|Sweep/);
   };
 
-  it('identifies configuration failures without logging private error contents', async () => {
-    vi.mocked(automaticPushConfiguration).mockRejectedValueOnce(privateError());
+  it.each([
+    [14, 'unavailable'],
+    ['remote-config/internal-error', 'remote-config/internal-error'],
+  ])('identifies configuration failure %s without logging private error contents', async (code, expected) => {
+    vi.mocked(automaticPushConfiguration).mockRejectedValueOnce(Object.assign(privateError(), { code }));
     await expect(run()).rejects.toThrow(failure);
-    assertFailure('configuration'); expect(mocks.get).not.toHaveBeenCalled();
+    assertFailure('configuration', expected); expect(mocks.get).not.toHaveBeenCalled();
   });
   it('identifies invalid signing configuration without logging keys', async () => {
     vi.mocked(automaticPushConfiguration).mockResolvedValueOnce({ enabled: true, publicKey: 'private-public-key-canary' });

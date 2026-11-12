@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { AppCheck, getToken as getAppCheckToken } from 'app/firebase/app-check';
+import { AppCheck, getToken as getAppCheckToken, onTokenChanged } from 'app/firebase/app-check';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
+import { appCheckFailureDetails } from '../helpers/app-check-error.helper';
 
 @Injectable({
   providedIn: 'root'
@@ -60,7 +61,22 @@ export class AppCheckReadinessService {
 
   private async fetchTokenWithDeadline(forceRefresh: boolean): Promise<string> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
-    const tokenRequest = this.fetchToken(forceRefresh);
+    let stopObserving: (() => void) | undefined;
+    let settled = false;
+    const tokenRequest = this.fetchToken(forceRefresh).catch(error => {
+      // reCAPTCHA can fail while the SDK's existing refresh is about to recover.
+      // Only an ordinary request may accept its next valid SDK token. Never
+      // downgrade forced refresh or retry a rejected attestation/cooldown.
+      if (settled || forceRefresh || appCheckFailureDetails(error)?.code !== 'appCheck/recaptcha-error') throw error;
+      try { this.diagnostics.reportFailure(error, 'token-request'); } catch { /* Preserve verification. */ }
+      return new Promise<string>((resolve, reject) => {
+        stopObserving = onTokenChanged(this.appCheck!, result => {
+          if (result.token) resolve(result.token);
+        }, nextError => {
+          if (appCheckFailureDetails(nextError)?.code !== 'appCheck/recaptcha-error') reject(nextError);
+        });
+      });
+    });
     const deadline = new Promise<never>((_, reject) => {
       timeout = setTimeout(() => {
         reject(Object.assign(new Error('App Check is taking too long. Please reload the page to try again.'), {
@@ -75,6 +91,8 @@ export class AppCheckReadinessService {
       try { this.diagnostics.reportFailure(error, 'token-request'); } catch { /* Preserve the actual verification result. */ }
       throw error;
     } finally {
+      settled = true;
+      stopObserving?.();
       if (timeout !== undefined) {
         clearTimeout(timeout);
       }

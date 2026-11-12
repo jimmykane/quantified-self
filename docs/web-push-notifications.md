@@ -472,13 +472,14 @@ The bundle retains the self-test metric/policy and adds `sendhistoryimportnotifi
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 
-Activity-delivery and Training sweep errors additionally record `failureStage` (initialization, configuration,
+Activity-sync, activity-delivery and Training sweep errors additionally record `failureStage` (initialization, configuration,
 signing key, due query, account processing or backlog probe) and an allowlisted `errorCode`. Codes cover canonical
 gRPC/Firestore statuses, known SDK/network codes and numeric HTTP error statuses; other errors become `unknown`.
 Account processing retains only the first rejection's safe code while awaiting the existing bounded fan-out.
 No raw error, stack, account/device identifier, endpoint, signing key or notification payload is added to these logs.
 Monitoring coverage is unchanged: the existing `phase: sweep`, `outcome: failed`, native 5xx and heartbeat filters
 remain authoritative. This diagnostic-only change adds no queries, retries, sends, public/MCP fields or Training planning behavior.
+For activity-sync diagnostic parity, only `sendActivitySyncNotifications` needs deployment after separate approval.
 
 The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
 (including admission failures in existing Gen 1/Gen 2 import workers), completed-sweep heartbeat, and positive oldest-due

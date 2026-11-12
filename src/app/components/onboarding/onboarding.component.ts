@@ -18,7 +18,7 @@ import { FIELD_GUIDE_CHAPTERS } from './onboarding-tour';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
-import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppAnalyticsService, OnboardingDestination, OnboardingFlow } from '../../services/app.analytics.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { filter, firstValueFrom, of, take, timeout } from 'rxjs';
@@ -60,6 +60,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
     private hasNavigatedSetup = false;
     private formUserId: string | undefined;
     private savedConsent: { uid: string; values: Partial<AppUserInterface> } | null = null;
+    private readonly trackedSelections = new Set<OnboardingFlow>();
     private readonly hasReturnDestination = computed(() => this.returnTarget().path !== '/dashboard');
     readonly isCompareFlow = computed(() => this.completionTarget().path === '/tools/compare' || this.completionTarget().path === '/tools/compare/saved');
     readonly setupProgress = computed(() => this.isCompareFlow() && this.stage() === 'privacy' ? 'Compare files' : this.stage() === 'start' ? '01 / Your starting point'
@@ -104,6 +105,16 @@ export class OnboardingComponent implements OnInit, OnChanges {
             ? { ...target, path: '/services', label: 'Connections' } : target;
     });
 
+    private readonly trackingFlow = computed<OnboardingFlow>(() => {
+        const target = this.completionTarget();
+        if (target.syncSetup) return 'sync';
+        if (this.isCompareFlow()) return 'compare';
+        if (this.hasReturnDestination()) return 'other';
+        const choice = this.startChoice();
+        if (choice === 'analyze' || choice === 'upload' || choice === 'connect') return 'analyze';
+        return choice === 'explore' ? 'explore' : 'other';
+    });
+
     readonly needsSyncPlan = computed(() => this.completionTarget().syncSetup && !this.hasProMembership());
     readonly continueLabel = computed(() => this.needsSyncPlan() ? 'Choose a Pro plan'
         : this.isCompareFlow() ? (this.hasPaidMembership() ? 'Open Compare' : 'Continue free')
@@ -145,6 +156,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 this.expandedPolicyId = null;
             }
             this.savedConsent = null;
+            this.trackedSelections.clear();
             this.hasPaidMembership.set(false);
             this.canFinish = false;
             this.formUserId = user.uid;
@@ -273,6 +285,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
         if (this.isLoading || this.startChoice() === choice) return;
         this.hasNavigatedSetup = true;
         this.startChoice.set(choice);
+        this.trackSelection();
         void this.router.navigate([], {
             relativeTo: this.route, queryParams: { start: choice }, queryParamsHandling: 'merge', replaceUrl: true,
         });
@@ -326,11 +339,18 @@ export class OnboardingComponent implements OnInit, OnChanges {
         return formControlName.replace(/^accept/, 'accepted');
     }
 
+    private trackSelection(): void {
+        const flow = this.trackingFlow();
+        if (!this.trackedSelections.has(flow) && this.analyticsService.logOnboardingFlow(flow, 'selected')) {
+            this.trackedSelections.add(flow);
+        }
+    }
+
     isLoading = false;
     readonly loadingLabel = signal('Saving your choices…');
 
     async onTermsSubmit() {
-        if (this.isLoading || !this.user) return;
+        if (this.isLoading || !this.user || !this.isCurrentUser(this.user.uid)) return;
         if (!this.termsFormGroup.valid) {
             this.termsFormGroup.markAllAsTouched();
             return;
@@ -361,13 +381,14 @@ export class OnboardingComponent implements OnInit, OnChanges {
                 (this.user as AppUserInterface)[key] === value) ? null : { uid: user.uid, values: submittedValues };
             this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, submittedValues);
             this.termsFormGroup.markAsPristine();
-            this.analyticsService.logEvent('onboarding_step', { step_index: 1, step_label: 'Legal consent' });
-            this.analyticsService.logEvent('tutorial_complete');
-            const navigated = await this.navigateAfterOnboarding(true);
+            const navigated = await this.navigateAfterOnboarding(true, true, submittedValues);
             if (!navigated) throw new Error('Account setup saved but navigation was cancelled.');
             if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
+            if (!choicesSaved && user.acceptedTrackingPolicy === true) {
+                this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
+            }
             this.logger.error('Error updating user terms:', error);
             this.errorMessage.set(choicesSaved
                 ? 'Your choices are saved, but we couldn’t open the next page. Please try again.'
@@ -385,33 +406,34 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     async finishOnboarding() {
-        if (!this.user || this.isLoading || this.completing || this.destroyRef.destroyed) return;
+        if (!this.user || this.isLoading || this.completing || !this.isCurrentUser(this.user.uid)) return;
         if (!this.policies.filter(policy => !policy.isOptional).every(policy =>
             (this.user as AppUserInterface)[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)) return;
         this.completing = true;
         this.isLoading = true;
         this.errorMessage.set('');
         const user = this.user;
+        const alreadyCompleted = (user as AppUserInterface).onboardingCompleted === true;
+        let choicesSaved = false;
         try {
             // A recovered existing account may still be on /onboarding. Leave
             // without rewriting its profile or repeating completion analytics.
-            if ((this.user as AppUserInterface).onboardingCompleted === true) {
+            if (alreadyCompleted) {
                 if (!await this.navigateAfterOnboarding()) throw new Error('Navigation was cancelled.');
                 return;
             }
             // Mark onboarding as completed in the database (ensures consistency)
             if (!this.isCurrentUser(user.uid)) return;
             await this.userService.updateUserProperties(user, { onboardingCompleted: true });
+            choicesSaved = true;
             if (!this.isCurrentUser(user.uid)) return;
 
-            // Log onboarding completion
-            this.analyticsService.logEvent('tutorial_complete');
-
-            const navigated = await this.navigateAfterOnboarding(true);
+            const navigated = await this.navigateAfterOnboarding(true, true);
             if (!navigated) throw new Error('Account setup saved but navigation was cancelled.');
             if (this.authService.currentUser?.uid === user.uid) this.haptics.success();
         } catch (error) {
             if (!this.isCurrentUser(user.uid)) return;
+            if (!choicesSaved && !alreadyCompleted) this.analyticsService.logOnboardingFlow(this.trackingFlow(), 'failed', { failureStage: 'save' });
             this.logger.error('Error completing onboarding:', error);
             this.errorMessage.set('We couldn’t finish setting up your account. Please try again.');
             this.haptics.error();
@@ -422,44 +444,85 @@ export class OnboardingComponent implements OnInit, OnChanges {
     }
 
     private isCurrentUser(uid: string): boolean {
-        return !this.destroyRef.destroyed && this.user?.uid === uid;
+        return !this.destroyRef.destroyed && this.user?.uid === uid && this.authService.currentUser?.uid === uid;
     }
 
-    private async navigateAfterOnboarding(waitForSavedProfile = false): Promise<boolean> {
-        if (waitForSavedProfile) {
-            const uid = this.user.uid;
-            this.loadingLabel.set('Finishing setup…');
-            // Firestore can acknowledge a write before the merged account stream publishes it.
-            // The route guard consumes this same stream, so wait for it instead of navigating
-            // against an older profile and bouncing back to onboarding.
-            await firstValueFrom(this.userService.user$.pipe(
-                filter(profile => profile?.uid === uid && profile.onboardingCompleted === true
-                    && this.policies.filter(policy => !policy.isOptional).every(policy =>
-                        profile[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)),
-                take(1),
-                timeout(10_000),
-                takeUntilDestroyed(this.destroyRef),
-            ));
-            if (!this.isCurrentUser(uid)) return false;
+    private async navigateAfterOnboarding(waitForSavedProfile = false, recordCompletion = false,
+        submittedConsent?: Partial<AppUserInterface>): Promise<boolean> {
+        const uid = this.user.uid;
+        const flow = this.trackingFlow();
+        let failureStage: 'profile' | 'navigation' = 'profile';
+        try {
+            if (waitForSavedProfile) {
+                this.loadingLabel.set('Finishing setup…');
+                // Firestore can acknowledge a write before the merged account stream publishes it.
+                // The route guard consumes this same stream, so wait for it instead of navigating
+                // against an older profile and bouncing back to onboarding.
+                await firstValueFrom(this.userService.user$.pipe(
+                    filter(profile => profile?.uid === uid && profile.onboardingCompleted === true
+                        && this.policies.filter(policy => !policy.isOptional).every(policy =>
+                            profile[this.mapFormControlNameToUserProperty(policy.formControlName || '')] === true)
+                        // Completion may arrive before the separately saved optional preferences.
+                        // Do not measure with stale consent, including a just-submitted opt-out.
+                        && Object.entries(submittedConsent ?? {}).every(([key, value]) => profile[key] === value)),
+                    take(1),
+                    timeout(10_000),
+                    takeUntilDestroyed(this.destroyRef),
+                ));
+                if (!this.isCurrentUser(uid)) return false;
+            }
+            const target = this.completionTarget();
+            this.loadingLabel.set(this.needsSyncPlan() ? 'Opening Pro plans…' : `Opening ${target.label}…`);
+            let path = target.path;
+            let destination: OnboardingDestination = this.isCompareFlow()
+                ? target.path === '/tools/compare/saved' ? 'saved_comparisons' : 'compare' : 'dashboard';
+            let queryParams: Record<string, string> | undefined;
+            if (target.syncSetup && !AppUserAccess.hasProAccess(this.user, (this.user as AppUserInterface)?.admin === true)) {
+                path = '/subscriptions';
+                destination = 'pro_plans';
+                queryParams = { setup: 'sync' };
+            } else if (target.priceId || target.path === '/subscriptions') {
+                destination = 'membership';
+                if (target.priceId) queryParams = { priceId: target.priceId };
+            } else if (target.path === '/mcp/authorize') {
+                destination = 'assistant';
+                queryParams = { request_id: target.requestId };
+            } else if (target.path === '/services') {
+                destination = 'connections';
+                if (target.serviceName || target.syncSetup) queryParams = {
+                    ...(target.serviceName ? { serviceName: target.serviceName } : {}),
+                    ...(target.syncSetup ? { setup: 'sync' } : {}),
+                };
+            }
+            if (recordCompletion) {
+                // Retry the bounded choice only after the saved profile has established consent.
+                // No events are queued or transmitted for people who decline analytics.
+                this.trackSelection();
+                this.analyticsService.logOnboardingFlow(flow, 'consent_saved', { destination });
+                this.analyticsService.logEvent('onboarding_step', { step_index: 1, step_label: 'Legal consent',
+                    onboarding_goal: flow, destination });
+            }
+            failureStage = 'navigation';
+            const navigated = await (queryParams ? this.router.navigate([path], { queryParams }) : this.router.navigate([path]));
+            if (this.authService.currentUser?.uid !== uid) return false;
+            // A guard can resolve navigation successfully while redirecting back to setup or login.
+            const actualUrl = new URL(this.router.url, 'https://onboarding.invalid');
+            const reached = navigated && actualUrl.pathname === path
+                && Object.entries(queryParams ?? {}).every(([key, value]) => actualUrl.searchParams.get(key) === value);
+            if (recordCompletion) {
+                this.analyticsService.logOnboardingFlow(flow, reached ? 'destination_reached' : 'failed', {
+                    destination, ...(!reached ? { failureStage } : {}),
+                });
+                if (reached) this.analyticsService.logEvent('tutorial_complete', { onboarding_goal: flow, destination });
+            }
+            return reached;
+        } catch (error) {
+            if (recordCompletion && submittedConsent?.acceptedTrackingPolicy !== false && this.authService.currentUser?.uid === uid
+                && !(failureStage === 'profile' && this.destroyRef.destroyed)) {
+                this.analyticsService.logOnboardingFlow(flow, 'failed', { failureStage });
+            }
+            throw error;
         }
-        const target = this.completionTarget();
-        this.loadingLabel.set(this.needsSyncPlan() ? 'Opening Pro plans…' : `Opening ${target.label}…`);
-        if (target.syncSetup && !AppUserAccess.hasProAccess(this.user, (this.user as AppUserInterface)?.admin === true)) {
-            return this.router.navigate(['/subscriptions'], { queryParams: { setup: 'sync' } });
-        }
-        if (target.priceId) {
-            return this.router.navigate(['/subscriptions'], { queryParams: { priceId: target.priceId } });
-        }
-        if (target.path === '/mcp/authorize') {
-            return this.router.navigate([target.path], { queryParams: { request_id: target.requestId } });
-        }
-        if (target.serviceName || target.syncSetup) {
-            return this.router.navigate(['/services'], { queryParams: {
-                ...(target.serviceName ? { serviceName: target.serviceName } : {}),
-                ...(target.syncSetup ? { setup: 'sync' } : {}),
-            } });
-        }
-        return this.router.navigate([target.path]);
     }
 
     togglePolicyDetails(policyId: string) {
