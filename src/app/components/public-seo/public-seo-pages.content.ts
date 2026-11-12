@@ -290,7 +290,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'date_range',
             title: 'Week, Month, and Year views',
-            copy: 'Move one week, month, or year at a time, return to today, and keep the selected view and date in the URL.',
+            copy: 'Move one week, month, or year at a time, return to today, and keep the selected view and date in the URL. See your swims, rides and runs in the same week, including sessions recorded on different devices.',
           },
           {
             icon: 'bubble_chart',
@@ -411,7 +411,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
         preview: 'training-explorer',
-        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
+        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines. Training for a triathlon? Review your overall workload, then explore swimming, cycling and running separately.',
         items: [
           {
             icon: 'directions_run',
