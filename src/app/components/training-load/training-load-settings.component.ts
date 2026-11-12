@@ -10,6 +10,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import type { TrainingFtpSuggestions } from '../../helpers/training-capacity.helper';
 import { displayRunningThresholdPace, parseRunningThresholdPace, type RunningPaceUnit } from '@shared/running-threshold-pace';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { parsePaceDurationSeconds } from '@shared/pace-input';
 
 @Component({ selector: 'app-training-load-settings', standalone: true, imports: [SharedModule],
   templateUrl: './training-load-settings.component.html', styleUrls: ['./training-load-settings.component.scss'],
@@ -91,13 +92,10 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
     this.haptics.selection();
   }
   private cssSpeed(row: typeof this.rows[number]): number | undefined {
-    const text = row.form.controls.cssPace.value.trim();
-    if (!text) return undefined;
-    // Optional minute zero padding does not change the displayed pace.
-    if (text.replace(/^(\d):/, '0$1:') === row.cssOriginalText) return row.cssOriginalSpeed;
-    if (!/^\d{1,2}:[0-5]\d$/.test(text)) return NaN;
-    const [minutes, seconds] = text.split(':').map(Number);
-    const pace = minutes * 60 + seconds;
+    const pace = parsePaceDurationSeconds(row.form.controls.cssPace.value);
+    if (pace === undefined) return undefined;
+    // Equivalent clock text retains the exact saved speed behind its rounded display.
+    if (pace === parsePaceDurationSeconds(row.cssOriginalText)) return row.cssOriginalSpeed;
     return convertSwimPaceToSpeed(row.cssUnit === 'yd' ? pace / convertSwimPaceToSwimPacePer100Yard(1) : pace);
   }
   validCss(row: typeof this.rows[number]): boolean {
@@ -106,7 +104,8 @@ export class TrainingLoadSettingsComponent implements OnChanges, OnDestroy {
   }
   private runningSpeed(row: typeof this.rows[number]): number | undefined {
     const text = row.form.controls.runningPace.value.trim();
-    return text.replace(/^(\d):/, '0$1:') === row.runningOriginalText ? row.runningOriginalSpeed : parseRunningThresholdPace(text, row.runningPaceUnit);
+    return parsePaceDurationSeconds(text) === parsePaceDurationSeconds(row.runningOriginalText)
+      ? row.runningOriginalSpeed : parseRunningThresholdPace(text, row.runningPaceUnit);
   }
   validRunningPace(row: typeof this.rows[number]): boolean {
     const speed = this.runningSpeed(row);

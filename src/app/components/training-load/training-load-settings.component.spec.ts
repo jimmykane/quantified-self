@@ -110,6 +110,22 @@ describe('dated Training load settings', () => {
     expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1609.34 / 480, 12);
   });
   it.each([
+    ['running', 'runningPace', 'runningThresholdSpeed', 1000],
+    ['swimming', 'cssPace', 'swimThresholdSpeed', 100],
+  ] as const)('keeps the displayed hour-format %s pace editable without losing saved precision', async (family, control, property, distance) => {
+    const speed = distance / 3659.6;
+    policies$.next([{ id: family, revision: 2, method: 'HR', included: true, [property]: speed }]);
+    const row = component.rows.find(row => row.id === family)!;
+    expect(row.form.controls[control].value).toBe('01:01:00');
+    row.form.controls[control].setValue('61:00'); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', family, 2,
+      { method: 'HR', included: true, [property]: speed });
+    row.form.controls[control].setValue('01:01:01'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(true); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3][property]).toBeCloseTo(distance / 3661, 12);
+  });
+  it.each([
     ['running', 'runningPace', '7:40', 'runningThresholdSpeed', 3.5],
     ['swimming', 'cssPace', '1:43', 'swimThresholdSpeed', 100 / 113],
   ] as const)('preserves exact %s threshold when only minute zero padding changes', async (family, control, text, property, speed) => {

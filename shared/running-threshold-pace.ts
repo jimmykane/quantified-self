@@ -1,4 +1,5 @@
 import { DataPace, DataPaceMinutesPerMile, convertPaceToPaceInMinutesPerMile, convertSpeedToPace } from '@sports-alliance/sports-lib';
+import { parsePaceDurationSeconds } from './pace-input';
 
 export type RunningPaceUnit = 'km' | 'mi';
 
@@ -9,10 +10,8 @@ export function runningThresholdSpeed(paceSeconds: number, unit: RunningPaceUnit
 }
 
 export function parseRunningThresholdPace(text: string, unit: RunningPaceUnit): number | undefined {
-  if (!text.trim()) return undefined;
-  if (!/^\d{1,2}:[0-5]\d$/.test(text.trim())) return NaN;
-  const [minutes, seconds] = text.trim().split(':').map(Number);
-  return runningThresholdSpeed(minutes * 60 + seconds, unit);
+  const seconds = parsePaceDurationSeconds(text);
+  return seconds === undefined ? undefined : runningThresholdSpeed(seconds, unit);
 }
 
 /** Draft display only; callers retain the original canonical speed when text is unchanged. */

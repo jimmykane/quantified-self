@@ -57,6 +57,13 @@ describe('modeled Training load', () => {
     for (const input of ['0:00', '4:99', '-1:30', '4.5', 'Infinity'])
       expect(Number.isNaN(parseRunningThresholdPace(input, 'km'))).toBe(true);
   });
+  it.each(['km', 'mi'] as const)('accepts the hour-format running pace displayed in %s', unit => {
+    const displayed = displayRunningThresholdPace(runningThresholdSpeed(3660, unit), unit);
+    expect(displayed).toBe('01:01:00');
+    expect(parseRunningThresholdPace(displayed, unit)).toBeCloseTo(runningThresholdSpeed(3660, unit), 12);
+    for (const invalid of ['1:60:00', '1:01:60', '1:1:00', '1:00:00:00'])
+      expect(Number.isNaN(parseRunningThresholdPace(invalid, unit))).toBe(true);
+  });
   it('uses stored running pace candidates and keeps legacy, override and exclusion semantics', () => {
     const data = metadata(); const leg = data.legs!.walk;
     const automatic = { preference: 'AUTOMATIC' as const, method: 'HR' as const, score: 30, estimated: false,

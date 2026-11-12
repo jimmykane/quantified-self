@@ -7789,7 +7789,9 @@ The shared Training/Health editor starts in the owner's preferred Running and sw
 distance/speed preferences. Input-unit choices preserve exact speeds; profile updates leave dirty drafts unchanged
 and do not restart policy/suggestion reads. The editor stores `runningThresholdSpeed` in m/s in the same dated policy; it creates no
 Health observation, extra import query, trigger or rebuild source. Switching units without editing preserves full
-canonical precision. Editor, Event Details and MCP threshold displays round to the nearest whole second after
+canonical precision. Pace inputs also accept the formatter's `hh:mm:ss` output; equivalent clock text such as
+`61:00` and `01:01:00` retains the exact saved speed. The clock parser is shared; Running and CSS keep their separate
+distance conversions. Editor, Event Details and MCP threshold displays round to the nearest whole second after
 unit conversion; normal activity pace displays and canonical calculations are unchanged. Clearing affects future
 workouts only. First import freezes the revision at the leg's recorded
 start, including delayed uploads; duplicate import, original-file reparse and Reset retain that saved policy.
@@ -7839,7 +7841,9 @@ pace and calorie method order, coverage, pauses/gaps, zero, overrides, exclusion
 
 MCP's existing unregistered threshold tools add resting/max HR and nullable HR formula set/clear inputs and safe
 current/dated outputs. Independent threshold grants, bounded reads, revision-bound preview and separate Apply remain;
-app-owned Assistant review shows before/after values and formula. Older saved reviews remain readable. Generic Health,
+app-owned Assistant review shows before/after values and formula. Tool-scoped model guidance explicitly permits
+manual resting/max HR and deliberate formula edits, forbids inferring them from activity peaks/daily Health, and
+retains preview-only preparation with app-owned Apply. Older saved reviews remain readable. Generic Health,
 measurement, activity and Training impact projections gain no private calibration fields. Registered schemas/history
 stay frozen; only the compatible pending digest changes. Publication, deployment, client refresh and historical reparse
 remain separately authorized. Before QS merge, app and Functions must adopt the same published companion release;
