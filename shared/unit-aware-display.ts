@@ -5,6 +5,7 @@ import {
   DataTrainingStressScore,
   DataSwimDistance,
   DataSwimPace,
+  DataPace,
   type DataInterface,
   DaysOfTheWeek,
   DistanceUnits,
@@ -220,6 +221,8 @@ export interface ResolveUnitAwareDisplayOptions {
   trainingStressScoreDecimals?: 0 | 1;
   /** Round configured CSS for display only, after conversion to the preferred swim-pace unit. */
   roundSwimPaceSeconds?: boolean;
+  /** Round configured running threshold pace only, after conversion to the preferred pace unit. */
+  roundPaceSeconds?: boolean;
   locale?: string | null;
 }
 
@@ -296,7 +299,9 @@ export function resolveUnitAwareDisplayStat(
     return null;
   }
 
-  const selectedStat = options?.roundSwimPaceSeconds === true && unitStat instanceof DataSwimPace && Number.isFinite(unitStat.getValue())
+  const roundPace = options?.roundSwimPaceSeconds === true && unitStat instanceof DataSwimPace
+    || options?.roundPaceSeconds === true && unitStat instanceof DataPace;
+  const selectedStat = roundPace && Number.isFinite(unitStat.getValue())
     ? DynamicDataLoader.getDataInstanceFromDataType(selectedType, Math.round(unitStat.getValue())) : unitStat;
 
   const rawValue = typeof selectedStat.getValue === 'function' ? Number(selectedStat.getValue()) : null;

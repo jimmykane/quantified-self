@@ -20,6 +20,18 @@ describe('complete first-party workout review boundary', () => {
     expect(isAssistantContentProposal({ ...proposal, thresholdReview: { ...proposal.thresholdReview, sourceRecordId: 'private' } })).toBe(false);
     expect(isAssistantContentProposal({ ...proposal, arguments: { ...proposal.arguments, uid: 'foreign' } })).toBe(false);
   });
+  it('accepts Running pace reviews but rejects asymmetric, invalid-unit and private quantities', () => {
+    const empty = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null, runningThresholdSpeed: null };
+    const pace = { value: 1000 / 270, unit: 'm/s', displayValue: '04:30', displayUnit: 'min/km' };
+    const review = { family: 'running', familyLabel: 'Running', before: empty, after: { ...empty, runningThresholdSpeed: pace } };
+    const proposal = { proposalRef: 'app-review', kind: 'apply_training_threshold_change', expiresAtMs: 1000,
+      summary: 'Change future thresholds.', requiresConfirmation: true, arguments: { proposalRef: 'sealed-server-proposal' }, thresholdReview: review };
+    expect(isAssistantContentProposal(proposal)).toBe(true);
+    const legacy = { functionalThresholdPower: null, lactateThresholdHR: null, swimThresholdSpeed: null };
+    for (const invalid of [{ ...review, before: legacy }, { ...review, after: { ...review.after, runningThresholdSpeed: { ...pace, unit: 's/km' } } },
+      { ...review, after: { ...review.after, runningThresholdSpeed: { ...pace, privateSource: 'PRIVATE' } } }])
+      expect(isAssistantContentProposal({ ...proposal, thresholdReview: invalid })).toBe(false);
+  });
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
     requiresConfirmation: true, summary: 'Review a workout.', changes: [{ index: 0, kind: 'update-workout', summary: 'Recovery edit.' }],
     providerPreviews: [], workoutReviews: [workoutReviewFixture()] };

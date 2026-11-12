@@ -68,11 +68,11 @@ proof or permission to change a Training plan. Keep note context separate from m
 
 ## Training threshold settings
 
-For an explicit FTP, threshold-HR or CSS settings request, discover the focused threshold read/preview/apply tools.
+For an explicit FTP, threshold-HR, CSS or running threshold pace settings request, discover the focused threshold read/preview/apply tools.
 They need independent threshold read permission and its dependent write grant; Health, measurement and plan grants
 are insufficient. Thresholds are dated calibration settings, not Health observations or evidence of which file inputs
 a workout used. Running/Cycling FTP stays separate in watts, HR uses bpm, and CSS requires an explicit per-100-metre
-or per-100-yard pace. Read current settings first, preserve unrequested values, use null only for explicit removal,
+or per-100-yard pace. Running threshold pace requires an explicit per-kilometre or per-mile unit and stays separate from CSS. Manual resting/maximum HR and an explicit HR formula are Training calibration, not daily Health observations. Banister requires a complete coherent resting/threshold/maximum tuple. Never infer missing values or switch formulas merely because rest/max exists; preserve the current choice unless explicitly changed. Read current settings first, preserve unrequested values, use null only for explicit removal,
 review before/after values and future-workout effect, then use separate native host approval. Never invent a threshold,
 backdate, retarget recipes, rewrite old workouts or access private frozen weight provenance. A missing tool needs
 reauthorization/catalog refresh after release, never a substitute mutation. The built-in Assistant independently starts

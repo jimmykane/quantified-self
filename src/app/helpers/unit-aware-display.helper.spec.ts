@@ -8,6 +8,8 @@ import {
   DataHeartRateMax,
   DataJumpDistance,
   DataPaceAvg,
+  DataPace,
+  convertSpeedToPace,
   DataRRRMSSD,
   DataRRCoverage,
   DataRRHeartRateAvg,
@@ -38,6 +40,22 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it.each([
+    [PaceUnits.MinutesPerKilometer, 3.5, '04:46', '04:45', 'min/km'],
+    [PaceUnits.MinutesPerMile, 3.5, '07:40', '07:39', 'min/m'],
+    [PaceUnits.MinutesPerMile, 1000 / 271.4, '07:17', '07:16', 'min/m'],
+    [PaceUnits.MinutesPerKilometer, 1000 / 59.6, '01:00', '00:59', 'min/km'],
+  ] as const)('rounds configured running thresholds only after conversion to %s (%s m/s)', (unit, speed, rounded, ordinary, displayUnit) => {
+    const settings = normalizeUserUnitSettings({ paceUnits: [unit] });
+    const stat = new DataPace(convertSpeedToPace(speed));
+    const before = stat.toJSON();
+    expect(resolveUnitAwareDisplayStat(stat, settings)).toMatchObject({ value: ordinary, unit: displayUnit });
+    expect(resolveUnitAwareDisplayStat(stat, settings, { roundPaceSeconds: true }))
+      .toMatchObject({ value: rounded, unit: displayUnit });
+    expect(stat.toJSON()).toEqual(before);
+    expect(resolveUnitAwareDisplayStat(stat, settings)).toMatchObject({ value: ordinary });
+    expect(resolveUnitAwareDisplayFromValue(DataPaceAvg.type, stat.getValue(), settings)).toMatchObject({ value: ordinary });
+  });
   it('formats elevation in feet independently of distance and preserves canonical metres', () => {
     const feet = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Kilometers, elevationUnits: ElevationUnits.Feet });
     for (const Metric of [DataAltitude, DataAscent, DataDescent]) {

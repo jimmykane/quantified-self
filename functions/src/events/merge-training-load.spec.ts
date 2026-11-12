@@ -205,15 +205,20 @@ describe('merge metadata coordination', () => {
     expect(state.docs.get(metadataPath).controls[id]).toEqual({ override: 0 });
     expect(resolveEffectiveTrainingLoad(merged, state.docs.get(metadataPath)).score).toBe(100);
   });
-  it('keeps frozen CSS and its candidates together when the source calibration changes before a merge retry', async () => {
-    const a = source('a', 100, 'SWIM_PACE', 'Swimming'), b = source('b');
-    a.metadata.legs!.old.policy = { ...a.metadata.legs!.old.policy, family: 'swimming', swimThresholdSpeed: 1 };
+  it.each([
+    ['SWIM_PACE', 'Swimming', 'swimming', 'swimThresholdSpeed', 'swimPace'],
+    ['PACE', 'Running', 'running', 'runningThresholdSpeed', 'runningPace'],
+  ] as const)('keeps frozen %s calibration and candidates together across a merge retry', async (method, type, family, threshold, candidateKey) => {
+    const a = source('a', 100, method, type), b = source('b');
+    const preference = candidateKey === 'runningPace' ? 'RUNNING_PACE' : 'SWIM_PACE';
+    a.metadata.legs!.old.policy = { ...a.metadata.legs!.old.policy, family, method: preference, [threshold]: 1 };
+    a.metadata.legs!.old.evaluations![candidateKey] = { ...a.metadata.legs!.old.evaluations!.automatic, preference };
     putSource(a); putSource(b);
     const merged = mergeRecordedEvents([a.event, b.event], 'merged');
     await prepareMergedTrainingLoad('u', merged, [a.item, b.item]);
     const id = mergedActivityId('merged', 'a', 'a-leg');
     const frozen = structuredClone(state.docs.get(metadataPath).legs[id]);
-    a.metadata.legs!.old.policy.swimThresholdSpeed = 2;
+    a.metadata.legs!.old.policy[threshold] = 2;
     for (const candidate of Object.values(a.metadata.legs!.old.evaluations!)) {
       if (candidate && typeof candidate === 'object' && 'score' in candidate) candidate.score = 12.5;
     }

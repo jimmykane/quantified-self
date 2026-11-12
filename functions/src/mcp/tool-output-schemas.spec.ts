@@ -583,13 +583,16 @@ function createFixtureDataService(
 const service = {
     trainingThresholds: vi.fn(async (tool: string) => {
       const thresholds = { functionalThresholdPower: { value: 220, unit: 'watt', displayValue: '220', displayUnit: 'watt' },
-        lactateThresholdHR: null, swimThresholdSpeed: null };
-      const policy = { family: 'cycling', familyLabel: 'Cycling', revision: 1, effectiveAt: '2026-07-01T08:00:00Z',
+        lactateThresholdHR: { value: 165, unit: 'bpm', displayValue: '165', displayUnit: 'bpm' },
+        restingHeartRate: { value: 55, unit: 'bpm', displayValue: '55', displayUnit: 'bpm' },
+        maxHeartRate: { value: 190, unit: 'bpm', displayValue: '190', displayUnit: 'bpm' }, hrAlgorithm: 'BANISTER',
+        swimThresholdSpeed: null, runningThresholdSpeed: { value: 1000 / 270, unit: 'm/s', displayValue: '04:30', displayUnit: 'min/km' } };
+      const policy = { family: 'running', familyLabel: 'Running', revision: 1, effectiveAt: '2026-07-01T08:00:00Z',
         policyRef: 'opaque-threshold-policy', thresholds };
       if (tool === 'get_training_thresholds') return { asOf: '2026-07-01T08:00:00Z', policies: [policy] };
       if (tool === 'apply_training_threshold_change') return { status: 'applied', policy };
       return { proposalRef: 'opaque-threshold-proposal', expiresAtMs: DAY_MS + 60000, requiresConfirmation: true,
-        appliesTo: 'future-workouts', review: { family: 'cycling', familyLabel: 'Cycling', before: thresholds, after: thresholds } };
+        appliesTo: 'future-workouts', review: { family: 'running', familyLabel: 'Running', before: thresholds, after: thresholds } };
     }),
     workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
       ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
@@ -1451,8 +1454,9 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
-  get_training_thresholds: { family: 'cycling' },
-  preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { functionalThresholdPower: 220 } },
+  get_training_thresholds: { family: 'running' },
+  preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { runningPace: { paceSeconds: 270, distanceUnit: 'km' },
+    lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' } },
   apply_training_threshold_change: { proposalRef: 'opaque-threshold-proposal' },
   list_training_goals: {},
   get_training_goal: { goalRef: 'opaque-goal' },

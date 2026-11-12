@@ -13,6 +13,8 @@ import { Subject } from 'rxjs';
 import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
 import { opaqueHealthSeriesId } from '../../helpers/health-workspace.helper';
 import { MatDialog } from '@angular/material/dialog';
+import { PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 @Component({ selector: 'app-dashboard-health-chart', standalone: true, template: '' })
 class HealthChartStubComponent {
@@ -59,14 +61,16 @@ describe('Health category overview', () => {
   }
   it('offers the shared threshold editor in Fitness even without recorded Health data', async () => {
     const fixture = create();
+    const unitSettings = normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    fixture.componentRef.setInput('user', { ...fixture.componentInstance.user(), settings: { unitSettings } });
     fixture.componentRef.setInput('groups', []); fixture.componentRef.setInput('showSleep', false); fixture.detectChanges();
     fixture.componentInstance.selectCategory('fitness'); fixture.detectChanges();
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) =>
-      item.textContent?.includes('Manage FTP, threshold HR and CSS')) as HTMLButtonElement;
+      item.textContent?.includes('Manage Training thresholds')) as HTMLButtonElement;
     const open = vi.spyOn(fixture.componentInstance, 'openTrainingThresholds');
     expect(button).toBeDefined(); button.click();
     expect(open).toHaveBeenCalledOnce(); await open.mock.results[0].value;
-    expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ data: { uid: 'owner' } }));
+    expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ data: { uid: 'owner', unitSettings } }));
     expect(haptics.selection).toHaveBeenCalled(); dialog.open.mockClear();
     fixture.componentRef.setInput('exampleOnly', true); fixture.detectChanges();
     await fixture.componentInstance.openTrainingThresholds();

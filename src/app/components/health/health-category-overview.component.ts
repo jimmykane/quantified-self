@@ -74,7 +74,7 @@ export class HealthCategoryOverviewComponent {
     const { TrainingThresholdsDialogComponent } = await import('../training-load/training-thresholds-dialog.component');
     if (uid !== this.owner()) return;
     this.haptics.selection();
-    this.dialog.open(TrainingThresholdsDialogComponent, { data: { uid }, width: '640px', maxWidth: '96vw' });
+    this.dialog.open(TrainingThresholdsDialogComponent, { data: { uid, unitSettings: this.user().settings?.unitSettings }, width: '640px', maxWidth: '96vw' });
   }
   readonly selectedCategory = computed(() => this.categories().some(category => category.id === this.category()) ? this.category() : 'all');
   readonly hasRecordedCategories = computed(() => this.categories().some(category => category.metrics.length > 0));

@@ -1,7 +1,10 @@
 import { TestBed } from '@angular/core/testing';
+import { DistanceUnits, SpeedUnits, PaceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { By } from '@angular/platform-browser';
 import { MatSelect } from '@angular/material/select';
+import { MatFormField } from '@angular/material/form-field';
 import { BehaviorSubject } from 'rxjs';
 import { TrainingLoadSettingsComponent } from './training-load-settings.component';
 import { TrainingLoadService, type TrainingLoadPolicyHead } from '../../services/training-load.service';
@@ -51,6 +54,188 @@ describe('dated Training load settings', () => {
     expect(savePolicy).toHaveBeenCalledExactlyOnceWith('owner', 'cycling', 5,
       { method: 'HR', included: false, functionalThresholdPower: 222.5, lactateThresholdHR: 165 });
     fixture.destroy();
+  });
+  it.each([false, true])('keeps empty HR labels above their unit suffixes (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy(); policies$.next([]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable();
+    const family = fixture.debugElement.query(By.css('section[aria-label="Cycling"]'));
+    for (const name of ['thresholdHr', 'restingHr', 'maxHr']) {
+      const field = family.queryAll(By.directive(MatFormField)).find(field => field.query(By.css(`input[formControlName="${name}"]`)))!;
+      expect(field.componentInstance.floatLabel).toBe('always');
+      expect(field.query(By.css('input')).nativeElement.value).toBe('');
+      expect(field.nativeElement.textContent).toContain('bpm');
+    }
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled(); fixture.destroy();
+  });
+  it.each([false, true])('edits manual HR calibration and formula only on Save (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'cycling', revision: 5, method: 'MET', included: false,
+      lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' }]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.detectChanges(); await fixture.whenStable();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'cycling')!;
+    expect(row.form.pristine).toBe(true); expect(selection).not.toHaveBeenCalled();
+    expect(row.form.controls.hrAlgorithm.value).toBe('BANISTER');
+    expect(fixture.nativeElement.textContent).toContain('Maximum HR alone is insufficient');
+    row.form.controls.restingHr.setValue('60'); row.form.markAsDirty();
+    await fixture.componentInstance.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 5,
+      { method: 'MET', included: false, lactateThresholdHR: 165, restingHeartRate: 60, maxHeartRate: 190, hrAlgorithm: 'BANISTER' });
+    row.form.controls.maxHr.setValue('160'); row.form.markAsDirty();
+    expect(fixture.componentInstance.validThresholds(row)).toBe(false);
+    await fixture.componentInstance.save(row); expect(savePolicy).toHaveBeenCalledOnce();
+    row.form.controls.maxHr.setValue(''); row.form.controls.hrAlgorithm.setValue('');
+    await fixture.componentInstance.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 6,
+      { method: 'MET', included: false, lactateThresholdHR: 165, restingHeartRate: 60 });
+    fixture.destroy();
+  });
+  it('saves independently measured running pace and preserves precision through unit changes', async () => {
+    const speed = 3.7123456789;
+    policies$.next([{ id: 'running', revision: 4, method: 'HR', included: true, runningThresholdSpeed: speed }]);
+    const row = component.rows.find(row => row.id === 'running')!;
+    component.changeRunningPaceUnit(row, 'mi'); component.changeRunningPaceUnit(row, 'km');
+    expect(row.form.pristine).toBe(true);
+    row.form.controls.method.setValue('RUNNING_PACE'); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 4,
+      { method: 'RUNNING_PACE', included: true, runningThresholdSpeed: speed });
+    row.form.controls.runningPace.setValue('04:30'); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1000 / 270, 12);
+    component.changeRunningPaceUnit(row, 'mi');
+    row.form.controls.runningPace.setValue('08:00'); row.form.markAsDirty(); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3].runningThresholdSpeed).toBeCloseTo(1609.34 / 480, 12);
+  });
+  it.each([
+    ['running', 'runningPace', 'runningThresholdSpeed', 1000],
+    ['swimming', 'cssPace', 'swimThresholdSpeed', 100],
+  ] as const)('keeps the displayed hour-format %s pace editable without losing saved precision', async (family, control, property, distance) => {
+    const speed = distance / 3659.6;
+    policies$.next([{ id: family, revision: 2, method: 'HR', included: true, [property]: speed }]);
+    const row = component.rows.find(row => row.id === family)!;
+    expect(row.form.controls[control].value).toBe('01:01:00');
+    row.form.controls[control].setValue('61:00'); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', family, 2,
+      { method: 'HR', included: true, [property]: speed });
+    row.form.controls[control].setValue('01:01:01'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(true); await component.save(row);
+    expect(savePolicy.mock.calls.at(-1)?.[3][property]).toBeCloseTo(distance / 3661, 12);
+  });
+  it.each([
+    ['running', 'runningPace', '7:40', 'runningThresholdSpeed', 3.5],
+    ['swimming', 'cssPace', '1:43', 'swimThresholdSpeed', 100 / 113],
+  ] as const)('preserves exact %s threshold when only minute zero padding changes', async (family, control, text, property, speed) => {
+    component.unitSettings = normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    });
+    component.ngOnChanges();
+    policies$.next([{ id: family, revision: 2, method: 'HR', included: true, [property]: speed }]);
+    const row = component.rows.find(row => row.id === family)!;
+    row.form.controls[control].setValue(text); row.form.markAsDirty();
+    await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', family, 2,
+      { method: 'HR', included: true, [property]: speed });
+  });
+  it.each([
+    ['running', 'runningPace'], ['swimming', 'cssPace'],
+  ] as const)('rejects invalid %s pace when the saved threshold is empty', async (family, control) => {
+    const row = component.rows.find(row => row.id === family)!;
+    row.form.controls[control].setValue('00000'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(false); await component.save(row);
+    expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('rejects invalid running pace and removes a cleared fallback only on Save', async () => {
+    const row = component.rows.find(row => row.id === 'running')!;
+    row.form.controls.runningPace.setValue('04:99'); row.form.markAsDirty();
+    expect(component.validThresholds(row)).toBe(false); await component.save(row);
+    expect(savePolicy).not.toHaveBeenCalled();
+    component.changeRunningPaceUnit(row, 'mi'); expect(row.runningPaceUnit).toBe('km');
+    row.form.controls.runningPace.setValue(''); await component.save(row);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 0, { method: 'AUTOMATIC', included: true });
+  });
+  it.each([false, true])('starts in the owner pace preferences without changing canonical values (Health editor: %s)', async thresholdsOnly => {
+    component.ngOnDestroy(); readFtpSuggestions.mockClear();
+    policies$.next([
+      { id: 'running', revision: 2, method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 3.5 },
+      { id: 'swimming', revision: 3, method: 'SWIM_PACE', included: true, swimThresholdSpeed: 100 / 113 },
+    ]);
+    const watch = vi.spyOn(TestBed.inject(TrainingLoadService), 'watchPolicies');
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.componentRef.setInput('thresholdsOnly', thresholdsOnly);
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    }));
+    fixture.detectChanges(); await fixture.whenStable();
+    const instance = fixture.componentInstance, running = instance.rows.find(row => row.id === 'running')!, swimming = instance.rows.find(row => row.id === 'swimming')!;
+    instance.selectedFamily.set('running'); fixture.detectChanges();
+    expect(running.runningPaceUnit).toBe('mi'); expect(running.form.controls.runningPace.value).toBe('07:40');
+    expect(swimming.cssUnit).toBe('yd'); expect(swimming.form.controls.cssPace.value).toBe('01:43');
+    const input = fixture.nativeElement.querySelector('input[formControlName="runningPace"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('7:15'); expect(input.closest('section')?.textContent).toContain('mm:ss per mile');
+    expect(watch).toHaveBeenCalledOnce(); expect(readFtpSuggestions).toHaveBeenCalledOnce();
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+    running.form.controls.ftp.setValue('250'); running.form.markAsDirty(); await instance.save(running);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'running', 2,
+      { method: 'RUNNING_PACE', included: true, runningThresholdSpeed: 3.5, functionalThresholdPower: 250 });
+  });
+  it('updates pristine units silently without reloading policies or reinterpreting a dirty draft', () => {
+    component.ngOnDestroy(); readFtpSuggestions.mockClear();
+    policies$.next([
+      { id: 'running', revision: 2, method: 'HR', included: true, runningThresholdSpeed: 3.5 },
+      { id: 'swimming', revision: 3, method: 'SWIM_PACE', included: true, swimThresholdSpeed: 100 / 113 },
+    ]);
+    const watch = vi.spyOn(TestBed.inject(TrainingLoadService), 'watchPolicies');
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const running = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    const swimming = fixture.componentInstance.rows.find(row => row.id === 'swimming')!;
+    running.form.controls.runningPace.setValue('04:30'); running.form.markAsDirty();
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({
+      paceUnits: [PaceUnits.MinutesPerMile], swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+    })); fixture.detectChanges();
+    expect(running.runningPaceUnit).toBe('km'); expect(running.form.controls.runningPace.value).toBe('04:30');
+    expect(swimming.cssUnit).toBe('yd'); expect(swimming.form.controls.cssPace.value).toBe('01:43');
+    expect(watch).toHaveBeenCalledOnce(); expect(readFtpSuggestions).toHaveBeenCalledOnce();
+    expect(selection).not.toHaveBeenCalled(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('keeps an explicit input-unit choice when unrelated profile units change', () => {
+    component.ngOnDestroy();
+    policies$.next([{ id: 'running', revision: 2, method: 'HR', included: true, runningThresholdSpeed: 3.5 }]);
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    fixture.componentInstance.changeRunningPaceUnit(row, 'mi');
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] }));
+    fixture.detectChanges();
+    expect(row.runningPaceUnit).toBe('mi'); expect(row.form.controls.runningPace.value).toBe('07:40');
+    expect(row.form.pristine).toBe(true); expect(selection).toHaveBeenCalledOnce(); expect(savePolicy).not.toHaveBeenCalled();
+  });
+  it('uses pace preferences independently of distance and speed preferences', () => {
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles,
+      speedUnits: [SpeedUnits.MilesPerHour], paceUnits: [PaceUnits.MinutesPerKilometer] });
+    component.ngOnChanges();
+    expect(component.rows.find(row => row.id === 'running')!.runningPaceUnit).toBe('km');
+    expect(component.rows.find(row => row.id === 'swimming')!.cssUnit).toBe('m');
+  });
+  it('shows Saving next to the edited values until the save actually succeeds', async () => {
+    component.ngOnDestroy(); let finish!: () => void;
+    savePolicy.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+    fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'running')!;
+    row.form.controls.ftp.setValue('250'); row.form.markAsDirty();
+    const pending = fixture.componentInstance.save(row); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('section[aria-label="Running"] button[mat-stroked-button]') as HTMLButtonElement;
+    try {
+      expect(button.textContent).toContain('Saving Running'); expect(button.disabled).toBe(true);
+      expect(success).not.toHaveBeenCalled();
+    } finally { finish(); await pending; }
+    fixture.detectChanges();
+    expect(button.textContent).toContain('Save Running preferences'); expect(success).toHaveBeenCalledOnce();
   });
   it('ignores late suggestions for a previous account or destroyed editor without changing drafts', async () => {
     let finish!: (value: { cycling: { value: number; displayText: string; detailText: string } }) => void;
@@ -104,7 +289,7 @@ describe('dated Training load settings', () => {
   });
   it('loads existing defaults quietly and saves only a changed family with its revision', async () => {
     const row = component.rows.find(row => row.id === 'walking-hiking')!;
-    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'HR', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' });
     await component.save(row); expect(savePolicy).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenCalledWith('owner', 'walking-hiking', 4, { method: 'HR', included: true });
@@ -120,7 +305,7 @@ describe('dated Training load settings', () => {
     await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 5,
       { method: 'MET', included: false, functionalThresholdPower: 220.5, lactateThresholdHR: 166 });
-    row.form.patchValue({ ftp: '', thresholdHr: '' }); row.form.markAsDirty(); await component.save(row);
+    row.form.patchValue({ ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', 'cycling', 6, { method: 'MET', included: false });
   });
   it('rejects invalid thresholds without a write and keeps sport FTP values independent', async () => {
@@ -151,7 +336,7 @@ describe('dated Training load settings', () => {
     policies$.next([{ id: row.id, revision: 6, method: 'MET', included: false }]);
     finish(); await pending;
     expect(row.revision).toBe(6);
-    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', ftp: '', thresholdHr: '' });
+    expect(row.form.getRawValue()).toEqual({ method: 'MET', included: false, cssPace: '', runningPace: '', ftp: '', thresholdHr: '', restingHr: '', maxHr: '', hrAlgorithm: '' });
     expect(row.form.pristine).toBe(true);
     row.form.patchValue({ included: true }); row.form.markAsDirty(); await component.save(row);
     expect(savePolicy).toHaveBeenLastCalledWith('owner', row.id, 6, { method: 'MET', included: true });
@@ -219,7 +404,7 @@ describe('CSS input and units', () => {
     const fixture = open();
     const row = fixture.componentInstance.rows.find(row => row.id === 'swimming')!;
     const swimming = fixture.debugElement.query(By.css('section[aria-label="Swimming"]'));
-    const unit = swimming.queryAll(By.directive(MatSelect))[1].componentInstance as MatSelect;
+    const unit = swimming.query(By.css('mat-select:not([formControlName])')).componentInstance as MatSelect;
     expect(selection).not.toHaveBeenCalled();
     unit.selectionChange.emit({ source: unit, value: 'yd' }); fixture.detectChanges();
     expect(swimming.nativeElement.textContent).toContain('mm:ss per 100 yd');
