@@ -112,10 +112,11 @@ Consent-gated onboarding goal events and bounded App Check recovery exceeded tha
 
 ## Dated Training calibration bundle allowance
 
-The Running pace and manual HR controls, published Sports Lib 23.12.0 and latest public-guide integration measure
-14.87 MB of total scripts, 11.11 kB above the previous 14.86 MB cap. Matching beta/production `allScript` error caps
-are 14.88 MB. The initial bundle remains 1.41 MB (335.55 kB estimated transfer), below the unchanged 1474 kB cap.
-Warning budgets stay unchanged. This is compiled-output accounting, not a runtime performance claim.
+The Running pace and manual HR controls, published Sports Lib 23.12.0 and public-guide integration measured
+14.87 MB of total scripts, 11.11 kB above the previous 14.86 MB cap. This raised matching beta/production `allScript`
+error caps to 14.88 MB before the Firebase/Angular patch upgrade documented below. At that stage the initial bundle
+measured 1.41 MB (335.55 kB estimated transfer), below the unchanged 1474 kB cap. Warning budgets stay unchanged.
+This is compiled-output accounting, not a runtime performance claim.
 
 ## Field guide onboarding terrain and bundle allowance
 
@@ -1242,6 +1243,18 @@ responses and other exceptions remain visible. The guard adds no requests, retri
 or Firestore writes; a later user/application retry can make a fresh request after a failure settles.
 
 Keep the direct `@firebase/webchannel-wrapper` dependency aligned with the full SDK's transport version.
+The frontend baseline is Firebase 12.19.0 (`@firebase/firestore` 4.17.2) with WebChannel 1.0.7, Angular framework
+20.3.35 and CLI/build/SSR tooling 20.3.42 on Node 22. Keep the root Firebase override aligned with the direct
+dependency and verify that the installed tree has a single WebChannel instance before running the browser transport
+regression. Retain the HTTP guard and account/cache recovery paths when upgrading; passing the guarded tests alone
+does not establish that upstream handles malformed HTTP responses without it. Material/CDK remain on 20.2.14.
+After integrating develop's Sports Lib 23.12.0 and dated Training calibration changes, the upgraded production output
+measures 15.05 MB of total scripts, above develop's 14.88 MB cap. Beta and production share a 15.10 MB total-script
+error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
+The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
+Production Home plus its deferred signal preview measures 3104.5 KiB, so its combined static-graph cap is 3120 KiB
+(previously 3050 KiB). The preview itself adds 181.4 KiB and retains its separate 192 KiB limit. All public dependency
+exclusions remain in force; these are dependency-update size allowances, not runtime performance measurements.
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
@@ -1358,8 +1371,11 @@ Complete profile snapshots add no Firestore reads. Incomplete snapshots require 
 reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
 and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
 restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
-Firestore Lite's fetch-rejection signature (`FirebaseError`, code `unknown`, exact message
-`Request failed with error: undefined`) is normalized to `unavailable` only where `getDoc` rejects. The original
+Firestore Lite's fetch-rejection signatures (`FirebaseError`, code `unknown`, exact message
+`Request failed with error: undefined`, or the same prefix with `Failed to fetch`, `Load failed`, or
+`NetworkError when attempting to fetch resource.`) are normalized to `unavailable` only where `getDoc` rejects.
+Firebase 12.19 preserves those browser messages instead of losing them as `undefined`; the real SDK regression
+checks every listed browser message with a rejecting fetch stub and no network requests. The original
 error remains its cause. This uses the existing four retries with backoff and the same account/session fences;
 it adds no nested retry budget. Other unknown errors, settings imports/merges and permanent read failures retain
 their original classification. Exhaustion exposes the existing manual **Retry** without publishing missing data.

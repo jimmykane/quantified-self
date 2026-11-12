@@ -1,4 +1,4 @@
-import { DOMParser, XMLSerializer } from 'xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 const GPX_NAMESPACE = 'http://www.topografix.com/GPX/1/1';
 const SUUNTO_ROUTE_NAMESPACE = 'http://www.suunto.com/xmlschemas/RouteExtension/v1';

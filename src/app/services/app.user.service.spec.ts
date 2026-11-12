@@ -1195,10 +1195,11 @@ describe('AppUserService', () => {
             vi.mocked(docData).mockReturnValue(of(undefined));
         });
 
-        it('recovers a Lite fetch rejection after the existing backoff without publishing missing account data', async () => {
+        it.each(['undefined', 'Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'])(
+            'recovers a Lite fetch rejection (%s) after the existing backoff without publishing missing account data', async message => {
             vi.useFakeTimers();
             try {
-                verificationSDK.getDoc.mockRejectedValueOnce(new FirebaseError('unknown', 'Request failed with error: undefined'));
+                verificationSDK.getDoc.mockRejectedValueOnce(new FirebaseError('unknown', `Request failed with error: ${message}`));
                 service = TestBed.inject(AppUserService);
                 const emitted: AppUserInterface[] = [];
                 const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
@@ -1220,10 +1221,11 @@ describe('AppUserService', () => {
             } finally { vi.useRealTimers(); }
         });
 
-        it('exhausts the existing four-retry budget and leaves manual recovery available', async () => {
+        it.each(['undefined', 'Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'])(
+            'exhausts the existing four-retry budget for %s and leaves manual recovery available', async message => {
             vi.useFakeTimers();
             try {
-                verificationSDK.getDoc.mockRejectedValue(new FirebaseError('unknown', 'Request failed with error: undefined'));
+                verificationSDK.getDoc.mockRejectedValue(new FirebaseError('unknown', `Request failed with error: ${message}`));
                 service = TestBed.inject(AppUserService);
                 await vi.runAllTimersAsync();
                 expect(verificationSDK.getDoc).toHaveBeenCalledTimes(20);
