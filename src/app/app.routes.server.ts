@@ -46,6 +46,7 @@ export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
   PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
   PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
+  PUBLIC_GUIDE_PATHS.wahooGarminTrainingData,
   PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
   PUBLIC_GUIDE_PATHS.importActivitiesToWahoo,
   PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,

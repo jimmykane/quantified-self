@@ -319,3 +319,8 @@
   .hero-product-header { gap: .25rem; }
   .hero-actions { flex-direction: column; align-items: stretch; }
 }
+
+.mixed-device-note { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+.mixed-device-note p { margin: 0; font: var(--mat-sys-body-medium); line-height: 1.65; }
+.mixed-device-note strong { font-weight: 600; }
+.mixed-device-note > div { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .35rem; }

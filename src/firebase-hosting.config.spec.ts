@@ -519,7 +519,7 @@ describe('Firebase Hosting configuration', () => {
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     // The hero preview now names the charts: Training load and recovery (2026-11-10).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
@@ -538,7 +538,7 @@ describe('Firebase Hosting configuration', () => {
     // Both overview CTAs now open the comparison tool directly.
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-12');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
@@ -552,7 +552,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-11-03');
     // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
