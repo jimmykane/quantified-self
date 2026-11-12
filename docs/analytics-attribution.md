@@ -73,6 +73,43 @@ when the runtime is given production build flags. Billing admission/maintenance 
 processing, and invoice/subscription projections are independent of referral filtering. Do not add
 Functions or Cloud Run domains to the referral policy as part of an extension retirement.
 
+## Onboarding flow measurement
+
+Onboarding telemetry is frontend-only. It uses `AppAnalyticsService` and the existing production-origin and
+saved analytics-consent gates. No analytics requests, collection endpoints or event writes are added to Functions.
+
+Each primary goal has its own event-name prefix, so Windsor can distinguish flows using `event_name` without
+registering GA4 custom dimensions:
+
+| Goal | Prefix | Expected destination |
+| --- | --- | --- |
+| Analyze my training | `onboarding_analyze_` | `dashboard` |
+| Sync between services | `onboarding_sync_` | `pro_plans` for Starter/Basic, `connections` for existing Pro access |
+| Compare device recordings | `onboarding_compare_` | `compare` or `saved_comparisons` for an explicit saved-list entry |
+
+The suffixes are `selected`, `consent_saved`, `destination_reached` and `failed`. Each event also includes the
+bounded `onboarding_goal` parameter; saved/destination events include a destination label, and failures include
+`failure_stage` (`save`, `profile` or `navigation`). Exploration and other explicit return flows use separate
+`explore`/`other` prefixes. Legacy connect/upload choices are grouped with the visible Analyze option. No account
+IDs, file data, return URLs, request IDs or selected Stripe price IDs are included in these events.
+
+Selection is recorded once per goal per mounted setup view, only when analytics consent already exists. For
+first-time opt-in, the selected goal is recorded after the authoritative profile confirms saved preferences.
+No pre-consent history is transmitted or persisted as a queue. People who decline analytics are not measured;
+the resulting funnel must not be described as conversion for all signups or abandonment before consent.
+
+`destination_reached` and the legacy `tutorial_complete` are emitted only after navigation completes and the final
+route and intended setup parameters match. A cancelled navigation, guard redirect back to setup/login or lost
+Sync hint records failure, never completion. A different signed-in account cannot inherit the completion event.
+An already-complete account automatically leaving onboarding does not repeat completion analytics. Completion
+means the destination route activated, not that checkout, provider connection or a comparison succeeded.
+
+For Windsor, use the production hostname and stream, `event_name`, `event_count` and `totalusers`; compare the
+three prefixes and their destination suffixes. Event counts include retry attempts; distinct users across events
+are not an ordered same-session conversion cohort. The `onboarding_goal`, `destination` and `failure_stage`
+parameters can additionally be registered as event-scoped dimensions after reviewing existing GA4 definitions,
+but no administrative setting is changed by this code. Normal GA4 processing delays still apply.
+
 ## GA4 administration and rollout
 
 No GA4 administrative settings are changed by this code. Windsor currently exposes reporting reads and no GA4

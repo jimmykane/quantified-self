@@ -104,8 +104,11 @@ The final production build passes matching beta/production `allScript` error cap
 and warning budgets are unchanged. This accounts for compiled output, not a runtime performance claim.
 
 The conditional Sync plan handoff and saved-profile navigation fix measured 8.96 kB above the subsequent
-14.84 MB total-script cap. Beta and production now share a 14.85 MB `allScript` error cap. The measured initial
+14.84 MB total-script cap, raising beta and production to 14.85 MB. The measured initial
 bundle remains 1.41 MB (335.36 kB estimated transfer), below its unchanged 1474 kB cap. Warning budgets are unchanged.
+
+Consent-gated onboarding goal events and bounded App Check recovery exceeded that total-script cap by
+1.11 kB. Beta and production now share a 14.86 MB `allScript` error cap; initial-load and warning caps stay unchanged.
 
 ## Field guide onboarding terrain and bundle allowance
 
@@ -1374,6 +1377,19 @@ fresh token arrives; repeated notifications of the same cached token do not rese
 is memory-only. An already active cooldown is labelled honestly when the original rejection was unavailable. These
 diagnostics do not expose a reCAPTCHA score or prove why a particular user was rejected. If Firebase changes its
 warning grammar, the strict log parser ignores it; observer/request diagnostics still report the available failure.
+
+For an ordinary token request that fails specifically with `appCheck/recaptcha-error`, readiness can wait for the
+SDK's next valid `onTokenChanged` result within the remainder of its original 15-second deadline. This avoids
+turning a transient challenge failure into a permanent profile-loading failure when the existing SDK refresh
+recovers shortly afterwards. The fallback makes no additional token request. It never applies to forced refresh,
+and a subsequent rejection or cooldown fails immediately. The observer is removed on success, failure or timeout;
+an original request rejecting after its deadline cannot attach a late observer. Other failure classifications,
+App Check enforcement and the SDK's attestation/cooldown policy remain unchanged.
+
+A shell startup warning with `profile_state=initializing`, no active profile stage and `startup_stage=auth-state`
+means Auth has not finished restoring; it does not prove that App Check caused the stall. A 403 attestation
+rejection and a script-level reCAPTCHA error are different diagnoses. Check the existing build tags, Auth/profile
+stage and token/operation outcomes before attributing a login failure or changing provider configuration.
 
 App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
 resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is

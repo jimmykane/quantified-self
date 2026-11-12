@@ -78,7 +78,13 @@ describe('OnboardingComponent', () => {
         };
 
         mockRouter = {
-            navigate: vi.fn().mockResolvedValue(true)
+            url: '/onboarding',
+            navigate: vi.fn().mockImplementation(async (commands: string[], options?: { queryParams?: Record<string, string> }) => {
+                if (commands.length) {
+                    mockRouter.url = commands.join('/') + (options?.queryParams ? '?' + new URLSearchParams(options.queryParams) : '');
+                }
+                return true;
+            })
         };
 
         mockLoggerService = {
@@ -87,7 +93,8 @@ describe('OnboardingComponent', () => {
         };
 
         mockAnalyticsService = {
-            logEvent: vi.fn()
+            logEvent: vi.fn(),
+            logOnboardingFlow: vi.fn().mockReturnValue(true)
         };
 
         mockPaymentService = {
@@ -1040,7 +1047,9 @@ describe('OnboardingComponent', () => {
 
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('onboarding_step', {
             step_index: 1,
-            step_label: 'Legal consent'
+            step_label: 'Legal consent',
+            onboarding_goal: 'other',
+            destination: 'dashboard',
         });
     });
 
@@ -1077,7 +1086,7 @@ describe('OnboardingComponent', () => {
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
         expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(component.user, { onboardingCompleted: true });
-        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('tutorial_complete');
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('tutorial_complete', { onboarding_goal: 'other', destination: 'dashboard' });
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
         expect(component.isLoading).toBe(false);
     });
@@ -1318,6 +1327,84 @@ describe('OnboardingComponent', () => {
         expect(component.isLoading).toBe(false);
         expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
         expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('tutorial_complete', expect.anything());
+        expect(mockAnalyticsService.logOnboardingFlow).toHaveBeenCalledWith('other', 'failed', {
+            destination: 'dashboard', failureStage: 'navigation',
+        });
+    });
+
+    it.each([
+        { flow: 'analyze', destination: 'dashboard', path: '/dashboard', role: null },
+        { flow: 'compare', destination: 'compare', path: '/tools/compare', role: null },
+        { flow: 'sync', destination: 'pro_plans', path: '/subscriptions?setup=sync', role: null },
+        { flow: 'sync', destination: 'pro_plans', path: '/subscriptions?setup=sync', role: 'basic' },
+        { flow: 'sync', destination: 'connections', path: '/services?setup=sync', role: 'pro' },
+    ] as const)('records $flow reaching $destination only after navigation finishes ($role)', async ({ flow, destination, path, role }) => {
+        await setupComponent(false, { stripeRole: role });
+        component.chooseStart(flow);
+        setRequiredPoliciesAccepted();
+        let finishNavigation!: (result: boolean) => void;
+        mockRouter.navigate.mockImplementationOnce(() => new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+        const submission = component.onTermsSubmit();
+        await vi.waitFor(() => expect(finishNavigation).toBeTypeOf('function'));
+        expect(mockAnalyticsService.logOnboardingFlow).toHaveBeenCalledWith(flow, 'consent_saved', { destination });
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalledWith(flow, 'destination_reached', expect.anything());
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('tutorial_complete', expect.anything());
+        mockRouter.url = path;
+        finishNavigation(true);
+        await submission;
+        expect(mockAnalyticsService.logOnboardingFlow).toHaveBeenCalledWith(flow, 'destination_reached', { destination });
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('tutorial_complete', { onboarding_goal: flow, destination });
+    });
+
+    it('does not count a successful guard redirect back to setup as reaching the destination', async () => {
+        await setupComponent();
+        component.chooseStart('sync');
+        setRequiredPoliciesAccepted();
+        mockRouter.navigate.mockImplementationOnce(async () => { mockRouter.url = '/onboarding'; return true; });
+        await component.onTermsSubmit();
+        expect(mockAnalyticsService.logOnboardingFlow).toHaveBeenCalledWith('sync', 'failed', {
+            destination: 'pro_plans', failureStage: 'navigation',
+        });
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('tutorial_complete', expect.anything());
+    });
+
+    it('does not attribute a pending navigation result to a different signed-in account', async () => {
+        await setupComponent();
+        component.chooseStart('analyze');
+        setRequiredPoliciesAccepted();
+        let finishNavigation!: (result: boolean) => void;
+        mockRouter.navigate.mockImplementationOnce(() => new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+        const submission = component.onTermsSubmit();
+        await vi.waitFor(() => expect(finishNavigation).toBeTypeOf('function'));
+        mockAuthService.currentUser = { uid: 'another-account' };
+        mockRouter.url = '/dashboard';
+        finishNavigation(true);
+        await submission;
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalledWith('analyze', 'destination_reached', expect.anything());
+        expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalledWith('analyze', 'failed', expect.anything());
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('tutorial_complete', expect.anything());
+    });
+
+    it('retries a suppressed choice after consent saves, without duplicating an already tracked selection', async () => {
+        await setupComponent();
+        mockAnalyticsService.logOnboardingFlow.mockReturnValueOnce(false);
+        component.chooseStart('analyze');
+        setRequiredPoliciesAccepted();
+        await component.onTermsSubmit();
+        expect(mockAnalyticsService.logOnboardingFlow.mock.calls.filter(call => call[1] === 'selected')).toHaveLength(2);
+    });
+
+    it('does not label generic membership as the Sync Pro-plan destination when its setup hint is lost', async () => {
+        await setupComponent();
+        component.chooseStart('sync');
+        setRequiredPoliciesAccepted();
+        mockRouter.navigate.mockImplementationOnce(async () => { mockRouter.url = '/subscriptions'; return true; });
+        await component.onTermsSubmit();
+        expect(mockAnalyticsService.logOnboardingFlow).toHaveBeenCalledWith('sync', 'failed', {
+            destination: 'pro_plans', failureStage: 'navigation',
+        });
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('tutorial_complete', expect.anything());
     });
 
     it('should sign out and navigate to login on logout', async () => {
