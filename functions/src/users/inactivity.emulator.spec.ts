@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { inactivityRef, processInactiveAccount, runInactivitySweep, type InactivityContext } from './inactivity';
-import { INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS } from './inactivity-policy';
+import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS } from './inactivity-policy';
 import { invalidateInactivityWarning } from './inactivity-cancellation';
 import { readInactivityBilling } from './inactivity-billing';
 import { beginAccountDataCleanup, deleteAccountFirestoreRoot, assertAccountFirestoreRootAbsent } from './data-cleanup';
@@ -227,6 +227,34 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(result.capped).toBe(true);
         expect((await inactivityRef(db, newcomer.uid).get()).get('state')).toBe('queued');
         expect((await config().get()).get('lastScanCompletedAt')).toBeDefined();
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it('lets newer warning receipts progress past capped deletions across daily scan windows', async () => {
+        await dueWarning();
+        const newcomer = { ...authUser, uid: `${uid}-later`, email: 'later@example.invalid' } as admin.auth.UserRecord;
+        owners.push(newcomer.uid);
+        await db.doc(`users/${newcomer.uid}`).set({ synthetic: true });
+        auth.getUser.mockImplementation(async candidate => candidate === newcomer.uid ? newcomer : authUser);
+        auth.listUsers.mockResolvedValue({ users: [authUser, newcomer] });
+        expect(await processInactiveAccount(ctx, newcomer.uid, run)).toBe('queued');
+        const newer = inactivityRef(db, newcomer.uid);
+        const mailId = (await newer.get()).get('mailId');
+        const acceptedAt = now;
+        await db.doc(`mail/${mailId}`).update({ delivery: { state: 'SUCCESS', endTime: Timestamp.fromMillis(acceptedAt),
+            info: { accepted: [newcomer.email], rejected: [], pending: [] } } });
+        now += INACTIVITY_DAY_MS;
+        await config().set({ mode: 'enforce', deletionDailyLimit: 0 });
+        // Model an older deletion consuming the due lane's remaining time in billing reads.
+        stripe.customers.list.mockImplementation(async () => {
+            now += INACTIVITY_BUDGET_MS / 2;
+            return { data: [], has_more: false };
+        });
+        expect((await runInactivitySweep(ctx)).counts.capped).toBe(1);
+        expect((await newer.get()).get('state')).toBe('queued');
+        now += INACTIVITY_DAY_MS;
+        expect((await runInactivitySweep(ctx)).counts.accepted).toBe(1);
+        expect((await newer.get()).get('state')).toBe('warned');
+        expect((await newer.get()).get('deleteAfter').toMillis()).toBe(acceptedAt + INACTIVITY_NOTICE_MS);
         expect(auth.deleteUser).not.toHaveBeenCalled();
     });
     it.each(['elapsed', 'missing'])('requires a fresh warning when evidence expiry is %s, even before TTL removes it', async kind => {

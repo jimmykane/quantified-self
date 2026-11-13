@@ -179,6 +179,10 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
             return 'cancelled';
         }
         const result = await prepareMutation(ctx, uid, run, lease, billing, identity, previous, deleting);
+        // A capped deletion must yield its old queue position. Otherwise a backlog
+        // can repeatedly exhaust the due lane before newer mail receipts are observed.
+        if (result === 'capped' && deleting) await updateEpisode(ctx, uid, episode!.generation, run,
+            { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
         if (result !== 'deletion_requested') return result;
         // Fence first, then one final Auth observation. A return before the RPC cancels
         // only our unattempted fence; an RPC error is ambiguous and needs operator review.

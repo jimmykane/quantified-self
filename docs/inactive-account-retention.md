@@ -46,7 +46,8 @@ There is no hourly requirement or exact deletion-time promise: caps, outages and
 State proceeds queued → warned → deletion_requested; cancellation permits a later new episode. Auth scanning uses
 pages of 100 and a durable cursor. Due episodes get an independent two-minute lane within a four-minute scan budget;
 an unfinished Auth page is revisited. Discovery skips existing active notices, so an exhausted deletion budget cannot
-block new warnings. A global lease prevents overlap. UTC caps are 100 new warnings and 25 deletion
+block new warnings. Capped deletions yield their due-queue position until the next daily check so an older backlog
+cannot repeatedly starve newer warning receipts. A global lease prevents overlap. UTC caps are 100 new warnings and 25 deletion
 initiations per day across retries; `warningDailyLimit`/`deletionDailyLimit` may lower these, including zero, but cannot
 raise them. Missing limits use those defaults. Invalid limits fail closed. A cap reservation is not refunded after failure.
 
