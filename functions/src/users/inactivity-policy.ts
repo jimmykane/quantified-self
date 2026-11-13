@@ -36,7 +36,8 @@ export function timestampMillis(value: unknown): number | null {
 }
 
 export function emailFingerprint(email: string): string {
-    return createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+    // Any Auth email edit starts a fresh notice, including case-only edits.
+    return createHash('sha256').update(email).digest('hex');
 }
 
 export interface InactiveIdentity { activityAt: number; createdAt: number; email: string; emailHash: string }
@@ -72,7 +73,7 @@ export function warningAcceptedAt(mail: Record<string, any>, uid: string, genera
     if (mail.uid !== uid || mail.to !== email || mail.template?.name !== INACTIVITY_TEMPLATE
         || mail.inactivity?.generation !== generation || delivery?.state !== 'SUCCESS'
         || !Array.isArray(accepted) || accepted.length !== 1 || typeof accepted[0] !== 'string'
-        || emailFingerprint(accepted[0]) !== emailFingerprint(email)
+        || accepted[0].trim().toLowerCase() !== email.trim().toLowerCase()
         || !Array.isArray(delivery.info.rejected) || delivery.info.rejected.length
         || (delivery.info.pending !== undefined && (!Array.isArray(delivery.info.pending) || delivery.info.pending.length))
         || end === null || end < queuedAt || end > now) return null;

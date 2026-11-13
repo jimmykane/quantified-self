@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { UserRecord } from 'firebase-admin/auth';
 import { Timestamp } from 'firebase-admin/firestore';
-import { inactiveIdentity, inactivityMode, isTerminalSubscription, sixMonthsAfter, timestampMillis, warningAcceptedAt } from './inactivity-policy';
+import { emailFingerprint, inactiveIdentity, inactivityMode, isTerminalSubscription, sixMonthsAfter, timestampMillis, warningAcceptedAt } from './inactivity-policy';
 
 it('retains submillisecond server timestamp precision without accepting malformed values', () => {
     const time = { toMillis: () => 1_800_000_000_123.456 };
@@ -16,6 +16,9 @@ const now = Date.parse('2026-11-13T12:00:00Z');
 const user = (patch: Record<string, unknown> = {}) => ({ uid: 'synthetic', email: 'synthetic@example.com',
     metadata: { creationTime: '2020-01-01T00:00:00Z', lastSignInTime: '2026-01-01T00:00:00Z' }, ...patch } as UserRecord);
 describe('inactivity eligibility', () => {
+    it('distinguishes every Auth email edit from normalized SMTP acceptance', () => {
+        expect(emailFingerprint('synthetic@example.com')).not.toBe(emailFingerprint('Synthetic@example.com'));
+    });
     it('uses calendar months, clamping month ends and preserving UTC time', () => {
         expect(new Date(sixMonthsAfter(Date.parse('2023-08-31T14:02:03Z'))).toISOString()).toBe('2024-02-29T14:02:03.000Z');
         expect(new Date(sixMonthsAfter(Date.parse('2024-08-31T14:02:03Z'))).toISOString()).toBe('2025-02-28T14:02:03.000Z');
@@ -57,6 +60,10 @@ describe('warning acceptance evidence', () => {
             info: { accepted: ['synthetic@example.com'], rejected: [], pending: [] } } });
     const accepted = (value: Record<string, unknown>) => warningAcceptedAt(value, 'synthetic', 'episode', 'synthetic@example.com', queued, now);
     it('starts from SMTP acceptance, not queue creation', () => expect(accepted(mail())).toBe(now - 1000));
+    it('accepts the same recipient when SMTP normalizes address casing', () => {
+        const value = mail(); value.delivery.info.accepted = ['SYNTHETIC@example.com'];
+        expect(accepted(value)).toBe(now - 1000);
+    });
     it.each(['PENDING', 'PROCESSING', 'RETRY', 'ERROR'])('does not accept %s', state => {
         const value = mail(); value.delivery.state = state; expect(accepted(value)).toBeNull();
     });

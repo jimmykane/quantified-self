@@ -129,12 +129,21 @@ test('policy thresholds are sustained, native abrupt account errors covered, onl
     assert.deepEqual(p.alertStrategy.notificationPrompts, ['OPENED', 'CLOSED']);
     assert.match(p.documentation.content, /No automatic remediation/);
     for (const c of p.conditions) {
+      if (c.conditionPrometheusQueryLanguage) {
+        assert.equal(p.userLabels.policy_id, 'inactivity_heartbeat');
+        const condition = c.conditionPrometheusQueryLanguage;
+        assert.equal(condition.query, `(sum(sum_over_time({__name__="logging.googleapis.com/user/qs_cleanup_inactivity_heartbeat_v1",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts"}[48h])) or vector(0)) < 1`);
+        assert.equal(condition.duration, '300s');
+        assert.equal(condition.evaluationInterval, '300s');
+        continue;
+      }
       const condition = c.conditionThreshold || c.conditionAbsent;
       assert.match(condition.filter, /resource.type="cloud_(function|run_revision)"/);
       assert.ok(!/\bOR\b/.test(condition.filter));
       if (c.conditionAbsent) {
-        assert.ok(['heartbeat', 'inactivity_heartbeat'].includes(p.userLabels.policy_id));
-        assert.equal(c.conditionAbsent.duration, p.userLabels.policy_id === 'inactivity_heartbeat' ? '172800s' : '7200s');
+        assert.equal(p.userLabels.policy_id, 'heartbeat');
+        assert.equal(c.conditionAbsent.duration, '7200s');
+        assert.ok(parseInt(c.conditionAbsent.duration, 10) <= 23.5 * 3600);
       } else assert.equal(condition.evaluationMissingData, 'EVALUATION_MISSING_DATA_INACTIVE');
     }
   }
@@ -293,4 +302,17 @@ test('adding daily inactivity coverage preserves the seven existing cleanup poli
   const addedPolicies = source.calls.filter(c => c.method === 'POST' && c.body?.userLabels?.policy_id?.startsWith('inactivity_'));
   assert.equal(addedPolicies.length, 5);
   assert.ok(source.calls.every(c => c.method !== 'DELETE'));
+});
+
+test('daily count distributions become numeric chart series rather than raw distributions', () => {
+  const b = bundle();
+  for (const key of ['warnings', 'deletions', 'holds']) {
+    const metric = b.metrics.find(m => m.name === `qs_cleanup_inactivity_${key}_v1`);
+    assert.equal(metric.metricDescriptor.valueType, 'DISTRIBUTION');
+    const widget = b.dashboard.mosaicLayout.tiles.find(t => t.widget.title.startsWith(`Daily inactivity: ${key} (`)).widget;
+    assert.match(widget.title, /per-run count p95/);
+    const query = widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
+    assert.equal(query.aggregation.perSeriesAligner, 'ALIGN_PERCENTILE_95');
+    assert.equal(query.aggregation.crossSeriesReducer, 'REDUCE_MAX');
+  }
 });

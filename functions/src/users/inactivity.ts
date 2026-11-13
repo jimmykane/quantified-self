@@ -21,6 +21,7 @@ export type InactivityOutcome = 'skipped' | 'eligible' | 'queued' | 'accepted' |
 const clock = (ctx: InactivityContext) => ctx.now?.() ?? Date.now();
 export const inactivityRef = (db: Firestore, uid: string) => db.doc(`users/${uid}/${INACTIVITY_COLLECTION}/state`);
 const activeEpisode = (data?: DocumentData) => data?.state === 'queued' || data?.state === 'warned';
+const currentEvidence = (data: DocumentData | undefined, now: number) => (timestampMillis(data?.expireAt) ?? 0) > now;
 const expiry = (time: number) => Timestamp.fromMillis(time + TTL_CONFIG.MAIL_IN_DAYS * INACTIVITY_DAY_MS);
 
 async function validRun(ctx: InactivityContext, tx: Transaction, run: InactivityRun): Promise<DocumentSnapshot | null> {
@@ -93,6 +94,7 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
             || (current.exists !== previous.exists)
             || (current.exists && !current.updateTime!.isEqual(previous.updateTime!))) return 'skipped';
         if (deleting && (run.mode !== 'enforce' || current.get('state') !== 'warned'
+            || !currentEvidence(current.data(), clock(ctx))
             || timestampMillis(current.get('deleteAfter')) === null || timestampMillis(current.get('deleteAfter'))! > clock(ctx)
             || timestampMillis(current.get('acceptedAt')) === null
             || timestampMillis(current.get('deleteAfter'))! < timestampMillis(current.get('acceptedAt'))! + INACTIVITY_NOTICE_MS)) return 'blocked';
@@ -113,15 +115,19 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
     });
 }
 
-export async function processInactiveAccount(ctx: InactivityContext, uid: string, run: InactivityRun): Promise<InactivityOutcome> {
+export async function processInactiveAccount(ctx: InactivityContext, uid: string, run: InactivityRun,
+    options: { discoveryOnly?: boolean } = {}): Promise<InactivityOutcome> {
     if (run.mode === 'off') return 'skipped';
     const episodeRef = inactivityRef(ctx.db, uid);
     const previous = await episodeRef.get();
     const episode = previous.data();
     if (episode?.state === 'deletion_requested') return 'review_required'; // Never repeat an uncertain destructive call.
+    // Existing notices belong to the due lane. Revisiting them during Auth discovery
+    // could exhaust its time/budget and hide new candidates behind capped deletions.
+    if (options.discoveryOnly && activeEpisode(episode)) return 'skipped';
     const identity = inactiveIdentity(await ctx.auth.getUser(uid), clock(ctx));
     const local = await readInactivityBilling(ctx.db, uid, clock(ctx));
-    const changed = !identity || !local.eligible || activeEpisode(episode) && (
+    const changed = !identity || !local.eligible || activeEpisode(episode) && (!currentEvidence(episode, clock(ctx)) ||
         identity.activityAt !== episode!.activityAt || identity.createdAt !== episode!.authCreatedAt
         || identity.emailHash !== episode!.emailHash || local.revision !== episode!.billingRevision);
     if (changed) {
@@ -145,6 +151,7 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
                 getUserDeletionGuardStateInTransaction(ctx.db, tx, uid, clock(ctx)), validRun(ctx, tx, run), tx.get(episodeRef), tx.get(mailRef),
             ]);
             if (guard.shouldSkip || !config || current.get('generation') !== episode.generation || current.get('state') !== 'queued'
+                || !currentEvidence(current.data(), clock(ctx))
                 || warningAcceptedAt(latestMail.data() ?? {}, uid, episode.generation, identity.email, queued!, clock(ctx)) !== accepted) return 'skipped';
             tx.update(episodeRef, { state: 'warned', acceptedAt: Timestamp.fromMillis(accepted), deleteAfter: Timestamp.fromMillis(accepted + INACTIVITY_NOTICE_MS),
                 nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS), expireAt: expiry(clock(ctx)) });
@@ -185,6 +192,7 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
                 if (!config || !ownsLease || !finalBilling.eligible || finalBilling.revision !== billing.revision
                     || marker.get('source') !== 'inactivity' || marker.get('inactivityGeneration') !== episode!.generation
                     || marker.get('authDeleteStatus') !== 'prepared' || marker.get('cleanupAttemptId')
+                    || !currentEvidence(current.data(), clock(ctx))
                     || current.get('generation') !== episode!.generation || current.get('state') !== 'deletion_requested') return false;
                 tx.update(marker.ref, { authDeleteStatus: 'attempted', authDeleteAttemptedAt: Timestamp.fromMillis(clock(ctx)) });
                 return true;
@@ -221,9 +229,9 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         counts: {}, scanned: 0, capped: false, overdue: 0, reviewRequired: 0, scanAgeMs: Math.max(0, start - (acquired.scanStartedAt ?? start)) };
     if (acquired.status !== 'started') return summary;
     const run = { token, mode: acquired.mode };
-    const process = async (uid: string) => {
+    const process = async (uid: string, discoveryOnly = false) => {
         let outcome: InactivityOutcome;
-        try { outcome = await processInactiveAccount(ctx, uid, run); }
+        try { outcome = await processInactiveAccount(ctx, uid, run, { discoveryOnly }); }
         catch (error) {
             outcome = error instanceof BillingContention ? 'contended' : 'failed';
             // Keep errors private; only fixed outcome counts reach telemetry. A failed
@@ -233,6 +241,7 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                 { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
         }
         summary.counts[outcome] = (summary.counts[outcome] ?? 0) + 1;
+        if (outcome === 'capped') summary.capped = true;
         return outcome;
     };
     try {
@@ -267,7 +276,7 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                 if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) { complete = false; summary.capped = true; break; }
                 summary.scanned++;
                 if (!inactiveIdentity(user, clock(ctx))) continue;
-                if (await process(user.uid) === 'capped') { complete = false; summary.capped = true; break; }
+                if (await process(user.uid, true) === 'capped') { complete = false; summary.capped = true; break; }
             }
             if (!complete) break; // Revisit the unfinished page; per-episode dedupe makes this safe.
             cursor = page.pageToken;

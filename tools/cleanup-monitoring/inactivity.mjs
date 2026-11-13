@@ -20,6 +20,9 @@ export function buildInactivityMonitoring(project, channel, owner) {
   metric('holds', 'jsonPayload.counts.blocked>=0', 'Protective or uncertain billing holds; informational, never a failure page.', 'counts.blocked');
   const filter = key => `metric.type="logging.googleapis.com/user/${name(key)}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
   const sum = { alignmentPeriod: '86400s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: [] };
+  // MetricAbsence has a 23.5-hour maximum, shorter than this job's cadence.
+  // Count positive heartbeat observations across revisions, including zero/absent series.
+  const heartbeat = `{__name__="logging.googleapis.com/user/${name('heartbeat')}",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts"}`;
   const threshold = key => ({ displayName: key, conditionThreshold: { filter: filter(key), aggregations: [sum],
     comparison: 'COMPARISON_GT', thresholdValue: 0, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } });
   const native = { displayName: 'Native daily scheduler errors, including hard timeout', conditionThreshold: {
@@ -35,13 +38,17 @@ export function buildInactivityMonitoring(project, channel, owner) {
     policy('notice', 'Inactivity warning unconfirmed', [threshold('notice')]),
     policy('review', 'Inactivity deletion needs review', [threshold('review')]),
     policy('progress', 'Inactivity processing overdue', [threshold('overdue'), threshold('scan_stalled')]),
-    policy('heartbeat', 'Daily inactivity heartbeat missing', [{ displayName: 'Daily scheduler absent for 48 hours', conditionAbsent: {
-      filter: filter('heartbeat'), aggregations: [sum], duration: '172800s', trigger: { count: 1 },
+    policy('heartbeat', 'Daily inactivity heartbeat missing', [{ displayName: 'Daily scheduler absent for 48 hours', conditionPrometheusQueryLanguage: {
+      query: `(sum(sum_over_time(${heartbeat}[48h])) or vector(0)) < 1`,
+      duration: '300s', evaluationInterval: '300s',
     } }]),
   ];
   const widgets = ['heartbeat', 'warnings', 'deletions', 'holds', 'failures', 'notice', 'review', 'overdue', 'scan_stalled'].map(key => ({
-    title: `Daily inactivity: ${key} (observations)`, xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: {
-      timeSeriesFilter: { filter: filter(key), aggregation: sum }, unitOverride: '1' } }], yAxis: { label: 'observations', scale: 'LINEAR' } },
+    title: `Daily inactivity: ${key} (${['warnings', 'deletions', 'holds'].includes(key) ? 'per-run count p95' : 'observations'})`,
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: {
+      timeSeriesFilter: { filter: filter(key), aggregation: ['warnings', 'deletions', 'holds'].includes(key)
+        ? { ...sum, perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX' } : sum },
+      unitOverride: '1' } }], yAxis: { label: ['warnings', 'deletions', 'holds'].includes(key) ? 'per-run count p95' : 'observations', scale: 'LINEAR' } },
   }));
   return { metrics, policies, widgets };
 }

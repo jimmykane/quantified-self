@@ -35,15 +35,18 @@ There is no hourly requirement or exact deletion-time promise: caps, outages and
 - `configuration/inactiveAccounts`: server-only mode, global expiring lease, UTC counters and resumable Auth cursor.
   Missing/unknown mode is `off`; other modes are `dry-run`, `warnings-only` and `enforce`.
 - `users/{uid}/inactivityRetention/state`: one UID-owned episode with generation, activity/creation snapshots, email
-  fingerprint, billing revision, mail ID, queue/acceptance/deadline timestamps and state. No plaintext email is stored here.
-  The `expireAt` TTL is 90 days; recursive account cleanup also erases it. Expired evidence requires a fresh notice.
+  fingerprint of the exact Auth address, billing revision, mail ID, queue/acceptance/deadline timestamps and state.
+  Even case-only Auth address edits require a fresh warning. No plaintext email is stored here.
+  The `expireAt` TTL is 90 days; recursive account cleanup also erases it. Expired or missing expiry evidence requires
+  a fresh notice even if asynchronous TTL cleanup has not removed the record yet.
 - `mail/inactivity_{generation}`: existing mail lifecycle with UID, current recipient and 90-day TTL.
 - `userDeletionTombstones/{uid}`: existing durable writer fence, created only when deletion is due. Pending fences
   have no TTL. The existing cleanup owner creates its expiring completed receipt only after verified cleanup.
 
 State proceeds queued → warned → deletion_requested; cancellation permits a later new episode. Auth scanning uses
 pages of 100 and a durable cursor. Due episodes get an independent two-minute lane within a four-minute scan budget;
-an unfinished Auth page is revisited. A global lease prevents overlap. UTC caps are 100 new warnings and 25 deletion
+an unfinished Auth page is revisited. Discovery skips existing active notices, so an exhausted deletion budget cannot
+block new warnings. A global lease prevents overlap. UTC caps are 100 new warnings and 25 deletion
 initiations per day across retries; `warningDailyLimit`/`deletionDailyLimit` may lower these, including zero, but cannot
 raise them. Missing limits use those defaults. Invalid limits fail closed. A cap reservation is not refunded after failure.
 
@@ -86,6 +89,12 @@ unfinished for seven days, and a missing daily heartbeat for 48 hours. Holds/cap
 Samples are bounded; queued mail, Auth initiation and cleanup completion are distinct. Existing email-delivery and
 native cleanup policies remain authoritative for their stages.
 
+The 48-hour heartbeat uses a PromQL sum over the lookback window, with an explicit zero fallback for absent data;
+it alerts after five minutes without any positive observation in that window. This avoids the
+[23.5-hour metric-absence limit](https://docs.cloud.google.com/monitoring/alerts/metric-absence). Warning/deletion/hold
+distribution charts show per-run p95 counts, not totals; their percentile alignment produces numeric series as required
+by the [Monitoring aggregation contract](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aligner).
+
 On an alert, inspect the exact episode, mail acceptance, latest Auth metadata, billing history, marker/checkpoints and
 native cleanup logs using read-only access. Do not infer an absent Auth user or finished cleanup from a network error.
 Preserve pending fences and uncertain Stripe operations. A prepared marker left by a crash, an attempted RPC without
@@ -117,6 +126,7 @@ Before an approved rollout:
    previews first; a controlled-inbox SMTP test needs its own mail authorization.
 4. Preview monitoring offline with `node tools/cleanup-monitoring/cli.mjs --project=quantified-self-io`. Apply only
    under separately approved configuration authority with the verified existing independent notification channel.
+   Observe the first natural off-mode heartbeat before enabling its policy: a new metric without history is absent.
    Read back all owned resources and prove old identities/conditions are preserved. Verify natural heartbeat series.
 5. Keep mode off until those prerequisites pass. Separately approve `dry-run`, inspect aggregate holds and scan
    completion, then separately approve a bounded `warnings-only` phase. Do not backdate acceptance or shorten deadlines.

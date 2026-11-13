@@ -114,16 +114,17 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(await process()).toBe('notice_unconfirmed'); expect(auth.deleteUser).not.toHaveBeenCalled();
         expect((await inactivityRef(db, uid).get()).get('deleteAfter')).toBeUndefined();
     });
-    it.each(['login', 'refresh', 'email', 'basic', 'pro', 'disabled'])('cancels a warning after %s changes', async change => {
+    it.each(['login', 'refresh', 'email', 'email-case', 'basic', 'pro', 'disabled'])('cancels a warning after %s changes', async change => {
         await dueWarning();
         if (change === 'login' || change === 'refresh') authUser = { ...authUser, metadata: { ...authUser.metadata,
             [change === 'login' ? 'lastSignInTime' : 'lastRefreshTime']: new Date(now).toISOString() } } as admin.auth.UserRecord;
         else if (change === 'email') authUser = { ...authUser, email: 'replacement@example.invalid' } as admin.auth.UserRecord;
+        else if (change === 'email-case') authUser = { ...authUser, email: authUser.email!.toUpperCase() } as admin.auth.UserRecord;
         else if (change === 'disabled') authUser = { ...authUser, disabled: true } as admin.auth.UserRecord;
         else authUser = { ...authUser, customClaims: { stripeRole: change } } as admin.auth.UserRecord;
         expect(await process()).toBe('cancelled'); expect(auth.deleteUser).not.toHaveBeenCalled();
         expect((await inactivityRef(db, uid).get()).get('state')).toBe('cancelled');
-        if (change === 'email') {
+        if (change === 'email' || change === 'email-case') {
             expect(await process()).toBe('queued');
             expect((await inactivityRef(db, uid).get()).get('deleteAfter')).toBeUndefined();
         }
@@ -211,6 +212,41 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(await process()).toBe('capped'); expect(auth.deleteUser).not.toHaveBeenCalled();
         await config().update({ mode: 'warnings-only' });
         expect(await processInactiveAccount(ctx, uid, { ...run, mode: 'warnings-only' })).toBe('waiting');
+    });
+    it('continues warning discovery when the independent deletion budget is exhausted', async () => {
+        await dueWarning();
+        const newcomer = { ...authUser, uid: `${uid}-later`, email: 'later@example.invalid' } as admin.auth.UserRecord;
+        owners.push(newcomer.uid);
+        await db.doc(`users/${newcomer.uid}`).set({ synthetic: true });
+        auth.getUser.mockImplementation(async candidate => candidate === newcomer.uid ? newcomer : authUser);
+        auth.listUsers.mockResolvedValue({ users: [authUser, newcomer] });
+        await config().set({ mode: 'enforce', deletionDailyLimit: 0 });
+        const result = await runInactivitySweep(ctx);
+        expect(result.counts.queued).toBe(1);
+        expect(result.counts.capped).toBe(1);
+        expect(result.capped).toBe(true);
+        expect((await inactivityRef(db, newcomer.uid).get()).get('state')).toBe('queued');
+        expect((await config().get()).get('lastScanCompletedAt')).toBeDefined();
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it.each(['elapsed', 'missing'])('requires a fresh warning when evidence expiry is %s, even before TTL removes it', async kind => {
+        await dueWarning();
+        const ref = inactivityRef(db, uid);
+        const generation = (await ref.get()).get('generation');
+        await ref.update({ expireAt: kind === 'elapsed' ? Timestamp.fromMillis(now) : null });
+        expect(await process()).toBe('cancelled');
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        expect(await process()).toBe('queued');
+        expect((await ref.get()).get('generation')).not.toBe(generation);
+        expect((await ref.get()).get('acceptedAt')).toBeUndefined();
+    });
+    it('rechecks evidence expiry after the external billing reads', async () => {
+        await dueWarning();
+        await inactivityRef(db, uid).update({ expireAt: Timestamp.fromMillis(now + 1) });
+        stripe.customers.list.mockImplementation(async () => { now++; return { data: [], has_more: false }; });
+        expect(await process()).toBe('blocked');
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(false);
     });
     it('defaults off, dry-runs without account/mail changes, and skips overlapping sweeps', async () => {
         await config().set({}); expect((await runInactivitySweep(ctx)).outcome).toBe('off');
