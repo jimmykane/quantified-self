@@ -1,29 +1,12 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { newEmailDeliveryFields } from '../email/queue-metadata';
-import { FieldValue } from 'firebase-admin/firestore';
 import { USER_DELETION_TOMBSTONES_COLLECTION } from '../shared/user-deletion-guard';
 
 
 import { isCorsAllowed } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import {
-    TRANSACTIONAL_EMAIL_FROM,
-    TRANSACTIONAL_EMAIL_REPLY_TO,
-} from '../email/config';
-
-type FirebaseAuthErrorLike = {
-    errorInfo?: {
-        code?: string;
-    };
-};
-
-
-const isAuthUserNotFoundError = (error: unknown): boolean => {
-    return (error as FirebaseAuthErrorLike)?.errorInfo?.code === 'auth/user-not-found';
-};
+import { deleteAuthAccountAndNotify, pendingAccountDeletionMarker } from '../users/initiate-deletion';
 
 export const deleteSelf = functions
     .runWith({
@@ -66,14 +49,7 @@ export const deleteSelf = functions
             }
 
             try {
-                const pendingMarker = {
-                    createdAt: FieldValue.serverTimestamp(),
-                    source: 'deleteSelf',
-                    cleanupStatus: 'pending',
-                    // Unfinished deletion must never lose its writer fence to TTL.
-                    expireAt: FieldValue.delete(),
-                    completedAt: FieldValue.delete(),
-                };
+                const pendingMarker = pendingAccountDeletionMarker('deleteSelf');
                 await firestore.runTransaction(async transaction => {
                     const existing = await transaction.get(deletionMarkerRef);
                     // Another deletion can complete after the Auth lookup. Always
@@ -88,43 +64,7 @@ export const deleteSelf = functions
                 throw markerError;
             }
 
-            // Delete Auth User (idempotent if already deleted)
-            try {
-                await admin.auth().deleteUser(uid);
-                logger.info(`Successfully deleted user auth: ${uid} `);
-            } catch (deleteError) {
-                if (isAuthUserNotFoundError(deleteError)) {
-                    logger.warn(`User ${uid} was already deleted in auth. Treating deletion as successful.`, deleteError);
-                } else {
-                    // A failed Auth RPC may have committed before its response was lost.
-                    // Retain the fence; retrying deleteSelf is safe and remains permitted.
-                    throw deleteError;
-                }
-            }
-
-            if (userEmail) {
-                try {
-                    await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
-                        ...newEmailDeliveryFields(),
-                        to: userEmail,
-                        uid,
-                        from: TRANSACTIONAL_EMAIL_FROM,
-                        replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
-                        template: {
-                            name: 'account_deleted_confirmation',
-                            data: {
-                                support_email: TRANSACTIONAL_EMAIL_REPLY_TO,
-                            }
-                        },
-                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                    });
-                    logger.info(`Queued account deletion confirmation email for user: ${uid}`);
-                } catch (mailError) {
-                    logger.error(`Failed to queue account deletion confirmation email for user: ${uid}`, mailError);
-                }
-            } else {
-                logger.info(`No email found for deleted user ${uid}. Skipping account deletion confirmation email.`);
-            }
+            await deleteAuthAccountAndNotify(uid, userEmail);
 
             return { success: true };
         } catch (error) {

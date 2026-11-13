@@ -6,6 +6,7 @@ This document is the source of truth for Quantified Self transactional and admin
 
 | Event | Delivery owner | Template ID | From | Reply-To |
 | --- | --- | --- | --- | --- |
+| Inactive Free account warning | `processInactiveAccounts` + Trigger Email extension | `account_inactivity_warning` | Standard transactional sender | Standard transactional reply address |
 | Onboarding first becomes complete | Cloud Function + Trigger Email extension | `registration_welcome` | `Dimitrios from Quantified Self <hello@quantified-self.io>` | `dimitrios@quantified-self.io` |
 | Subscription starts or trial starts | `onSubscriptionUpdated` + Trigger Email extension | `welcome_email` | `Quantified Self <hello@quantified-self.io>` | `support@quantified-self.io` |
 | Subscription upgrade | `onSubscriptionUpdated` + Trigger Email extension | `subscription_upgrade` | Standard transactional sender | Standard transactional reply address |
@@ -205,6 +206,15 @@ monitoring bundles are unchanged. Approved production activation/readback and na
 in #835 separately from local test results; no simulated outage or new test email is claimed.
 
 ## Firestore template source of truth
+
+The off-by-default [inactive account retention](inactive-account-retention.md) flow selects `account_inactivity_warning`.
+Its UID-owned mail and separate user-scoped episode both carry 90-day expiry, with explicit recursive cleanup and
+collection-specific TTL configuration. Only matching successful SMTP acceptance starts the full 30-day warning period;
+queued, missing, failed or ambiguous delivery never permits account deletion. Changed Auth email or restored access
+invalidates the prior episode. The notice is transactional and does not depend on marketing consent. Its selected
+template and partials must be seeded under separate approval before warnings are enabled; source availability and local
+render tests do not prove live delivery. The existing confirmation follows individual Auth deletion and makes no claim
+that background cleanup has completed.
 
 The allowlisted template and partial catalog is in `functions/src/email/template-catalog.ts`. HTML and plaintext sources are under `functions/templates/`. Standard sender addresses, URLs, date formatting, grace-period calculation, and plan descriptions are centralized in `functions/src/email/config.ts`; numeric limits and device-sync entitlement come from `shared/limits.ts`.
 

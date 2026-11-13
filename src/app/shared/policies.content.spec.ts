@@ -12,6 +12,18 @@ import {
 import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from './policy-consent-fields';
 
 describe('Policy consent fields', () => {
+  it('discloses inactivity deletion separately from downgrade restrictions', () => {
+    for (const id of ['data', 'tos']) {
+      const copy = POLICY_CONTENT.find(policy => policy.id === id)!.content.join(' ');
+      for (const phrase of ['Inactive Free accounts', 'six calendar months', 'at least 30 days',
+        'no purchase is required', 'trials and gifts', 'grace period']) expect(copy).toContain(phrase);
+      expect(copy).toContain('not automatically deleted due to');
+    }
+    const data = POLICY_CONTENT.find(policy => policy.id === 'data')!.content.join(' ');
+    expect(data).toContain('Unconfirmed warning delivery prevents deletion');
+    expect(data).toContain('changed sign-in address requires a fresh warning period');
+    expect(data).toContain('Provider sync and MCP requests do not count');
+  });
   it('keeps the lightweight required-consent registry aligned with visible policy controls', () => {
     const requiredPolicyControls = POLICY_CONTENT
       .filter(policy => !!policy.checkboxLabel && !policy.isOptional)

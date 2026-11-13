@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock dependencies using vi.hoisted to avoid initialization errors
 const {
+    mockInvalidateInactivity,
     mockReconcileClaims,
     mockCheckAndSendEmails,
     mockLogger,
@@ -11,6 +12,7 @@ const {
     mockClearServiceDisconnectPending,
     firestoreTriggerState,
 } = vi.hoisted(() => ({
+    mockInvalidateInactivity: vi.fn().mockResolvedValue(undefined),
     mockReconcileClaims: vi.fn(),
     mockCheckAndSendEmails: vi.fn(),
     mockLogger: {
@@ -24,6 +26,8 @@ const {
         options: undefined as unknown,
     },
 }));
+
+vi.mock('../users/inactivity-cancellation', () => ({ invalidateInactivityWarning: mockInvalidateInactivity }));
 
 vi.mock('./claims', () => ({
     reconcileClaims: mockReconcileClaims
@@ -86,6 +90,7 @@ describe('onSubscriptionUpdated', () => {
 
     const createMockEvent = (uid: string, subscriptionId: string, beforeData?: unknown, afterData?: unknown) => ({
         id: `evt_${Date.now()}`,
+        time: new Date().toISOString(),
         params: { uid, subscriptionId },
         data: beforeData || afterData ? {
             before: { data: () => beforeData },
@@ -157,6 +162,16 @@ describe('onSubscriptionUpdated', () => {
             data: () => ({})
         };
     };
+
+    it('invalidates inactivity notices before subscription reconciliation, and retries invalidation failure', async () => {
+        setupUserExists(true); setupSubscriptionsQuery(true);
+        mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+        const event = createMockEvent('synthetic', 'sub_synthetic', undefined, { status: 'active', role: 'pro' });
+        await onSubscriptionUpdated(event as any);
+        expect(mockInvalidateInactivity).toHaveBeenCalledWith(expect.anything(), 'synthetic', Date.parse(event.time));
+        mockInvalidateInactivity.mockRejectedValueOnce(new Error('synthetic invalidation failure'));
+        await expect(onSubscriptionUpdated(event as any)).rejects.toThrow('synthetic invalidation failure');
+    });
 
     it('retries transient subscription lifecycle failures', () => {
         expect(firestoreTriggerState.options).toEqual(expect.objectContaining({

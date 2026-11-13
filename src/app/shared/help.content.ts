@@ -1974,6 +1974,12 @@ This action cannot be undone in the app. Deleted uploaded files can remain in pr
 
 Some older email delivery records may remain after account deletion. Those with a 90-day expiry are removed automatically after that date.
 
+**Inactive Free accounts:** If you have not signed in or refreshed an app session for more than six calendar months and your account is Free, we may email your current sign-in address with a deletion warning. This includes former Basic or Pro members whose paid access and grace period have ended. Basic and Pro access, including trials and gifts, and an active grace period protect your account.
+
+Sign in within 30 days of the warning to keep your account; no purchase is required. An existing app session refreshing also counts as activity. Provider sync and MCP requests do not reset this period. If your sign-in email changes, a fresh warning period is required at the new address.
+
+Deletion checks run daily and never delete an account before the full 30-day warning period has elapsed. Unconfirmed warning delivery prevents deletion. If you remain inactive and Free, deletion uses the same permanent account and background data-cleanup process described above. Export anything you want to keep before the deadline.
+
 ## Exports and legal requests
 
 - Use CSV export and per-activity downloads for day-to-day backups.

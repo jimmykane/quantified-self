@@ -48,6 +48,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   queueActivitySendNotification: () => module.require('./web-push/delivery-admission') as FunctionModule,
   queueAutomaticDeliveryNotification: () => module.require('./web-push/delivery-admission') as FunctionModule,
   sendActivitySyncNotifications: () => module.require('./web-push/activity') as FunctionModule,
+  processInactiveAccounts: () => module.require('./schedule/inactive-accounts') as FunctionModule,
   checkSubscriptionNotifications: () => module.require('./schedule/notifications') as FunctionModule,
   cleanupStripeCustomer: () => module.require('./stripe/cleanup') as FunctionModule,
   cleanupUserAccounts: () => module.require('./users/cleanup') as FunctionModule,
