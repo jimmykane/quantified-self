@@ -1,5 +1,17 @@
 # Sports-Lib Reparse Runbook
 
+## Sports Lib 23.12.1: FIT developer metadata security fix
+
+Root and Functions pin the same published 23.12.1 artifact with matching lockfile integrity. Both trees resolve
+fit-file-parser 6.2.8, and Functions pins its direct parser dependency to 6.2.8. The patch rejects invalid developer-field
+cache identities while preserving valid developer fields and retained raw metadata; see
+[GHSA-gjg8-qvmp-pvp2](https://github.com/jimmykane/fit-parser/security/advisories/GHSA-gjg8-qvmp-pvp2).
+No historical activity/route reparse, derived-summary regeneration or persisted-data migration is required.
+Public APIs, canonical metrics, units, serialized data and MCP contracts are unchanged.
+Runtime detection and strict reparse targets follow the installed package. Before any separately approved deployment,
+review already-enabled scanners because the version increase can make older records eligible. This local intake
+does not deploy QS, enable scanners, launch a reparse campaign or change queue settings.
+
 ## Sports Lib 23.12.0: running pace and explicit HR formula calibration
 
 Root and Functions pin the same published 23.12.0 artifact with matching lockfile integrity. Runtime detection and
