@@ -914,3 +914,20 @@ describe('firestore indexes', () => {
         });
     });
 });
+
+
+describe('inactivity retention indexes', () => {
+    it('declares due-episode collection-group scanning, retained receipts, and bounded billing/cleanup checks', () => {
+        const configuration = loadFirestoreIndexes();
+        expect(configuration.fieldOverrides).toEqual(expect.arrayContaining([
+            expect.objectContaining({ collectionGroup: 'inactivityRetention', fieldPath: 'nextCheckAt', indexes: expect.arrayContaining([
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ]) }),
+            { collectionGroup: 'inactivityRetention', fieldPath: 'expireAt', ttl: true, indexes: [] },
+        ]));
+        for (const [collectionGroup, fields] of [['stripeBillingJobs', ['uid', 'state']], ['userDeletionTombstones', ['source', 'cleanupStatus']]]) {
+            expect(configuration.indexes).toContainEqual({ collectionGroup, queryScope: 'COLLECTION',
+                fields: (fields as string[]).map(fieldPath => ({ fieldPath, order: 'ASCENDING' })) });
+        }
+    });
+});

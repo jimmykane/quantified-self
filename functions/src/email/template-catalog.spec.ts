@@ -49,6 +49,7 @@ function expectValidRenderedUrls(html: string): void {
 describe('refreshed email template catalog', () => {
     it('contains the approved template IDs and exact subjects', () => {
         expect(Object.fromEntries(REFRESHED_EMAIL_TEMPLATE_CATALOG.map(template => [template.id, template.subject]))).toEqual({
+            account_inactivity_warning: 'Sign in within 30 days to keep your Quantified Self account',
             registration_welcome: 'Welcome to Quantified Self — a note from Dimitrios',
             welcome_email: 'Your {{role}} membership is active',
             subscription_upgrade: 'You’re now on {{new_role}}',
@@ -210,6 +211,19 @@ describe('refreshed email template catalog', () => {
         expect(documents.filter(document => document.data.partial)).toHaveLength(EMAIL_PARTIAL_CATALOG.length - 1);
         expect(documents.filter(document => !document.data.partial)).toHaveLength(REFRESHED_EMAIL_TEMPLATE_CATALOG.length);
         expect(documents.every(document => document.data.html.length > 0 && document.data.text.length > 0)).toBe(true);
+    });
+
+    it('renders the inactivity warning with an ordinary login link and no payment requirement', () => {
+        const entry = REFRESHED_EMAIL_TEMPLATE_CATALOG.find(template => template.id === 'account_inactivity_warning')!;
+        const data = entry.previewCases[0].data;
+        const html = createHandlebarsEnvironment('html').compile(readTemplate(entry.htmlFile), { strict: true })(data);
+        const text = createHandlebarsEnvironment('text').compile(readTemplate(entry.textFile), { strict: true })(data);
+        for (const copy of [html, text]) {
+            expect(copy).toContain('after 30 days unless you sign in');
+            expect(copy).toContain('You do not need to buy a subscription');
+            expect(copy).toContain('https://quantified-self.io/login');
+            expect(copy).toContain('cannot be undone in the app');
+        }
     });
 
     it('loads only an explicitly requested refreshed template and its required partials', () => {

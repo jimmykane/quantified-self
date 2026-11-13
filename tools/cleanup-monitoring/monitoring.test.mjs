@@ -62,8 +62,8 @@ test('filter fixtures follow Logging OR-before-AND precedence and require groupe
   assert.equal(matches('resource.type="cloud_run_revision" AND (jsonPayload.flow="account" OR jsonPayload.flow="disconnect")', log), true);
 });
 
-test('fixed categories, nine owned metrics, seven policies and mixed runtime boundaries', () => {
-  const b = bundle(); assert.equal(b.metrics.length, 9); assert.equal(b.policies.length, 7);
+test('fixed categories, eighteen owned metrics, twelve policies and mixed runtime boundaries', () => {
+  const b = bundle(); assert.equal(b.metrics.length, 18); assert.equal(b.policies.length, 12);
   assert.equal(b.dashboard.displayName, 'QS Account Cleanup & Disconnect Recovery');
   for (const m of b.metrics) {
     assert.ok(m.description.startsWith(`[${OWNER}]`));
@@ -129,11 +129,21 @@ test('policy thresholds are sustained, native abrupt account errors covered, onl
     assert.deepEqual(p.alertStrategy.notificationPrompts, ['OPENED', 'CLOSED']);
     assert.match(p.documentation.content, /No automatic remediation/);
     for (const c of p.conditions) {
+      if (c.conditionPrometheusQueryLanguage) {
+        assert.equal(p.userLabels.policy_id, 'inactivity_heartbeat');
+        const condition = c.conditionPrometheusQueryLanguage;
+        assert.equal(condition.query, `(sum(sum_over_time({__name__="logging.googleapis.com/user/qs_cleanup_inactivity_heartbeat_v1",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts"}[48h])) or vector(0)) < 1`);
+        assert.equal(condition.duration, '300s');
+        assert.equal(condition.evaluationInterval, '300s');
+        continue;
+      }
       const condition = c.conditionThreshold || c.conditionAbsent;
       assert.match(condition.filter, /resource.type="cloud_(function|run_revision)"/);
       assert.ok(!/\bOR\b/.test(condition.filter));
       if (c.conditionAbsent) {
-        assert.equal(p.userLabels.policy_id, 'heartbeat'); assert.equal(c.conditionAbsent.duration, '7200s');
+        assert.equal(p.userLabels.policy_id, 'heartbeat');
+        assert.equal(c.conditionAbsent.duration, '7200s');
+        assert.ok(parseInt(c.conditionAbsent.duration, 10) <= 23.5 * 3600);
       } else assert.equal(condition.evaluationMissingData, 'EVALUATION_MISSING_DATA_INACTIVE');
     }
   }
@@ -180,7 +190,7 @@ test('offline preview, explicit cloud approval, CI registration and no index/Rul
   for (const args of [[`--project=${project}`], [`--project=${project}`, '--apply'], [`--project=${project}`, '--delete']]) {
     const result = spawnSync(process.execPath, ['tools/cleanup-monitoring/cli.mjs', ...args], { encoding: 'utf8', env: { PATH: '/no-credentials' } });
     assert.equal(result.status, args.length === 1 ? 0 : 1);
-    if (result.status === 0) assert.equal(JSON.parse(result.stdout).metrics.length, 9);
+    if (result.status === 0) assert.equal(JSON.parse(result.stdout).metrics.length, 18);
   }
   assert.throws(() => buildCleanupMonitoring(project, 'projects/other/notificationChannels/123'));
   assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).scripts['test:cleanup-monitoring'], 'node --test tools/cleanup-monitoring/monitoring.test.mjs');
@@ -223,12 +233,12 @@ test('serial reapplication preserves all nine other bundles and every condition 
   const policies = structuredClone(source.state.alertPolicies.slice(before.alertPolicies.length)); source.calls.length = 0;
   const second = await applyCleanupMonitoring(bundle(), source.request);
   assert.equal(second.dashboard, first.dashboard); assert.equal(source.calls.filter(c => c.method === 'POST').length, 0);
-  assert.equal(source.calls.filter(c => c.method === 'PATCH').length, 8);
+  assert.equal(source.calls.filter(c => c.method === 'PATCH').length, 13);
   assert.deepEqual(source.state.alertPolicies.slice(before.alertPolicies.length), policies);
   for (const key of Object.keys(before)) assert.deepEqual(source.state[key].slice(0, before[key].length), before[key]);
   assert.ok(source.calls.every(c => c.method !== 'DELETE' && !c.url.includes('other-') && (c.method === 'GET' || !c.url.includes('/notificationChannels'))));
 });
-test('adding the remote policy to the original six preserves existing policies, conditions and dashboard', async () => {
+test('adding the remote policy preserves every other policy, condition and dashboard', async () => {
   const source = transport(); const original = bundle();
   original.policies = original.policies.filter(p => p.userLabels.policy_id !== 'remote');
   const first = await applyCleanupMonitoring(original, source.request);
@@ -257,5 +267,52 @@ test('ownership collisions and malformed/disabled configuration fail before writ
       return result;
     }));
     assert.ok(source.calls.every(c => c.method === 'GET'));
+  }
+});
+
+
+test('inactivity filters cover the exact daily owner while excluding protected accounts and other runtimes', () => {
+  const log = entry({ message: '[AccountInactivity]', outcome: 'completed', mode: 'enforce', counts: { blocked: 10 }, overdue: 0, reviewRequired: 0 });
+  log.resource.labels.service_name = 'processinactiveaccounts';
+  assert.equal(matches(metric('inactivity_heartbeat').filter, log), true);
+  for (const key of ['failures', 'notice', 'review', 'overdue', 'scan_stalled']) assert.equal(matches(metric(`inactivity_${key}`).filter, log), false);
+  log.jsonPayload.counts.notice_unconfirmed = 1; assert.equal(matches(metric('inactivity_notice').filter, log), true);
+  log.jsonPayload.counts.failed = 1; assert.equal(matches(metric('inactivity_failures').filter, log), true);
+  log.jsonPayload.reviewRequired = 1; assert.equal(matches(metric('inactivity_review').filter, log), true);
+  log.jsonPayload.overdue = 1; assert.equal(matches(metric('inactivity_overdue').filter, log), true);
+  log.jsonPayload.mode = 'warnings-only'; assert.equal(matches(metric('inactivity_overdue').filter, log), false);
+  log.jsonPayload.scanAgeMs = 604800000; assert.equal(matches(metric('inactivity_scan_stalled').filter, log), true);
+  log.resource.labels.service_name = 'unrelated'; assert.equal(matches(metric('inactivity_heartbeat').filter, log), false);
+  const policy = bundle().policies.find(p => p.userLabels.policy_id === 'inactivity_failure');
+  assert.match(policy.conditions[1].conditionThreshold.filter, /request_count.*processinactiveaccounts.*5xx/);
+  assert.equal(policy.conditions[0].conditionThreshold.aggregations[0].alignmentPeriod, '86400s');
+});
+
+
+test('adding daily inactivity coverage preserves the seven existing cleanup policies and their condition IDs', async () => {
+  const source = transport(); const original = bundle();
+  original.metrics = original.metrics.filter(m => !m.name.includes('_inactivity_'));
+  original.policies = original.policies.filter(p => !p.userLabels.policy_id.startsWith('inactivity_'));
+  original.dashboard.mosaicLayout.tiles = original.dashboard.mosaicLayout.tiles.filter(t => !t.widget.title.startsWith('Daily inactivity:'));
+  assert.equal(original.metrics.length, 9); assert.equal(original.policies.length, 7);
+  const first = await applyCleanupMonitoring(original, source.request);
+  const before = structuredClone(source.state.alertPolicies.filter(p => p.userLabels.managed_by === OWNER)); source.calls.length = 0;
+  const second = await applyCleanupMonitoring(bundle(), source.request); assert.equal(second.dashboard, first.dashboard);
+  for (const policy of before) assert.deepEqual(source.state.alertPolicies.find(p => p.name === policy.name), policy);
+  const addedPolicies = source.calls.filter(c => c.method === 'POST' && c.body?.userLabels?.policy_id?.startsWith('inactivity_'));
+  assert.equal(addedPolicies.length, 5);
+  assert.ok(source.calls.every(c => c.method !== 'DELETE'));
+});
+
+test('daily count distributions become numeric chart series rather than raw distributions', () => {
+  const b = bundle();
+  for (const key of ['warnings', 'deletions', 'holds']) {
+    const metric = b.metrics.find(m => m.name === `qs_cleanup_inactivity_${key}_v1`);
+    assert.equal(metric.metricDescriptor.valueType, 'DISTRIBUTION');
+    const widget = b.dashboard.mosaicLayout.tiles.find(t => t.widget.title.startsWith(`Daily inactivity: ${key} (`)).widget;
+    assert.match(widget.title, /per-run count p95/);
+    const query = widget.xyChart.dataSets[0].timeSeriesQuery.timeSeriesFilter;
+    assert.equal(query.aggregation.perSeriesAligner, 'ALIGN_PERCENTILE_95');
+    assert.equal(query.aggregation.crossSeriesReducer, 'REDUCE_MAX');
   }
 });

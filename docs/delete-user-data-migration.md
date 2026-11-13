@@ -12,6 +12,11 @@ or merging this code does not deploy it or remove the installed extension.
 See [the deletion matrix](user-deletion-workflow.html) and
 [provider lifecycle guidance](provider-integration-guide.md#account-deletion).
 
+The separately gated [inactive Free account retention](inactive-account-retention.md) feature reuses this native cleanup
+owner. Its daily scheduler establishes the existing writer fence and calls the same individual Auth-deletion helper as
+`deleteSelf` only after eligibility and accepted-notice checks. It does not add another cleanup owner or alter this
+document's completed production migration. Retention deployment and activation remain separate, unperformed steps.
+
 ## Production status — 23 October 2026
 
 The separately approved deployment and extension retirement are complete in

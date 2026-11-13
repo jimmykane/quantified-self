@@ -33,6 +33,24 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Server-owned inactivity retention', () => {
+        it('denies owners, other users, anonymous clients and client admins access to episodes or activation', async () => {
+            const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one', 'configuration/inactiveAccounts'];
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({});
+                for (const path of paths) await context.firestore().doc(path).set({ state: 'warned', mode: 'off' });
+            });
+            for (const context of [testEnv.authenticatedContext('owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('admin', { admin: true }), testEnv.unauthenticatedContext()]) {
+                for (const path of paths) {
+                    const ref = context.firestore().doc(path);
+                    await assertFails(ref.get()); await assertFails(ref.set({ mode: 'enforce' }));
+                    await assertFails(ref.update({ state: 'warned' })); await assertFails(ref.delete());
+                }
+            }
+        });
+    });
+
     describe('Calendar training goals', () => {
         const path = 'users/goal-owner/trainingGoals/goal';
         const statePath = 'users/goal-owner/trainingGoalState/current';

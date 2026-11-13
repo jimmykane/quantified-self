@@ -269,6 +269,9 @@ service cloud.firestore {
       match /activitySendOperations/{batchID}/{path=**} { allow read, write: if false; }
       match /activitySendQuota/{quotaID} { allow read, write: if false; }
 
+      // Inactivity warnings and deletion authorization are exclusively server-owned.
+      match /inactivityRetention/{document=**} { allow read, write: if false; }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;
@@ -827,6 +830,8 @@ service cloud.firestore {
       return url is string && url.size() <= 2048
         && url.matches('^https://(beta[.])?quantified-self[.]io/.*|^http://(localhost|127[.]0[.]0[.]1):[0-9]+/.*');
     }
+    match /configuration/inactiveAccounts { allow read, write: if false; }
+
     match /configuration/stripeBilling {
       allow read: if request.auth != null;
       allow write: if false;

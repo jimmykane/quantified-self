@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "stripeBillingJobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "state", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "userDeletionTombstones", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source", "order": "ASCENDING" }, { "fieldPath": "cleanupStatus", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "endTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
     },
@@ -1793,6 +1801,10 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "inactivityRetention", "fieldPath": "nextCheckAt", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" }, { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
+    { "collectionGroup": "inactivityRetention", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "pushState", "fieldPath": "trainingDueAt", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "expireAt", "ttl": true, "indexes": []},
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "goal", "ttl": false, "indexes": []},

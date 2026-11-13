@@ -1,3 +1,4 @@
+import { buildInactivityMonitoring } from './inactivity.mjs';
 import { validateTarget } from '../monitoring/target.mjs';
 
 export const OWNER = 'qs-cleanup-monitoring-v1';
@@ -96,6 +97,8 @@ export function buildCleanupMonitoring(project, channel) {
   chart('Existing recovery scheduler outcomes', filter('heartbeat', 'cloud_run_revision'), sum('1800s', ['metric.label.outcome'])),
   chart('Account Auth handler native executions (not extension completion)', accountNative, sum('3600s', ['metric.label.status'])),
   ];
+  const inactivity = buildInactivityMonitoring(project, channel, OWNER);
+  metrics.push(...inactivity.metrics); policies.push(...inactivity.policies); widgets.push(...inactivity.widgets);
   return { project, metrics, policies, dashboard: { displayName: 'QS Account Cleanup & Disconnect Recovery', labels: { [OWNER]: '' }, mosaicLayout: { columns: 12,
     tiles: widgets.map((widget, i) => i === 0 ? { xPos: 0, yPos: 0, width: 12, height: 3, widget }
       : { xPos: (i - 1) % 2 * 6, yPos: 3 + Math.floor((i - 1) / 2) * 4, width: 6, height: 4, widget }),

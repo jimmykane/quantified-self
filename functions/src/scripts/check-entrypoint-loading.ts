@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 200;
+const EXPECTED_FULL_EXPORT_COUNT = 201;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
@@ -33,6 +33,7 @@ const BILLING_SUPPORT_TARGET_METADATA: Readonly<Record<string, {
   getUpcomingRenewalAmount: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'] },
   onSubscriptionUpdated: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', secrets: ['STRIPE_SECRET_KEY'], region: 'europe-west3', concurrency: 5 },
   enforceSubscriptionLimits: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'schedule', secrets: [...ACCOUNT_CLEANUP_SECRETS, 'STRIPE_SECRET_KEY'].sort() },
+  processInactiveAccounts: { memoryMb: 512, timeoutSeconds: 540, trigger: 'schedule', secrets: ['STRIPE_BILLING_KEY'], concurrency: 1, maxInstances: 1 },
   checkSubscriptionNotifications: { memoryMb: 512, timeoutSeconds: null, trigger: 'schedule', secrets: [] },
   cleanupStripeCustomer: { memoryMb: null, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'], minInstances: 0, maxInstances: 10 },
   cleanupUserAccounts: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'event', secrets: ACCOUNT_CLEANUP_SECRETS, platform: 'gcfv1' },
@@ -732,6 +733,9 @@ async function check(): Promise<void> {
       assert(arraysEqual(triggers, [`${billingSupport.trigger}Trigger`]), `${target} trigger kind changed.`);
       if (billingSupport.trigger === 'schedule') {
         assert(endpoint.scheduleTrigger?.schedule === 'every 24 hours', `${target} schedule changed.`);
+        if (target === 'processInactiveAccounts') {
+          assert(endpoint.scheduleTrigger?.retryConfig?.retryCount === 0, 'Inactivity scheduler must not retry ambiguous deletion calls.');
+        }
       } else if (target === 'onSubscriptionUpdated') {
         assert(endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
           && endpoint.eventTrigger.eventFilterPathPatterns?.document === 'customers/{uid}/subscriptions/{subscriptionId}'
