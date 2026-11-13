@@ -94,6 +94,9 @@ it alerts after five minutes without any positive observation in that window. Th
 [23.5-hour metric-absence limit](https://docs.cloud.google.com/monitoring/alerts/metric-absence). Warning/deletion/hold
 distribution charts show per-run p95 counts, not totals; their percentile alignment produces numeric series as required
 by the [Monitoring aggregation contract](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aligner).
+On first creation, the metric has no history: [log-based metrics do not backfill earlier logs](https://docs.cloud.google.com/logging/docs/logs-based-metrics).
+The enabled policy can therefore open an initial absence incident until a new heartbeat is ingested. An older log entry
+is not proof that the new metric has data.
 
 On an alert, inspect the exact episode, mail acceptance, latest Auth metadata, billing history, marker/checkpoints and
 native cleanup logs using read-only access. Do not infer an absent Auth user or finished cleanup from a network error.
@@ -126,8 +129,10 @@ Before an approved rollout:
    previews first; a controlled-inbox SMTP test needs its own mail authorization.
 4. Preview monitoring offline with `node tools/cleanup-monitoring/cli.mjs --project=quantified-self-io`. Apply only
    under separately approved configuration authority with the verified existing independent notification channel.
-   Observe the first natural off-mode heartbeat before enabling its policy: a new metric without history is absent.
-   Read back all owned resources and prove old identities/conditions are preserved. Verify natural heartbeat series.
+   The bundle enables policies during apply; allow for the initial absence incident described above. Keep retention off
+   until the first post-creation scheduled heartbeat appears in the metric and its alert clears. Any manual off-mode
+   invocation to accelerate that check requires separate approval.
+   Read back all owned resources and prove old identities/conditions are preserved. Verify actual heartbeat series.
 5. Keep mode off until those prerequisites pass. Separately approve `dry-run`, inspect aggregate holds and scan
    completion, then separately approve a bounded `warnings-only` phase. Do not backdate acceptance or shorten deadlines.
    Review current evidence and aged notices before separately authorizing `enforce` and exact operational limits.
