@@ -100,7 +100,10 @@ export async function startManualActivityHistory(
     if (serviceName === ServiceNames.SuuntoApp) {
       const token = (await tx.get(tokenRef)).data();
       credentialGeneration = token?.tokenCredentialGeneration;
-      if (token?.userName !== providerUserId || typeof credentialGeneration !== 'string' || !credentialGeneration.trim()) {
+      // Match Suunto's existing lifecycle validation; never normalize an authority snapshot.
+      if (token?.userName !== providerUserId
+        || [rootGeneration, credentialGeneration, connectionGeneration].some(generation =>
+          typeof generation !== 'string' || !generation || generation !== generation.trim() || generation.length > 128)) {
         throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
       }
       if (credentialGeneration !== rootGeneration) {

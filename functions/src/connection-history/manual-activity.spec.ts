@@ -248,6 +248,30 @@ describe('migrated Suunto history admission', () => {
     await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(runs()).toHaveLength(0);
   });
+  describe.each(['root', 'token', 'connection'])('malformed %s generation', field => {
+    it.each(['whitespace', 'oversized'])('rejects %s before admitting a migrated account', async format => {
+      const root = migrated();
+      const value = format === 'oversized' ? 'x'.repeat(129)
+        : field === 'root' ? ' root-generation ' : field === 'token' ? ' credential ' : ' connection ';
+      if (field === 'root') mocks.rows.get(root)!.activeOAuthCredentialGeneration = value;
+      if (field === 'token') mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = value;
+      if (field === 'connection') mocks.rows.get(metaPath(service))!.connectionStateGeneration = value;
+      await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(runs()).toHaveLength(0);
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('providerUserId');
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryReservation');
+    });
+  });
+  it.each([1, 128])('preserves valid generation snapshots at length %s', async length => {
+    const root = migrated();
+    mocks.rows.get(root)!.activeOAuthCredentialGeneration = 'r'.repeat(length);
+    mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = 't'.repeat(length);
+    mocks.rows.get(metaPath(service))!.connectionStateGeneration = 'c'.repeat(length);
+    mocks.rows.set(bindingPath(), buildSuuntoHealthWebhookAccountBinding('owner', 'account', 't'.repeat(length), 'provider_refresh'));
+    await startManualActivityHistory('owner', service, start, end);
+    expect(runs()[0][1]).toMatchObject({ rootOAuthCredentialGeneration: 'r'.repeat(length), credentialGeneration: 't'.repeat(length),
+      connectionGeneration: 'c'.repeat(length) });
+  });
   it.each(['root', 'token', 'connection', 'disconnect', 'binding'])('does not adopt a changed %s on admission transaction retry', async change => {
     const root = migrated();
     mocks.retryTransaction = true;
