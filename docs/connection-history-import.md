@@ -274,6 +274,19 @@ Suunto identity. The existing progress UI needs no behavior change; Help explain
 To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
 retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
 
+### Suunto manual request diagnostics
+
+`addSuuntoAppHistoryToQueue` records failed handler requests as `[SuuntoHistoryImport] Request failed.` with a fixed
+`failureStage`, request `mode`, `notificationRequested` boolean, callable `errorCode`, allowlisted `reason` and elapsed
+time. This includes validation, notification consent and background admission, which run before the legacy provider-scan
+catch. Expected callable rejections are WARNING; unexpected/server failures are ERROR. Messages, request payloads,
+date ranges, identities, credential generations and notification registration data are excluded. Unknown rejection
+messages remain `unclassified`; the original callable code/message and import behavior are preserved.
+
+Monitoring coverage is **unchanged**: this diagnostic-only boundary does not change coordinator/import metrics,
+admission checks, queues, retries, authorization or terminal outcomes. Deploy only `addSuuntoAppHistoryToQueue` after
+separate approval for this history diagnostic; no frontend, Rules or index release is required.
+
 ### Existing provider operations
 
 | Provider | Shared operations used by manual and connection imports | Completion |
