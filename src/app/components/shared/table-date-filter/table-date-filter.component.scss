@@ -31,7 +31,7 @@
 .table-date-error { color: var(--mat-sys-error); font: var(--mat-sys-body-small); }
 button.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent); }
 
-.table-date-filter-control.has-range-navigation { flex-wrap: wrap; }
+.table-date-filter-control.has-range-navigation { flex-wrap: nowrap; }
 .table-date-period-step {
   display: flex;
   align-items: center;
@@ -39,17 +39,22 @@ button.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, 
   flex: 0 0 auto;
   mat-icon { width: 1em; height: 1em; font-size: inherit; line-height: 1; }
 }
-.table-date-current-period { font: var(--mat-sys-label-medium); }
 
 @media (max-width: 768px) {
-  .table-date-filter-control.has-range-navigation { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; }
+  .table-date-filter-control.has-range-navigation { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
   .has-range-navigation {
-    .table-date-choice { display: contents; }
+    .table-date-choice { grid-column: 2; grid-row: 1; }
+    .table-date-period-step {
+      @include mat.icon-button-overrides((state-layer-size: 44px));
+      width: 44px; height: 44px; padding: 10px;
+    }
     .table-date-period-step:first-child { grid-column: 1; grid-row: 1; }
     .table-date-choice + .table-date-period-step { grid-column: 3; grid-row: 1; }
-    .table-date-filter-button { grid-column: 2; grid-row: 1; }
+    .table-date-filter-button { padding-inline: 2px; }
+    // The arrows and date text already identify this control; leave room for the dates.
+    .table-date-filter-icon { display: none; }
+    .table-filter-button-content { gap: 4px; }
+    // Keep words intact, while allowing unusually long or cross-year ranges to wrap.
     .table-filter-button-content > span { overflow-wrap: normal; }
-    .table-date-clear { grid-column: 3; grid-row: 2; justify-self: center; }
-    .table-date-current-period { grid-column: 2; grid-row: 2; justify-self: center; }
   }
 }

@@ -87,7 +87,8 @@ describe('Merged toolbar filter rendering', () => {
     expect(host.requests.at(-1)?.rangeNavigation?.anchor).toBeTruthy();
     expect(search.toolbarRangeStart?.getTime()).toBe(original);
     expect(search.rangeNavigation?.anchor).toBeNull();
-    expect(fixture.nativeElement.querySelector('.table-date-current-period').disabled).toBe(true);
+    const dateFilter = fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance as TableDateFilterComponent;
+    expect(dateFilter.currentPeriod()).toBe(true);
   });
 
   it('navigates full calendar weeks through the shared date control with one haptic per accepted change', async () => {
@@ -110,12 +111,15 @@ describe('Merged toolbar filter rendering', () => {
       expect(search.toolbarNavigationEnabled).toBe(true);
       expect(fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(false);
       expect(haptics.selection).toHaveBeenCalledOnce();
-      fixture.nativeElement.querySelector('.table-date-current-period').click();
+      fixture.nativeElement.querySelector('.table-date-filter-button').click();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(haptics.selection).toHaveBeenCalledTimes(2); // Previous period and menu opening.
+      TestBed.inject(OverlayContainer).getContainerElement().querySelector<HTMLButtonElement>('.table-date-current-period')!.click();
       fixture.detectChanges(); await fixture.whenStable();
       expect(fixture.componentInstance.requests.at(-1)?.dateRange).toBe(DateRanges.thisWeek);
       expect(fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Week');
       expect(fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
-      expect(haptics.selection).toHaveBeenCalledTimes(2);
+      expect(haptics.selection).toHaveBeenCalledTimes(3);
       await search.onToolbarDateRangeChange(DateRanges.lastSevenDays);
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('[aria-label="Previous period"]').disabled).toBe(false);
