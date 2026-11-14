@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
-import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
+import { isReimportableCompletedActivity, replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
 import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
 import { HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
@@ -149,11 +149,16 @@ export async function upsertWahooWorkoutQueueItem(
   input: Omit<WahooAPIWorkoutQueueItemInterface, 'id' | 'dateCreated' | 'processed' | 'retryCount' | 'dispatchedToCloudTask'> & { id: string },
   dispatchMode: WahooQueueDispatchMode,
   assertWriteAuthorizationInTransaction?: (transaction: admin.firestore.Transaction) => Promise<void>,
+  /** Server-owned legacy import lease; reused as the existing queue revision, never a coordinator run ID. */
+  legacyHistoryLeaseOwner?: string,
 ): Promise<{ ref: admin.firestore.DocumentReference; queued: boolean }> {
   const db = admin.firestore();
   const ref = db.collection(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME).doc(input.id);
   const now = Date.now();
-  const historyRevision = input.connectionHistoryRunId ? { queueRevision: input.queueRevision || randomUUID() } : {};
+  const legacyHistoryRevision = input.fromHistory === true && !input.connectionHistoryRunId && !currentHistoryExecution()
+    ? legacyHistoryLeaseOwner : undefined;
+  const historyRevision = legacyHistoryRevision ? { queueRevision: legacyHistoryRevision }
+    : input.connectionHistoryRunId ? { queueRevision: input.queueRevision || randomUUID() } : {};
   const result = await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -171,7 +176,10 @@ export async function upsertWahooWorkoutQueueItem(
     if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
       throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
     }
-    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, {
+    const reimportLegacy = existing && legacyHistoryRevision && input.firebaseUserID
+      && existing.firebaseUserID === input.firebaseUserID && existing.queueRevision !== legacyHistoryRevision
+      && isReimportableCompletedActivity(existing);
+    if (existing && !isNewerRevision(existing, input) && !reimportLegacy && !replacesSupersededHistoryWork(existing, {
       ...input, reimportCompletedActivities: currentHistoryExecution()?.reimportCompletedActivities,
     })) {
       if ((existing as Record<string, unknown>).processed !== true) {

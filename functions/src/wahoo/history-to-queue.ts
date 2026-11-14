@@ -293,7 +293,15 @@ export async function importWahooHistory(
                 userID,
                 pageAccountGuard,
               );
-            });
+              if (!options.execution) {
+                const meta = await transaction.get(admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME));
+                const lease = meta.data();
+                if (lease?.historyImportLeaseOwner !== leaseOwner || Number(lease?.historyImportLeaseExpiresAt) <= Date.now()
+                  || !Number.isFinite(lease?.historyImportLeaseExpiresAt)) {
+                  throw new HttpsError('already-exists', 'This Wahoo history import is no longer active. Please retry.');
+                }
+              }
+            }, options.execution ? undefined : leaseOwner);
             options.execution?.onQueued(`wahooAPIWorkoutQueue/${id}`);
             if (queued.queued) stats.successCount++;
             else stats.skippedCount++;
@@ -302,7 +310,7 @@ export async function importWahooHistory(
             // page-level check. Do not reduce that lifecycle fence to an
             // ordinary per-item failure and continue through the old page.
             await assertWahooActiveAccountGuardCurrent(userID, pageAccountGuard);
-            if (options.execution) throw error;
+            if (options.execution || (error instanceof HttpsError && error.code === 'already-exists')) throw error;
             stats.failureCount++;
             logger.error('Could not queue a Wahoo history item', {
               userID,

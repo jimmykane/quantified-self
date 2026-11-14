@@ -360,6 +360,11 @@ describe('importWahooHistory account fencing', () => {
       expect(startManualActivityHistory).not.toHaveBeenCalled();
       expect(getNextAllowedHistoryImportDate).toHaveBeenCalledWith('user-1', SERVICE_NAME);
       expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
+      const call = historyMocks.upsertWahooWorkoutQueueItem.mock.calls[0];
+      const lease = firestoreMocks.transactionSet.mock.calls.find(([, data]) => data.historyImportLeaseOwner !== undefined)?.[1].historyImportLeaseOwner;
+      expect(call[3]).toBe(lease);
+      expect(typeof call[3]).toBe('string');
+      expect(call[0]).not.toHaveProperty('connectionHistoryRunId');
     });
 
     it.each(['already-exists', 'permission-denied', 'failed-precondition'] as const)('does not fall back after an admission %s error', async code => {
@@ -411,7 +416,7 @@ describe('importWahooHistory account fencing', () => {
     expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenCalledTimes(101);
     expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenLastCalledWith(expect.objectContaining({
       workoutID: '101', firebaseUserID: 'user-1', fromHistory: true, connectionHistoryRunId: 'manual-run',
-    }), 'deferred', expect.any(Function));
+    }), 'deferred', expect.any(Function), undefined);
     expect(execution.beforeRequest).toHaveBeenCalledTimes(2);
     expect(execution.onQueued).toHaveBeenLastCalledWith('wahooAPIWorkoutQueue/wahoo-user-1-101');
   });
@@ -468,7 +473,8 @@ describe('importWahooHistory account fencing', () => {
   });
 
   it('binds every history queue write to the captured Wahoo account transactionally', async () => {
-    const queueTransaction = { get: vi.fn() };
+    const queueTransaction = { get: vi.fn(async () => ({ data: () =>
+      firestoreMocks.transactionSet.mock.calls.find(([, data]) => typeof data.historyImportLeaseOwner === 'string')?.[1] })) };
     historyMocks.upsertWahooWorkoutQueueItem.mockImplementationOnce(async (_item, _dispatch, authorize) => {
       await authorize(queueTransaction);
       return { queued: true };
@@ -485,6 +491,21 @@ describe('importWahooHistory account fencing', () => {
       'user-1',
       accountGuard,
     );
+    expect(queueTransaction.get).toHaveBeenCalledExactlyOnceWith(firestoreMocks.metaRef);
+  });
+
+  it.each(['expired', 'replaced', 'missing'])('stops a legacy import before reopening work after its lease is %s', async reason => {
+    historyMocks.upsertWahooWorkoutQueueItem.mockImplementationOnce(async (_item, _dispatch, authorize) => {
+      const lease = firestoreMocks.transactionSet.mock.calls.find(([, data]) => typeof data.historyImportLeaseOwner === 'string')?.[1];
+      await authorize({ get: vi.fn(async () => ({ data: () => reason === 'missing' ? {} : {
+        ...lease, ...(reason === 'expired' ? { historyImportLeaseExpiresAt: Date.now() - 1 } : { historyImportLeaseOwner: 'new-import' }),
+      } })) });
+      throw new Error('Stale legacy import reached queue persistence');
+    });
+    await expect(importWahooHistory('user-1', new Date('2026-07-10'), new Date('2026-07-18T23:59:59.999Z')))
+      .rejects.toMatchObject({ code: 'already-exists' });
+    expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenCalledOnce();
+    expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
   });
 
   it('aborts the history import when the account fence fails inside queue insertion', async () => {

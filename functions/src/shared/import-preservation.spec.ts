@@ -95,6 +95,40 @@ describe('shared import preservation', () => {
       expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toHaveLength(1);
     });
 
+  it('rechecks a former provider copy, restores it after deletion, and keeps one recording with edits on reimport', async () => {
+    const { incoming, provider } = garminCopy();
+    state.parent.name = 'Saved title';
+    state.parent.notes = 'Saved note';
+    const saved = structuredClone({ parent: state.parent, activities: [...state.activities] });
+    await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider))
+      .rejects.toMatchObject({ name: 'ProviderImportDuplicateError', eventID: 'event' });
+    expect({ parent: state.parent, activities: [...state.activities] }).toEqual(saved);
+
+    // A completed duplicate receipt is no longer proof of a saved workout after deletion.
+    state.parentExists = false; state.parent = {}; state.activities.clear(); state.garminProvider = {};
+    const adapter: FirestoreAdapter = {
+      setDoc: async (path, data) => {
+        if (path[2] === 'activities') state.activities.set(path[3], preserveImportedActivityEdits(
+          data as Record<string, unknown>, state.activities.get(path[3]) ?? null));
+        else { state.parent = preserveImportedEventEdits(data as Record<string, unknown>, state.parentExists ? state.parent : null); state.parentExists = true; }
+      },
+      generateID: () => 'unexpected-new-id', createBlob: data => data,
+      prepareTrainingLoad: parsed => prepareImportedEventWrite('owner', parsed, authorize, provider),
+    };
+    const writer = new EventWriter(adapter, undefined, undefined, { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
+    await writer.writeAllEventData('owner', event([incoming]));
+    const restoredIds = [...state.activities.keys()];
+    expect(restoredIds).toHaveLength(1);
+    expect(state.parentExists).toBe(true);
+    state.provider = provider;
+    state.parent.name = 'Edited restored title'; state.parent.notes = 'Edited restored note';
+    await writer.writeAllEventData('owner', event([activity()]));
+    expect([...state.activities.keys()]).toEqual(restoredIds);
+    expect(state.parent).toMatchObject({ name: 'Edited restored title', notes: 'Edited restored note' });
+    expect(state.parent).not.toHaveProperty('activities');
+    expect(state.parent).not.toHaveProperty('streams');
+  });
+
   const unverifiedScenarios = ['manual', 'same-provider', 'multisport', 'merged-files', 'missing-original', 'malformed-original',
     'foreign-original', 'different-event-original', 'non-fit-original', 'pending', 'pending-parent', 'first-import', 'different-distance',
     'missing-provenance', 'wrong-provenance', 'non-fit', 'incomplete-provenance', 'sml-original'];

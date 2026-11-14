@@ -1502,10 +1502,13 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
-Explicit manual custom-range Suunto/COROS/Wahoo activity runs refetch successful completed recordings once per run,
-so deleted workouts can be restored and corrected provider exports reach the existing identity/edit-preserving writer.
+Explicit manual custom-range Suunto/COROS/Wahoo activity runs refetch successful completed recordings and previously
+verified cross-provider copies once per run, so deleted workouts can be restored and corrected provider exports reach
+the existing identity/edit-preserving writer. Copies are verified again against current saved data; existing IDs and edits
+remain protected. Other skipped/uncertain outcomes gain no new eligibility. Legacy Wahoo history reuses its manual
+lease as the queue revision and verifies that lease transactionally, retaining its existing scan/stats contract.
 The same run's completed children and in-flight live work remain deduplicated; automatic history keeps its existing
-completed-job policy. No extra admission reads are added. See
+completed-job policy. Coordinator admission adds no reads; legacy Wahoo adds one metadata read per item. See
 [manual history semantics and worker-only release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
 Monitoring is **covered/unchanged** under #847/#829; Help, frontend, MCP and Training need no contract change.
 

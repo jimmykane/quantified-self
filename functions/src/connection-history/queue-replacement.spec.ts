@@ -13,10 +13,19 @@ describe('history queue replacement', () => {
     { firebaseUserID: 'other', processed: true },
     { processed: true },
     { firebaseUserID: 'owner', connectionHistoryRunId: 'manual-run', processed: true },
-    { firebaseUserID: 'owner', processed: true, skippedReason: 'cross_provider_duplicate', resultStatus: 'skipped' },
+    { firebaseUserID: 'owner', processed: true, skippedReason: 'provider_auth_required', resultStatus: 'skipped' },
     { firebaseUserID: 'owner', processed: true, resultStatus: 'manual_reconciliation_required' },
   ])('does not reopen live work, another owner, this run, or non-successful live outcomes: %j', existing => {
     expect(replacesSupersededHistoryWork(existing, manual)).toBe(false);
+  });
+
+  it('rechecks a verified live-feed copy on a new manual import, once per run', () => {
+    const copy = { firebaseUserID: 'owner', processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' };
+    expect(replacesSupersededHistoryWork(copy, manual)).toBe(true);
+    expect(replacesSupersededHistoryWork(copy, { ...manual, reimportCompletedActivities: false })).toBe(false);
+    expect(replacesSupersededHistoryWork({ ...copy, connectionHistoryRunId: manual.connectionHistoryRunId }, manual)).toBe(false);
+    expect(replacesSupersededHistoryWork({ ...copy, resultStatus: 'success' }, manual)).toBe(false);
+    expect(replacesSupersededHistoryWork({ ...copy, skippedReason: 'outbound_provider_echo' }, manual)).toBe(false);
   });
 
   it('preserves automatic deduplication and existing superseded-run recovery', () => {
