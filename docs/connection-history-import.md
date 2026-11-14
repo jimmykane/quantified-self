@@ -206,6 +206,22 @@ snapshots retain their original cursor precision. Only the activity capability i
 requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
 requests. No existing jobs are converted, reset or replayed.
 
+An explicit custom-range Suunto/COROS/Wahoo activity import refetches successfully completed source recordings once
+per new manual run, including completed live-feed jobs. This restores deleted workouts and lets the existing
+identity/edit-preserving writer apply corrected provider exports to retained recordings. It uses fresh queue revisions
+and the existing worker; it does not reparse the retained original or add a second identity. Repeated pages/task
+deliveries within that run preserve its completed children. Automatic connection imports retain completed-job
+deduplication; pending live work, owner/lifecycle guards, retained failures and explicit failed-record recovery are
+unchanged. The policy is derived privately from the server-owned `custom` range, never from a queue payload or public
+field. A manual range can therefore download already saved recordings again; there are no additional admission reads
+or queries, but normal provider/download/persistence work applies to those recordings. Garmin keeps its own backfill path.
+
+Monitoring is **covered/unchanged** by the reviewed #847 coordinator and #829 recorded-import source definitions and
+runbooks: the same committed child outcomes, retries, dispatch/worker failures and retained DLQ observations apply.
+Existing Help describes manual date-range imports and remains accurate; no frontend, Rules, index, MCP/Assistant or
+Training contract change is required. Deploy only `processConnectionHistoryTask` after separate approval to enable
+the coordinator behavior; rollback restores its previous revision. Any targeted recovery remains separately authorized.
+
 For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
 dispatch spread, tracks committed child outcomes and resumes with the same shared capacity, retry, deletion and
 connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed

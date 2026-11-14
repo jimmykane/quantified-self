@@ -226,6 +226,20 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
+  it('refetches completed recordings once per explicit manual run without persisting execution policy', async () => {
+    const execution = { reimportCompletedActivities: true } as HistoryExecution;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, connectionHistoryRunId: 'old-run', processed: true }) });
+    const incoming = { ...input, connectionHistoryRunId: 'new-run', fromHistory: true };
+    await expect(withHistoryExecution(execution, () => upsertWahooWorkoutQueueItem(incoming, 'deferred'))).resolves.toMatchObject({ queued: true });
+    const written = mocks.transactionSet.mock.calls[0][1];
+    expect(written).toMatchObject({ processed: false, retryCount: 0, fromHistory: true, connectionHistoryRunId: 'new-run', queueRevision: expect.any(String) });
+    expect(written).not.toHaveProperty('reimportCompletedActivities');
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...written, processed: true }) });
+    mocks.transactionSet.mockClear();
+    await expect(withHistoryExecution(execution, () => upsertWahooWorkoutQueueItem(incoming, 'deferred'))).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
   it('retries an ownership-transfer collision without overwriting the previous owner', async () => {
     mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: 'another-owner', connectionHistoryRunId: 'old-run', processed: false }) });
     await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))

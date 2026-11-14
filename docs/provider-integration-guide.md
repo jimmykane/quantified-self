@@ -1502,6 +1502,13 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
+Explicit manual custom-range Suunto/COROS/Wahoo activity runs refetch successful completed recordings once per run,
+so deleted workouts can be restored and corrected provider exports reach the existing identity/edit-preserving writer.
+The same run's completed children and in-flight live work remain deduplicated; automatic history keeps its existing
+completed-job policy. No extra admission reads are added. See
+[manual history semantics and worker-only release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
+Monitoring is **covered/unchanged** under #847/#829; Help, frontend, MCP and Training need no contract change.
+
 Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active
 and recent. No per-account allowlist or environment activation is required. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
 checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,

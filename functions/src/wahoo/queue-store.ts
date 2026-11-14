@@ -171,7 +171,9 @@ export async function upsertWahooWorkoutQueueItem(
     if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
       throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
     }
-    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, input)) {
+    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, {
+      ...input, reimportCompletedActivities: currentHistoryExecution()?.reimportCompletedActivities,
+    })) {
       if ((existing as Record<string, unknown>).processed !== true) {
         const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};
         if (existing.FITFileURI !== input.FITFileURI) refreshed.FITFileURI = input.FITFileURI;

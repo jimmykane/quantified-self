@@ -49,7 +49,7 @@ vi.mock('firebase-admin', () => {
 });
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
-import { CONNECTION_HISTORY_COLLECTION, MAX_ISOLATED_HISTORY_FAILURES, createHistoryRun, historyOperationKey, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, MAX_ISOLATED_HISTORY_FAILURES, createHistoryRun, historyOperationKey, historyProjection, type ConnectionHistoryRun } from './model';
 import { processConnectionHistoryRun, observeHistoryChildren, dispatchConnectionHistoryRun, retryConnectionHistoryImport, classifyHistoryFailure, processConnectionHistoryTask, recoverConnectionHistoryImports, onConnectionHistoryImportWritten } from './tasks';
 import { historyExecution, HistoryLifecycleChangedError, withHistoryQueueExecution } from './execution';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
@@ -94,6 +94,11 @@ describe('independent Suunto history lifecycle snapshots', () => {
     await execution.beforeRequest();
     await processConnectionHistoryRun(run.id, '0');
     expect(mocks.execute).toHaveBeenCalledOnce(); expect(saved()).toMatchObject({ processed: true, rootOAuthCredentialGeneration: 'retained-root' });
+  });
+  it('permits completed activity refetch only for the server-owned manual custom range', () => {
+    expect(historyExecution(run, []).reimportCompletedActivities).toBe(false);
+    expect(historyExecution({ ...run, rangePreset: 'custom' }, []).reimportCompletedActivities).toBe(true);
+    expect(historyProjection({ ...run, rangePreset: 'custom' })).not.toHaveProperty('reimportCompletedActivities');
   });
   it('allows the exact queued child without borrowing a replacement account', async () => {
     const operation = vi.fn(async () => 'PROCESSED' as QueueResult);
