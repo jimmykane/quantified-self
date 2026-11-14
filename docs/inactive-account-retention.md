@@ -101,7 +101,8 @@ returns lease tokens, generation/hash evidence, mail bodies or billing identifie
 Settings use the existing Firestore SDK directly. Rules enforce their exact field set, integer caps and monotonically
 incremented `settingsRevision`, preserving runtime state and rejecting concurrent/stale edits. Only genuine administrator
 sessions may write; impersonated sessions are denied. The page discards pending responses and confirmations after an
-account change or destruction. There are no manual-delete, retry, reset-counter or send-email buttons.
+account change or destruction. Returning to the same UID cannot revive an old confirmation or let an old save result
+clear a newer dialog or its pending state. There are no manual-delete, retry, reset-counter or send-email buttons.
 
 The existing help/policy content already describes the unchanged customer-facing retention behavior; this admin-only
 surface does not change those rules. Monitoring coverage is unchanged: dashboard data reuses scheduler outcomes and

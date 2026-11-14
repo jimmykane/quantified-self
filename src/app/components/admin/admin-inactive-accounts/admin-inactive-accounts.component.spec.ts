@@ -103,6 +103,34 @@ describe('Admin inactive accounts route', () => {
     expect(component.data()).toBeNull(); expect(close).toHaveBeenCalled(); closed.next(true); closed.complete(); await saving;
     expect(service.save).not.toHaveBeenCalled();
   });
+  it('does not revive an old confirmation after leaving and returning to the same administrator', async () => {
+    const { component, ownerChanged, service, dialog } = await render();
+    const closed = new Subject<boolean>(); dialog.open.mockReturnValue({ afterClosed: () => closed, close: vi.fn() });
+    component.changeMode('enforce'); const saving = component.save();
+    ownerChanged(null); ownerChanged('admin');
+    // A dialog that was already closing can deliver its earlier result after the account switch.
+    closed.next(true); closed.complete(); await saving;
+    expect(service.save).not.toHaveBeenCalled();
+  });
+  it.each(['success', 'failure'])('keeps an old save %s from clearing a new session confirmation or saving state', async outcome => {
+    const { component, ownerChanged, service, dialog, haptics } = await render();
+    let finishSave!: () => void;
+    service.save.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      finishSave = () => outcome === 'success' ? resolve() : reject(new Error('old-session'));
+    }));
+    component.changeMode('enforce'); const first = component.save(); await Promise.resolve();
+    expect(service.save).toHaveBeenCalledTimes(1);
+    ownerChanged(null); ownerChanged('admin'); component.refresh(); await Promise.resolve(); await Promise.resolve();
+    const closed = new Subject<boolean>(); const close = vi.fn();
+    dialog.open.mockReturnValue({ afterClosed: () => closed, close });
+    component.changeMode('warnings-only'); const second = component.save();
+    finishSave(); await first;
+    expect(component.saving()).toBe(true); expect(component.error()).toBe('');
+    expect(haptics.error).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+    ownerChanged(null); expect(close).toHaveBeenCalledTimes(1);
+    closed.next(false); closed.complete(); await second;
+    expect(service.save).toHaveBeenCalledTimes(1);
+  });
   it('discards pending reads on destruction and releases the account subscription', async () => {
     const { fixture, component, service, unwatch } = await setup();
     let finish!: (value: InactivityAdminResponse) => void; service.read.mockReturnValue(new Promise(resolve => { finish = resolve; }));

@@ -29,6 +29,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   private readonly dialog = inject(MatDialog);
   private confirmation: MatDialogRef<ConfirmationDialogComponent, boolean> | null = null;
   private owner = this.service.currentUid();
+  private ownerVersion = 0;
   private unwatch?: () => void;
   private sequence = 0;
   private destroyed = false;
@@ -72,7 +73,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.unwatch = this.service.watchOwner(uid => {
       if (uid === this.owner) return;
-      this.owner = uid; this.sequence++; this.data.set(null); this.baseline.set(null);
+      this.owner = uid; this.ownerVersion++; this.sequence++; this.data.set(null); this.baseline.set(null);
       this.loading.set(false); this.saving.set(false); this.notice.set('');
       this.error.set('The signed-in account changed. Refresh to continue.'); this.confirmation?.close();
     });
@@ -125,25 +126,31 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   async save(): Promise<void> {
     if (!this.canSave() || !this.owner) return;
     const owner = this.owner;
+    const ownerVersion = this.ownerVersion;
+    const isCurrent = () => !this.destroyed && ownerVersion === this.ownerVersion;
     const settings = { mode: this.mode(), warningDailyLimit: this.warningLimit()!, deletionDailyLimit: this.deletionLimit()!, revision: this.baseline()!.revision };
     this.saving.set(true); this.notice.set(''); this.haptics.selection();
-    this.confirmation = this.dialog.open<ConfirmationDialogComponent, ConfirmationDialogData, boolean>(ConfirmationDialogComponent, {
+    const confirmation = this.dialog.open<ConfirmationDialogComponent, ConfirmationDialogData, boolean>(ConfirmationDialogComponent, {
       data: { title: settings.mode === 'enforce' ? 'Enable account deletion?' : 'Save retention settings?',
         message: `${this.modeDescriptions[settings.mode]} Daily limits: ${settings.warningDailyLimit} warnings and ${settings.deletionDailyLimit} deletion initiations.`,
         confirmText: settings.mode === 'enforce' ? 'Save enforcement settings' : 'Save settings',
         cancelText: 'Cancel', confirmColor: settings.mode === 'enforce' ? 'warn' : 'primary' },
     });
+    this.confirmation = confirmation;
     try {
-      const confirmed = await firstValueFrom(this.confirmation.afterClosed());
-      if (confirmed !== true || this.destroyed || owner !== this.owner) return;
+      const confirmed = await firstValueFrom(confirmation.afterClosed());
+      if (confirmed !== true || !isCurrent()) return;
       await this.service.save(settings, owner);
-      if (this.destroyed || owner !== this.owner) return;
+      if (!isCurrent()) return;
       this.haptics.success(); this.notice.set('Settings saved. The daily job will use the updated settings.');
       await this.load(true);
     } catch {
-      if (this.destroyed || owner !== this.owner) return;
+      if (!isCurrent()) return;
       this.error.set('Settings were not confirmed saved. Reset changes and refresh before trying again; another administrator may have changed them.');
       this.haptics.error();
-    } finally { this.confirmation = null; if (!this.destroyed && owner === this.owner) this.saving.set(false); }
+    } finally {
+      if (this.confirmation === confirmation) this.confirmation = null;
+      if (isCurrent()) this.saving.set(false);
+    }
   }
 }
