@@ -29,12 +29,17 @@ The same dispatcher also observes retained outcomes separately from its pending/
 20 records plus one look-ahead from each of `activitySyncQueue` (`manual_reconciliation_required`) and
 `failed_jobs` (`originalCollection == activitySyncQueue`). Queries are field-masked and use the new composite
 indexes in `firestore.indexes.json`; deploy those indexes before the dispatcher. The five-second probe deadline
-reports unavailable and suppresses late success. A read-only transaction checks each revision, owner and deletion
+reports unavailable and suppresses late success. One read-only transaction per sample checks each revision, owner and deletion
 tombstone; active leases, resumed manual-review records and parked lifecycle work are excluded. Destination token-root
 and connection metadata are checked in the same read-only transaction, along with field-masked token presence. Disconnected,
 reconnecting or missing-credential accounts are excluded. Accepted outcomes do not require a source connection, an enabled
 automatic route or new-send entitlement. A failed-job receipt with a live queue peer is
 excluded, including previously recovered deliveries. Ordinary provider polls and retry backoff are not failures.
+Repeated owner, tombstone, connection and token-presence reads are reused only within that consistent transaction
+snapshot, never between observations. Two full 20-record samples sharing one owner/destination need 110 reads
+instead of 300, including their candidate queries. Distinct owners can still reach the original 302-read bound with
+both look-ahead records. Empty samples still need only the two queries. The 30-minute cadence, five-second deadline,
+read caps, metric labels and alert thresholds remain unchanged; this optimization adds no cache writes or scheduler.
 
 Age is the conservative lower bound since the later of the failure marker and latest write. A sample containing
 an unresolved outcome at least 24 hours old emits `overdue_review_samples`. Two such observations for the same

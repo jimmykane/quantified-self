@@ -1,8 +1,9 @@
 import { Injectable, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
 import { Firestore, collection, collectionData, doc, docData, getCountFromServer, getDocFromServer, limit, orderBy, query, where } from 'app/firebase/firestore';
-import { Subscription, Subject, firstValueFrom, from, takeUntil, timeout } from 'rxjs';
+import { Subscription, Subject, firstValueFrom, from, fromEvent, takeUntil, timeout } from 'rxjs';
 import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow, ActivitySendSummary } from '@shared/activity-send';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -22,6 +23,7 @@ export class ActivitySendService {
   private readonly functions = inject(AppFunctionsService);
   private readonly appCheck = inject(AppCheckReadinessService);
   private readonly processing = inject(AppProcessingService);
+  private readonly document = inject(DOCUMENT);
   readonly recent = signal<ActivitySendBatch[]>([]);
   readonly batch = signal<ActivitySendBatch | null>(null);
   readonly rows = signal<ActivitySendRow[]>([]);
@@ -51,7 +53,12 @@ export class ActivitySendService {
   private rowLimit = 50;
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => { this.closeBatch(); this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); });
+    const visibility = fromEvent(this.document, 'visibilitychange').subscribe(() => {
+      if (this.document.visibilityState === 'hidden') {
+        clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
+      } else this.scheduleSummary(true);
+    });
+    inject(DestroyRef).onDestroy(() => { visibility.unsubscribe(); this.closeBatch(); this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); });
     effect(() => {
       const uid = this.user.user()?.uid || null;
       if (this.uid === uid) return;
@@ -97,15 +104,20 @@ export class ActivitySendService {
   refreshSummary(): void {
     if (this.summaryInFlight || !this.selectedId) return;
     clearTimeout(this.summaryTimer); this.summaryTimer = undefined; this.summaryNextReadAt = 0;
-    this.scheduleSummary();
+    this.scheduleSummary(true);
   }
-  private scheduleSummary(): void {
-    if (this.summaryInFlight || this.summaryTimer || !this.selectedId) return;
+  private scheduleSummary(force = false): void {
+    if (this.summaryInFlight || this.summaryTimer || !this.selectedId || !this.batch() || this.batch()?.state === 'draft'
+      || this.document.visibilityState === 'hidden') return;
+    // Every outcome-group change advances the existing batch clock. An unchanged
+    // batch needs no aggregate polling, even while provider processing continues.
+    if (!force && this.summary() && Number(this.batch()?.updatedAt) <= this.summary()!.updatedAt) return;
     this.summaryTimer = setTimeout(() => { this.summaryTimer = undefined; void this.readSummary(); }, Math.max(0, this.summaryNextReadAt - Date.now()));
   }
   private async readSummary(): Promise<void> {
     const uid = this.uid, id = this.selectedId, epoch = this.summaryEpoch;
-    if (!uid || !id || !this.isCurrentOwner(uid)) return;
+    const hidden = () => this.document.visibilityState === 'hidden';
+    if (!uid || !id || !this.isCurrentOwner(uid) || hidden()) return;
     const current = () => this.summaryEpoch === epoch && this.selectedId === id && this.isCurrentOwner(uid);
     this.summaryInFlight = true; this.loadingSummary.set(true); this.summaryError.set(null);
     let retry = false;
@@ -117,7 +129,7 @@ export class ActivitySendService {
     try {
       const ref = doc(this.firestore, `users/${uid}/activitySends/${id}`);
       const before = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
-      if (!current()) return;
+      if (!current() || hidden()) return;
       if (!before || before.state === 'draft') {
         this.summary.set(null); this.summaryError.set('Delivery totals are not available for this send.'); return;
       }
@@ -129,7 +141,7 @@ export class ActivitySendService {
       const values = await read(Promise.all(Object.values(groups).map(statuses => getCountFromServer(query(
         collection(this.firestore, `users/${uid}/activitySends/${id}/rows`), where('status', 'in', statuses),
       )).then(result => result.data().count))));
-      if (!current()) return;
+      if (!current() || hidden()) return;
       const after = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
       if (!current()) return;
       const [delivered, duplicate, needs_action, stopped, pending] = values;
@@ -141,13 +153,12 @@ export class ActivitySendService {
         retry = true; this.summaryError.set('Activities are updating. Totals will refresh shortly.'); return;
       }
       this.summary.set({ delivered, duplicate, needs_action, stopped, pending, checkedAt: Date.now(), updatedAt: after.updatedAt });
-      retry = after.state === 'confirmed';
     } catch {
       if (current()) this.summaryError.set('Delivery totals are unavailable. Refresh totals to try again.');
     } finally {
       if (current()) {
         this.summaryInFlight = false; this.loadingSummary.set(false); this.summaryNextReadAt = Date.now() + 30_000;
-        if (retry || Number(this.batch()?.updatedAt) > Number(this.summary()?.updatedAt || 0) && !this.summaryError()) this.scheduleSummary();
+        if (retry || Number(this.batch()?.updatedAt) > Number(this.summary()?.updatedAt || 0) && !this.summaryError()) this.scheduleSummary(retry);
       }
     }
   }

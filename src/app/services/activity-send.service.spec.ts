@@ -62,6 +62,56 @@ describe('ActivitySendService owner and upload boundaries', () => {
     expect(streams.count).toHaveBeenCalledTimes(5); expect(streams.doc).toHaveBeenCalledTimes(2);
     service.loadMoreRows(); expect(streams.count).toHaveBeenCalledTimes(5);
   });
+  it('does not poll unchanged active batches and coalesces outcome changes into one totals read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    batch.state = 'confirmed'; batch.finished = 99;
+    streams.count.mockReset();
+    [95, 3, 1, 0, 1].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    const checkedAt = service.summary()!.checkedAt;
+    streams.reads[2].next({ ...batch });
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(streams.count).toHaveBeenCalledTimes(5); expect(streams.doc).toHaveBeenCalledTimes(2);
+    expect(service.summary()!.checkedAt).toBe(checkedAt);
+    for (const updatedAt of [11, 12, 13]) { batch.updatedAt = updatedAt; streams.reads[2].next({ ...batch }); }
+    [95, 3, 1, 0, 1].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.updatedAt).toBe(13); expect(streams.count).toHaveBeenCalledTimes(10);
+    batch.updatedAt = 14; batch.finished = 100; batch.state = 'complete'; streams.reads[2].next({ ...batch });
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(29_999); expect(streams.count).toHaveBeenCalledTimes(10);
+    await vi.advanceTimersByTimeAsync(1); expect(service.summary()).toMatchObject({ delivered: 96, pending: 0, updatedAt: 14 });
+    await vi.advanceTimersByTimeAsync(3_600_000); expect(streams.count).toHaveBeenCalledTimes(15);
+  });
+  it('defers initial and changed totals while hidden and refreshes once when the tab returns', async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const batch = summaryBatch(); await vi.advanceTimersByTimeAsync(60_000);
+    expect(streams.doc).not.toHaveBeenCalled(); expect(streams.count).not.toHaveBeenCalled();
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(streams.count).toHaveBeenCalledTimes(5);
+    batch.updatedAt = 11; streams.reads[2].next({ ...batch });
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(60_000); expect(streams.count).toHaveBeenCalledTimes(5);
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(service.summary()).toMatchObject({ delivered: 96, updatedAt: 11 });
+    expect(streams.count).toHaveBeenCalledTimes(10);
+    service.closeBatch(); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(60_000); expect(streams.count).toHaveBeenCalledTimes(10);
+  });
+  it('does not start aggregate reads if the tab becomes hidden during the first server read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let resolve!: (value: unknown) => void;
+    streams.doc.mockImplementationOnce(() => new Promise(res => { resolve = res; }));
+    await vi.advanceTimersByTimeAsync(0);
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'));
+    resolve({ data: () => batch }); await vi.advanceTimersByTimeAsync(60_000);
+    expect(streams.count).not.toHaveBeenCalled(); expect(service.loadingSummary()).toBe(false);
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(service.summary()?.delivered).toBe(95);
+  });
   it('rejects counts if delivery changes while the aggregates are read', async () => {
     vi.useFakeTimers(); const batch = summaryBatch();
     streams.doc.mockResolvedValueOnce({ data: () => batch }).mockResolvedValueOnce({ data: () => ({ ...batch, updatedAt: 11 }) });

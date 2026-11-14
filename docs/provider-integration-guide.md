@@ -1032,6 +1032,9 @@ state before resending. Monitoring coverage is **covered by source definitions/t
 separately: the existing dispatcher observes retained outcomes older than 24 hours independently of ordinary
 retries, excluding disconnected/reconnecting destinations and resumed work. Unknown or truncated observations omit
 healthy-zero age/count values while preserving confirmed positive lower bounds and coverage warnings.
+The probe reuses repeated account/connection reads inside each read-only transaction snapshot, with fresh lifecycle
+checks on every observation. Monitoring cadence, coverage and thresholds are unchanged. Browser totals use the
+existing outcome-clock listener, coalesce bursts and defer new reads in hidden tabs instead of polling unchanged batches.
 See [retained-outcome monitoring and guarded recovery](activity-delivery-monitoring.md#retained-unresolved-outcomes-14-november-2026).
 Release must apply the new indexes, projection/dispatcher code and monitoring bundle, then verify positive series.
 No Training computation, planned-workout lifecycle or MCP tool/read/write/scope/consent contract changes; the

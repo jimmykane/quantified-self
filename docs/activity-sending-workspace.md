@@ -74,8 +74,12 @@ without offering another send. Accepted/ambiguous operations keep their existing
 Five aggregates are bracketed by server batch reads. A changed `updatedAt`, total, finished count or state, or
 non-reconciling row counts, discards the result. Outcome-group transitions advance the public batch clock
 monotonically, including terminal-to-terminal corrections; ordinary progress within pending still avoids the
-shared batch/operation write. Deploy the projection changes before the frontend. Active batches refresh at most
-once every 30 seconds, with one active observation; an explicit Refresh totals action may read sooner. The complete
+shared batch/operation write. Deploy the projection changes before the frontend. The existing batch listener requests
+totals when the outcome clock changes; unchanged active batches do not poll. Bursts coalesce to at most one automatic
+observation every 30 seconds. Hidden tabs defer new totals reads and check once on return; already-started SDK reads
+cannot be cancelled, but no later read stage starts while hidden. An explicit Refresh totals action may read sooner.
+For a small unchanged batch left open for an hour, this reduces aggregate/server reads from about 840 to seven;
+actual savings depend on outcome changes, explicit refreshes and larger aggregation sizes. The complete
 server/count/server observation has a 30-second deadline. Timeout releases Refresh while keeping the previous totals;
 late SDK replies cannot replace a newer observation. Account changes/navigation cancel the observation and its deadline.
 Errors retain the last known totals with their **Last checked** time,
