@@ -60,8 +60,18 @@
           @if (batch.state === 'draft') {
             @if (batch.source === 'saved') { {{ batch.total }} checked · {{ readyCount() }} ready · {{ batch.finished }} excluded }
             @else { {{ batch.total }} files in draft · {{ batch.finished }} excluded }
-          } @else { {{ batch.finished }}/{{ batch.total }} finished }
+          } @else { {{ batch.finished }}/{{ batch.total }} processed }
         </p>
+        @if (batch.state !== 'draft') {
+          <div class="delivery-summary" aria-label="Whole batch delivery totals" aria-live="polite">
+            @if (sends.summary(); as totals) {
+              <p><strong>{{ totals.delivered | number }} delivered</strong> · {{ totals.duplicate | number }} already present or queued · {{ totals.needs_action | number }} need attention · {{ totals.pending | number }} in progress @if (totals.stopped) { · {{ totals.stopped | number }} stopped }</p>
+              <p class="retention-note">Last checked {{ totals.checkedAt | date:'medium' }}. Includes all {{ batch.total | number }} activities.</p>
+            } @else if (!sends.summaryError()) { <p>Checking delivery totals for all activities…</p> }
+            @if (sends.summaryError()) { <p role="status">{{ sends.summaryError() }}</p> }
+            <button mat-button [disabled]="sends.loadingSummary()" (click)="refreshDeliverySummary()">{{ sends.loadingSummary() ? 'Updating totals…' : 'Refresh totals' }}</button>
+          </div>
+        }
         @if (batch.state === 'draft') { <p>Previewing does not send activities. Sending starts only after you confirm Send.</p> }
         @if (sendingClosed()) {
           <p role="status">{{ batch.stopped ? 'This batch was stopped.' : 'The sending window expired.' }} Start a new send to review any unsent recordings. Accepted uploads can still be checked.</p>
@@ -123,14 +133,14 @@
           <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>
         </div>
         <button class="details-toggle" mat-button [attr.aria-expanded]="showDetails()" aria-controls="activity-send-details" (click)="toggleDetails()">{{ showDetails() ? 'Hide' : 'Show' }} delivery details</button>
-        <div id="activity-send-details" class="delivery-details" [hidden]="!showDetails()"><p>Files are processed individually. The overall finished count includes deliveries, exclusions, stopped items, and items needing action.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} recorded sending/status attempts</p> }</div>
+        <div id="activity-send-details" class="delivery-details" [hidden]="!showDetails()"><p>Files are processed individually. Processed includes deliveries, exclusions, stopped items, and items needing attention. Only Delivered confirms a successful transfer.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} recorded sending/status attempts</p> }</div>
         <p class="retention-note">Stopping affects activities that have not started sending. Accepted uploads continue processing. Results stay available for 30 days.</p>
       </section>
     }
   }
   <section aria-label="Recent sends"><h2>Recent sends</h2>
     @for (batch of recentForProvider(); track batch.id) {
-      <button mat-button class="recent-send" [disabled]="busy()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · @if (batch.state === 'draft') { Draft · {{ batch.total }} activities } @else { {{ batch.finished }}/{{ batch.total }} finished }</button>
+      <button mat-button class="recent-send" [disabled]="busy()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · @if (batch.state === 'draft') { Draft · {{ batch.total }} activities } @else { {{ batch.finished }}/{{ batch.total }} processed }</button>
     } @empty { <p>No recent sends yet. Your drafts and delivery results will appear here.</p> }
   </section>
 </main>

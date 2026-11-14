@@ -1012,6 +1012,34 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Compatibility before Pro checkout
+
+The subscription view offers a compact, read-only source → destination preview. Sync onboarding expands it;
+other non-Pro visits can disclose it. All four providers remain represented. Completed-activity directions derive
+from `shared/activity-sync-routes.ts`; automatic saved-route directions derive from
+`shared/route-delivery-sync-routes.ts`. Garmin is not a completed-activity destination, even though supported
+Suunto route delivery can target Garmin with Course Import permission. QS-authored planned workouts are a separate
+resource; the preview does not promise provider-to-provider plan transfer or COROS workout delivery.
+
+History copy distinguishes importing into QS from subsequently sending historical recordings: COROS covers the
+last three months, Garmin permits a five-year request once every 30 days, and other providers expose their available
+history. Older exported originals remain the manual alternative. The preview enables no connection, route,
+checkout or provider request and adds no mandatory onboarding step.
+
+Recorded-activity delivery now exposes whole-batch counts and explicit automatic retry status; see
+[workspace outcome semantics](activity-sending-workspace.md#whole-batch-outcomes-and-recovery). Review recovery
+state before resending. Monitoring coverage is **covered by source definitions/tests**, with activation tracked
+separately: the existing dispatcher observes retained outcomes older than 24 hours independently of ordinary
+retries, excluding disconnected/reconnecting destinations and resumed work. Unknown or truncated observations omit
+healthy-zero age/count values while preserving confirmed positive lower bounds and coverage warnings.
+The probe reuses repeated account/connection reads inside each read-only transaction snapshot, with fresh lifecycle
+checks on every observation. Monitoring cadence, coverage and thresholds are unchanged. Browser totals use the
+existing outcome-clock listener, coalesce bursts and defer new reads in hidden tabs instead of polling unchanged batches.
+See [retained-outcome monitoring and guarded recovery](activity-delivery-monitoring.md#retained-unresolved-outcomes-14-november-2026).
+Release must apply the new indexes, projection/dispatcher code and monitoring bundle, then verify positive series.
+No Training computation, planned-workout lifecycle or MCP tool/read/write/scope/consent contract changes; the
+planned-workout text merely describes existing capabilities. No backend product analytics is added.
+
 ### Manual activity range selection
 
 The activity picker reuses the provider range registry for recent presets and maximum/all-available choices, plus

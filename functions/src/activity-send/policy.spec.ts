@@ -11,6 +11,9 @@ function syntheticFit(headerSize = 14, dataSize = 0, byteLength = headerSize + d
 }
 
 describe('activity send safety', () => {
+  it('keeps accepted uploads on their status-check path even after retries', () => {
+    expect(projectSendQueue({ retryCount: 2, destinationUploadID: 'accepted', processed: false })).toMatchObject({ status: 'processing', recovery: 'check_status' });
+  });
   it.each(['../other', 'a/b', '', null])('rejects unsafe references: %s', value => expect(() => sendIdentifier(value)).toThrow());
   it('rejects a gzip expansion bomb before parsing', () => expect(() => decodeSendFile(gzipSync(Buffer.alloc(21 * 1024 * 1024)), 'recording.fit.gz')).toThrow('20 MiB'));
   it.each([
@@ -37,6 +40,10 @@ describe('activity send safety', () => {
     const fit = syntheticFit();
     expect(decodeSendFile(fit, 'recording.FIT')).toBe(fit);
     expect(decodeSendFile(gzipSync(fit), 'recording.FIT.GZ')).toEqual(fit);
+  });
+  it('shows bounded background retries without offering a second upload', () => {
+    expect(projectSendQueue({ processed: false, retryCount: 2 })).toMatchObject({ status: 'retrying', recovery: 'none' });
+    expect(projectSendQueue({ processed: true, retryCount: 2, resultStatus: 'manual_reconciliation_required' })).toMatchObject({ status: 'needs_action', recovery: 'review_provider' });
   });
   it('never offers resend for uncertain acceptance', () => expect(projectSendQueue({ processed: true, providerOperationStartedAt: 1 })).toMatchObject({ recovery: 'review_provider' }));
   it('does not offer connection resume for a paused provider claim with no accepted identifier', () => expect(projectSendQueue({ deferredReason: 'service_reconnect_required', providerOperationStartedAt: 1, processed: false })).toMatchObject({ recovery: 'review_provider' }));

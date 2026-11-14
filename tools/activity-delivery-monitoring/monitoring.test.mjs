@@ -12,14 +12,14 @@ const bundle = () => buildActivityDeliveryMonitoring(project, channel);
 const type = filter => /metric\.type="([^"]+)"/.exec(filter)?.[1];
 
 test('fixed dimensions, committed semantics and exact native queue scope', () => {
-  const config = bundle(); assert.equal(config.metrics.length, 15); assert.equal(config.policies.length, 10);
+  const config = bundle(); assert.equal(config.metrics.length, 18); assert.equal(config.policies.length, 12);
   const logTypes = new Set(config.metrics.map(metric => `logging.googleapis.com/user/${metric.name}`));
   const native = new Set(['depth', 'task_attempt_count', 'task_attempt_delays'].map(key => `cloudtasks.googleapis.com/queue/${key}`));
   for (const metric of config.metrics) {
     assert.ok(metric.description.startsWith(`[${OWNER}]`)); assert.match(metric.filter, /telemetryVersion=1/);
     const sportFailure = metric.name.endsWith('coros_sport_failures_v1');
     assert.match(metric.filter, sportFailure ? /jsonPayload.message="\[COROSActivityUpload\] Processing failed\."/ : /jsonPayload.message="\[ActivityDelivery\]"/);
-    assert.ok(metric.metricDescriptor.labels.every(label => (sportFailure ? ['fit_sport', 'fit_sub_sport'] : ['source', 'destination', 'mode', 'outcome']).includes(label.key)));
+    assert.ok(metric.metricDescriptor.labels.every(label => (sportFailure ? ['fit_sport', 'fit_sub_sport'] : ['source', 'destination', 'mode', 'outcome', 'reviewKind']).includes(label.key)));
     assert.equal(metric.metricDescriptor.metricKind, 'DELTA');
   }
   for (const tile of config.dashboard.mosaicLayout.tiles.slice(1)) {
@@ -53,7 +53,7 @@ test('sustained alerts use bounded metrics, idle heartbeats and explicit missing
       assert.ok(type(body.filter).startsWith('logging.googleapis.com/user/qs_activity_delivery_'));
       if (condition.conditionThreshold) { assert.equal(body.evaluationMissingData, 'EVALUATION_MISSING_DATA_INACTIVE'); assert.equal(body.duration, '60s'); }
       else if (policy.userLabels.policy_id === 'send-cleanup-heartbeat') { assert.equal(body.duration, '10800s'); assert.equal(type(body.filter), metricType('send_cleanup_runs')); }
-      else { assert.equal(body.duration, '7200s'); assert.equal(type(body.filter), metricType('queue_samples')); }
+      else { assert.equal(body.duration, '7200s'); assert.equal(type(body.filter), metricType(policy.userLabels.policy_id === 'review-heartbeat' ? 'review_samples' : 'queue_samples')); }
     }
   }
   assert.equal(bundle().policies.at(-1).conditions.length, 3);
@@ -79,8 +79,8 @@ function transport(existing = false, collision = false) {
 test('serial create/reapply preserves other bundles, condition IDs and etags without deletion', async () => {
   for (const existing of [false, true]) {
     const source = transport(existing); const result = await applyActivityDeliveryMonitoring(bundle(), source.request);
-    assert.equal(result.metrics, 15); assert.equal(result.policies, 10);
-    assert.equal(source.calls.filter(call => call.method === 'POST').length, existing ? 0 : 11);
+    assert.equal(result.metrics, 18); assert.equal(result.policies, 12);
+    assert.equal(source.calls.filter(call => call.method === 'POST').length, existing ? 0 : 13);
     assert.ok(source.calls.every(call => call.method !== 'DELETE'));
     assert.ok(source.calls.filter(call => call.method !== 'GET').every(call => !call.url.includes('other-')));
     if (existing) {
@@ -121,4 +121,19 @@ test('malformed/unowned inventories and immutable-schema changes fail before wri
   const source = transport(true); const config = bundle(); config.metrics[0].metricDescriptor.labels.push({ key: 'new', valueType: 'STRING' });
   await assert.rejects(applyActivityDeliveryMonitoring(config, source.request), /Immutable log metric schema changed/);
   assert.ok(source.calls.every(call => call.method === 'GET'));
+});
+
+test('retained failures have a distinct aged-review warning and bounded labels', () => {
+  const config = bundle();
+  const policy = config.policies.find(p => p.userLabels.policy_id === 'retained-review');
+  assert.equal(policy.severity, 'WARNING');
+  assert.deepEqual(policy.conditions[0].conditionThreshold.aggregations[0].groupByFields, ['metric.label.destination', 'metric.label.reviewKind']);
+  const metric = config.metrics.find(m => m.name.endsWith('overdue_review_samples_v1'));
+  assert.match(metric.filter, /ageLowerBoundMs>=86400000/);
+  const age = config.metrics.find(m => m.name.endsWith('review_age_v1'));
+  assert.ok(age.bucketOptions.explicitBuckets.bounds.includes(7 * 86400000));
+  assert.equal(age.bucketOptions.explicitBuckets.bounds.at(-1), 90 * 86400000);
+  assert.doesNotMatch(metric.filter, /event="committed"/);
+  assert.match(config.metrics.find(m => m.name.endsWith('probe_failures_v1')).filter, /review_sample_unavailable/);
+  assert.match(config.metrics.find(m => m.name.endsWith('probe_failures_v1')).filter, /review_sample" jsonPayload.truncated=true/);
 });
