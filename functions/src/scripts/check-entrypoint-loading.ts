@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 201;
+const EXPECTED_FULL_EXPORT_COUNT = 202;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
@@ -99,6 +99,7 @@ const ADMIN_TARGET_METADATA: Readonly<Record<string, {
   getUserGrowthTrend: { ownerModule: 'trends.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
   setMaintenanceMode: { ownerModule: 'maintenance.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   getMaintenanceStatus: { ownerModule: 'maintenance.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  getInactivityAdmin: { ownerModule: 'inactivity.handlers', memoryMb: 256, timeoutSeconds: 60, trigger: 'callable' },
   impersonateUser: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   stopImpersonation: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   getFinancialStats: { ownerModule: 'financials.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'], allowsBigQuery: true },

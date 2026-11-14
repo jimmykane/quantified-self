@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
 import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import type Stripe from 'stripe';
+import { INACTIVITY_DELETION_LIMIT, INACTIVITY_WARNING_LIMIT } from '../../../shared/admin-inactivity';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { acquireBillingLease, releaseBillingLease, type BillingLease } from '../stripe/billing/service';
 import { BillingContention } from '../stripe/billing/model';
@@ -30,7 +31,7 @@ async function validRun(ctx: InactivityContext, tx: Transaction, run: Inactivity
         && inactivityMode(config.get('mode')) === run.mode ? config : null;
 }
 function consumeBudget(tx: Transaction, config: DocumentSnapshot, kind: 'warnings' | 'deletions', now: number): boolean {
-    const maximum = kind === 'warnings' ? 100 : 25;
+    const maximum = kind === 'warnings' ? INACTIVITY_WARNING_LIMIT : INACTIVITY_DELETION_LIMIT;
     const configured = config.get(kind === 'warnings' ? 'warningDailyLimit' : 'deletionDailyLimit');
     const limit = configured === undefined ? maximum : configured;
     if (!Number.isSafeInteger(limit) || limit < 0 || limit > maximum) throw new Error('invalid_inactivity_limit');
@@ -212,7 +213,7 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
     }
 }
 
-export interface InactivitySummary { mode: InactivityMode; outcome: 'off' | 'contended' | 'completed'; counts: Partial<Record<InactivityOutcome, number>>; scanned: number; capped: boolean; overdue: number; reviewRequired: number; scanAgeMs: number }
+export interface InactivitySummary { mode: InactivityMode; outcome: 'off' | 'contended' | 'completed' | 'failed'; counts: Partial<Record<InactivityOutcome, number>>; scanned: number; capped: boolean; overdue: number; reviewRequired: number; scanAgeMs: number }
 export async function runInactivitySweep(ctx: InactivityContext): Promise<InactivitySummary> {
     const start = clock(ctx);
     const configRef = ctx.db.doc(INACTIVITY_CONTROL);
@@ -292,11 +293,15 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
             if (!cursor) { summary.scanAgeMs = 0; break; }
         }
         return summary;
+    } catch (error) {
+        summary.outcome = 'failed';
+        throw error;
     } finally {
         await ctx.db.runTransaction(async tx => {
             const config = await tx.get(configRef);
             if (config.get('leaseToken') === token) tx.update(configRef, {
                 leaseToken: FieldValue.delete(), leaseUntil: FieldValue.delete(), lastFinishedAt: Timestamp.fromMillis(clock(ctx)),
+                lastRun: { ...summary, finishedAt: Timestamp.fromMillis(clock(ctx)) },
             });
         });
     }

@@ -7,6 +7,7 @@ import { inactivityRef, processInactiveAccount, runInactivitySweep, type Inactiv
 import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS } from './inactivity-policy';
 import { invalidateInactivityWarning } from './inactivity-cancellation';
 import { readInactivityBilling } from './inactivity-billing';
+import { readInactivityAdmin } from './inactivity-admin';
 import { beginAccountDataCleanup, deleteAccountFirestoreRoot, assertAccountFirestoreRootAbsent } from './data-cleanup';
 vi.unmock('firebase-admin');
 vi.unmock('firebase-admin/firestore');
@@ -300,4 +301,58 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await inactivityRef(db, uid).get()).exists).toBe(false);
         expect((await db.doc(`users/${neighbour}`).get()).get('preserved')).toBe(true);
     }, 30_000);
+    it('projects current Auth identity and warning delivery without private evidence', async () => {
+        await process();
+        const episode = (await inactivityRef(db, uid).get()).data()!;
+        await config().update({ leaseToken: 'private-lease-canary' });
+        const getUsers = vi.fn().mockResolvedValue({ users: [{ uid, email: 'current@example.invalid' }] });
+        const view = await readInactivityAdmin(db, { getUsers }, { view: 'queued' }, now);
+        expect(view.accounts).toEqual([{ uid, email: 'current@example.invalid', authPresent: true, queuedAt: now,
+            acceptedAt: null, deleteAfter: null, requestedAt: null, detail: 'Awaiting confirmed warning delivery.' }]);
+        for (const privateValue of ['private-lease-canary', episode.generation, episode.emailHash, episode.billingRevision, authUser.email])
+            expect(JSON.stringify(view)).not.toContain(privateValue);
+        expect(view.settings).toEqual({ mode: 'enforce', warningDailyLimit: 100, deletionDailyLimit: 25, revision: 0 });
+        expect(view.lastRun).toBeNull();
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it('paginates equal-state episodes and includes pending deletion markers after root cleanup', async () => {
+        const batch = db.batch();
+        for (let n = 0; n < 26; n++) {
+            const owner = `${uid}-${String(n).padStart(2, '0')}`; owners.push(owner);
+            batch.set(inactivityRef(db, owner), { uid: owner, state: 'warned', expireAt: Timestamp.fromMillis(now + INACTIVITY_DAY_MS) });
+        }
+        await batch.commit();
+        const getUsers = vi.fn().mockResolvedValue({ users: [] });
+        const first = await readInactivityAdmin(db, { getUsers }, { view: 'warned' }, now);
+        expect(first.accounts).toHaveLength(25); expect(first.nextUid).toBe(`${uid}-24`);
+        const second = await readInactivityAdmin(db, { getUsers }, { view: 'warned', afterUid: first.nextUid! }, now);
+        expect(second.accounts.map(account => account.uid)).toEqual([`${uid}-25`]); expect(second.nextUid).toBeNull();
+        await db.doc(`userDeletionTombstones/${uid}`).set({ source: 'inactivity', cleanupStatus: 'pending',
+            authDeleteStatus: 'attempted', createdAt: Timestamp.fromMillis(now - 2 * INACTIVITY_DAY_MS) });
+        await db.recursiveDelete(db.doc(`users/${uid}`));
+        const pending = await readInactivityAdmin(db, { getUsers }, { view: 'pending-deletion' }, now);
+        expect(pending.accounts[0]).toMatchObject({ uid, authPresent: false, detail: 'Deletion needs operator review.' });
+    });
+    it('persists bounded last-run counters and a failed run without losing the global lease cleanup', async () => {
+        await config().set({ mode: 'dry-run' });
+        await runInactivitySweep(ctx);
+        expect((await config().get()).get('lastRun.outcome')).toBe('completed');
+        auth.listUsers.mockRejectedValue(new Error('private-failure-canary'));
+        await expect(runInactivitySweep(ctx)).rejects.toThrow('private-failure-canary');
+        const saved = (await config().get()).data()!;
+        expect(saved.lastRun.outcome).toBe('failed'); expect(saved.leaseToken).toBeUndefined();
+        expect(JSON.stringify(saved)).not.toContain('private-failure-canary');
+    });
+    it.each(['warningDailyLimit', 'deletionDailyLimit', 'settingsRevision'])('reports explicit null %s as invalid instead of a missing default', async field => {
+        await config().set({ mode: 'off', [field]: null });
+        const getUsers = vi.fn().mockResolvedValue({ users: [] });
+        const view = await readInactivityAdmin(db, { getUsers }, { view: 'queued' }, now);
+        expect(view.settingsValid).toBe(false); expect(getUsers).not.toHaveBeenCalled();
+    });
+    it('rejects an unexpected collection-group owner instead of returning an unusable pagination cursor', async () => {
+        await db.doc(`users/${uid}/other/root/inactivityRetention/state`).set({ uid, state: 'warned' });
+        const getUsers = vi.fn().mockResolvedValue({ users: [] });
+        await expect(readInactivityAdmin(db, { getUsers }, { view: 'warned' }, now)).rejects.toThrow('invalid_inactivity_owner');
+        expect(getUsers).not.toHaveBeenCalled();
+    });
 });

@@ -4,6 +4,7 @@ export const MERGE_EVENTS_CLIENT_TIMEOUT_MS = 61 * 60 * 1000;
 export const COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS = 310_000;
 
 export const FUNCTIONS_MANIFEST = {
+    getInactivityAdmin: { name: 'getInactivityAdmin', region: 'europe-west2' },
     // Admin Functions (europe-west2)
     listMarketingCampaigns: { name: 'listMarketingCampaigns', region: 'europe-west2' },
     saveMarketingCampaign: { name: 'saveMarketingCampaign', region: 'europe-west2' },

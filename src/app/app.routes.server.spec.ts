@@ -17,6 +17,7 @@ import { dashboardRoutes } from './dashboard.routing.module';
 import { eventRoutes } from './event.routing.module';
 import { loginRoutes } from './login.routing.module';
 import { adminRoutes } from './modules/admin.module';
+import { adminGuard } from './authentication/admin.guard';
 import { myTracksRoutes } from './my-tracks.routing.module';
 import { policiesRoutes } from './policies.routing.module';
 import { servicesRoutes } from './services.routing.module';
@@ -248,6 +249,9 @@ describe('serverRoutes', () => {
   });
 
   it('keeps exact admin child routes mirrored as client-rendered server routes', () => {
+    const inactive = adminRoutes.find(route => route.path === 'inactive-accounts');
+    expect(inactive?.canActivate).toContain(adminGuard);
+    expect(inactive?.data?.robots).toBe('noindex, nofollow');
     const expectedAdminRoutes = fullAdminRoutePaths();
     const serverAdminRoutes = CLIENT_RENDERED_APP_ROUTES
       .filter(path => path === 'admin' || path.startsWith('admin/'));

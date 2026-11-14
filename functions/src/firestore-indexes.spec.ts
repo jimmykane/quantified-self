@@ -920,6 +920,9 @@ describe('inactivity retention indexes', () => {
     it('declares due-episode collection-group scanning, retained receipts, and bounded billing/cleanup checks', () => {
         const configuration = loadFirestoreIndexes();
         expect(configuration.fieldOverrides).toEqual(expect.arrayContaining([
+            expect.objectContaining({ collectionGroup: 'inactivityRetention', fieldPath: 'state', indexes: expect.arrayContaining([
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ]) }),
             expect.objectContaining({ collectionGroup: 'inactivityRetention', fieldPath: 'nextCheckAt', indexes: expect.arrayContaining([
                 { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
             ]) }),

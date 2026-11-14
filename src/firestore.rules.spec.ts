@@ -34,7 +34,7 @@ describe('Firestore Security Rules', () => {
     });
 
     describe('Server-owned inactivity retention', () => {
-        it('denies owners, other users, anonymous clients and client admins access to episodes or activation', async () => {
+        it('keeps episodes and raw runtime control private, and rejects incomplete activation writes', async () => {
             const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one', 'configuration/inactiveAccounts'];
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('users/owner').set({});
@@ -47,6 +47,38 @@ describe('Firestore Security Rules', () => {
                     await assertFails(ref.get()); await assertFails(ref.set({ mode: 'enforce' }));
                     await assertFails(ref.update({ state: 'warned' })); await assertFails(ref.delete());
                 }
+            }
+        });
+        it('allows only validated admin settings and preserves runtime counters, leases and evidence', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const path = 'configuration/inactiveAccounts';
+            const ref = testEnv.authenticatedContext('admin', { admin: true }).firestore().doc(path);
+            const settings = { mode: 'off', warningDailyLimit: 100, deletionDailyLimit: 25,
+                settingsRevision: 1, settingsUpdatedAt: serverTimestamp(), settingsUpdatedBy: 'admin' };
+            await assertSucceeds(ref.set(settings));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).update({ warnings: 8, deletions: 3, leaseToken: 'private-lease', scanCursor: 'private-cursor' });
+            });
+            await assertSucceeds(ref.set({ ...settings, mode: 'dry-run', warningDailyLimit: 2, deletionDailyLimit: 0, settingsRevision: 2 }, { merge: true }));
+            await assertFails(ref.set({ ...settings, mode: 'enforce', settingsRevision: 2 }, { merge: true })); // stale editor
+            for (const patch of [{ warnings: 0 }, { deletions: 0 }, { leaseToken: 'replacement' }, { scanCursor: 'reset' },
+                { lastRun: {} }, { warningDailyLimit: 101 }, { deletionDailyLimit: 26 }, { warningDailyLimit: -1 },
+                { deletionDailyLimit: 1.5 }, { mode: 'unknown' }, { settingsUpdatedBy: 'another-admin' }, { settingsUpdatedAt: new Date(0) }]) {
+                await assertFails(ref.set({ ...settings, settingsRevision: 3, ...patch }, { merge: true }));
+            }
+            await assertFails(ref.set({ ...settings, settingsRevision: 3 })); // cannot erase runtime fields
+            await assertFails(ref.delete()); await assertFails(ref.get());
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const saved = (await context.firestore().doc(path).get()).data();
+                expect(saved).toMatchObject({ mode: 'dry-run', settingsRevision: 2, warnings: 8, deletions: 3, leaseToken: 'private-lease', scanCursor: 'private-cursor' });
+            });
+        });
+        it('rejects settings edits by ordinary, anonymous and impersonated administrators', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            for (const context of [testEnv.authenticatedContext('member'), testEnv.unauthenticatedContext(),
+                testEnv.authenticatedContext('admin', { admin: true, impersonatedBy: 'operator' })]) {
+                await assertFails(context.firestore().doc('configuration/inactiveAccounts').set({ mode: 'enforce', warningDailyLimit: 10,
+                    deletionDailyLimit: 1, settingsRevision: 1, settingsUpdatedAt: serverTimestamp(), settingsUpdatedBy: 'admin' }));
             }
         });
     });

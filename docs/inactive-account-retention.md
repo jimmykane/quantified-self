@@ -32,8 +32,10 @@ There is no hourly requirement or exact deletion-time promise: caps, outages and
 
 ## State and safety boundary
 
-- `configuration/inactiveAccounts`: server-only mode, global expiring lease, UTC counters and resumable Auth cursor.
+- `configuration/inactiveAccounts`: private runtime state, global expiring lease, UTC counters and resumable Auth cursor.
   Missing/unknown mode is `off`; other modes are `dry-run`, `warnings-only` and `enforce`.
+  Admin settings writes can change only the mode, bounded daily limits and revision/attribution fields; raw reads,
+  counter/cursor/lease edits and deletion remain denied to every browser client.
 - `users/{uid}/inactivityRetention/state`: one UID-owned episode with generation, activity/creation snapshots, email
   fingerprint of the exact Auth address, billing revision, mail ID, queue/acceptance/deadline timestamps and state.
   Even case-only Auth address edits require a fresh warning. No plaintext email is stored here.
@@ -76,6 +78,34 @@ RPC may have started, failures keep the fence and require review; scheduled scan
 Firestore, Firebase Auth and Stripe do not support one distributed transaction. The final Auth observation and
 customer lease narrow races but cannot eliminate a sign-in or externally initiated payment in the final RPC window.
 This residual boundary must be understood before enabling enforcement.
+
+## Admin route
+
+**Admin → Inactive accounts** opens `/admin/inactive-accounts`, independently of Maintenance. It is admin-guarded,
+client-rendered and noindexed, and links directly from the Admin dashboard. The page provides:
+
+- Off, dry-run, warnings-only and enforce settings, daily limits, current UTC-day reservations and explicit save confirmation.
+  Enforcement confirmation explains that existing elapsed notices may become actionable. Saving does not run a scan.
+- Last scan start/finish, last complete Auth inventory, worker lease state and the most recent active run's bounded counters.
+  The scheduler persists only one aggregate `lastRun` alongside its normal lease release. Failed active runs retain a failed
+  summary; off/contended invocations do not replace it. Cloud Monitoring remains authoritative for missed invocations/timeouts.
+- Pages of 25 accounts for warning delivery, deletion deadlines, cancelled notices and pending deletion follow-up, ordered
+  by UID. Pending tombstones remain visible after user-root cleanup. Current email/absence comes from Firebase Auth;
+  an Auth lookup failure fails the request rather than claiming the account is gone. Hold counts are observations from the
+  last run, not a complete per-account billing investigation or a global candidate inventory.
+
+The read-only `getInactivityAdmin` callable applies existing admin authentication/App Check and rejects impersonation.
+It returns an explicit bounded projection combining private retention/mail/cleanup records with current Auth identities;
+direct client reads cannot supply that cross-system projection without exposing the private source records. It never
+returns lease tokens, generation/hash evidence, mail bodies or billing identifiers, and performs no Stripe calls or writes.
+Settings use the existing Firestore SDK directly. Rules enforce their exact field set, integer caps and monotonically
+incremented `settingsRevision`, preserving runtime state and rejecting concurrent/stale edits. Only genuine administrator
+sessions may write; impersonated sessions are denied. The page discards pending responses and confirmations after an
+account change or destruction. There are no manual-delete, retry, reset-counter or send-email buttons.
+
+The existing help/policy content already describes the unchanged customer-facing retention behavior; this admin-only
+surface does not change those rules. Monitoring coverage is unchanged: dashboard data reuses scheduler outcomes and
+does not replace the existing heartbeat, failure, delivery, overdue or pending-fence policies.
 
 ## Monitoring and recovery
 
@@ -121,8 +151,8 @@ Before an approved rollout:
    Subscription Schedules read permission must be verified; this PR does not modify a key or secret.
 2. With separate deployment approval, use Node 22 and the repository's pinned CLI:
    `npm run firebase -- deploy --project quantified-self-io --only firestore:rules,firestore:indexes`, then
-   `npm run firebase -- deploy --project quantified-self-io --only functions:processInactiveAccounts,functions:onSubscriptionUpdated,functions:deleteSelf`.
-   Verify the new collection-group query index and 90-day episode TTL are active, not merely present in source.
+   `npm run firebase -- deploy --project quantified-self-io --only functions:processInactiveAccounts,functions:getInactivityAdmin,functions:onSubscriptionUpdated,functions:deleteSelf`.
+   Verify the due/state collection-group query indexes and 90-day episode TTL are active, not merely present in source.
    Deploy the help/policy changes with the normal approved Hosting build.
 3. With separate template-write approval, seed only the selected warning and its required partials using
    `npm --prefix functions run seed-emails -- --templates=account_inactivity_warning` under an explicitly verified

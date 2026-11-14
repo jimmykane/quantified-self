@@ -830,7 +830,27 @@ service cloud.firestore {
       return url is string && url.size() <= 2048
         && url.matches('^https://(beta[.])?quantified-self[.]io/.*|^http://(localhost|127[.]0[.]0[.]1):[0-9]+/.*');
     }
-    match /configuration/inactiveAccounts { allow read, write: if false; }
+    match /configuration/inactiveAccounts {
+      function settingsKeys() {
+        return ['mode', 'warningDailyLimit', 'deletionDailyLimit', 'settingsRevision', 'settingsUpdatedAt', 'settingsUpdatedBy'];
+      }
+      function validSettings() {
+        let d = request.resource.data;
+        return isAdmin() && !('impersonatedBy' in request.auth.token)
+          && d.mode in ['off', 'dry-run', 'warnings-only', 'enforce']
+          && d.warningDailyLimit is int && d.warningDailyLimit >= 0 && d.warningDailyLimit <= 100
+          && d.deletionDailyLimit is int && d.deletionDailyLimit >= 0 && d.deletionDailyLimit <= 25
+          && d.settingsRevision is int && d.settingsRevision > 0 && d.settingsRevision <= 9007199254740991
+          && d.settingsUpdatedAt == request.time && d.settingsUpdatedBy == request.auth.uid;
+      }
+      // Reads are projected by the admin endpoint; runtime leases/cursors stay private.
+      allow read, delete: if false;
+      allow create: if validSettings() && request.resource.data.keys().hasOnly(settingsKeys())
+        && request.resource.data.settingsRevision == 1;
+      allow update: if validSettings() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(settingsKeys())
+        && resource.data.get('settingsRevision', 0) is int
+        && request.resource.data.settingsRevision == resource.data.get('settingsRevision', 0) + 1;
+    }
 
     match /configuration/stripeBilling {
       allow read: if request.auth != null;

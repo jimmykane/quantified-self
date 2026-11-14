@@ -11,6 +11,10 @@
     "environment": "angular",
     "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
   },
+  "src/app/components/admin/admin-inactive-accounts/admin-inactive-accounts.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the standalone Admin route with TestBed and Material controls to verify settings bindings, explicit enforcement confirmation, pagination, haptics and account-safe teardown."
+  },
   "src/app/components/benchmark/benchmark-rr.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
@@ -170,6 +174,10 @@
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
+  },
+  "src/app/services/admin-inactivity.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify the injected Firebase Auth, Firestore and callable boundaries, bounded settings patches and account changes during pending operations."
   },
   "src/app/services/app-check-diagnostics.service.spec.ts": {
     "environment": "angular",

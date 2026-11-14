@@ -25,6 +25,7 @@ describe('function target loader', () => {
       'queueAutomaticDeliveryNotification',
       'sendActivitySyncNotifications',
       'processInactiveAccounts',
+      'getInactivityAdmin',
       'checkSubscriptionNotifications',
       'cleanupStripeCustomer',
       'cleanupUserAccounts',

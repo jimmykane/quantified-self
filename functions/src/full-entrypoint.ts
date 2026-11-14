@@ -284,3 +284,4 @@ export { queueTrainingSyncNotification } from './web-push/training-admission';
 export { sendTrainingSyncNotifications } from './web-push/training';
 
 export { processInactiveAccounts } from './schedule/inactive-accounts';
+export { getInactivityAdmin } from './admin/handlers/inactivity.handlers';

@@ -1,0 +1,94 @@
+<main class="qs-workspace-page" aria-labelledby="inactive-accounts-title">
+  <app-page-header title="Inactive accounts" titleId="inactive-accounts-title" eyebrow="Administration"
+    leadingIcon="person_off" subtitle="Manage the daily retention process for inactive Free accounts." />
+  <div class="toolbar">
+    <a mat-stroked-button routerLink="/admin"><mat-icon>arrow_back</mat-icon>Admin dashboard</a>
+    <button mat-stroked-button type="button" (click)="refresh()" [disabled]="loading() || saving() || dirty()">
+      <span class="button-content"><span class="button-icon">@if (loading()) { <mat-spinner diameter="18" /> } @else { <mat-icon>refresh</mat-icon> }</span>Refresh</span>
+    </button>
+  </div>
+  @if (error()) { <p class="feedback error" role="alert">{{ error() }}</p> }
+  @if (notice()) { <p class="feedback" role="status">{{ notice() }}</p> }
+  @if (loading()) { <p role="status" class="secondary">Loading account retention…</p> }
+  @if (data(); as snapshot) {
+    <section aria-labelledby="retention-settings" class="section">
+      <div class="section-heading"><h2 id="retention-settings">Retention settings</h2><span>Current mode: <strong>{{ currentModeLabel() }}</strong></span></div>
+      <p>Free accounts qualify after more than six calendar months without an app sign-in or session refresh. Confirmed warning delivery starts a full 30-day return period. Basic, Pro, trials, gifts and active grace periods are protected.</p>
+      @if (!snapshot.settingsValid) { <p class="feedback error" role="alert">Stored settings are invalid. An operator must review them before this form can save changes.</p> }
+      @if (conflict()) { <p class="feedback error" role="alert">Settings changed while you were editing. Reset changes to load the current values.</p> }
+      <app-compact-select label="Processing mode" [value]="mode()" [options]="modes" [disabled]="loading() || saving()" (selectionChange)="changeMode($event)" />
+      <p class="secondary">{{ description() }}</p>
+      <div class="limits">
+        <mat-form-field appearance="outline"><mat-label>Warnings per day</mat-label>
+          <input matInput type="number" required min="0" [max]="maximumWarnings" step="1" [ngModel]="warningLimit()"
+            (ngModelChange)="warningLimit.set($event)" [disabled]="loading() || saving()" aria-describedby="retention-cap-help" />
+          <mat-hint>0–{{ maximumWarnings }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Deletion initiations per day</mat-label>
+          <input matInput type="number" required min="0" [max]="maximumDeletions" step="1" [ngModel]="deletionLimit()"
+            (ngModelChange)="deletionLimit.set($event)" [disabled]="loading() || saving()" aria-describedby="retention-cap-help" />
+          <mat-hint>0–{{ maximumDeletions }}</mat-hint>
+        </mat-form-field>
+      </div>
+      <p id="retention-cap-help" class="secondary">Limits reset at midnight UTC. Zero pauses that action. Used reservations are not refunded after a failed attempt.</p>
+      <div class="toolbar">
+        <button mat-flat-button type="button" (click)="save()" [disabled]="!canSave()">
+          <span class="button-content"><span class="button-icon">@if (saving()) { <mat-spinner diameter="18" /> } @else { <mat-icon>save</mat-icon> }</span>{{ saving() ? 'Saving…' : 'Save settings' }}</span>
+        </button>
+        <button mat-button type="button" (click)="reset()" [disabled]="!dirty() || loading() || saving()">Reset changes</button>
+      </div>
+    </section>
+    <section aria-labelledby="retention-status" class="section">
+      <h2 id="retention-status">Daily processing</h2>
+      <dl class="status-grid">
+        <div><dt>Worker</dt><dd>{{ snapshot.running ? 'Running' : 'Idle' }}</dd></div>
+        <div><dt>Last started</dt><dd>{{ snapshot.lastStartedAt ? (snapshot.lastStartedAt | date:'medium') : 'No recorded scan' }}</dd></div>
+        <div><dt>Last finished</dt><dd>{{ snapshot.lastFinishedAt ? (snapshot.lastFinishedAt | date:'medium') : 'No recorded scan' }}</dd></div>
+        <div><dt>Last full account scan</dt><dd>{{ snapshot.lastScanCompletedAt ? (snapshot.lastScanCompletedAt | date:'medium') : 'No completed scan' }}</dd></div>
+        <div><dt>Warnings reserved today</dt><dd class="number">{{ snapshot.warningsReserved | number }} / {{ snapshot.settings.warningDailyLimit | number }}</dd></div>
+        <div><dt>Deletions reserved today</dt><dd class="number">{{ snapshot.deletionsReserved | number }} / {{ snapshot.settings.deletionDailyLimit | number }}</dd></div>
+      </dl>
+      @if (snapshot.lastRun; as run) {
+        <p>Last run: <strong>{{ run.outcome === 'failed' ? 'Failed — review required' : 'Completed' }}</strong> · {{ run.finishedAt | date:'medium' }}@if (run.capped) { · Limited by time or daily cap }</p>
+        <dl class="status-grid run-counts">
+          <div><dt>Warnings queued</dt><dd class="number">{{ run.queued | number }}</dd></div>
+          <div><dt>Warnings accepted</dt><dd class="number">{{ run.accepted | number }}</dd></div>
+          <div><dt>Deletion initiated</dt><dd class="number">{{ run.deletionRequested | number }}</dd></div>
+          <div><dt>Eligibility holds</dt><dd class="number">{{ run.blocked | number }}</dd></div>
+          <div><dt>Unconfirmed delivery</dt><dd class="number">{{ run.noticeUnconfirmed | number }}</dd></div>
+          <div><dt>Processing failures</dt><dd class="number">{{ run.failed | number }}</dd></div>
+          <div><dt>Observed overdue</dt><dd class="number">{{ run.overdue | number }}</dd></div>
+          <div><dt>Deletion needs review</dt><dd class="number">{{ run.reviewRequired | number }}</dd></div>
+        </dl>
+        <p class="secondary">Last-run counts are bounded observations, not a complete account inventory. Eligibility holds protect accounts when activity, warning evidence, access or billing checks do not pass. Initiating deletion does not mean background cleanup has finished.</p>
+      } @else { <p class="secondary">No run summary recorded yet. Off mode does not scan accounts.</p> }
+    </section>
+    <section aria-labelledby="retention-accounts" class="section">
+      <div class="section-heading"><h2 id="retention-accounts">Accounts</h2>
+        <app-compact-select label="View" [value]="view()" [options]="views" [disabled]="loading() || saving()" (selectionChange)="changeView($event)" />
+      </div>
+      <p class="secondary">Current sign-in addresses are shown. These are recorded states; activity and billing are checked again before deletion. Pending cleanup records remain visible even after the account is removed.</p>
+      @if (!loading() && !error()) {
+        <ul class="account-list">
+          @for (account of snapshot.accounts; track account.uid) {
+            <li>
+              <div class="account-identity"><strong>{{ account.email || (account.authPresent ? 'No sign-in email' : 'Auth account no longer present') }}</strong><span class="secondary account-id">{{ account.uid }}</span><p>{{ account.detail }}</p></div>
+              <dl class="account-dates">
+                @if (account.queuedAt !== null) { <div><dt>Warning queued</dt><dd>{{ account.queuedAt | date:'medium' }}</dd></div> }
+                @if (account.acceptedAt !== null) { <div><dt>Delivery accepted</dt><dd>{{ account.acceptedAt | date:'medium' }}</dd></div> }
+                @if (account.deleteAfter !== null) { <div><dt>Deletion no earlier than</dt><dd>{{ account.deleteAfter | date:'medium' }}</dd></div> }
+                @if (account.requestedAt !== null) { <div><dt>Deletion requested</dt><dd>{{ account.requestedAt | date:'medium' }}</dd></div> }
+              </dl>
+            </li>
+          } @empty { <li class="secondary">No accounts in this view.</li> }
+        </ul>
+      }
+      <div class="toolbar pagination">
+        <button mat-stroked-button type="button" (click)="previous()" [disabled]="page() <= 1 || loading() || saving() || !!error()">Previous</button>
+        <span>Page {{ page() | number }}</span>
+        <button mat-stroked-button type="button" (click)="next()" [disabled]="!snapshot.nextUid || loading() || saving() || !!error()">Next</button>
+      </div>
+      <p class="secondary">Up to 25 accounts per page, ordered by account ID. Cases needing review require the existing operator recovery process.</p>
+    </section>
+  }
+</main>
