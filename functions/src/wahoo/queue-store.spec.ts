@@ -284,6 +284,21 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
+  it.each(['coordinator', 'legacy'].flatMap(path => [false, true].map(processed => ({ path, processed }))))(
+    'preserves a newer provider summary during $path restoration (processed=$processed)', async ({ path, processed }) => {
+      const current = { ...input, summaryUpdatedAt: '2026-07-19T10:00:00.000Z', workoutSummaryID: 'new-summary',
+        FITFileURI: 'https://cdn.wahooligan.com/new.fit', queueRevision: 'new-revision',
+        connectionHistoryRunId: 'earlier-run', processed, retryCount: 7 };
+      mocks.transactionGet.mockResolvedValue({ exists: true, data: () => current });
+      const incoming = { ...input, fromHistory: true, ...(path === 'coordinator' ? { connectionHistoryRunId: 'manual-run' } : {}) };
+      const restore = () => upsertWahooWorkoutQueueItem(incoming, 'deferred', undefined, path === 'legacy' ? 'legacy-lease' : undefined);
+      const operation = path === 'coordinator'
+        ? withHistoryExecution({ reimportCompletedActivities: true } as HistoryExecution, restore) : restore();
+      await expect(operation).resolves.toMatchObject({ queued: false });
+      expect(mocks.transactionSet).not.toHaveBeenCalled();
+      expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+    });
+
   it('retries an ownership-transfer collision without overwriting the previous owner', async () => {
     mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: 'another-owner', connectionHistoryRunId: 'old-run', processed: false }) });
     await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
@@ -382,7 +397,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
   });
 
-  it('does not requeue an older duplicate but refreshes its pending signed URL', async () => {
+  it('does not requeue a same-revision duplicate but refreshes its pending signed URL', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({

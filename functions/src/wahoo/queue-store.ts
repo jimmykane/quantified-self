@@ -176,6 +176,10 @@ export async function upsertWahooWorkoutQueueItem(
     if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
       throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
     }
+    // A cached history page must not downgrade a newer summary or its download URL.
+    if (existing && revisionTime(input.summaryUpdatedAt) < revisionTime(existing.summaryUpdatedAt)) {
+      return { queued: false, dateCreated: Number(existing.dateCreated || now) };
+    }
     const reimportLegacy = existing && legacyHistoryRevision && input.firebaseUserID
       && existing.firebaseUserID === input.firebaseUserID && existing.queueRevision !== legacyHistoryRevision
       && isReimportableCompletedActivity(existing);

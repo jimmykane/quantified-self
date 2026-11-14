@@ -1507,9 +1507,10 @@ verified cross-provider copies once per run, so deleted workouts can be restored
 the existing identity/edit-preserving writer. Copies are verified again against current saved data; existing IDs and edits
 remain protected. Other skipped/uncertain outcomes gain no new eligibility. Legacy Wahoo history reuses its manual
 lease as the queue revision and verifies that lease transactionally, retaining its existing scan/stats contract.
+An older Wahoo summary cannot replace a newer queued summary or its download URL during restoration.
 The same run's completed children and in-flight live work remain deduplicated; automatic history keeps its existing
 completed-job policy. Coordinator admission adds no reads; legacy Wahoo adds one metadata read per item. See
-[manual history semantics and worker-only release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
+[manual history semantics and backend release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
 Monitoring is **covered/unchanged** under #847/#829; Help, frontend, MCP and Training need no contract change.
 
 Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active

@@ -225,6 +225,8 @@ completed row from the same import. It is not persisted as a coordinator run ID.
 same lease owner and unexpired deadline transactionally with the existing account/deletion guards, adding one metadata
 read per legacy item. An expired/replaced lease stops that request. Pending work retains its current revision/retries;
 ordinary webhooks and automatic connection imports gain no restoration permission. No new field, queue or counter is added.
+Wahoo ignores strictly older provider summaries, including their download URLs, even during manual restoration;
+same-revision URL refreshes and newer provider revisions retain their existing behavior.
 
 Monitoring is **covered/unchanged** by the reviewed #847 coordinator and #829 recorded-import source definitions and
 runbooks: the same committed child outcomes, retries, dispatch/worker failures and retained DLQ observations apply.
