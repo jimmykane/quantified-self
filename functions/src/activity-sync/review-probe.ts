@@ -66,7 +66,13 @@ export async function observeActivityDeliveryReview(db: FirebaseFirestore.Firest
             else if (age >= DAY_MS) { group.overdueSample++; group.ageLowerBoundMs = Math.max(group.ageLowerBoundMs, age); }
         }
         if (stopped) return;
-        groups.forEach(({ destination, ...fields }) => recordActivityDeliveryReviewSample(destination, kind, { ...fields, truncated: sample.size > LIMIT }));
+        const truncated = sample.size > LIMIT;
+        groups.forEach(({ destination, overdueSample, ageLowerBoundMs, ...fields }) => recordActivityDeliveryReviewSample(destination, kind, {
+            ...fields, truncated,
+            // Unknown or unobserved records cannot establish a healthy zero. Keep a
+            // known positive lower bound, and always retain coverage/heartbeat fields.
+            ...(overdueSample > 0 || fields.unknownSample === 0 && !truncated ? { overdueSample, ageLowerBoundMs } : {}),
+        }));
         completed.add(kind);
     };
     try {

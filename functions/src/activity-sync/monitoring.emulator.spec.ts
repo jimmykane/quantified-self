@@ -131,6 +131,28 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observa
             expect(fields).not.toHaveProperty('dueSample');
         }
     });
+    it('does not publish healthy zeroes when excluded retained records fill the bounded sample', async () => {
+        const batch = db.batch();
+        for (let i = 0; i < 21; i++) batch.set(db.doc(`activitySyncQueue/excluded-${i}`), {
+            userID: 'deleted-owner', routeId: 'GarminAPI_to_WahooAPI', sourceServiceName: ServiceNames.GarminAPI,
+            destinationServiceName: ServiceNames.WahooAPI, processed: true, resultStatus: 'manual_reconciliation_required',
+            manualReconciliationRequiredAt: 1, dateCreated: 1,
+        });
+        await batch.commit();
+        await observeActivityDeliveryReview(db);
+        const samples = vi.mocked(logger.info).mock.calls.map(([, fields]) => fields);
+        expect(samples).toHaveLength(6);
+        for (const sample of samples.filter(s => s.reviewKind === 'manual_reconciliation')) {
+            expect(sample).toMatchObject({ event: 'review_sample', truncated: true, unknownSample: 0 });
+            expect(sample).not.toHaveProperty('overdueSample');
+            expect(sample).not.toHaveProperty('ageLowerBoundMs');
+        }
+        expect(samples.find(s => s.reviewKind === 'manual_reconciliation' && s.destination === 'wahoo')).toMatchObject({ sampled: 20, excludedSample: 20 });
+        for (const sample of samples.filter(s => s.reviewKind === 'dead_letter')) {
+            expect(sample).toMatchObject({ truncated: false, overdueSample: 0, ageLowerBoundMs: 0 });
+        }
+        expect((await db.collection('activitySyncQueue').get()).size).toBe(21);
+    });
     it('excludes retained failures during destination reconnect or missing credentials, without requiring the source connection', async () => {
         const future = Date.now() + 3 * 86400_000;
         await seed('review-connection');

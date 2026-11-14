@@ -42,6 +42,9 @@ fixed destination/review kind in 90 minutes alert for investigation. Two unavail
 truncated retained-review samples, alert that coverage is incomplete; old recovered receipts can saturate the
 sample and must never imply all later failures are healthy. This is bounded operational observation, not an
 exhaustive backlog inventory. Use a scoped operator audit when coverage is incomplete. Neither probe replays work.
+Unknown or truncated samples omit zero-valued overdue counts and age observations, so incomplete coverage cannot
+draw a healthy zero on the age chart. Confirmed positive lower bounds remain visible alongside the coverage warning;
+complete idle samples still emit zeroes and all samples retain their heartbeat and coverage fields.
 
 The source-controlled bundle now defines 18 metrics and 12 policies, with retained-review age/overdue dashboard
 charts (retained-age buckets extend through 90 days) and a two-hour observation-absence policy for all six

@@ -26,7 +26,7 @@ function harness(options: { deleted?: boolean; replayed?: boolean; changed?: boo
     return { exists: false };
   })) };
   const db = { collection: vi.fn(() => query), doc: vi.fn(refFor), runTransaction: vi.fn(async fn => fn(tx)) };
-  return { db, query, tx };
+  return { db, query, tx, snap };
 }
 describe('retained delivery review observation', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -56,10 +56,31 @@ describe('retained delivery review observation', () => {
   });
   it('reports missing timestamps as unknown, and read failure as unavailable', async () => {
     await observeActivityDeliveryReview(harness({ unknown: true }).db as never, now);
-    expect(vi.mocked(logger.info).mock.calls.some(([, fields]) => fields.unknownSample === 1)).toBe(true);
+    const unknown = vi.mocked(logger.info).mock.calls.find(([, fields]) => fields.destination === 'suunto' && fields.reviewKind === 'manual_reconciliation')?.[1];
+    expect(unknown).toMatchObject({ event: 'review_sample', unknownSample: 1 });
+    expect(unknown).not.toHaveProperty('overdueSample');
+    expect(unknown).not.toHaveProperty('ageLowerBoundMs');
+    const idle = vi.mocked(logger.info).mock.calls.find(([, fields]) => fields.destination === 'wahoo')?.[1];
+    expect(idle).toMatchObject({ overdueSample: 0, ageLowerBoundMs: 0 });
     vi.clearAllMocks(); await observeActivityDeliveryReview(harness({ fail: true }).db as never, now);
     expect(logger.info).toHaveBeenCalledTimes(6);
     expect(vi.mocked(logger.info).mock.calls.every(([, fields]) => fields.event === 'review_sample_unavailable')).toBe(true);
+  });
+  it.each([false, true])('preserves a confirmed overdue lower bound with unknown records (truncated: %s)', async truncated => {
+    const { db, query, snap } = harness();
+    const unknown = { ...snap, data: () => ({ ...snap.data(), routeId: 'unknown-route' }) };
+    const docs = [snap, ...Array.from({ length: truncated ? 20 : 1 }, () => unknown)];
+    query.get.mockResolvedValue({ docs, size: docs.length });
+    await observeActivityDeliveryReview(db as never, now);
+    const samples = vi.mocked(logger.info).mock.calls.map(([, fields]) => fields);
+    expect(samples).toHaveLength(6);
+    for (const sample of samples.filter(s => s.destination === 'suunto')) {
+      expect(sample).toMatchObject({ overdueSample: 1, ageLowerBoundMs: 2 * 86400_000, truncated, unknownSample: truncated ? 19 : 1 });
+    }
+    for (const sample of samples.filter(s => s.destination !== 'suunto')) {
+      expect(sample).not.toHaveProperty('overdueSample');
+      expect(sample).not.toHaveProperty('ageLowerBoundMs');
+    }
   });
   it('stops after its deadline and never emits a late healthy result', async () => {
     vi.useFakeTimers(); const { db, query } = harness(); let resolve!: (data: unknown) => void;
