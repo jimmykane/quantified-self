@@ -43,6 +43,8 @@ export interface ConnectionHistoryRun {
   tokenPath: string;
   rootPath: string;
   credentialGeneration: string;
+  /** Suunto retained accounts can have a token generation independent of the OAuth root. */
+  rootOAuthCredentialGeneration?: string;
   connectionGeneration: string;
   rangePreset: HistoryImportRange;
   startMs: number;
@@ -75,6 +77,11 @@ export interface HistoryConnectionContext {
   rootPath: string;
   providerUserId: string;
   credentialGeneration: string;
+}
+/** Older runs retain their original same-generation fence; other providers still require it. */
+export function historyRootCredentialGeneration(run: ConnectionHistoryRun): string {
+  return run.serviceName === ServiceNames.SuuntoApp && run.rootOAuthCredentialGeneration !== undefined
+    ? run.rootOAuthCredentialGeneration : run.credentialGeneration;
 }
 /** Exact identity of the committed provider operation, shared with read-only recovery monitoring. */
 export function historyOperationKey(step: HistoryStep): string {

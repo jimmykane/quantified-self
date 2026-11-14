@@ -271,8 +271,41 @@ The on-demand identity repair requires the four admission functions (`addSuuntoA
 `addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue`, `backfillGarminAPIActivities`) once coordinator support is
 deployed. Release `requestAndSetSuuntoAPIAccessToken` before or alongside them so reconnect also updates the saved
 Suunto identity. The existing progress UI needs no behavior change; Help explains verification and reconnect requirements.
+Suunto retained accounts are an exception to the root/token equality above: the completed September migration
+preserved independent nonempty generations. Admission uses the pinned canonical account, or (when no token matches
+the current root generation and the scalar account ID is absent) exactly one retained owner-scoped token from a
+two-document bounded query. A different account generation requires the existing schema-v3, provider-authorized
+binding to match that exact owner, account and token generation in the admission transaction. No provider call,
+credential change or repeat migration is needed. Ambiguous accounts and unverified bindings still fail closed.
+New independent-generation runs privately retain `rootOAuthCredentialGeneration`; `credentialGeneration` remains
+the account-token snapshot. Coordinator requests, write guards, child workers, retry and the masked monitoring probe
+check each captured generation separately. Old runs without the optional field retain their original same-generation
+meaning; other providers still require root/token equality. Reconnect, either generation changing, disconnect and
+deletion still stop the old run. Neither generation is projected to the client.
+
+For this Suunto compatibility correction, deploy consumers `processConnectionHistoryTask`,
+`retryConnectionHistoryImport`, `recoverConnectionHistoryImports` and `processWorkoutTask` before the producer
+`addSuuntoAppHistoryToQueue`, with separate approval. The producer creates activity-only runs, so no Sleep/Route
+producer or worker change is required for this rollout. Keep compatible consumers until these runs drain; roll
+back the admission producer first. No frontend, Rules, index, secret, monitoring-resource apply or data migration is
+needed. Existing Help's connection-verification guidance remains accurate. #847/#829 monitoring is **covered/unchanged**,
+including the probe's added private field mask; MCP/Assistant and Training contracts are unchanged. Rejected requests
+never created runs and cannot be replayed without the original user-selected dates.
 To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
 retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
+
+### Suunto manual request diagnostics
+
+`addSuuntoAppHistoryToQueue` records failed handler requests as `[SuuntoHistoryImport] Request failed.` with a fixed
+`failureStage`, request `mode`, `notificationRequested` boolean, callable `errorCode`, allowlisted `reason` and elapsed
+time. This includes validation, notification consent and background admission, which run before the legacy provider-scan
+catch. Expected callable rejections are WARNING; unexpected/server failures are ERROR. Messages, request payloads,
+date ranges, identities, credential generations and notification registration data are excluded. Unknown rejection
+messages remain `unclassified`; the original callable code/message and import behavior are preserved.
+
+Monitoring coverage is **unchanged**: this diagnostic-only boundary does not change coordinator/import metrics,
+admission checks, queues, retries, authorization or terminal outcomes. Deploy only `addSuuntoAppHistoryToQueue` after
+separate approval for this history diagnostic; no frontend, Rules or index release is required.
 
 ### Existing provider operations
 

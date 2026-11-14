@@ -107,6 +107,10 @@
     "environment": "angular",
     "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
   },
+  "src/app/components/shared/sync-compatibility/sync-compatibility.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the inline Material provider selectors and verifies rendered direction/resource/history guidance and single-owner haptic feedback with TestBed."
+  },
   "src/app/components/shared/table-date-filter/table-date-filter.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the shared table date control with real Material menus and range-picker portals to verify calendar selection, deferred Apply versus Cancel, focus restoration, disabled controls and haptic ownership."

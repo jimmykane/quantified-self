@@ -1,0 +1,6 @@
+:host { display: block; }
+.compatibility { margin-block: 1rem 1.5rem; text-align: start; }
+h2 { font: var(--mat-sys-title-medium); margin: 0 0 .5rem; }
+p { font: var(--mat-sys-body-medium); margin: .65rem 0; }
+.direction { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: .75rem; }
+.note { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }

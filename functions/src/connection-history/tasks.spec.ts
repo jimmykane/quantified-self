@@ -75,6 +75,67 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 const signals = () => [...vi.mocked(logger.info).mock.calls, ...vi.mocked(logger.warn).mock.calls]
   .filter(([, fields]) => fields?.telemetryVersion === 1).map(([, fields]) => fields);
+describe('independent Suunto history lifecycle snapshots', () => {
+  beforeEach(() => {
+    run.serviceName = ServiceNames.SuuntoApp;
+    run.rootPath = 'suuntoAppAccessTokens/owner'; run.tokenPath = `${run.rootPath}/tokens/account`;
+    run.rootOAuthCredentialGeneration = 'retained-root'; run.steps = run.steps.slice(0, 1);
+    mocks.rows.set(path(), run);
+    mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'retained-root' });
+    mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
+    mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
+  });
+  it('runs the coordinator and fences downstream writes with each original generation', async () => {
+    const execution = historyExecution(run, []);
+    expect(execution.requiredDocumentFieldValues.slice(0, 2)).toEqual([
+      { documentRef: expect.objectContaining({ path: run.rootPath }), expectedFields: { activeOAuthCredentialGeneration: 'retained-root' } },
+      { documentRef: expect.objectContaining({ path: run.tokenPath }), expectedFields: { tokenCredentialGeneration: 'credential' } },
+    ]);
+    await execution.beforeRequest();
+    await processConnectionHistoryRun(run.id, '0');
+    expect(mocks.execute).toHaveBeenCalledOnce(); expect(saved()).toMatchObject({ processed: true, rootOAuthCredentialGeneration: 'retained-root' });
+  });
+  it('allows the exact queued child without borrowing a replacement account', async () => {
+    const operation = vi.fn(async () => 'PROCESSED' as QueueResult);
+    const item = { connectionHistoryRunId: run.id, firebaseUserID: 'owner', sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'account' } as QueueItemInterface;
+    await withHistoryQueueExecution(item, operation);
+    expect(operation).toHaveBeenCalledOnce(); expect(mocks.skip).not.toHaveBeenCalled();
+    mocks.rows.get(run.tokenPath).tokenCredentialGeneration = 'new-token';
+    operation.mockClear(); await withHistoryQueueExecution(item, operation);
+    expect(operation).not.toHaveBeenCalled(); expect(mocks.skip).toHaveBeenCalledOnce();
+  });
+  it('resumes a failed run with both original generations intact', async () => {
+    run.processed = true; run.failed = true;
+    Object.assign(run.steps[0], { status: 'failed', done: true, retryCount: PROVIDER_MAX_RETRY_COUNT });
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
+    expect(saved()).toMatchObject({ processed: false, credentialGeneration: 'credential', rootOAuthCredentialGeneration: 'retained-root',
+      steps: [{ status: 'queued', done: false, retryCount: 0 }] });
+    await historyExecution(saved(), []).beforeRequest();
+  });
+  it.each(['root', 'token', 'connection', 'disconnect', 'deleted', 'pro', 'legacy run', 'other provider'])(
+    'stops provider work after %s changes', async change => {
+      if (change === 'root') mocks.rows.get(run.rootPath).activeOAuthCredentialGeneration = 'new-root';
+      if (change === 'token') mocks.rows.get(run.tokenPath).tokenCredentialGeneration = 'new-token';
+      if (change === 'connection') mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionStateGeneration = 'new-connection';
+      if (change === 'disconnect') mocks.rows.get(run.rootPath).disconnectGeneration = 'disconnect';
+      if (change === 'deleted') mocks.rows.set('userDeletionTombstones/owner', {});
+      if (change === 'pro') mocks.pro.mockResolvedValue(false);
+      if (change === 'legacy run') delete run.rootOAuthCredentialGeneration;
+      if (change === 'other provider') run.serviceName = ServiceNames.WahooAPI;
+      await expect(historyExecution(run, []).beforeRequest()).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+      expect(mocks.execute).not.toHaveBeenCalled();
+    });
+  it('rejects a root change between provider I/O and the final checkpoint', async () => {
+    mocks.execute.mockImplementationOnce(async () => {
+      mocks.rows.get(run.rootPath).activeOAuthCredentialGeneration = 'new-root';
+      return { count: 2, nextStartMs: now + 1000, nextPage: 1 };
+    });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved().steps[0].count).toBe(0);
+  });
+});
 describe('durable history coordinator', () => {
   it('finishes an empty import and projects only safe progress', async () => {
     await processConnectionHistoryRun(run.id, '0'); expect(saved().processed).toBe(true);

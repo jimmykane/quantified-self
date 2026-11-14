@@ -1,3 +1,4 @@
+import { observeActivityDeliveryReview } from './review-probe';
 import { randomUUID } from 'node:crypto';
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -129,5 +130,64 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observa
             expect(fields).toMatchObject({ truncated: true, unknownSample: 20 });
             expect(fields).not.toHaveProperty('dueSample');
         }
+    });
+    it('does not publish healthy zeroes when excluded retained records fill the bounded sample', async () => {
+        const batch = db.batch();
+        for (let i = 0; i < 21; i++) batch.set(db.doc(`activitySyncQueue/excluded-${i}`), {
+            userID: 'deleted-owner', routeId: 'GarminAPI_to_WahooAPI', sourceServiceName: ServiceNames.GarminAPI,
+            destinationServiceName: ServiceNames.WahooAPI, processed: true, resultStatus: 'manual_reconciliation_required',
+            manualReconciliationRequiredAt: 1, dateCreated: 1,
+        });
+        await batch.commit();
+        await observeActivityDeliveryReview(db);
+        const samples = vi.mocked(logger.info).mock.calls.map(([, fields]) => fields);
+        expect(samples).toHaveLength(6);
+        for (const sample of samples.filter(s => s.reviewKind === 'manual_reconciliation')) {
+            expect(sample).toMatchObject({ event: 'review_sample', truncated: true, unknownSample: 0 });
+            expect(sample).not.toHaveProperty('overdueSample');
+            expect(sample).not.toHaveProperty('ageLowerBoundMs');
+        }
+        expect(samples.find(s => s.reviewKind === 'manual_reconciliation' && s.destination === 'wahoo')).toMatchObject({ sampled: 20, excludedSample: 20 });
+        for (const sample of samples.filter(s => s.reviewKind === 'dead_letter')) {
+            expect(sample).toMatchObject({ truncated: false, overdueSample: 0, ageLowerBoundMs: 0 });
+        }
+        expect((await db.collection('activitySyncQueue').get()).size).toBe(21);
+    });
+    it('excludes retained failures during destination reconnect or missing credentials, without requiring the source connection', async () => {
+        const future = Date.now() + 3 * 86400_000;
+        await seed('review-connection');
+        const queue = db.doc('activitySyncQueue/review-connection');
+        await queue.update({ processed: true, resultStatus: 'manual_reconciliation_required', manualReconciliationRequiredAt: Date.now() });
+        await db.doc('garminAPITokens/review-connection').delete();
+        await db.doc('users/review-connection/config/settings').set({});
+        const observe = async () => {
+            vi.clearAllMocks(); await observeActivityDeliveryReview(db, future);
+            return vi.mocked(logger.info).mock.calls.find(([, fields]) => fields.destination === 'wahoo' && fields.reviewKind === 'manual_reconciliation')?.[1];
+        };
+        const before = await queue.get();
+        expect(await observe()).toMatchObject({ overdueSample: 1 });
+        await db.doc(`users/review-connection/meta/${ServiceNames.WahooAPI}`).update({ connectionState: 'reconnect_required' });
+        expect(await observe()).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        await db.doc(`users/review-connection/meta/${ServiceNames.WahooAPI}`).update({ connectionState: 'connected' });
+        await db.doc('wahooAPIAccessTokens/review-connection/tokens/account').delete();
+        expect(await observe()).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        expect((await queue.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');
+    });
+    it('samples retained review outcomes and excludes a recovered live job or deleted owner', async () => {
+        const future = Date.now() + 3 * 86400_000;
+        await seed('retained');
+        const q = db.doc('activitySyncQueue/retained');
+        await q.set({ userID: 'retained', routeId: 'GarminAPI_to_WahooAPI', sourceServiceName: ServiceNames.GarminAPI,
+            destinationServiceName: ServiceNames.WahooAPI, processed: true, resultStatus: 'manual_reconciliation_required',
+            manualReconciliationRequiredAt: Date.now(), dateCreated: Date.now() });
+        await db.doc('failed_jobs/retained').set({ ...(await q.get()).data(), originalCollection: 'activitySyncQueue', failedAt: Date.now() });
+        await observeActivityDeliveryReview(db, future);
+        const samples = vi.mocked(logger.info).mock.calls.map(([, fields]) => fields);
+        expect(samples.find(s => s.event === 'review_sample' && s.reviewKind === 'manual_reconciliation' && s.destination === 'wahoo')).toMatchObject({ overdueSample: 1 });
+        expect(samples.find(s => s.event === 'review_sample' && s.reviewKind === 'dead_letter' && s.destination === 'wahoo')).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        await db.doc('users/retained').delete(); vi.clearAllMocks();
+        await observeActivityDeliveryReview(db, future);
+        expect(vi.mocked(logger.info).mock.calls.every(([, fields]) => fields.overdueSample === 0)).toBe(true);
     });
 });

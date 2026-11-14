@@ -1012,6 +1012,34 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Compatibility before Pro checkout
+
+The subscription view offers a compact, read-only source → destination preview. Sync onboarding expands it;
+other non-Pro visits can disclose it. All four providers remain represented. Completed-activity directions derive
+from `shared/activity-sync-routes.ts`; automatic saved-route directions derive from
+`shared/route-delivery-sync-routes.ts`. Garmin is not a completed-activity destination, even though supported
+Suunto route delivery can target Garmin with Course Import permission. QS-authored planned workouts are a separate
+resource; the preview does not promise provider-to-provider plan transfer or COROS workout delivery.
+
+History copy distinguishes importing into QS from subsequently sending historical recordings: COROS covers the
+last three months, Garmin permits a five-year request once every 30 days, and other providers expose their available
+history. Older exported originals remain the manual alternative. The preview enables no connection, route,
+checkout or provider request and adds no mandatory onboarding step.
+
+Recorded-activity delivery now exposes whole-batch counts and explicit automatic retry status; see
+[workspace outcome semantics](activity-sending-workspace.md#whole-batch-outcomes-and-recovery). Review recovery
+state before resending. Monitoring coverage is **covered by source definitions/tests**, with activation tracked
+separately: the existing dispatcher observes retained outcomes older than 24 hours independently of ordinary
+retries, excluding disconnected/reconnecting destinations and resumed work. Unknown or truncated observations omit
+healthy-zero age/count values while preserving confirmed positive lower bounds and coverage warnings.
+The probe reuses repeated account/connection reads inside each read-only transaction snapshot, with fresh lifecycle
+checks on every observation. Monitoring cadence, coverage and thresholds are unchanged. Browser totals use the
+existing outcome-clock listener, coalesce bursts and defer new reads in hidden tabs instead of polling unchanged batches.
+See [retained-outcome monitoring and guarded recovery](activity-delivery-monitoring.md#retained-unresolved-outcomes-14-november-2026).
+Release must apply the new indexes, projection/dispatcher code and monitoring bundle, then verify positive series.
+No Training computation, planned-workout lifecycle or MCP tool/read/write/scope/consent contract changes; the
+planned-workout text merely describes existing capabilities. No backend product analytics is added.
+
 ### Manual activity range selection
 
 The activity picker reuses the provider range registry for recent presets and maximum/all-available choices, plus
@@ -1406,7 +1434,7 @@ This sequence ensures every callback that can still be valid was created by a st
 - Refresh access tokens only when a provider request needs one, persist rotation safely, and never log token values or signed authorization URLs. The shared `getTokenData()` path takes a transaction-backed lease on the token document before calling a provider refresh endpoint; bound that HTTP request below the lease duration. The lease owner may persist only if the credential snapshot and server-issued credential generation still match and the account-deletion guard remains active; a contender re-reads a winning refresh or retries later, and an expired lease is reclaimable after a crash. OAuth reconnect, disconnect, duplicate-account cleanup, and account deletion must replace, remove, or reject that snapshot atomically so an older worker cannot restore stale credentials.
 - Give every connected, reconnect-required, and disconnect-pending transition a new opaque connection-state generation. Terminal credential cleanup must prove the expected generation and absence of a replacement credential in the same transaction that writes reconnect-required state; any later route-disable write must require that same generation and state. This prevents a stale refresh failure from overwriting a successful OAuth callback or disabling routes after reconnection.
 - Keep a queue task's OAuth credential generation and connection-state generation immutable from its first lifecycle capture. Ordinary token refresh may update credential timestamps only inside that generation; never rebase old work onto a replacement OAuth snapshot. When token children can outlive a deleted parent document, require the original server-owned token-root generation in every downstream write transaction and deny direct browser creation, update, and deletion of that root.
-- When credential generations are introduced after connections already exist, document and test the rollout boundary explicitly. A compatibility path may treat an existing root and child that both omit the generation as one legacy credential, but it must still reject a missing root, a generation on only one side, and unequal generations. Do not perform a blind credential migration or require reconnect when the existing pair can be safely fenced by this exact matching-absence rule.
+- When credential generations are introduced after connections already exist, document and test the rollout boundary explicitly. A compatibility path may treat an existing root and child that both omit the generation as one legacy credential, but it must still reject a missing root, a generation on only one side, and unequal generations where the provider uses one generation. Suunto retained accounts deliberately have independent token/root generations: verify existing provider authorization and fence each captured value separately. Do not perform a blind credential migration or require reconnect when the existing authority can be safely fenced.
 - When authoritative connection metadata is mirrored into a separate product status such as unified Health, commit a generation-keyed repair marker in the authoritative transition. Require the exact marker claim as part of the derived-write guard, retry it from a bounded scheduler, and clear only that claim after success. A disconnect must transactionally supersede any pending claim while proving the credential root remains absent so an in-flight or delayed connected projection cannot restore stale status; logging and swallowing a partial projection is not a recovery mechanism.
 - Keep any provider-specific refresh-failure exception narrow, centralized, and temporary. The current Suunto `400 invalid_grant` exception preserves credentials and retries because Suunto confirmed a provider outage; remove that exception and restore terminal-auth cleanup once Suunto confirms the incident is fixed.
 
@@ -1503,6 +1531,15 @@ Existing progress/Retry UI and #847/#829 monitoring cover both starts. See
 for compatibility, precision, lifecycle/overlap guards, backend-first rollout and rollback boundary. After the shared
 manual coordinator support is deployed, Wahoo adds only `addWahooAPIHistoryToQueue` plus the frontend release.
 No new Function, queue, secret, index, Rules, MCP or Training contract is introduced.
+
+Suunto's completed migration can retain independent account-token/root generations. Background activity-history
+admission verifies the existing server-authorized binding before accepting that shape, then privately snapshots both
+generations. Missing scalar identity recovers only one unambiguous owner-scoped token; no credential rewrite,
+provider call or repeated migration occurs. Coordinator/child guards, retry and masked monitoring compare each value
+against its own snapshot, preserving old-run semantics and every reconnect/disconnect/deletion boundary. See the
+[Suunto history compatibility correction](connection-history-import.md#manual-activity-imports-suunto-coros-and-wahoo)
+for the consumer-before-producer release and rollback order. Monitoring is **covered/unchanged** under #847/#829;
+existing Help remains accurate and no frontend, MCP/Assistant or Training contract changes are required.
 
 Suunto/COROS coordinator-owned activity batches use the existing guarded workout dispatcher after durable
 admission, restricted to at most 100 exact children of that run/account/owner, spread over 60 seconds. Capacity,

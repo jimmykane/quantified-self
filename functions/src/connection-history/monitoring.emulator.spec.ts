@@ -71,6 +71,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     expect(logs().some(([, fields]) => fields.dueSample > 0)).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
   });
+  it.each(['current', 'root changed', 'token changed', 'legacy run', 'other provider'])(
+    'observes independent Suunto generations with the same lifecycle rules: %s', async state => {
+      const { run, ref } = await seed(state === 'other provider' ? ServiceNames.WahooAPI : ServiceNames.SuuntoApp);
+      await db.doc(run.rootPath).update({ activeOAuthCredentialGeneration: 'PRIVATE_ROOT' });
+      if (state !== 'legacy run') await ref.update({ rootOAuthCredentialGeneration: 'PRIVATE_ROOT' });
+      if (state === 'root changed') await db.doc(run.rootPath).update({ activeOAuthCredentialGeneration: 'PRIVATE_REPLACED' });
+      if (state === 'token changed') await db.doc(run.tokenPath).update({ tokenCredentialGeneration: 'PRIVATE_REPLACED' });
+      const select = vi.spyOn(Query.prototype, 'select');
+      await observe();
+      expect(sample(state === 'other provider' ? 'wahoo' : 'suunto')).toMatchObject({ dueSample: state === 'current' ? 1 : 0, unknownSample: 0 });
+      expect(select.mock.calls[0]).toContain('rootOAuthCredentialGeneration');
+      expect(JSON.stringify(logs())).not.toContain('PRIVATE');
+    });
   it('observes route-library work independently of Sleep rollout and cooldown state', async () => {
     const { ref, run } = await seed(ServiceNames.SuuntoApp);
     const routes = { ...run.steps[0], id: 'routes', resources: ['routes' as const],

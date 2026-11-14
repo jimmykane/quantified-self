@@ -8,6 +8,8 @@ vi.mock('../token-refresh-coordinator', () => ({ ACTIVE_OAUTH_CREDENTIAL_GENERAT
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { startManualActivityHistory } from './manual-activity';
 import { historyProjection, type ConnectionHistoryRun } from './model';
+import { assertHistoryConnectionCurrent, historyExecution } from './execution';
+import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../suunto/health-webhook-binding';
 import { sendHistoryCompletion, type HistoryPushDependencies } from '../web-push/history-service';
 const pushMock = vi.hoisted(() => ({ template: vi.fn() }));
 vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTemplate: pushMock.template }) }));
@@ -89,6 +91,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     expect((await meta.get()).data()).not.toHaveProperty('providerUserId');
     expect((await meta.get()).data()).not.toHaveProperty('connectionHistoryImport');
     expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
+  });
+  it.each([true, false])('admits migrated Suunto generations atomically and preserves the original credentials (missing ID: %s)', async missing => {
+    const meta = await seed(ServiceNames.SuuntoApp, missing);
+    const root = mocks.db.doc('suuntoAppAccessTokens/owner'), token = root.collection('tokens').doc('account');
+    await root.update({ activeOAuthCredentialGeneration: 'independent-root' });
+    await getSuuntoHealthWebhookAccountBindingRef(mocks.db, 'account', 'owner').set(
+      buildSuuntoHealthWebhookAccountBinding('owner', 'account', 'credential', 'provider_refresh'));
+    const before = await mocks.db.getAll(root, token);
+    const result = await startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end);
+    const run = (await mocks.db.doc(`connectionHistoryImports/${result.runId}`).get()).data() as ConnectionHistoryRun;
+    expect(run).toMatchObject({ credentialGeneration: 'credential', rootOAuthCredentialGeneration: 'independent-root' });
+    expect(result).not.toHaveProperty('rootOAuthCredentialGeneration');
+    expect((await meta.get()).data()).toMatchObject({ providerUserId: 'account', connectionHistoryReservation: run.id });
+    const after = await mocks.db.getAll(root, token);
+    expect(after.every((snapshot, i) => snapshot.updateTime!.isEqual(before[i].updateTime!))).toBe(true);
+    await mocks.db.runTransaction(tx => assertHistoryConnectionCurrent(run, tx));
+    expect(historyExecution(run, []).requiredDocumentFieldValues[0].expectedFields).toEqual({ activeOAuthCredentialGeneration: 'independent-root' });
+    await root.update({ activeOAuthCredentialGeneration: 'new-root' });
+    await expect(mocks.db.runTransaction(tx => assertHistoryConnectionCurrent(run, tx))).rejects.toThrow('earlier connection');
   });
   it.each(['second current token', 'stale token', 'deleted token', 'mismatched identity', 'disconnect', 'deletion'])(
     'rejects unsafe recovery with %s in Firestore', async reason => {

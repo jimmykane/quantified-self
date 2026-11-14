@@ -8,6 +8,7 @@ vi.mock('../token-refresh-coordinator', () => ({ ACTIVE_OAUTH_CREDENTIAL_GENERAT
 vi.mock('firebase-admin', () => {
   const doc = (path: string): any => ({ path, collection: (name: string) => collection(`${path}/${name}`) });
   const collection = (path: string) => ({ doc: (id: string) => doc(`${path}/${id}`),
+    select: (...fields: string[]) => ({ limit: (limit: number) => ({ path, fields, limit }) }),
     where: (field: string, op: string, value: unknown) => ({
       select: (...fields: string[]) => ({ limit: (limit: number) => ({ path, field, op, value, fields, limit }) }),
     }),
@@ -18,12 +19,12 @@ vi.mock('firebase-admin', () => {
       const tx = {
         get: async (ref: { path: string; field?: string; value?: unknown; fields?: string[]; limit?: number }) => {
           if (writes.length) throw new Error('Read after write');
-          if (ref.field) {
+          if (ref.fields) {
             const docs = [...mocks.rows].filter(([path, data]) => path.startsWith(`${ref.path}/`)
-              && !path.slice(ref.path.length + 1).includes('/') && data[ref.field!] === ref.value)
+              && !path.slice(ref.path.length + 1).includes('/') && (!ref.field || data[ref.field] === ref.value))
               .slice(0, ref.limit).map(([path, data]) => ({ id: path.split('/').at(-1),
                 data: () => Object.fromEntries(ref.fields!.map(field => [field, data[field]])) }));
-            return { size: docs.length, docs };
+            return { size: docs.length, empty: docs.length === 0, docs };
           }
           return { exists: mocks.rows.has(ref.path), data: () => structuredClone(mocks.rows.get(ref.path)) };
         },
@@ -43,6 +44,8 @@ vi.mock('firebase-admin', () => {
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { startManualActivityHistory } from './manual-activity';
 import type { ConnectionHistoryRun } from './model';
+import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../suunto/health-webhook-binding';
+import * as admin from 'firebase-admin';
 
 const now = Date.parse('2026-10-21T12:00:00Z');
 const start = new Date('2026-09-01T21:00:00.000Z'), end = new Date('2026-10-20T20:59:59.999Z');
@@ -200,6 +203,98 @@ describe.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.CORO
     await startManualActivityHistory('owner', service, start, end);
     await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'already-exists' });
     expect(runs()).toHaveLength(1);
+  });
+});
+
+describe('migrated Suunto history admission', () => {
+  const service = ServiceNames.SuuntoApp;
+  const bindingPath = () => getSuuntoHealthWebhookAccountBindingRef(admin.firestore(), 'account', 'owner').path;
+  function migrated(missingProviderId = true) {
+    const root = seed(service);
+    mocks.rows.get(root)!.activeOAuthCredentialGeneration = 'root-generation';
+    if (missingProviderId) delete mocks.rows.get(metaPath(service))!.providerUserId;
+    mocks.rows.set(bindingPath(), buildSuuntoHealthWebhookAccountBinding('owner', 'account', 'credential', 'provider_refresh'));
+    return root;
+  }
+  it.each([true, false])('admits a provider-verified retained account (missing scalar identity: %s) without replacing credentials', async missing => {
+    const root = migrated(missing);
+    const before = [root, `${root}/tokens/account`, bindingPath()].map(path => structuredClone(mocks.rows.get(path)));
+    const result = await startManualActivityHistory('owner', service, start, end);
+    expect(runs()[0][1]).toMatchObject({ providerUserId: 'account', credentialGeneration: 'credential',
+      rootOAuthCredentialGeneration: 'root-generation', connectionGeneration: 'connection' });
+    expect([root, `${root}/tokens/account`, bindingPath()].map(path => mocks.rows.get(path))).toEqual(before);
+    expect(mocks.rows.get(metaPath(service))).toMatchObject({ providerUserId: 'account', connectionHistoryReservation: result.runId });
+    expect(result).not.toHaveProperty('rootOAuthCredentialGeneration');
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE_TOKEN|root-generation|credential/);
+  });
+  it.each(['missing', 'old schema', 'unverified', 'wrong owner', 'wrong account', 'wrong generation'])(
+    'rejects an independent generation with a %s binding', async reason => {
+      migrated();
+      const binding = mocks.rows.get(bindingPath())!;
+      if (reason === 'missing') mocks.rows.delete(bindingPath());
+      if (reason === 'old schema') binding.schemaVersion = 2;
+      if (reason === 'unverified') delete binding.authorizationSource;
+      if (reason === 'wrong owner') binding.userID = 'another-owner';
+      if (reason === 'wrong account') binding.providerAccountDigest = '0'.repeat(64);
+      if (reason === 'wrong generation') binding.tokenCredentialGeneration = 'replaced';
+      await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(runs()).toHaveLength(0);
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('providerUserId');
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryReservation');
+    });
+  it('does not choose arbitrarily between retained Suunto accounts without a scalar identity', async () => {
+    const root = migrated();
+    mocks.rows.set(`${root}/tokens/other`, { userName: 'other', tokenCredentialGeneration: 'retained-other' });
+    await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(runs()).toHaveLength(0);
+  });
+  describe.each(['root', 'token', 'connection'])('malformed %s generation', field => {
+    it.each(['whitespace', 'oversized'])('rejects %s before admitting a migrated account', async format => {
+      const root = migrated();
+      const value = format === 'oversized' ? 'x'.repeat(129)
+        : field === 'root' ? ' root-generation ' : field === 'token' ? ' credential ' : ' connection ';
+      if (field === 'root') mocks.rows.get(root)!.activeOAuthCredentialGeneration = value;
+      if (field === 'token') mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = value;
+      if (field === 'connection') mocks.rows.get(metaPath(service))!.connectionStateGeneration = value;
+      await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(runs()).toHaveLength(0);
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('providerUserId');
+      expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryReservation');
+    });
+  });
+  it.each([1, 128])('preserves valid generation snapshots at length %s', async length => {
+    const root = migrated();
+    mocks.rows.get(root)!.activeOAuthCredentialGeneration = 'r'.repeat(length);
+    mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = 't'.repeat(length);
+    mocks.rows.get(metaPath(service))!.connectionStateGeneration = 'c'.repeat(length);
+    mocks.rows.set(bindingPath(), buildSuuntoHealthWebhookAccountBinding('owner', 'account', 't'.repeat(length), 'provider_refresh'));
+    await startManualActivityHistory('owner', service, start, end);
+    expect(runs()[0][1]).toMatchObject({ rootOAuthCredentialGeneration: 'r'.repeat(length), credentialGeneration: 't'.repeat(length),
+      connectionGeneration: 'c'.repeat(length) });
+  });
+  it.each(['root', 'token', 'connection', 'disconnect', 'binding'])('does not adopt a changed %s on admission transaction retry', async change => {
+    const root = migrated();
+    mocks.retryTransaction = true;
+    mocks.onRetry = () => {
+      if (change === 'root') mocks.rows.get(root)!.activeOAuthCredentialGeneration = 'new-root';
+      if (change === 'token') {
+        mocks.rows.get(`${root}/tokens/account`)!.tokenCredentialGeneration = 'new-token';
+        mocks.rows.set(bindingPath(), buildSuuntoHealthWebhookAccountBinding('owner', 'account', 'new-token', 'oauth_callback'));
+      }
+      if (change === 'connection') mocks.rows.get(metaPath(service))!.connectionStateGeneration = 'new-connection';
+      if (change === 'disconnect') mocks.rows.get(root)!.disconnectOperationGeneration = 'disconnect';
+      if (change === 'binding') mocks.rows.delete(bindingPath());
+    };
+    await expect(startManualActivityHistory('owner', service, start, end)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(runs()).toHaveLength(0);
+    expect(mocks.rows.get(metaPath(service))).not.toHaveProperty('connectionHistoryReservation');
+  });
+  it('permits a normal access-token refresh without changing either generation', async () => {
+    const root = migrated();
+    mocks.retryTransaction = true;
+    mocks.onRetry = () => { mocks.rows.get(`${root}/tokens/account`)!.accessToken = 'REFRESHED_PRIVATE_TOKEN'; };
+    await startManualActivityHistory('owner', service, start, end);
+    expect(runs()[0][1]).toMatchObject({ credentialGeneration: 'credential', rootOAuthCredentialGeneration: 'root-generation' });
   });
 });
 
