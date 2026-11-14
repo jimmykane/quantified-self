@@ -130,6 +130,9 @@ test('retained failures have a distinct aged-review warning and bounded labels',
   assert.deepEqual(policy.conditions[0].conditionThreshold.aggregations[0].groupByFields, ['metric.label.destination', 'metric.label.reviewKind']);
   const metric = config.metrics.find(m => m.name.endsWith('overdue_review_samples_v1'));
   assert.match(metric.filter, /ageLowerBoundMs>=86400000/);
+  const age = config.metrics.find(m => m.name.endsWith('review_age_v1'));
+  assert.ok(age.bucketOptions.explicitBuckets.bounds.includes(7 * 86400000));
+  assert.equal(age.bucketOptions.explicitBuckets.bounds.at(-1), 90 * 86400000);
   assert.doesNotMatch(metric.filter, /event="committed"/);
   assert.match(config.metrics.find(m => m.name.endsWith('probe_failures_v1')).filter, /review_sample_unavailable/);
   assert.match(config.metrics.find(m => m.name.endsWith('probe_failures_v1')).filter, /review_sample" jsonPayload.truncated=true/);

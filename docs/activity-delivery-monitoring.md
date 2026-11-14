@@ -30,7 +30,10 @@ The same dispatcher also observes retained outcomes separately from its pending/
 `failed_jobs` (`originalCollection == activitySyncQueue`). Queries are field-masked and use the new composite
 indexes in `firestore.indexes.json`; deploy those indexes before the dispatcher. The five-second probe deadline
 reports unavailable and suppresses late success. A read-only transaction checks each revision, owner and deletion
-tombstone; active leases and parked lifecycle work are excluded. A failed-job receipt with a live queue peer is
+tombstone; active leases, resumed manual-review records and parked lifecycle work are excluded. Destination token-root
+and connection metadata are checked in the same read-only transaction, along with field-masked token presence. Disconnected,
+reconnecting or missing-credential accounts are excluded. Accepted outcomes do not require a source connection, an enabled
+automatic route or new-send entitlement. A failed-job receipt with a live queue peer is
 excluded, including previously recovered deliveries. Ordinary provider polls and retry backoff are not failures.
 
 Age is the conservative lower bound since the later of the failure marker and latest write. A sample containing
@@ -41,7 +44,8 @@ sample and must never imply all later failures are healthy. This is bounded oper
 exhaustive backlog inventory. Use a scoped operator audit when coverage is incomplete. Neither probe replays work.
 
 The source-controlled bundle now defines 18 metrics and 12 policies, with retained-review age/overdue dashboard
-charts and a two-hour observation-absence policy for all six destination/kind combinations. Existing pending-work,
+charts (retained-age buckets extend through 90 days) and a two-hour observation-absence policy for all six
+destination/kind combinations. Existing pending-work,
 new-failure, native-queue and cleanup coverage is unchanged. Labels contain no account/job IDs or provider payloads.
 There is no new scheduler, scanner, queue mutation or product analytics.
 

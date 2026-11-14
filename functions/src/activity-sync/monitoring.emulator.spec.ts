@@ -131,6 +131,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observa
             expect(fields).not.toHaveProperty('dueSample');
         }
     });
+    it('excludes retained failures during destination reconnect or missing credentials, without requiring the source connection', async () => {
+        const future = Date.now() + 3 * 86400_000;
+        await seed('review-connection');
+        const queue = db.doc('activitySyncQueue/review-connection');
+        await queue.update({ processed: true, resultStatus: 'manual_reconciliation_required', manualReconciliationRequiredAt: Date.now() });
+        await db.doc('garminAPITokens/review-connection').delete();
+        await db.doc('users/review-connection/config/settings').set({});
+        const observe = async () => {
+            vi.clearAllMocks(); await observeActivityDeliveryReview(db, future);
+            return vi.mocked(logger.info).mock.calls.find(([, fields]) => fields.destination === 'wahoo' && fields.reviewKind === 'manual_reconciliation')?.[1];
+        };
+        const before = await queue.get();
+        expect(await observe()).toMatchObject({ overdueSample: 1 });
+        await db.doc(`users/review-connection/meta/${ServiceNames.WahooAPI}`).update({ connectionState: 'reconnect_required' });
+        expect(await observe()).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        await db.doc(`users/review-connection/meta/${ServiceNames.WahooAPI}`).update({ connectionState: 'connected' });
+        await db.doc('wahooAPIAccessTokens/review-connection/tokens/account').delete();
+        expect(await observe()).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        expect((await queue.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('PRIVATE');
+    });
     it('samples retained review outcomes and excludes a recovered live job or deleted owner', async () => {
         const future = Date.now() + 3 * 86400_000;
         await seed('retained');

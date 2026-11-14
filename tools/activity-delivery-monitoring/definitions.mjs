@@ -19,7 +19,8 @@ export function buildActivityDeliveryMonitoring(project, channel) {
         labels: labels.map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
       labelExtractors: Object.fromEntries(labels.map(key => [key, `EXTRACT(jsonPayload.${key})`])),
       ...(field ? { valueExtractor: `EXTRACT(jsonPayload.${field})`, bucketOptions: { explicitBuckets: {
-        bounds: field === 'durationMs' ? [0, 100, 1000, 10000, 60000, 300000, 540000]
+        bounds: key === 'review_age' ? [0, 3600000, 86400000, 172800000, 259200000, 604800000, 1209600000, 2592000000, 7776000000]
+          : field === 'durationMs' ? [0, 100, 1000, 10000, 60000, 300000, 540000]
           : field === 'ageLowerBoundMs' ? [0, 60000, 1800000, 3600000, 7200000, 86400000] : [0, 1, 5, 10, 20],
       } } } : {}),
     });

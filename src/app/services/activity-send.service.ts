@@ -2,7 +2,7 @@ import { Injectable, DestroyRef, computed, effect, inject, signal } from '@angul
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
 import { Firestore, collection, collectionData, doc, docData, getCountFromServer, getDocFromServer, limit, orderBy, query, where } from 'app/firebase/firestore';
-import { Subscription } from 'rxjs';
+import { Subscription, Subject, firstValueFrom, from, takeUntil, timeout } from 'rxjs';
 import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow, ActivitySendSummary } from '@shared/activity-send';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -10,6 +10,8 @@ import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppProcessingService } from './app.processing.service';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { environment } from '../../environments/environment';
+
+export const ACTIVITY_SEND_SUMMARY_TIMEOUT_MS = 30_000;
 
 @Injectable({ providedIn: 'root' })
 export class ActivitySendService {
@@ -35,6 +37,7 @@ export class ActivitySendService {
   readonly loadingSummary = signal(false);
   readonly summaryError = signal<string | null>(null);
   private summaryEpoch = 0;
+  private readonly summaryCancelled$ = new Subject<void>();
   private summaryTimer?: ReturnType<typeof setTimeout>;
   private summaryInFlight = false;
   private summaryNextReadAt = 0;
@@ -85,7 +88,7 @@ export class ActivitySendService {
     this.rowLimit += 50; this.watchRows();
   }
   closeBatch(): void {
-    this.summaryEpoch++; clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
+    this.summaryEpoch++; this.summaryCancelled$.next(); clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
     this.summaryInFlight = false; this.summaryNextReadAt = 0;
     this.summary.set(null); this.loadingSummary.set(false); this.summaryError.set(null);
     this.batchSubscription?.unsubscribe(); this.rowSubscription?.unsubscribe();
@@ -106,9 +109,14 @@ export class ActivitySendService {
     const current = () => this.summaryEpoch === epoch && this.selectedId === id && this.isCurrentOwner(uid);
     this.summaryInFlight = true; this.loadingSummary.set(true); this.summaryError.set(null);
     let retry = false;
+    const deadline = Date.now() + ACTIVITY_SEND_SUMMARY_TIMEOUT_MS;
+    // A late SDK reply must not keep Refresh disabled or overwrite a newer observation.
+    const read = <T>(promise: Promise<T>) => firstValueFrom(from(promise).pipe(
+      timeout(Math.max(1, deadline - Date.now())), takeUntil(this.summaryCancelled$),
+    ));
     try {
       const ref = doc(this.firestore, `users/${uid}/activitySends/${id}`);
-      const before = (await getDocFromServer(ref)).data() as ActivitySendBatch | undefined;
+      const before = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
       if (!current()) return;
       if (!before || before.state === 'draft') {
         this.summary.set(null); this.summaryError.set('Delivery totals are not available for this send.'); return;
@@ -118,11 +126,11 @@ export class ActivitySendService {
         delivered: ['delivered'], duplicate: ['duplicate'], needs_action: ['needs_action'], stopped: ['stopped'],
         pending: ['preparing', 'ready', 'queued', 'sending', 'processing', 'retrying'],
       };
-      const values = await Promise.all(Object.values(groups).map(statuses => getCountFromServer(query(
+      const values = await read(Promise.all(Object.values(groups).map(statuses => getCountFromServer(query(
         collection(this.firestore, `users/${uid}/activitySends/${id}/rows`), where('status', 'in', statuses),
-      )).then(result => result.data().count)));
+      )).then(result => result.data().count))));
       if (!current()) return;
-      const after = (await getDocFromServer(ref)).data() as ActivitySendBatch | undefined;
+      const after = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
       if (!current()) return;
       const [delivered, duplicate, needs_action, stopped, pending] = values;
       // Every change between outcome groups advances the batch clock. Reject mixed snapshots and unknown states.

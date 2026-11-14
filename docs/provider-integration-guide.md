@@ -1030,7 +1030,7 @@ Recorded-activity delivery now exposes whole-batch counts and explicit automatic
 [workspace outcome semantics](activity-sending-workspace.md#whole-batch-outcomes-and-recovery). Review recovery
 state before resending. Monitoring coverage is **covered by source definitions/tests**, with activation tracked
 separately: the existing dispatcher observes retained outcomes older than 24 hours independently of ordinary
-retries. See [retained-outcome monitoring and guarded recovery](activity-delivery-monitoring.md#retained-unresolved-outcomes-14-november-2026).
+retries, excluding disconnected/reconnecting destinations and resumed work. See [retained-outcome monitoring and guarded recovery](activity-delivery-monitoring.md#retained-unresolved-outcomes-14-november-2026).
 Release must apply the new indexes, projection/dispatcher code and monitoring bundle, then verify positive series.
 No Training computation, planned-workout lifecycle or MCP tool/read/write/scope/consent contract changes; the
 planned-workout text merely describes existing capabilities. No backend product analytics is added.

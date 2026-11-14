@@ -5,7 +5,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
 import { Firestore } from 'app/firebase/firestore';
-import { ActivitySendService } from './activity-send.service';
+import { ActivitySendService, ACTIVITY_SEND_SUMMARY_TIMEOUT_MS } from './activity-send.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
@@ -73,6 +73,25 @@ describe('ActivitySendService owner and upload boundaries', () => {
     vi.useFakeTimers(); summaryBatch(); streams.count.mockReset().mockRejectedValue(new Error('offline'));
     await vi.advanceTimersByTimeAsync(0);
     expect(service.summary()).toBeNull(); expect(service.summaryError()).toContain('unavailable');
+  });
+  it('releases a stalled totals read, preserves the last result and ignores late replies after refresh', async () => {
+    vi.useFakeTimers(); summaryBatch(); await vi.advanceTimersByTimeAsync(0);
+    const previous = service.summary();
+    const late: Array<(value: unknown) => void> = [];
+    streams.count.mockReset().mockImplementation(() => new Promise(resolve => { late.push(resolve); }));
+    service.refreshSummary(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.loadingSummary()).toBe(true);
+    await vi.advanceTimersByTimeAsync(ACTIVITY_SEND_SUMMARY_TIMEOUT_MS);
+    expect(service.loadingSummary()).toBe(false); expect(service.summary()).toEqual(previous);
+    expect(service.summaryError()).toContain('unavailable');
+    streams.count.mockReset();
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    service.refreshSummary(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.delivered).toBe(96);
+    late.forEach(resolve => resolve({ data: () => ({ count: 0 }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.delivered).toBe(96); expect(streams.doc).toHaveBeenCalledTimes(5);
+    expect(service.summaryError()).toBeNull(); expect(vi.getTimerCount()).toBe(0);
   });
   it('does not keep polling a send that disappeared or returned to a draft', async () => {
     vi.useFakeTimers(); summaryBatch(); streams.doc.mockResolvedValue({ data: () => undefined });

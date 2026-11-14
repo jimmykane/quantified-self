@@ -75,8 +75,10 @@ Five aggregates are bracketed by server batch reads. A changed `updatedAt`, tota
 non-reconciling row counts, discards the result. Outcome-group transitions advance the public batch clock
 monotonically, including terminal-to-terminal corrections; ordinary progress within pending still avoids the
 shared batch/operation write. Deploy the projection changes before the frontend. Active batches refresh at most
-once every 30 seconds, without overlapping requests; an explicit Refresh totals action may read sooner. Account
-changes/navigation invalidate pending replies. Errors retain the last known totals with their **Last checked** time,
+once every 30 seconds, with one active observation; an explicit Refresh totals action may read sooner. The complete
+server/count/server observation has a 30-second deadline. Timeout releases Refresh while keeping the previous totals;
+late SDK replies cannot replace a newer observation. Account changes/navigation cancel the observation and its deadline.
+Errors retain the last known totals with their **Last checked** time,
 or show unavailable when none exists, rather than silently substituting zeros. No backend aggregation endpoint,
 product analytics, new client writes, queue reads or original-file reads are introduced.
 
