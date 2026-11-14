@@ -1,3 +1,4 @@
+import { observeActivityDeliveryReview } from './review-probe';
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
@@ -305,7 +306,7 @@ export const dispatchActivitySyncQueue = functions.region('europe-west2').runWit
         throw error;
     } finally {
         try {
-            await observeActivityDeliveryQueue(admin.firestore(), async uid => {
+            await Promise.all([observeActivityDeliveryReview(admin.firestore()), observeActivityDeliveryQueue(admin.firestore(), async uid => {
                 try {
                     const claims = (await admin.auth().getUser(uid)).customClaims;
                     return claims?.stripeRole === 'pro' || typeof claims?.gracePeriodUntil === 'number' && claims.gracePeriodUntil > Date.now();
@@ -313,7 +314,7 @@ export const dispatchActivitySyncQueue = functions.region('europe-west2').runWit
                     if ((error as { code?: string }).code === 'auth/user-not-found') return false;
                     throw error;
                 }
-            }, taskDepth);
+            }, taskDepth)]);
         } catch { recordActivityDeliveryQueueUnavailable(); }
     }
 });

@@ -8,7 +8,7 @@ export const ACTIVITY_SEND_PROVIDERS = {
 } as const;
 export type ActivitySendProvider = keyof typeof ACTIVITY_SEND_PROVIDERS;
 export const ACTIVITY_SEND_LIMITS = { fileBytes: 20 * 1024 * 1024, userBytes: 200 * 1024 * 1024, files: 50, page: 5 } as const;
-export type ActivitySendStatus = 'preparing' | 'ready' | 'queued' | 'sending' | 'processing' | 'delivered' | 'duplicate' | 'needs_action' | 'stopped';
+export type ActivitySendStatus = 'preparing' | 'ready' | 'queued' | 'sending' | 'processing' | 'retrying' | 'delivered' | 'duplicate' | 'needs_action' | 'stopped';
 export type ActivitySendRecovery = 'none' | 'choose_file' | 'reconnect' | 'check_status' | 'retry_send' | 'review_provider' | 'upgrade';
 export interface ActivitySendRow {
   id: string;
@@ -21,6 +21,15 @@ export interface ActivitySendRow {
   recovery: ActivitySendRecovery;
   message: string;
   attempts: number;
+}
+export interface ActivitySendSummary {
+  delivered: number;
+  duplicate: number;
+  needs_action: number;
+  stopped: number;
+  pending: number;
+  checkedAt: number;
+  updatedAt: number;
 }
 export interface ActivitySendBatch {
   id: string;

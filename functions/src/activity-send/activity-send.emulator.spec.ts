@@ -258,6 +258,18 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await projectSendDelivery(queue.ref);
     (await db.getAll(row, batch, operation)).forEach((snapshot, index) => expect(snapshot.updateTime!.isEqual(completed[index].updateTime!)).toBe(true));
   });
+  it('advances the public outcome clock when terminal outcomes change without changing the finished count', async () => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, resultStatus: 'manual_reconciliation_required', destinationUploadID: 'accepted' });
+    await projectSendDelivery(queue.ref);
+    const before = (await batchRef(uid, id).get()).data()!;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(before.updatedAt);
+    try {
+      await queue.ref.update({ resultStatus: 'success' }); await projectSendDelivery(queue.ref);
+      const after = (await batchRef(uid, id).get()).data()!;
+      expect(after.finished).toBe(before.finished); expect(after.updatedAt).toBeGreaterThan(before.updatedAt);
+    } finally { clock.mockRestore(); }
+  });
   it('projects ten concurrent nonterminal deliveries without writing their shared batch', async () => {
     const original = await confirm();
     const batch = batchRef(uid, id);

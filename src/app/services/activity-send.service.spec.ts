@@ -12,8 +12,8 @@ import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppProcessingService } from './app.processing.service';
 import { ACTIVITY_SEND_LIMITS } from '@shared/activity-send';
 
-const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn() }));
-vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data }));
+const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn(), count: vi.fn(), doc: vi.fn() }));
+vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data, getCountFromServer: streams.count, getDocFromServer: streams.doc }));
 
 class FakeXHR {
   static latest: FakeXHR;
@@ -41,14 +41,52 @@ describe('ActivitySendService owner and upload boundaries', () => {
   const appCheck = { getToken: vi.fn(async () => 'synthetic-app-check') };
   const processing = { addJob: vi.fn(() => 'job'), updateJob: vi.fn(), removeJob: vi.fn() };
   beforeEach(() => {
-    vi.clearAllMocks(); streams.reads = []; FakeXHR.latest = undefined!;
+    vi.clearAllMocks(); streams.count.mockReset(); streams.doc.mockReset(); streams.reads = []; FakeXHR.latest = undefined!;
     streams.data.mockImplementation(() => { const subject = new Subject<unknown>(); streams.reads.push(subject); return subject; });
     auth.currentUser.uid = 'owner'; user.user.set({ uid: 'owner' });
     vi.stubGlobal('XMLHttpRequest', FakeXHR);
     TestBed.configureTestingModule({ providers: [ActivitySendService, { provide: Auth, useValue: auth }, { provide: FirebaseApp, useValue: { options: { projectId: 'demo-send' } } }, { provide: Firestore, useValue: {} }, { provide: AppUserService, useValue: user }, { provide: AppFunctionsService, useValue: functions }, { provide: AppCheckReadinessService, useValue: appCheck }, { provide: AppProcessingService, useValue: processing }] });
     service = TestBed.inject(ActivitySendService); TestBed.flushEffects();
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => { TestBed.resetTestingModule(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  function summaryBatch() {
+    const batch = { id: 'batch', state: 'complete', total: 100, finished: 100, updatedAt: 10 };
+    streams.doc.mockResolvedValue({ data: () => batch });
+    [95, 3, 2, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    service.watchBatch('batch'); streams.reads[2].next(batch); streams.reads[3].next([{ id: 'visible-only' }]);
+    return batch;
+  }
+  it('reads full-batch server counts independently of pagination and fences a stable batch version', async () => {
+    vi.useFakeTimers(); summaryBatch(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toMatchObject({ delivered: 95, duplicate: 3, needs_action: 2, pending: 0 });
+    expect(streams.count).toHaveBeenCalledTimes(5); expect(streams.doc).toHaveBeenCalledTimes(2);
+    service.loadMoreRows(); expect(streams.count).toHaveBeenCalledTimes(5);
+  });
+  it('rejects counts if delivery changes while the aggregates are read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    streams.doc.mockResolvedValueOnce({ data: () => batch }).mockResolvedValueOnce({ data: () => ({ ...batch, updatedAt: 11 }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.summaryError()).toContain('updating');
+    await vi.advanceTimersByTimeAsync(29_000); expect(streams.count).toHaveBeenCalledTimes(5);
+  });
+  it('does not turn an unavailable count into a successful zero', async () => {
+    vi.useFakeTimers(); summaryBatch(); streams.count.mockReset().mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.summaryError()).toContain('unavailable');
+  });
+  it('does not keep polling a send that disappeared or returned to a draft', async () => {
+    vi.useFakeTimers(); summaryBatch(); streams.doc.mockResolvedValue({ data: () => undefined });
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(streams.doc).toHaveBeenCalledTimes(1); expect(streams.count).not.toHaveBeenCalled();
+    expect(service.summaryError()).toContain('not available'); expect(service.loadingSummary()).toBe(false);
+  });
+  it('discards an in-flight summary after navigation or an account change', async () => {
+    vi.useFakeTimers(); summaryBatch(); const resolvers: Array<(value: unknown) => void> = [];
+    streams.count.mockReset().mockImplementation(() => new Promise(res => { resolvers.push(res); }));
+    await vi.advanceTimersByTimeAsync(0); service.closeBatch(); auth.currentUser.uid = 'another';
+    resolvers.forEach(resolve => resolve({ data: () => ({ count: 0 }) })); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.loadingSummary()).toBe(false);
+  });
   it('reconciles global jobs from active batches separately from recent history', () => {
     streams.reads[1].next([{ id: 'batch', provider: 'suunto', state: 'confirmed', total: 2, finished: 1 }]);
     expect(processing.updateJob).toHaveBeenCalledWith('job', expect.objectContaining({ progress: undefined }));

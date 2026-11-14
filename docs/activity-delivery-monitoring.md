@@ -23,6 +23,62 @@ existing hourly source cleanup is observed without invoking an extra cleanup run
 Monitoring sends opening/closing notifications to the existing enabled Alerts email
 channel, independently of the Firebase mail extension.
 
+## Retained unresolved outcomes (14 November 2026)
+
+The same dispatcher also observes retained outcomes separately from its pending/retry sample. It reads at most
+20 records plus one look-ahead from each of `activitySyncQueue` (`manual_reconciliation_required`) and
+`failed_jobs` (`originalCollection == activitySyncQueue`). Queries are field-masked and use the new composite
+indexes in `firestore.indexes.json`; deploy those indexes before the dispatcher. The five-second probe deadline
+reports unavailable and suppresses late success. A read-only transaction checks each revision, owner and deletion
+tombstone; active leases and parked lifecycle work are excluded. A failed-job receipt with a live queue peer is
+excluded, including previously recovered deliveries. Ordinary provider polls and retry backoff are not failures.
+
+Age is the conservative lower bound since the later of the failure marker and latest write. A sample containing
+an unresolved outcome at least 24 hours old emits `overdue_review_samples`. Two such observations for the same
+fixed destination/review kind in 90 minutes alert for investigation. Two unavailable/unknown observations, or
+truncated retained-review samples, alert that coverage is incomplete; old recovered receipts can saturate the
+sample and must never imply all later failures are healthy. This is bounded operational observation, not an
+exhaustive backlog inventory. Use a scoped operator audit when coverage is incomplete. Neither probe replays work.
+
+The source-controlled bundle now defines 18 metrics and 12 policies, with retained-review age/overdue dashboard
+charts and a two-hour observation-absence policy for all six destination/kind combinations. Existing pending-work,
+new-failure, native-queue and cleanup coverage is unchanged. Labels contain no account/job IDs or provider payloads.
+There is no new scheduler, scanner, queue mutation or product analytics.
+
+Coverage decision: **covered by the definitions and tests in this change; production activation pending** in
+[#1052](https://github.com/jimmykane/quantified-self/issues/1052). Read-only
+production inspection on 14 November found the existing ten delivery policies enabled, without the two new
+retained-review policies. No Monitoring apply, deployment or synthetic alert was performed. Release requires
+separate approval: deploy indexes and the affected Functions, apply the existing bundle using its normal approved
+notification channel, then read back configuration and positive samples for all six combinations. A successful
+apply alone is not operational verification. Follow the activation commands below. For this extension, the scoped release commands (not run by the PR) are:
+
+```sh
+npm run firebase -- deploy --only firestore:indexes --project quantified-self-io
+# Wait for the two new indexes to report READY before deploying the dispatcher.
+npm --prefix functions run build
+npm run firebase -- deploy --only functions:activitySendCommand,functions:admitActivitySend,functions:projectActivitySendDelivery,functions:cleanupActivitySends,functions:dispatchActivitySyncQueue --project quantified-self-io
+```
+
+Then release Hosting through the existing approved production build/deploy workflow and apply the monitoring
+bundle with the exact existing channel as shown below. No new Function, Rule or secret is required.
+
+### Recovery of earlier Suunto blob-URL rejections
+
+The existing worker already retries the specific Suunto blob PUT 404 rejection. Older manual-reconciliation
+records require evidence, not a blanket replay: verify the exact rejected upload in logs, a current provider
+status of NEW with no workout key, no accepted-blob evidence, the retained original's exact bucket/path/generation,
+and current destination account, credential generation, entitlement, open confirmed sending window and deletion
+guards. Use the bucket stored on the original, or the configured app bucket; do not infer an appspot bucket name.
+
+Recheck those guards and the queue revision transactionally before reopening only the proven unaccepted attempt.
+Keep a restricted local journal before enqueueing the existing deterministic task version. A queue creation
+failure must resume from that journal/current state, never reset the upload twice. Preserve retention and retry
+budgets, original source identity and account pin. Read back the durable result; queued is not delivered. A rejected
+credential refresh remains blocked for reconnection. Accepted/uncertain operations retain their identifiers and
+status/review path. Recovery does not delete retained receipts, create a second QS workout, or contact customers.
+Keep operational identifiers, originals and exports outside the repository and PR.
+
 ## Outcome semantics and privacy
 
 Suunto, COROS and Wahoo activity-history imports no longer enter automatic outbound delivery. They keep their normal
@@ -366,7 +422,7 @@ Preview is offline and needs no credentials or network:
 node tools/activity-delivery-monitoring/cli.mjs --project=quantified-self-io
 ```
 
-After separate approval to apply the fifteen metrics, one dashboard and ten
+After separate approval to apply the eighteen metrics, one dashboard and twelve
 policies using the existing enabled email channel, supply its exact resource name:
 
 ```sh

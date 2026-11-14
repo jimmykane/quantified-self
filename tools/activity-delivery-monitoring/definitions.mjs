@@ -37,7 +37,10 @@ export function buildActivityDeliveryMonitoring(project, channel) {
   metric('sampled_due', 'cloud_function', 'jsonPayload.event="queue_sample" jsonPayload.dueSample>=0', 'Bounded eligible new-work and overdue lost-poll lower bound; not a complete backlog count.', ['destination'], 'dueSample');
   metric('sampled_age', 'cloud_function', 'jsonPayload.event="queue_sample" jsonPayload.ageLowerBoundMs>=0', 'Conservative last-write/due-time delay, not the age of the source recording.', ['destination'], 'ageLowerBoundMs');
   metric('overdue_samples', 'cloud_function', 'jsonPayload.event="queue_sample" jsonPayload.dueSample>0 jsonPayload.ageLowerBoundMs>=3600000', 'Eligible work >=1h old. Accepted Wahoo/COROS polls must also be >=2h past saved due time with no native tasks.');
-  metric('probe_failures', 'cloud_function', '(jsonPayload.event="queue_sample_unavailable" OR (jsonPayload.event="queue_sample" jsonPayload.unknownSample>0))', 'Unknown/failed observations, not healthy zero. Sample saturation alone is diagnostic, not failure.');
+  metric('probe_failures', 'cloud_function', '(jsonPayload.event=("queue_sample_unavailable" OR "review_sample_unavailable") OR (jsonPayload.event=("queue_sample" OR "review_sample") jsonPayload.unknownSample>0) OR (jsonPayload.event="review_sample" jsonPayload.truncated=true))', 'Unknown/failed observations, not healthy zero. A truncated retained-review sample is incomplete coverage; pending-work sample saturation alone is diagnostic.');
+  metric('review_samples', 'cloud_function', 'jsonPayload.event=("review_sample" OR "review_sample_unavailable") jsonPayload.reviewKind=("manual_reconciliation" OR "dead_letter")', 'Retained-review observation heartbeat, independent of pending/retry work.', ['destination', 'reviewKind']);
+  metric('review_age', 'cloud_function', 'jsonPayload.event="review_sample" jsonPayload.ageLowerBoundMs>=0', 'Retained unresolved outcome age lower bound, not a global failure total.', ['destination', 'reviewKind'], 'ageLowerBoundMs');
+  metric('overdue_review_samples', 'cloud_function', 'jsonPayload.event="review_sample" jsonPayload.overdueSample>0 jsonPayload.ageLowerBoundMs>=86400000', 'Observations with at least one retained outcome still unresolved after 24h. Never authorizes resending.', ['destination', 'reviewKind']);
   const corosSportFailures = { name: 'qs_activity_delivery_coros_sport_failures_v1',
     description: `[${OWNER}] Confirmed COROS processing-failure observations by original FIT sport/sub-sport. Counts attempts, including retries, not distinct workouts or proven unsupported sports.`,
     filter: `resource.type="cloud_run_revision" resource.labels.project_id="${project}" severity=WARNING jsonPayload.message="[COROSActivityUpload] Processing failed." jsonPayload.telemetryVersion=1 jsonPayload.fit_sport:* jsonPayload.fit_sub_sport:*`,
@@ -50,8 +53,8 @@ export function buildActivityDeliveryMonitoring(project, channel) {
   const sum = (period, fields = ['metric.label.destination']) => ({ alignmentPeriod: period, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: fields });
   const filter = (key, resource = 'cloud_run_revision', extra = '') => `metric.type="${metricType(key)}" resource.type="${resource}" resource.labels.project_id="${project}" ${extra}`.trim();
   const native = key => `metric.type="cloudtasks.googleapis.com/queue/${key}" resource.type="cloud_tasks_queue" resource.labels.project_id="${project}" resource.labels.location="europe-west2" resource.labels.queue_id="processActivitySyncTask"`;
-  function threshold(key, resource, count, period) {
-    return { displayName: key, conditionThreshold: { filter: filter(key, resource), aggregations: [sum(period)], comparison: 'COMPARISON_GT',
+  function threshold(key, resource, count, period, fields = ['metric.label.destination']) {
+    return { displayName: key, conditionThreshold: { filter: filter(key, resource), aggregations: [sum(period, fields)], comparison: 'COMPARISON_GT',
       thresholdValue: count - 1, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } };
   }
   const policies = [];
@@ -70,9 +73,16 @@ export function buildActivityDeliveryMonitoring(project, channel) {
   policy('processing', 'Repeated processing failures', 'ERROR', [threshold('worker_failures', 'cloud_run_revision', 10, '900s')], 'Ten failed attempts or actual retries per destination in 15m. Expected asynchronous polls, stale acknowledgements, lifecycle skips and contention do not count.');
   policy('dead-letter', 'New permanent failures', 'WARNING', [threshold('new_dead_letters', 'cloud_run_revision', 3, '1800s')], 'Three newly committed DLQ records per destination in 30m. These are not historical retained failure totals.');
   policy('reconciliation', 'New unresolved provider outcomes', 'WARNING', [threshold('new_reconciliation', 'cloud_run_revision', 3, '1800s')], 'Three newly durable manual-reconciliation markers per destination in 30m. Accepted or ambiguous external side effects remain protected. Inspect the retained job privately; this is NOT an automatic resend action.');
-  policy('telemetry', 'Observations unavailable', 'WARNING', [threshold('probe_failures', 'cloud_function', 2, '5400s')], 'Two unknown/unavailable observations per destination in 90m. Missing observations are not zero backlog.');
+  policy('retained-review', 'Unresolved delivery needs review', 'WARNING', [threshold('overdue_review_samples', 'cloud_function', 2, '5400s', ['metric.label.destination', 'metric.label.reviewKind'])], 'Two observations in 90m contain retained manual-review or dead-letter outcomes at least 24h old. This bounded sample is separate from normal retries and pending work. Read the recovery state and provider receipt before any action; recovered live jobs and deleted accounts are excluded.');
+  policy('telemetry', 'Observations unavailable', 'WARNING', [threshold('probe_failures', 'cloud_function', 2, '5400s')], 'Two unknown/unavailable or truncated retained-review observations per destination in 90m. Missing observations are not zero backlog.');
   policy('send-cleanup', 'Temporary source cleanup failures', 'ERROR', [threshold('send_cleanup_failures', 'cloud_run_revision', 2, '10800s')], 'Two hourly cleanup failures in three hours. Check Storage/Firestore access and the scheduler privately. Preserve account deletion guards, exact generations, accepted operation identifiers and recursive retention cleanup.');
   policy('send-cleanup-heartbeat', 'Temporary source cleanup heartbeat missing', 'WARNING', [{ displayName: 'Hourly cleanup absent', conditionAbsent: { filter: filter('send_cleanup_runs', 'cloud_run_revision'), aggregations: [sum('3600s')], duration: '10800s', trigger: { count: 1 } } }], 'No hourly temporary-source cleanup observation for three hours. Idle runs still report. Read back positive series after activation; absence cannot establish readiness before the first sample.');
+  policy('review-heartbeat', 'Retained-review observation missing', 'WARNING', ['manual_reconciliation', 'dead_letter'].flatMap(kind => destinations.map(destination => ({
+    displayName: `${destination} ${kind} observation absent`, conditionAbsent: {
+      filter: filter('review_samples', 'cloud_function', `metric.labels.destination="${destination}" metric.labels.reviewKind="${kind}"`),
+      aggregations: [sum('1800s')], duration: '7200s', trigger: { count: 1 },
+    },
+  }))), 'No retained-outcome observation for two hours. Verify positive series after activation; a missing sample never proves that all failures recovered.');
   const sportGroups = ['metric.label.fit_sport', 'metric.label.fit_sub_sport'];
   policy('coros-sport', 'Review COROS FIT category', 'WARNING', [{ displayName: 'Confirmed processing failures by original sport', conditionMatchedLog: {
     filter: corosSportFailures.filter, labelExtractors: corosSportFailures.labelExtractors,
@@ -85,6 +95,8 @@ export function buildActivityDeliveryMonitoring(project, channel) {
     return { title, xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: queryFilter, aggregation }, unitOverride: unit } }], yAxis: { label: unit, scale: 'LINEAR' } } };
   }
   const widgets = [{ title: 'Meaning and response', text: { format: 'MARKDOWN', content: `Recorded-activity delivery to Suunto/Wahoo/COROS, NOT Training or inbound parsing. HTTP ACK is not final success. Pending provider processing, actual retries, newly unresolved outcomes and DLQ are separate. Manual reconciliation and DLQ may overlap. Native attempts include expected polls/contention; diagnostic only. The shared 20-row probe excludes normal backoff, future work and lifecycle waits. Counts/last-write ages are lower bounds, never complete backlog coverage. Unknown data is not zero. No automatic resends. [Runbook](${runbook})` } },
+    chart('Unresolved outcome age — sampled lower bound', filter('review_age', 'cloud_function'), { alignmentPeriod: '3600s', perSeriesAligner: 'ALIGN_PERCENTILE_99', crossSeriesReducer: 'REDUCE_MAX', groupByFields: ['metric.label.destination', 'metric.label.reviewKind'] }, 'ms'),
+    chart('Retained outcomes over 24h — observations requiring review', filter('overdue_review_samples', 'cloud_function'), sum('3600s', ['metric.label.destination', 'metric.label.reviewKind'])),
     chart('Native queue depth', native('depth'), { alignmentPeriod: '300s', perSeriesAligner: 'ALIGN_MAX', crossSeriesReducer: 'REDUCE_MAX', groupByFields: ['resource.label.queue_id'] }),
     chart('Native HTTP attempts — not delivery success', native('task_attempt_count'), sum('900s', ['metric.label.response_code'])),
     chart('Native dispatch delay p95', native('task_attempt_delays'), { alignmentPeriod: '900s', perSeriesAligner: 'ALIGN_PERCENTILE_95', crossSeriesReducer: 'REDUCE_MAX', groupByFields: ['resource.label.queue_id'] }, 'ms'),

@@ -1,3 +1,4 @@
+import { observeActivityDeliveryReview } from './review-probe';
 import { randomUUID } from 'node:crypto';
 import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -129,5 +130,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery observa
             expect(fields).toMatchObject({ truncated: true, unknownSample: 20 });
             expect(fields).not.toHaveProperty('dueSample');
         }
+    });
+    it('samples retained review outcomes and excludes a recovered live job or deleted owner', async () => {
+        const future = Date.now() + 3 * 86400_000;
+        await seed('retained');
+        const q = db.doc('activitySyncQueue/retained');
+        await q.set({ userID: 'retained', routeId: 'GarminAPI_to_WahooAPI', sourceServiceName: ServiceNames.GarminAPI,
+            destinationServiceName: ServiceNames.WahooAPI, processed: true, resultStatus: 'manual_reconciliation_required',
+            manualReconciliationRequiredAt: Date.now(), dateCreated: Date.now() });
+        await db.doc('failed_jobs/retained').set({ ...(await q.get()).data(), originalCollection: 'activitySyncQueue', failedAt: Date.now() });
+        await observeActivityDeliveryReview(db, future);
+        const samples = vi.mocked(logger.info).mock.calls.map(([, fields]) => fields);
+        expect(samples.find(s => s.event === 'review_sample' && s.reviewKind === 'manual_reconciliation' && s.destination === 'wahoo')).toMatchObject({ overdueSample: 1 });
+        expect(samples.find(s => s.event === 'review_sample' && s.reviewKind === 'dead_letter' && s.destination === 'wahoo')).toMatchObject({ overdueSample: 0, excludedSample: 1 });
+        await db.doc('users/retained').delete(); vi.clearAllMocks();
+        await observeActivityDeliveryReview(db, future);
+        expect(vi.mocked(logger.info).mock.calls.every(([, fields]) => fields.overdueSample === 0)).toBe(true);
     });
 });
