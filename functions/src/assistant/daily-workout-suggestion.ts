@@ -13,7 +13,7 @@ import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSugges
 import { DayWorkoutModelError } from './day-workout-diagnostics';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
-import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
+import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 import { readDailyWorkoutPlanContext } from './daily-workout-context';
@@ -193,7 +193,7 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     }
     const controls = await dependencies.selectSport(uid, preferences, now);
     const request: GenerateDayWorkoutRequest = { requestId: `daily-suggestion:${date}`, controls };
-    const evidence = await dependencies.context(uid, request, now, true);
+    const evidence = await dependencies.context(uid, request, now, { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable });
     const observedAt = dependencies.now();
     await assertActive();
     const skip = dailyWorkoutSuggestionSkip(evidence);
@@ -279,6 +279,11 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     stage = 'status';
     return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
   } catch (error) {
+    if (stage === 'context' && !useAvailable && error instanceof DayWorkoutTrainingNotReadyError) {
+      outcome = 'waiting-training';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
     failureReason = stage === 'generation' && error instanceof DayWorkoutModelError ? 'temporary-service'
       : stage === 'generation' && (error instanceof DayWorkoutSuggestionValidationError || error instanceof z.ZodError
         || error instanceof HttpsError && error.code === 'failed-precondition') ? 'invalid-output' : 'unknown';

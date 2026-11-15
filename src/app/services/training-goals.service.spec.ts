@@ -33,6 +33,18 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers());
 describe('TrainingGoalsService', () => {
+  it('joins an automatic retry in flight without restarting its listener', async () => {
+    vi.useFakeTimers(); const { service, rows } = setup();
+    const seen: any[] = [], a = service.watch('owner').subscribe(value => seen.push(value));
+    rows.error(Object.assign(Error('offline'), { code: 'unavailable' }));
+    const reconnecting = new Subject<any[]>(); mocks.data.mockReturnValue(reconnecting);
+    await vi.advanceTimersByTimeAsync(1000); expect(mocks.data).toHaveBeenCalledTimes(2);
+    const b = service.watch('owner').subscribe(); expect(mocks.data).toHaveBeenCalledTimes(2);
+    reconnecting.next([{ ...goal, documentId: goal.id }]);
+    expect(seen.at(-1)).toMatchObject({ status: 'ready', goals: [{ id: 'goal' }] });
+    a.unsubscribe(); b.unsubscribe();
+  });
+
   it('automatically reconnects all consumers after a transient failure and keeps live updates', async () => {
     vi.useFakeTimers(); const { service, rows } = setup();
     const seen: any[] = [], other: any[] = [];

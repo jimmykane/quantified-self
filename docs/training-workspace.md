@@ -6503,13 +6503,45 @@ failed or unavailable preparation/read becomes private `waiting-training` with `
 no history are allowed. Explicit **Use available data** can proceed from this deferred state with uncertainty stated
 in Context. Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction
 admit only one resumed generation; completed or failed charged receipts are never reset by Training updates.
+Automatic context collection stops immediately when preparation or a selected snapshot read cannot establish readiness,
+before reading the daily report, Timeline, nearby plans/goals, feedback and detailed duration routine. The already
+bounded weekday sport selection and day-coverage check still run; this is not a zero-read availability probe. Manual
+generation and explicit **Use available data** retain their best-effort context behavior.
 
 The existing dashboard derived-metric subscription includes the daily suggestion's selected core kinds only for
-opted-in Pro owners viewing Today. A ready snapshot update resumes `waiting-training`, including an update arriving
+opted-in Pro owners viewing Today. Daily-only kinds are read-only subscriptions: the dashboard's ensure call still
+contains only its displayed metrics. The uncovered-day generator owns preparation of additional daily context, so a
+covered/dismissed/cached day does not cause a new Training-summary build solely for the suggestion. A ready snapshot update resumes `waiting-training`, including an update arriving
 while the previous context request was in flight. The browser caches the checked Training update key across remounts
 and reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
 poller, collection or Firestore index is introduced. MCP impact: these are private first-party admission and browser
 recovery changes; public tools, projections, permissions, Training mutations and plugin contracts remain unchanged.
+
+Cost model for this readiness change (USD list rates checked 2026-11-15; estimates, not measured billing):
+
+- Waiting checks invoke no model and do not raise the existing daily result or model-attempt limits. Ready-day context
+  and model limits are unchanged; recovered Training evidence can add prompt tokens on previously partial days.
+- The usual extra listener is one Training-summary document; up to four additional kinds may be watched when Today
+  does not already use them. Initial snapshots and subsequent document updates/reconnections are billable reads.
+  Goals retries are shared, capped at two and bounded by the 201-document query limit. Joining a retry in progress
+  does not restart it. No repeated AI request is added on focus.
+- [Firestore pricing](https://cloud.google.com/firestore/pricing), selecting Frankfurt (`europe-west3`): $0.039 per
+  100,000 reads and $0.117 per 100,000 writes. The configured daily Function is 1 vCPU/2 GiB in London with concurrency
+  10; [Cloud Run request pricing](https://cloud.google.com/run/pricing) there is $0.0000336/vCPU-second,
+  $0.0000035/GiB-second and $0.40/million requests. Concurrent requests may share billed instance time.
+- Illustration: 1,000 opted-in daily active users, 30 days, 10% of days needing one deferred check = 3,000 extra checks.
+  Assuming 5–15 billed seconds, 100–400 document reads and two receipt writes per check gives $0.73–$2.30/month in
+  request/compute/document operations, before free tiers, discounts and shared concurrency. These durations, read counts
+  and the 10% incidence are scenario assumptions, not measurements or guaranteed bounds; the existing bounded sport
+  scan can read up to 200 activity summaries. One additional snapshot read per user/day costs $0.0117/month here;
+  document updates and reconnects add reads.
+- [Gemini 3.1 Flash-Lite pricing](https://ai.google.dev/gemini-api/docs/pricing?hl=en) is $0.25/million text input tokens
+  and $1.50/million output/thinking tokens. If each of those 3,000 recovered generations gains 1,000–10,000 input
+  tokens, that adds $0.75–$7.50/month. Another 1,000 output/thinking tokens per affected generation would add $4.50.
+  Existing correction attempts are still metered normally; no fixed AI-cost percentage can be inferred from code.
+  These examples exclude network/storage/tax and unusual rebuilds, and do not count the pre-existing daily generation
+  or Training build cost again. Scale by actual deferred requests and token deltas using existing daily telemetry;
+  report a measured bill change only after rollout and billing comparison.
 
 `DailyWorkoutSuggestionService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
 requests independently of the component lifetime. A bounded, validated session-storage copy restores completed status
@@ -10713,7 +10745,8 @@ markers for context while remaining outside recorded period totals; goal targets
 
 The shared owner-only Goals listener retries transient read errors or a 15-second initial server-snapshot timeout
 at most twice, after one and two seconds. Calendar and Goals consumers recover together; manual reopening still
-retries explicitly. Sign-out, a changed session or the last subscriber leaving cancels pending recovery. Invalid
+retries explicitly. A subscriber arriving while an automatic attempt is already reading joins that attempt, rather
+than resetting its timeout/backoff. Sign-out, a changed session or the last subscriber leaving cancels pending recovery. Invalid
 records and permission failures remain errors without automatic retry. Only confirmed server snapshots supply goals.
 
 Owner SDK CRUD writes `users/{uid}/trainingGoals/{id}` and `trainingGoalState/current` atomically, with per-goal

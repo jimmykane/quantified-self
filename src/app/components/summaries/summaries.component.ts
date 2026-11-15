@@ -949,7 +949,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const metricKinds = this.resolveDashboardDerivedMetricKinds();
-    const subscriptionKey = `${uid}:${[...metricKinds].sort().join(',')}`;
+    // Daily-only snapshots are observed here; the uncovered-day generator owns their preparation.
+    const ensureMetricKinds = this.resolveDashboardDerivedMetricKinds(false);
+    const subscriptionKey = `${uid}:${[...metricKinds].sort().join(',')}:${[...ensureMetricKinds].sort().join(',')}`;
 
     if (this.derivedMetricsUserUID === subscriptionKey && (this.derivedMetricsSubscription || !metricKinds.length)) {
       return;
@@ -969,7 +971,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
     this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user, { metricKinds }).subscribe((state) => {
-      this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state, { metricKinds });
+      if (ensureMetricKinds.length) this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state, { metricKinds: ensureMetricKinds });
       const freshness = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion?.controls?.freshnessContext !== false;
       const trainingReady = state.trainingSummaryStatus === 'ready'
         && (!freshness || [state.formStatus, state.formNowStatus, state.rampRateStatus].every(status => status === 'ready'));
@@ -1110,7 +1112,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
   }
 
-  private resolveDashboardDerivedMetricKinds(): DerivedMetricKind[] {
+  private resolveDashboardDerivedMetricKinds(includeDailySuggestion = true): DerivedMetricKind[] {
     const metricKinds = (this.user?.settings?.dashboardSettings?.tiles || [])
       .filter(tile => tile.type === TileTypes.Chart)
       .flatMap(dashboardTileMetricKinds);
@@ -1118,7 +1120,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (this.showTodaySummary && needed.load) metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
     if (this.showTodaySummary && needed.recovery) metricKinds.push(DERIVED_METRIC_KINDS.RecoveryNow);
     const daily = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion;
-    if (this.showTodaySummary && this.isOwnerDashboard && daily?.enabled
+    if (includeDailySuggestion && this.showTodaySummary && this.isOwnerDashboard && daily?.enabled
       && this.userService.isProSignal()) {
       metricKinds.push(DERIVED_METRIC_KINDS.TrainingSummary);
       if (daily.controls?.freshnessContext !== false) {

@@ -28,6 +28,14 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
     return { ...bucket, localDate };
   }) } };
 }
+export interface DayWorkoutContextOptions {
+  allowEventAdvice?: boolean;
+  deferUntilTrainingReady?: boolean;
+}
+/** Internal control flow; never a model failure or an Assistant quota charge. */
+export class DayWorkoutTrainingNotReadyError extends Error {
+  constructor() { super('Selected Training metrics are not ready.'); }
+}
 export interface DayWorkoutContext {
   /** Private admission evidence; an empty ready snapshot is still ready. */
   trainingMetricsReady?: boolean;
@@ -178,7 +186,7 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
 
 export async function collectDayWorkoutContext(controls: DayWorkoutControls, now: Date,
   session: Pick<AssistantMcpSession, 'callTool'>,
-  readTraining: () => Promise<DayWorkoutTrainingContext>, allowEventAdvice = false): Promise<DayWorkoutContext> {
+  readTraining: () => Promise<DayWorkoutTrainingContext>, options: DayWorkoutContextOptions = {}): Promise<DayWorkoutContext> {
   const usedContext: string[] = [];
   const missingContext: string[] = [];
   const readinessEnabled = controls.readinessContext !== false && dayWorkoutReadinessSourcesEnabled(controls);
@@ -221,11 +229,17 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     try {
       const value = (await session.callTool(name, input)).structuredContent;
       if (name === 'get_daily_report') return selectReport(value);
-      if (name === 'prepare_training_metrics') return { ...value,
-        readyMetricKinds: Array.isArray(value.readyMetricKinds) ? value.readyMetricKinds.filter(kind => (input.metricKinds as unknown[]).includes(kind)) : [] };
+      if (name === 'prepare_training_metrics') {
+        if (options.deferUntilTrainingReady && value.status !== 'ready') throw new DayWorkoutTrainingNotReadyError();
+        return { ...value, readyMetricKinds: Array.isArray(value.readyMetricKinds)
+          ? value.readyMetricKinds.filter(kind => (input.metricKinds as unknown[]).includes(kind)) : [] };
+      }
       return value;
     }
     catch (error) {
+      if (options.deferUntilTrainingReady && ['prepare_training_metrics', 'get_training_metric'].includes(name)) {
+        throw new DayWorkoutTrainingNotReadyError();
+      }
       if (name === 'get_training_metric') trainingReadFailed = true;
       if (['query_planned_workouts_by_date', 'get_planned_workout_completions'].includes(name)) throw error;
       missingContext.push(name === 'query_timeline_notes' ? 'Timeline notes could not be checked completely.'
@@ -295,7 +309,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     else if (controls.goalsContext === false) missingContext.push('Goals: turned off.');
     missingContext.push(...training.missing);
   } else missingContext.push('Training plan context and previous weights: access is off.');
-  const adviceOnly = allowEventAdvice && controls.goalsContext !== false && !!training?.goals?.events.length;
+  const adviceOnly = options.allowEventAdvice && controls.goalsContext !== false && !!training?.goals?.events.length;
   const feedbackResult = controls.feedbackContext === false ? {} : await read('query_metrics', {
     metrics: [DataFeeling.type, DataRPE.type].flatMap(metric => [{ metric, aggregation: 'minimum' }, { metric, aggregation: 'maximum' }]),
     start: `${dayWorkoutDateOffset(daily.windowStartDate, -1)}T00:00:00Z`, end: now.toISOString(), groupBy: 'date', interval: 'daily', timeZone: controls.timeZone,

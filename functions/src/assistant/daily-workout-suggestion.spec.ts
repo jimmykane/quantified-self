@@ -35,7 +35,7 @@ describe('daily workout preferences', () => {
 
 import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
-import type { DayWorkoutContext } from './day-workout-context';
+import { DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DayWorkoutModelError } from './day-workout-diagnostics';
 
@@ -63,13 +63,26 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('persists an early Training deferral without model calls, charges or failure telemetry', async () => {
+    const deps = dependencies(); deps.context.mockRejectedValueOnce(new DayWorkoutTrainingNotReadyError());
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.state).toBe('waiting-training');
+    expect(deps.store.finish).toHaveBeenCalledExactlyOnceWith('owner', dailyControls.localDate, 'lease', 'waiting-training');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.log).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'waiting-training', attempts: 0 }));
+    expect(deps.log.mock.calls[0][0]).not.toHaveProperty('failureReason');
+    const resumed = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(resumed.state).toBe('ready');
+    expect(deps.context).toHaveBeenLastCalledWith('owner', expect.any(Object), dailyNow, { allowEventAdvice: true, deferUntilTrainingReady: false });
+    expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
   it('waits for Training before charging, resumes once, and retains the saved result', async () => {
     const deps = dependencies();
     deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: false });
     const input = { mode: 'daily-suggestion', action: 'prepare' };
     expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-training');
     expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
-    expect(deps.context).toHaveBeenCalledWith('owner', expect.any(Object), dailyNow, true);
+    expect(deps.context).toHaveBeenCalledWith('owner', expect.any(Object), dailyNow, { allowEventAdvice: true, deferUntilTrainingReady: true });
     deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: true });
     const ready = await runDailyWorkoutSuggestion(input, identity, deps);
     expect(ready.state).toBe('ready');

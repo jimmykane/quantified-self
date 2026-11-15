@@ -9,7 +9,7 @@ import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest, type Generat
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
-import { readDayWorkoutTrainingContext } from './day-workout-context';
+import { readDayWorkoutTrainingContext, DayWorkoutTrainingNotReadyError } from './day-workout-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import { createFirestoreTrainingReads, readTrainingPlans } from '../mcp/training-plans.service';
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from '../mcp/training-plans.schemas';
@@ -24,7 +24,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
-  it('defers pending Training without a charge and admits only one concurrent resume', async () => {
+  it.each([false, true])('defers pending Training without a charge and admits one concurrent resume (early: %s)', async early => {
     const uid = `training-wait-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
     const preferences = { enabled: true, followRoutine: false, controls };
     await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
@@ -34,11 +34,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const generate = vi.fn(async () => { entered(); await blocked; return { kind: 'rest', rationale: 'Keep it easy.' }; });
     const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
       selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
-      regenerate: vi.fn(), log: vi.fn(), context: async () => ({ trainingMetricsReady: ready, evidence: { daily: {
+      regenerate: vi.fn(), log: vi.fn(), context: async () => {
+        if (early && !ready) throw new DayWorkoutTrainingNotReadyError();
+        return { trainingMetricsReady: ready, evidence: { daily: {
         dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } },
         activitiesToday: { scanComplete: true, activities: [] },
         plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } },
-      } }, usedContext: [], missingContext: [], previousStrength: [], references: [] }) };
+      } }, usedContext: [], missingContext: [], previousStrength: [], references: [] }; } };
     const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
     const receipt = user.collection('assistantConversations').doc('daily-workout-suggestion');
     let pending: Promise<unknown> | undefined;

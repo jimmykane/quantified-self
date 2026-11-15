@@ -56,6 +56,7 @@ export class TrainingGoalsService {
       if (session?.uid !== uid) return of({ status: 'ready' as const, goals: [] });
       const read = (attempt = 0): Observable<TrainingGoalsState> => defer(() => {
         if (!this.isOwner(uid) || this.auth.currentUser !== session) throw Error('The signed-in account changed.');
+        failed = false; // A new consumer joins an automatic retry already in progress.
         return collectionData(query(collection(this.db, 'users', uid, TRAINING_GOALS_COLLECTION), limit(TRAINING_GOALS_LIMIT + 1)),
           { idField: 'documentId', waitForServer: true });
       }).pipe(timeout({ first: 15000 }), filter(() => this.isOwner(uid) && this.auth.currentUser === session), map(values => {

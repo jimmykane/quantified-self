@@ -2247,6 +2247,9 @@ describe('SummariesComponent', () => {
       expect(mockDashboardDerivedMetricsService.watch).toHaveBeenLastCalledWith(component.user,
         { metricKinds: expect.arrayContaining(['form', 'form_now', 'ramp_rate', 'training_summary']) });
       load$.next({ ...loadState, trainingUpdatedAtMs: 100, formStatus: 'ready', trainingSummaryStatus: 'building' });
+      expect(mockDashboardDerivedMetricsService.ensureForDashboard).toHaveBeenLastCalledWith(component.user,
+        expect.anything(), { metricKinds: ['form', 'form_now', 'ramp_rate'] });
+      expect(component['resolveDashboardDerivedMetricKinds'](false)).not.toContain('training_summary');
       expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();
       load$.next({ ...loadState, trainingUpdatedAtMs: 101, formStatus: 'ready', trainingSummaryStatus: 'ready' });
       expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 101]));
@@ -2256,6 +2259,23 @@ describe('SummariesComponent', () => {
       mockUserService.isProSignal.set(false);
       expect(component['resolveDashboardDerivedMetricKinds']()).not.toContain('training_summary');
       component['resetDerivedMetricsState'](); expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();
+    });
+
+    it('observes daily-only snapshots without triggering any dashboard build', () => {
+      component.isOwnerDashboard = true; component.showTodaySummary = true;
+      component.user.settings.appSettings = { dailyWorkoutSuggestion: { enabled: true, controls: { freshnessContext: true } } } as any;
+      component.todaySettings = { ...defaultDashboardTodaySettings(), trainingState: false, readiness: false, metrics: ['weight'] };
+      mockDashboardDerivedMetricsService.ensureForDashboard.mockClear();
+      component['syncDerivedMetricsSubscription']();
+      load$.next(createDashboardDerivedMetricsMissingState());
+      expect(mockDashboardDerivedMetricsService.watch).toHaveBeenLastCalledWith(component.user,
+        { metricKinds: expect.arrayContaining(['form', 'form_now', 'ramp_rate', 'training_summary']) });
+      expect(mockDashboardDerivedMetricsService.ensureForDashboard).not.toHaveBeenCalled();
+      // Showing Training again changes ensure ownership even though the watched documents are the same.
+      component.todaySettings = defaultDashboardTodaySettings(); component['syncDerivedMetricsSubscription']();
+      load$.next(createDashboardDerivedMetricsMissingState());
+      expect(mockDashboardDerivedMetricsService.ensureForDashboard).toHaveBeenLastCalledWith(component.user,
+        expect.anything(), { metricKinds: ['form', 'form_now', 'ramp_rate'] });
     });
 
     it('leaves Recovery hidden and unsubscribed until it is selected', () => {
