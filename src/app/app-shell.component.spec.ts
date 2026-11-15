@@ -773,6 +773,24 @@ describe('AppShellComponent', () => {
         }));
     });
 
+    it('keeps shared preferences outside the route animation so incoming pages cannot overlap it', async () => {
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Manual });
+        renderShellFixture();
+        component['currentUser'] = {
+            uid: 'u1', onboardingCompleted: true, acceptedTos: true, acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true, settings: { appSettings: { unitSetupCompleted: false } }
+        };
+        syncRoute('/services');
+        fixture.detectChanges();
+        const blocks = await fixture.getDeferBlocks();
+        await blocks[1].render(DeferBlockState.Complete);
+        fixture.detectChanges();
+        const invitation = fixture.nativeElement.querySelector('app-preferences-setup');
+        expect(invitation).toBeTruthy();
+        expect(invitation.closest('.router-outlet-container')).toBeNull();
+        expect(invitation.parentElement.classList.contains('app-shell-scroll-content')).toBe(true);
+    });
+
     it('should place the impersonation banner inside the maintenance branch', () => {
         renderShellFixture();
         syncRoute('/dashboard');

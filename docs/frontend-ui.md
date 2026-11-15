@@ -2231,6 +2231,7 @@ without the marker and completed accounts remain quiet. Starting intent never ch
 
 The Dashboard retains the invitation after its first-activity actions. The app shell lazily places the same
 component on other normal account workspaces, including Connections, subscription selection and Compare.
+The shell invitation sits before the animated route container so incoming pages cannot overlap it during transitions.
 Public/shared pages, Settings, onboarding, login and authorization/checkout-return pages do not show it.
 `isPreferencesSetupWorkspace` owns this route boundary; Dashboard owner checks exclude another account's data.
 
@@ -2239,9 +2240,11 @@ independent weight units and week start; custom multi-unit choices remain intact
 Only changed unit/appearance fields and the completion marker are merged. Keep defaults and the invitation's
 close action write only completion; canceling the dialog does not complete setup. A failed save retains the
 invitation and draft for retry. A shared busy state blocks duplicate actions; account revisions fence late writes
-and dialog loads. Completion elsewhere is observed by the existing user stream.
+and dialog loads. Completion elsewhere closes an idle review through the existing user stream; an in-flight local
+save finishes its feedback and regional-format handling before closing, even if its completion snapshot arrives first.
 
 The optional Training thresholds shortcut opens the existing editor over the unsaved preferences draft, using
 the saved account units. It changes no Training calculations, planning rules, provider action, or MCP contract.
+A late-loaded editor is not opened if the parent has started closing, even before its exit animation finishes.
 Regional formatting uses the existing cache/reload flow after a successful save. UI controls use Material and
 CompactSelect with the shared overlay/scrollbar theme and one haptic owner per accepted interaction.

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
-import { MatDialog, MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MAT_DIALOG_DATA, MatDialogRef, MatDialogState } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
@@ -37,6 +37,8 @@ export class PreferencesSetupDialogComponent {
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroy = inject(DestroyRef);
   private readonly ownerRevision = this.state.ownerRevision();
+  private readonly saving = signal(false);
+  private closing = false;
   readonly initial = createPreferencesDraft(this.data.user);
   readonly draft = signal(this.initial);
   readonly customUnits = signal(false);
@@ -66,8 +68,12 @@ export class PreferencesSetupDialogComponent {
 
   constructor() {
     effect(() => {
-      if (this.state.user()?.uid !== this.data.user.uid || this.ownerRevision !== this.state.ownerRevision()) this.ref.close();
-      this.ref.disableClose = this.state.busy();
+      const staleOwner = this.state.user()?.uid !== this.data.user.uid || this.ownerRevision !== this.state.ownerRevision();
+      // Another tab can finish setup while this review is open. Our own write may publish
+      // its completion flag before its promise resolves, so let it finish its save feedback.
+      const completedElsewhere = !this.state.due() && !this.state.busy() && !this.saving();
+      if (staleOwner || completedElsewhere) this.closeDialog();
+      this.ref.disableClose = this.state.busy() || this.saving();
     });
   }
   choosePreset(value: UnitSetupPreset): void {
@@ -87,31 +93,46 @@ export class PreferencesSetupDialogComponent {
     if (this.state.busy()) return;
     (section === 'units' ? this.customUnits : this.appearance).update(value => !value); this.haptics.selection();
   }
-  close(): void { if (!this.state.busy()) { this.haptics.selection(); this.ref.close(); } }
-  async save(): Promise<void> {
-    if (!this.valid() || this.loadingThresholds()) return;
-    const draft = this.draft();
-    if (!await this.state.complete(this.data.user.uid, preferencesSetupPatch(this.initial, draft), this.ownerRevision)) return;
-    if (this.destroy.destroyed) return;
-    this.analytics.logEvent('unit_setup_complete', { preset: this.preset() ?? 'custom' });
-    const changedLocale = draft.formatLocale !== this.initial.formatLocale;
-    const result = changedLocale ? this.locale.cachePreference(draft.formatLocale) : 'unchanged';
-    this.snackBar.open(result === 'storage-unavailable' ? 'Preferences saved, but this browser could not apply the regional format.' : 'Preferences saved', undefined, { duration: 3000 });
+  close(): void {
+    if (this.state.busy() || this.saving() || this.closing) return;
+    this.haptics.selection(); this.closeDialog();
+  }
+  private closeDialog(): void {
+    if (this.closing) return;
+    this.closing = true;
     this.ref.close();
-    if (result === 'updated') this.locale.reload();
+  }
+  async save(): Promise<void> {
+    if (this.closing || this.state.busy() || this.saving() || !this.valid() || this.loadingThresholds()) return;
+    const draft = this.draft();
+    this.saving.set(true);
+    try {
+      if (!await this.state.complete(this.data.user.uid, preferencesSetupPatch(this.initial, draft), this.ownerRevision)) return;
+      if (this.destroy.destroyed) return;
+      this.analytics.logEvent('unit_setup_complete', { preset: this.preset() ?? 'custom' });
+      const changedLocale = draft.formatLocale !== this.initial.formatLocale;
+      const result = changedLocale ? this.locale.cachePreference(draft.formatLocale) : 'unchanged';
+      this.snackBar.open(result === 'storage-unavailable' ? 'Preferences saved, but this browser could not apply the regional format.' : 'Preferences saved', undefined, { duration: 3000 });
+      this.closeDialog();
+      if (result === 'updated') this.locale.reload();
+    } finally { this.saving.set(false); }
+  }
+  private activeReview(): boolean {
+    return !this.destroy.destroyed && !this.closing && this.ref.getState() === MatDialogState.OPEN
+      && this.state.user()?.uid === this.data.user.uid && this.ownerRevision === this.state.ownerRevision();
   }
   async openThresholds(): Promise<void> {
-    if (this.state.busy() || this.loadingThresholds() || this.ownerRevision !== this.state.ownerRevision()) return;
+    if (this.state.busy() || this.loadingThresholds() || !this.activeReview()) return;
     this.loadingThresholds.set(true); this.thresholdError.set(''); this.haptics.selection();
     try {
       const { TrainingThresholdsDialogComponent } = await import('../training-load/training-thresholds-dialog.component');
-      if (this.destroy.destroyed || this.state.user()?.uid !== this.data.user.uid || this.ownerRevision !== this.state.ownerRevision()) return;
+      if (!this.activeReview()) return;
       // Reuse the existing editor; keep this unsaved preferences draft intact underneath.
       const dialog = this.dialogs.open(TrainingThresholdsDialogComponent, { width: '640px', maxWidth: '100vw',
         data: { uid: this.data.user.uid, unitSettings: this.state.user()?.settings?.unitSettings } });
       await new Promise<void>(resolve => dialog.afterClosed().subscribe(() => resolve()));
     } catch {
-      if (!this.destroy.destroyed) { this.thresholdError.set('Could not open Training thresholds. Please try again.'); this.haptics.error(); }
+      if (this.activeReview()) { this.thresholdError.set('Could not open Training thresholds. Please try again.'); this.haptics.error(); }
     } finally { if (!this.destroy.destroyed) this.loadingThresholds.set(false); }
   }
 }

@@ -67,14 +67,14 @@
     <mat-sidenav-content>
       <div class="app-shell-scroll-content" [style.padding-top.px]="layoutTopOffsetPx">
         <app-impersonation-banner></app-impersonation-banner>
+        @if (showPreferencesSetup()) {
+        @defer (on immediate) {
+          <app-preferences-setup [shellPlacement]="true" />
+        } @error {
+          <app-deferred-load-error area="preferences-setup" />
+        }
+        }
         <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
-          @if (showPreferencesSetup()) {
-          @defer (on immediate) {
-            <app-preferences-setup [shellPlacement]="true" />
-          } @error {
-            <app-deferred-load-error area="preferences-setup" />
-          }
-          }
           <router-outlet #outlet="outlet"></router-outlet>
         </div>
       </div>
