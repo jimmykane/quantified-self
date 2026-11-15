@@ -882,6 +882,34 @@ describe('history', () => {
             if (replace) expect(writes[0][1]).toMatchObject({ connectionHistoryRunId: 'current-run', firebaseUserID: 'uid', queueRevision: expect.any(String) });
         });
 
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI].flatMap(serviceName =>
+            ['success', 'cross_provider_duplicate'].map(outcome => ({ serviceName, outcome }))))('refetches completed $outcome recordings once per explicit manual run for $serviceName', async ({ serviceName, outcome }) => {
+            const execution = { ...automaticExecution(serviceName), reimportCompletedActivities: true };
+            const completed = { firebaseUserID: 'uid', processed: true, queueRevision: 'old-revision',
+                ...(outcome === 'cross_provider_duplicate' ? { resultStatus: 'skipped', skippedReason: outcome, duplicateEventID: 'saved-event' }
+                    : { connectionHistoryRunId: 'older-run' }) };
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => completed }]);
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 't', userName: 'account', openId: 'account' } as any);
+            vi.mocked(requestHelper.get).mockResolvedValue(serviceName === ServiceNames.SuuntoApp
+                ? JSON.stringify({ payload: [{ workoutKey: 'workout' }] })
+                : JSON.stringify({ result: '0000', message: 'OK', data: [{ workoutID: 'workout' }] }));
+            const start = new Date('2026-09-01'), end = new Date('2026-09-02');
+            await history.addHistoryToQueue('uid', serviceName, start, end, { execution, maxItems: 100 });
+            const writes = hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId);
+            expect(writes).toHaveLength(1);
+            expect(writes[0][1]).toMatchObject({ connectionHistoryRunId: execution.runId, firebaseUserID: 'uid',
+                processed: false, retryCount: 0, fromHistory: true, dispatchedToCloudTask: null });
+            expect(writes[0][1].queueRevision).not.toBe('old-revision');
+            expect(writes[0][1]).not.toHaveProperty('activityNotificationOrigin');
+            for (const field of ['skippedReason', 'duplicateEventID', 'resultStatus']) expect(writes[0][1]).not.toHaveProperty(field);
+
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ ...writes[0][1], processed: true }) }]);
+            hoisted.batchSetMock.mockClear();
+            await history.addHistoryToQueue('uid', serviceName, start, end, { execution, maxItems: 100 });
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId)).toHaveLength(0);
+        });
+
         it('retries a provider queue ownership transfer without overwriting the previous owner', async () => {
             hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: 'older-run', firebaseUserID: 'another-owner', processed: false }) }]);
             hoisted.getMock.mockResolvedValue({ id: 'token1' });

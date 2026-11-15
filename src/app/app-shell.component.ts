@@ -1,3 +1,4 @@
+import { isPreferencesSetupWorkspace, needsPreferencesSetup } from './helpers/preferences-setup.helper';
 import { ActivitySendService } from './services/activity-send.service';
 import {
   Component,
@@ -124,6 +125,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
     // }
     return true;
   });
+  public readonly showPreferencesSetup = computed(() => needsPreferencesSetup(this.currentUserSignal())
+    && isPreferencesSetupWorkspace(this.currentUrlSignal()) && !this.isDashboardRouteComputed());
   public readonly showUploadActivities = computed(() => this.isDashboardRouteComputed() && !!this.currentUserSignal());
   public authService = inject(AppAuthService);
   private userService = inject(AppUserService);

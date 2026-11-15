@@ -1,3 +1,4 @@
+import { PreferencesSetupComponent } from './components/preferences-setup/preferences-setup.component';
 import { DeferredLoadErrorComponent } from './components/shared/deferred-load-error/deferred-load-error.component';
 import { connectFirestoreEmulator } from 'firebase/firestore';
 import { connectStorageEmulator } from 'firebase/storage';
@@ -90,6 +91,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
+    PreferencesSetupComponent,
     DeferredLoadErrorComponent,
     AppRoutingModule,
     ClipboardModule,

@@ -15,14 +15,8 @@ import { of, Subject, throwError } from 'rxjs';
 import {
     ActivityTypes,
     DateRanges,
-    DistanceUnits,
-    PaceUnits,
-    SpeedUnits,
-    SwimPaceUnits,
     ServiceNames,
     User,
-    VerticalSpeedUnits,
-    WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
@@ -313,33 +307,12 @@ describe('DashboardComponent', () => {
         expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
-    it('shows unit setup prompt for owner dashboard when setup is explicitly incomplete', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-
+    it('leaves unit setup to the shared preferences card', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
         fixture.detectChanges();
         await fixture.whenStable();
-
-        expect(component.showUnitSetupPrompt).toBe(true);
-    });
-
-    it('does not show unit setup prompt on another user dashboard', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
-        mockActivatedRoute.snapshot.data.dashboardData.targetUser = { uid: 'other-user' };
-
-        fixture.detectChanges();
-        await fixture.whenStable();
-
-        expect(component.showUnitSetupPrompt).toBe(false);
-    });
-
-    it('does not show unit setup prompt for legacy users missing the marker', async () => {
-        delete (mockUser.settings.appSettings as any).unitSetupCompleted;
-
-        fixture.detectChanges();
-        await fixture.whenStable();
-
-        expect(component.showUnitSetupPrompt).toBe(false);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-preferences-setup')).toBeTruthy();
     });
 
     it('shows first activity upload prompt for free owner dashboards with no uploaded activities', async () => {
@@ -463,7 +436,7 @@ describe('DashboardComponent', () => {
         expect(text).toContain('Connect a service or upload an activity.');
         const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity') as HTMLElement;
         const actionPrompts = fixture.nativeElement.querySelector('app-dashboard-action-prompts') as HTMLElement;
-        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(true);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
         expect(emptyState.compareDocumentPosition(actionPrompts) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
         expect(template).toContain('[fullWidth]="true"');
@@ -1066,129 +1039,6 @@ describe('DashboardComponent', () => {
             },
         );
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
-    });
-
-    it('applies the miles unit setup preset and completes setup', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
-        (mockUser.settings.unitSettings as any).weightUnits = WeightUnits.Pounds;
-        mockUser.settings.unitSettings.startOfTheWeek = 0;
-        component.user = mockUser;
-        component.selectedUnitSetupPreset = 'miles';
-
-        await component.applyUnitSetupPreset();
-
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
-            mockUser,
-            {
-                settings: {
-                    appSettings: {
-                        unitSetupCompleted: true
-                    },
-                    unitSettings: expect.objectContaining({
-                        distanceUnits: DistanceUnits.Miles,
-                        speedUnits: [SpeedUnits.MilesPerHour],
-                        paceUnits: [PaceUnits.MinutesPerMile],
-                        swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
-                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
-                        weightUnits: WeightUnits.Pounds,
-                        startOfTheWeek: 0,
-                    })
-                }
-            }
-        );
-        expect(Object.keys(mockUserService.updateUserProperties.mock.calls[0][1].settings).sort()).toEqual([
-            'appSettings',
-            'unitSettings'
-        ]);
-        expect(component.showUnitSetupPrompt).toBe(false);
-        expect(component.user).not.toBe(mockUser);
-        expect(component.user).toBeInstanceOf(User);
-        expect(component.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
-        expect(mockHaptics.success).toHaveBeenCalledOnce();
-    });
-
-    it('locks unit actions immediately, prevents duplicate saves, and retries after failure', async () => {
-        mockUser.settings.appSettings.unitSetupCompleted = false;
-        component.user = mockUser;
-        component.selectedUnitSetupPreset = 'miles';
-        let reject!: (error: Error) => void;
-        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise((_resolve, rejectSave) => { reject = rejectSave; }));
-        const pending = component.applyUnitSetupPreset();
-        expect(component.isSavingUnitSetup).toBe(true);
-        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')?.busy).toBe(true);
-        component.onUnitSetupPresetChange('kilometers');
-        await component.applyUnitSetupPreset();
-        component.onDashboardActionPromptMenuAction({ promptId: 'unitSetup', action: { id: 'openUnitSettings', label: 'Advanced settings' } });
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
-        expect(mockRouter.navigate).not.toHaveBeenCalled();
-        expect(component.selectedUnitSetupPreset).toBe('miles');
-        expect(mockHaptics.selection).not.toHaveBeenCalled();
-        expect(mockHaptics.success).not.toHaveBeenCalled();
-        reject(new Error('offline'));
-        await pending;
-        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')).toMatchObject({busy: false, error: 'Could not save unit preferences.'});
-        expect(component.user.settings.appSettings.unitSetupCompleted).toBe(false);
-        expect(mockHaptics.error).toHaveBeenCalledOnce();
-        await component.applyUnitSetupPreset();
-        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(2);
-        expect(mockHaptics.success).toHaveBeenCalledOnce();
-    });
-
-    it('does not change setup on another user dashboard or when already complete', async () => {
-        mockUser.settings.appSettings.unitSetupCompleted = false;
-        component.user = mockUser;
-        component.targetUser = {uid: 'other-user'} as AppUserInterface;
-        await component.applyUnitSetupPreset();
-        component.targetUser = null;
-        mockUser.settings.appSettings.unitSetupCompleted = true;
-        await component.applyUnitSetupPreset();
-        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-        expect(mockHaptics.success).not.toHaveBeenCalled();
-    });
-
-    it('does not apply a completed save to a different signed-in account', async () => {
-        mockUser.settings.appSettings.unitSetupCompleted = false;
-        component.user = mockUser;
-        let resolveSave!: () => void;
-        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { resolveSave = resolve; }));
-        const pending = component.applyUnitSetupPreset();
-        const nextUser = new User('next-user') as AppUserInterface;
-        nextUser.settings = {appSettings: {unitSetupCompleted: false}, unitSettings: {distanceUnits: DistanceUnits.Kilometers}} as any;
-        component.user = nextUser;
-        resolveSave();
-        await pending;
-        expect(component.user).toBe(nextUser);
-        expect(nextUser.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
-        expect(nextUser.settings.appSettings.unitSetupCompleted).toBe(false);
-        expect(mockHaptics.success).not.toHaveBeenCalled();
-    });
-
-    it('keeps hydration and unchanged presets silent and confirms an accepted preset change', () => {
-        fixture.detectChanges();
-        expect(mockHaptics.selection).not.toHaveBeenCalled();
-        component.selectedUnitSetupPreset = 'kilometers';
-        component.onUnitSetupPresetChange('kilometers');
-        expect(mockHaptics.selection).not.toHaveBeenCalled();
-        component.onUnitSetupPresetChange('miles');
-        expect(mockHaptics.selection).toHaveBeenCalledOnce();
-    });
-
-    it('navigates to settings units from the unit prompt menu action', async () => {
-        component.onDashboardActionPromptMenuAction({
-            promptId: 'unitSetup',
-            action: {
-                id: 'openUnitSettings',
-                label: 'Advanced settings',
-            },
-        });
-
-        await fixture.whenStable();
-
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], {
-            queryParams: { section: 'units' },
-        });
     });
 
     it('navigates to the selected services provider from the service prompt menu action', async () => {

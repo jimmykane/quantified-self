@@ -17,20 +17,14 @@ import {
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
-import { DaysOfTheWeek, WeightUnits } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 
 import { WhereFilterOp } from 'firebase/firestore';
-import {
-  buildUnitSettingsForUnitSetupPreset,
-  resolveSuggestedUnitSetupPreset,
-  shouldShowUnitSetupPrompt,
-  UNIT_SETUP_PRESET_OPTIONS,
-  UnitSetupPreset,
-} from '../../helpers/unit-setup-preset.helper';
+
 import {
   eventMatchesDashboardActivityTypes,
   normalizeDashboardEventTableFilters,
@@ -48,7 +42,6 @@ import {
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
   DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
-  DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   DashboardActionPromptControlChange,
   DashboardActionPromptEvent,
   DashboardActionPromptMenuEvent,
@@ -94,11 +87,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public showUpload = false;
   public isInitialized = false;
   public hasMergedEvents = false;
-  public readonly unitSetupOptions = UNIT_SETUP_PRESET_OPTIONS;
-  public selectedUnitSetupPreset: UnitSetupPreset = resolveSuggestedUnitSetupPreset();
-  public showUnitSetupPrompt = false;
-  public isSavingUnitSetup = false;
-  public unitSetupError: string | null = null;
+
   public dashboardActionPrompts: DashboardActionPromptViewModel[] = [];
   public isDismissingFirstActivityUploadPrompt = false;
   public firstActivityUploadPromptError: string | null = null;
@@ -478,20 +467,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  onUnitSetupPresetChange(preset: UnitSetupPreset): void {
-    if (this.isSavingUnitSetup || preset === this.selectedUnitSetupPreset
-      || !this.unitSetupOptions.some(option => option.value === preset)) return;
-    this.selectedUnitSetupPreset = preset;
-    this.unitSetupError = null;
-    this.syncDashboardActionPromptState();
-    this.hapticsService.selection();
-  }
-
   onDashboardActionPromptPrimary(event: DashboardActionPromptEvent): void {
-    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'applyUnitSetup') {
-      void this.applyUnitSetupPreset();
-      return;
-    }
 
     if (event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID && event.action.id === 'upgradeToPro') {
       void this.openSubscriptions();
@@ -565,10 +541,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDashboardActionPromptMenuAction(event: DashboardActionPromptMenuEvent): void {
-    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'openUnitSettings') {
-      void this.openUnitSettings();
-      return;
-    }
 
     if (
       event.promptId === DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID
@@ -579,10 +551,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDashboardActionPromptControlChange(event: DashboardActionPromptControlChange): void {
-    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID) {
-      this.onUnitSetupPresetChange(event.value as UnitSetupPreset);
-      return;
-    }
 
     if (
       event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
@@ -598,62 +566,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async onNoActivityConnectService(serviceName: ServiceNames): Promise<void> {
     await this.openServiceProvider(serviceName);
-  }
-
-  async applyUnitSetupPreset(): Promise<void> {
-    if (this.isSavingUnitSetup || !shouldShowUnitSetupPrompt(this.user, this.targetUser)) {
-      return;
-    }
-
-    const user = this.user;
-    const preset = this.selectedUnitSetupPreset;
-    this.isSavingUnitSetup = true;
-    this.unitSetupError = null;
-    this.syncDashboardActionPromptState();
-
-    try {
-      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(preset);
-      // The distance setup prompt must not overwrite a separately chosen weight unit.
-      nextUnitSettings.weightUnits = user.settings?.unitSettings?.weightUnits === WeightUnits.Pounds
-        ? WeightUnits.Pounds
-        : WeightUnits.Kilograms;
-      nextUnitSettings.startOfTheWeek = user.settings?.unitSettings?.startOfTheWeek ?? nextUnitSettings.startOfTheWeek;
-      const unitSetupCompletedAppSettings = {
-        unitSetupCompleted: true,
-      };
-      await this.userService.updateUserProperties(user, {
-        settings: {
-          unitSettings: nextUnitSettings,
-          appSettings: unitSetupCompletedAppSettings,
-        },
-      });
-      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-      user.settings = {
-        ...user.settings,
-        unitSettings: nextUnitSettings,
-        appSettings: { ...user.settings?.appSettings, ...unitSetupCompletedAppSettings },
-      };
-      // A fresh input also updates dashboard chart/table display preferences immediately.
-      this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, {
-        settings: {
-          ...this.user.settings,
-          unitSettings: nextUnitSettings,
-          appSettings: { ...this.user.settings?.appSettings, ...unitSetupCompletedAppSettings },
-        },
-      });
-      this.syncDashboardActionPromptState();
-      this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
-      this.analyticsService.logEvent('unit_setup_complete', { preset });
-      this.hapticsService.success();
-    } catch (error) {
-      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
-      this.unitSetupError = 'Could not save unit preferences.';
-      this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
-      this.hapticsService.error();
-    } finally {
-      this.isSavingUnitSetup = false;
-      this.syncDashboardActionPromptState();
-    }
   }
 
   async dismissFirstActivityUploadPrompt(): Promise<void> {
@@ -995,13 +907,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private syncDashboardActionPromptState(): void {
-    this.showUnitSetupPrompt = shouldShowUnitSetupPrompt(this.user, this.targetUser);
     this.updateNoActivityDashboardState();
     const suppressNoActivityPrompts = this.showNoActivityDashboardState;
     this.dashboardActionPrompts = buildDashboardActionPromptViewModels({
-      showUnitSetupPrompt: this.showUnitSetupPrompt,
-      unitSetupBusy: this.isSavingUnitSetup,
-      unitSetupError: this.unitSetupError,
       showFirstActivityUploadPrompt: !suppressNoActivityPrompts && this.shouldShowFirstActivityUploadPrompt(),
       firstActivityUploadBusy: this.isDismissingFirstActivityUploadPrompt,
       firstActivityUploadError: this.firstActivityUploadPromptError,
@@ -1409,14 +1317,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private isOwnerDashboard(user: AppUserInterface): boolean {
     return !this.targetUser || this.targetUser.uid === user.uid;
-  }
-
-  private async openUnitSettings(): Promise<void> {
-    if (this.isSavingUnitSetup) return;
-    this.hapticsService.selection();
-    await this.router.navigate(['/settings'], {
-      queryParams: { section: 'units' },
-    });
   }
 
   private async openServiceProvider(serviceName: ServiceNames | string | undefined): Promise<void> {

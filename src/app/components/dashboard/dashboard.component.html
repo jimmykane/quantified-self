@@ -53,11 +53,12 @@
       </mat-card>
       }
 
+      @if (user && (!targetUser || targetUser.uid === user.uid)) {
+      <app-preferences-setup [ownerUid]="user.uid" />
+      }
       <app-dashboard-action-prompts
         [prompts]="dashboardActionPrompts"
         [user]="user"
-        [unitSetupOptions]="unitSetupOptions"
-        [selectedUnitSetupPreset]="selectedUnitSetupPreset"
         (primary)="onDashboardActionPromptPrimary($event)"
         (secondary)="onDashboardActionPromptSecondary($event)"
         (menuAction)="onDashboardActionPromptMenuAction($event)"
@@ -65,7 +66,8 @@
       </app-dashboard-action-prompts>
 
       @if (user && (!targetUser || targetUser.uid === user.uid) && hasActivityServiceConnection === true
-        && !showNoActivityDashboardState && dashboardActionPrompts.length === 0) {
+        && !showNoActivityDashboardState && dashboardActionPrompts.length === 0
+        && user.settings?.appSettings?.unitSetupCompleted !== false) {
         <app-notification-offer placement="dashboard" [ownerUid]="user.uid" />
       }
 

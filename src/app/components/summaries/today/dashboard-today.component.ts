@@ -63,6 +63,7 @@ export class DashboardTodayComponent {
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly sleepRevision = input(0);
   readonly sleepKey = input<string | null>(null);
+  readonly trainingKey = input<string | null>(null);
   readonly customize = output<void>();
   readonly todaySleepBaseColor = AppColors.Purple;
   readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];

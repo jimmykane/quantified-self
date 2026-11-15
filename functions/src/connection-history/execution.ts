@@ -14,6 +14,8 @@ export interface HistoryExecution {
   serviceName: ConnectionHistoryRun['serviceName'];
   runId: string;
   cooldownStartedAtMs: number;
+  /** Explicit manual range imports may fetch completed recordings again, once per run. */
+  reimportCompletedActivities?: boolean;
   garminHealthSummaryTypes?: ConnectionHistoryRun['garminHealthSummaryTypes'];
   garminHealthBackfillCutoffs?: ConnectionHistoryRun['garminHealthBackfillCutoffs'];
   // In-memory only: overlapping history pages must not replay failures without owner action.
@@ -61,6 +63,7 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
     }
   };
   return { userID: run.userID, serviceName: run.serviceName, runId: run.id, cooldownStartedAtMs: run.dateCreated,
+    reimportCompletedActivities: run.rangePreset === 'custom',
     garminHealthSummaryTypes: run.garminHealthSummaryTypes,
     garminHealthBackfillCutoffs: run.processed ? undefined : run.garminHealthBackfillCutoffs,
     retainedFailedChildPaths: new Set(run.steps.flatMap(step => step.failedChildPaths ?? [])),

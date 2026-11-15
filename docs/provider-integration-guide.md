@@ -1502,6 +1502,23 @@ prerequisites, proof requirements and secret handling. The public client-ID head
 
 ### History imports
 
+Explicit manual custom-range Suunto/COROS/Wahoo activity runs refetch successful completed recordings and previously
+verified cross-provider copies once per run, so deleted workouts can be restored and corrected provider exports reach
+the existing identity/edit-preserving writer. Copies are verified again against current saved data; existing IDs and edits
+remain protected. Other skipped/uncertain outcomes gain no new eligibility. Legacy Wahoo history reuses its manual
+lease as the queue revision and verifies that lease transactionally, retaining its existing scan/stats contract.
+An older Wahoo summary cannot replace a newer queued summary or its download URL during restoration.
+The same run's completed children and in-flight live work remain deduplicated; automatic history keeps its existing
+completed-job policy. Coordinator admission adds no reads; legacy Wahoo adds one metadata read per item. See
+[manual history semantics and backend release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
+Monitoring is **covered/unchanged** under #847/#829; Help, frontend, MCP and Training need no contract change.
+
+Garmin's explicit manual activity history separately grants once-per-request restoration through its shared callback path.
+The existing metadata lease stores the selected range and current account/connection/credential fences before provider I/O;
+callbacks reopen only eligible completed receipts through the canonical writer and existing queue revisions. Pending retries,
+saved IDs/edits and conservative history-notification exclusions remain intact. Range matching is not proof of callback origin
+or complete ingestion. No scanner or saved-workout query is added. See [Garmin restoration and release](garmin-integration.md#availability-and-history).
+
 Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active
 and recent. No per-account allowlist or environment activation is required. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
 checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,

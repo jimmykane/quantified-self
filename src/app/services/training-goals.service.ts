@@ -3,7 +3,7 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { Auth, authState } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, doc, limit, query, runTransaction } from 'app/firebase/firestore';
-import { Observable, Subject, auditTime, catchError, combineLatest, defer, distinctUntilChanged, filter, from, map, of,
+import { Observable, Subject, auditTime, catchError, combineLatest, concat, defer, distinctUntilChanged, filter, from, map, of,
   shareReplay, startWith, switchMap, timeout, timer } from 'rxjs';
 import { TRAINING_GOALS_COLLECTION, TRAINING_GOAL_STATE_PATH, TRAINING_GOALS_LIMIT, TRAINING_GOAL_FIELDS,
   parseTrainingGoalFields, parseTrainingGoalV1, type TrainingGoalFields, type TrainingGoalV1 } from '@shared/training-goals';
@@ -54,19 +54,26 @@ export class TrainingGoalsService {
     const stream$ = this.owner$.pipe(switchMap(session => {
       failed = false;
       if (session?.uid !== uid) return of({ status: 'ready' as const, goals: [] });
-      const read$ = defer(() => {
+      const read = (attempt = 0): Observable<TrainingGoalsState> => defer(() => {
         if (!this.isOwner(uid) || this.auth.currentUser !== session) throw Error('The signed-in account changed.');
+        failed = false; // A new consumer joins an automatic retry already in progress.
         return collectionData(query(collection(this.db, 'users', uid, TRAINING_GOALS_COLLECTION), limit(TRAINING_GOALS_LIMIT + 1)),
           { idField: 'documentId', waitForServer: true });
       }).pipe(timeout({ first: 15000 }), filter(() => this.isOwner(uid) && this.auth.currentUser === session), map(values => {
         if (values.length > TRAINING_GOALS_LIMIT) throw Error('The goal list is incomplete.');
-        return { status: 'ready' as const, goals: values.map(({ documentId, ...data }) => parseTrainingGoalV1(data, documentId)) };
-      }), catchError(() => {
-        // Keep existing Calendar subscribers alive so reopening Goals recovers every consumer.
+        const goals = values.map(({ documentId, ...data }) => parseTrainingGoalV1(data, documentId));
+        failed = false;
+        return { status: 'ready' as const, goals };
+      }), catchError(error => {
+        // One shared bounded recovery, cancelled on sign-out, manual retry or last unsubscribe.
         failed = true;
-        return of({ status: 'error' as const, goals: [] });
+        const state = of({ status: 'error' as const, goals: [] });
+        const transient = error?.name === 'TimeoutError'
+          || ['unavailable', 'deadline-exceeded', 'aborted', 'internal'].includes(String(error?.code).replace(/^firestore\//, ''));
+        return transient && attempt < 2
+          ? concat(state, timer(1000 * 2 ** attempt).pipe(switchMap(() => read(attempt + 1)))) : state;
       }), startWith({ status: 'loading' as const, goals: [] }));
-      return retries.pipe(startWith(undefined), switchMap(() => { failed = false; return read$; }));
+      return retries.pipe(startWith(undefined), switchMap(() => { failed = false; return read(); }));
     }),
     shareReplay({ bufferSize: 1, refCount: true }));
     if (this.streams.size >= 8) this.streams.clear();

@@ -59,6 +59,35 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('persists the checked Training snapshot and invalidates only a deferred suggestion on a ready update', async () => {
+    const { service, call, saved } = setup();
+    service.observeTraining('owner', 'snapshot-a');
+    call.mockResolvedValue({ data: { localDate: '2026-10-30', state: 'waiting-training' } });
+    await service.request('owner', 'prepare', () => true);
+    const next = setup(saved);
+    next.service.observeTraining('owner', 'snapshot-a');
+    expect(next.service.cached('owner')).toMatchObject({ status: { state: 'waiting-training' }, trainingKey: 'snapshot-a' });
+    next.service.observeTraining('owner', null);
+    expect(next.service.cached('owner')?.status?.state).toBe('waiting-training');
+    next.service.observeTraining('owner', 'snapshot-b'); expect(next.service.cached('owner')).toBeNull();
+    await next.service.request('owner', 'prepare', () => true);
+    next.service.observeTraining('owner', 'snapshot-c');
+    expect(next.service.cached('owner')?.status?.state).toBe('ready');
+    await next.service.request('owner', 'prepare', () => true); expect(next.call).toHaveBeenCalledOnce();
+  });
+  it('retains the Training evidence actually checked when an update arrives during preparation', async () => {
+    const { service, call } = setup(); service.observeTraining('owner', 'snapshot-a');
+    let finish!: (value: any) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.request('owner', 'prepare', () => true);
+    service.observeTraining('owner', 'snapshot-b');
+    finish({ data: { localDate: '2026-10-30', state: 'waiting-training' } }); await pending;
+    call.mockResolvedValue({ data: { localDate: '2026-10-30', state: 'waiting-training' } });
+    await service.request('owner', 'status', () => true, undefined, true);
+    expect(service.cached('owner')?.trainingKey).toBe('snapshot-a');
+    service.observeTraining('owner', 'snapshot-b'); expect(service.cached('owner')).toBeNull();
+  });
+
   it('persists an explicit regenerated suggestion across reload without another model request', async () => {
     const { service, call, saved, result } = setup();
     const initial = result(); service.remember('owner', initial);

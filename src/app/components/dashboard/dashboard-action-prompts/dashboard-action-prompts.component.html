@@ -4,25 +4,10 @@
   <app-dashboard-action-prompt
     [prompt]="prompt"
     [compact]="true"
-    [hasControls]="prompt.id === unitSetupPromptId"
     [hasActionControls]="prompt.id === firstActivityUploadPromptId"
     (primary)="primary.emit($event)"
     (secondary)="secondary.emit($event)"
     (menuAction)="menuAction.emit($event)">
-    @if (prompt.id === unitSetupPromptId) {
-    <mat-button-toggle-group
-      prompt-controls
-      class="dashboard-action-prompts__unit-toggle"
-      [value]="selectedUnitSetupPreset"
-      [disabled]="prompt.busy"
-      hideSingleSelectionIndicator
-      (change)="onControlChange(prompt.id, $event.value)"
-      aria-label="Default unit preset">
-      @for (option of unitSetupOptions; track option.value) {
-      <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    }
     @if (prompt.id === firstActivityUploadPromptId && user) {
     <app-upload-activities
       prompt-actions

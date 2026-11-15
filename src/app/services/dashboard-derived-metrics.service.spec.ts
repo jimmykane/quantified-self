@@ -193,7 +193,7 @@ describe('DashboardDerivedMetricsService', () => {
       .mockReturnValueOnce(recoveryDocRef);
     hoisted.docDataMock
       .mockReturnValueOnce(of({
-        status: 'ready',
+        status: 'ready', updatedAtMs: 100,
         schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         sourceEventCount: 3,
         payload: buildFormPayload([
@@ -202,7 +202,7 @@ describe('DashboardDerivedMetricsService', () => {
         ]),
       }))
       .mockReturnValueOnce(of({
-        status: 'ready',
+        status: 'ready', updatedAtMs: 200,
         schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
         payload: {
           totalSeconds: 5400,
@@ -225,6 +225,7 @@ describe('DashboardDerivedMetricsService', () => {
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(false);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(false);
     expect(state.formStatus).toBe('ready');
+    expect(state.trainingUpdatedAtMs).toBe(100); // Unrelated Recovery updates never resume generation.
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
     expect(state.rampRateStatus).toBe('missing');

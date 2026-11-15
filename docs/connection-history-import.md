@@ -206,6 +206,45 @@ snapshots retain their original cursor precision. Only the activity capability i
 requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
 requests. No existing jobs are converted, reset or replayed.
 
+An explicit custom-range Suunto/COROS/Wahoo activity import refetches successfully completed source recordings and
+verified `cross_provider_duplicate` skips once per new manual run, including live-feed jobs. Old duplicate receipts
+are rechecked by the ordinary writer: a retained workout stays single with its edits, while a deleted workout can be
+restored from the provider export. Other skip/uncertain-result categories gain no new restoration eligibility.
+This restores deleted workouts and lets the existing
+identity/edit-preserving writer apply corrected provider exports to retained recordings. It uses fresh queue revisions
+and the existing worker; it does not reparse the retained original or add a second identity. Repeated pages/task
+deliveries within that run preserve its completed children. Automatic connection imports retain completed-job
+deduplication; pending live work, owner/lifecycle guards, retained failures and explicit failed-record recovery are
+unchanged. The policy is derived privately from the server-owned `custom` range, never from a queue payload or public
+field. A manual range can therefore download already saved recordings again; coordinator admission adds no reads
+or queries, but normal provider/download/persistence work applies to those recordings. Garmin keeps its own backfill path.
+
+Older Wahoo clients retain the foreground scan/stats contract and can also restore completed recordings/copy skips.
+The existing server-generated manual lease ID supplies their queue revision, so an overlapping page cannot reopen a
+completed row from the same import. It is not persisted as a coordinator run ID. Each legacy queue write rechecks the
+same lease owner and unexpired deadline transactionally with the existing account/deletion guards, adding one metadata
+read per legacy item. An expired/replaced lease stops that request. Pending work retains its current revision/retries;
+ordinary webhooks and automatic connection imports gain no restoration permission. No new field, queue or counter is added.
+Wahoo ignores strictly older provider summaries, including their download URLs, even during manual restoration;
+same-revision URL refreshes and newer provider revisions retain their existing behavior.
+
+Monitoring is **covered/unchanged** by the reviewed #847 coordinator and #829 recorded-import source definitions and
+runbooks: the same committed child outcomes, retries, dispatch/worker failures and retained DLQ observations apply.
+Existing Help describes manual date-range imports and remains accurate; no frontend, Rules, index, MCP/Assistant or
+Training contract change is required. Deploy `processConnectionHistoryTask` and `addWahooAPIHistoryToQueue` after
+separate approval to enable coordinator and legacy Wahoo restoration respectively; rollback restores those revisions.
+The Suunto/COROS/Wahoo import workers are unchanged. Any targeted recovery remains separately authorized.
+
+Garmin manual restoration uses its asynchronous callback path. Before requesting files, the existing lease write records
+a request/range permission bound to the current provider account, connection and OAuth-root generations. Matching callbacks
+can replace completed successes or verified copy skips once per request, preserving pending retry state and other protected
+outcomes. The canonical writer preserves retained IDs/edits and restores missing workouts. Coordinator callbacks carry the
+actual run ID on restored work; legacy requests use their lease as the queue revision. New recordings keep their existing
+notification/forwarding classification. This permission does not prove callback origin or
+whole-import completion. Existing notification exclusions, provider cooldowns and **History requested** remain unchanged.
+See [Garmin history](garmin-integration.md#availability-and-history) for transaction costs, lifecycle checks and the separately
+approved five-function release order. No bulk replay or frontend release is included.
+
 For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
 dispatch spread, tracks committed child outcomes and resumes with the same shared capacity, retry, deletion and
 connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed

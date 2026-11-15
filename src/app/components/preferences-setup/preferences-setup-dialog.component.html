@@ -1,0 +1,61 @@
+<div class="preferences-title">
+  <h2 mat-dialog-title>Your preferences</h2>
+  <button mat-icon-button type="button" aria-label="Close preferences" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
+</div>
+<mat-dialog-content>
+  <p class="preferences-intro">Choose how your data is displayed across QS.</p>
+  <h3>Distance and pace</h3>
+  <mat-button-toggle-group class="preferences-presets" aria-label="Distance and pace preset" [value]="preset()" [disabled]="state.busy()" (change)="choosePreset($event.value)">
+    @for (option of presets; track option.value) { <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle> }
+  </mat-button-toggle-group>
+  <p class="preferences-hint">@if (!preset()) { Custom units · }{{ unitPreview() }}</p>
+  <button mat-button type="button" class="preferences-disclosure" aria-controls="preferences-custom-units" [attr.aria-expanded]="customUnits()" [disabled]="state.busy()" (click)="toggle('units')">
+    {{ customUnits() ? 'Hide individual units' : 'Customize individual units' }}<mat-icon iconPositionEnd>{{ customUnits() ? 'expand_less' : 'expand_more' }}</mat-icon>
+  </button>
+  <div id="preferences-custom-units" class="preferences-custom" [hidden]="!customUnits()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Distance</mat-label><mat-select [value]="draft().units.distanceUnits" [disabled]="state.busy()" (selectionChange)="setUnit('distanceUnits', $event.value)">
+      @for (option of distances; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
+    </mat-select></mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Elevation</mat-label><mat-select [value]="draft().units.elevationUnits" [disabled]="state.busy()" (selectionChange)="setUnit('elevationUnits', $event.value)">
+      @for (option of elevations; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
+    </mat-select></mat-form-field>
+    @for (field of arrayUnits; track field.key) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ field.label }}</mat-label><mat-select multiple required [value]="draft().units[field.key]" [disabled]="state.busy()" (selectionChange)="setUnit(field.key, $event.value)">
+        @for (option of field.options; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
+      </mat-select></mat-form-field>
+    }
+    @if (!valid()) { <p role="alert">Choose at least one unit for each measurement.</p> }
+  </div>
+  <div class="preferences-row"><span><mat-icon aria-hidden="true">weight</mat-icon>Weight units</span>
+    <app-compact-select label="Weight units" [hideLabel]="true" [options]="weights" [value]="draft().units.weightUnits" [disabled]="state.busy()" (selectionChange)="setUnit('weightUnits', $event)" />
+  </div>
+  <div class="preferences-row"><span><mat-icon aria-hidden="true">calendar_month</mat-icon>Week starts on</span>
+    <app-compact-select label="Week starts on" [hideLabel]="true" [options]="days" [value]="day()" [disabled]="state.busy()" (selectionChange)="setDay($event)" />
+  </div>
+  <div class="preferences-more">
+    <button mat-button type="button" class="preferences-disclosure" aria-controls="preferences-appearance" [attr.aria-expanded]="appearance()" [disabled]="state.busy()" (click)="toggle('appearance')">
+      <mat-icon>contrast</mat-icon>Appearance &amp; formatting<mat-icon iconPositionEnd>{{ appearance() ? 'expand_less' : 'expand_more' }}</mat-icon>
+    </button>
+    <p class="preferences-hint">{{ appearanceSummary() }}</p>
+    <div id="preferences-appearance" class="preferences-appearance" [hidden]="!appearance()">
+      <app-compact-select label="Appearance" [options]="themes" [value]="draft().theme" [disabled]="state.busy()" (selectionChange)="setPreference('theme', $event)" />
+      <app-compact-select label="Regional format" [options]="locales" [value]="draft().formatLocale" [disabled]="state.busy()" (selectionChange)="setPreference('formatLocale', $event)" />
+      <p class="preferences-hint">{{ localePreview().date }} · {{ localePreview().number }}. Changing the regional format reloads the page after saving.</p>
+    </div>
+  </div>
+  <div class="preferences-more">
+    <button mat-button type="button" [disabled]="state.busy() || loadingThresholds()" (click)="openThresholds()">
+      <span class="preferences-button-content">@if (loadingThresholds()) { <mat-spinner diameter="18" /> } @else { <mat-icon>monitoring</mat-icon> }<span>{{ loadingThresholds() ? 'Training thresholds open…' : 'Training thresholds' }}</span></span>
+    </button>
+    <p class="preferences-hint">FTP, heart rate and swim pace · Optional</p>
+    @if (thresholdError()) { <p class="preferences-error" role="alert">{{ thresholdError() }}</p> }
+  </div>
+  <p class="preferences-hint">You can change these any time in Settings.</p>
+  @if (state.error()) { <p class="preferences-error" role="alert">{{ state.error() }}</p> }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [disabled]="state.busy()" (click)="close()">Cancel</button>
+  <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="state.busy() || !valid() || loadingThresholds()" [attr.aria-busy]="state.busy()" (click)="save()">
+    <span class="preferences-button-content">@if (state.busy()) { <mat-spinner diameter="18" /> }<span>{{ state.busy() ? 'Saving…' : 'Save preferences' }}</span></span>
+  </button>
+</mat-dialog-actions>
