@@ -78,7 +78,6 @@ export interface DailyWorkoutSuggestionDependencies {
   legal: typeof assertAssistantLegalAccess;
   pro(uid: string): Promise<boolean>;
   prepareContext: typeof collectDailyWorkoutSuggestionContext;
-  context: typeof dayWorkoutDependencies.context;
   coverage(uid: string, controls: DayWorkoutControls): Promise<DayCoverage>;
   importActive(uid: string): Promise<boolean>;
   generate: typeof generateDayWorkoutSuggestion;
@@ -88,7 +87,7 @@ export interface DailyWorkoutSuggestionDependencies {
 const defaults: DailyWorkoutSuggestionDependencies = {
   store: createDailyWorkoutSuggestionStore(), regenerate: runGenerateDayWorkout, now: () => new Date(), legal: assertAssistantLegalAccess,
   pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
-  importActive: readDailyWorkoutHistoryImportActive, prepareContext: collectDailyWorkoutSuggestionContext, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
+  importActive: readDailyWorkoutHistoryImportActive, prepareContext: collectDailyWorkoutSuggestionContext, coverage: readDailyWorkoutSuggestionCoverage, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
 };
 const coveredStates = ['planned', 'completed', 'rest-day'];

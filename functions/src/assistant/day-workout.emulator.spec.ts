@@ -1,5 +1,5 @@
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
-import { runGenerateDayWorkout } from './day-workout-callable';
+import { runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
 import { randomUUID } from 'node:crypto';
 import { dailyWorkoutSuggestionMergePatch } from '../../../shared/daily-workout-suggestion';
 import { FieldValue, Firestore } from 'firebase-admin/firestore';
@@ -17,6 +17,9 @@ import { collectDailyWorkoutSuggestionCoverage, runDailyWorkoutSuggestion, type 
 import type { AssistantMcpSession } from './mcp-session';
 import { DayWorkoutModelError } from './day-workout-diagnostics';
 
+// Context is a fixture builder; production daily orchestration exposes only prepareContext.
+type DailyTestDependencies = DailyWorkoutSuggestionDependencies & Pick<DayWorkoutDependencies, 'context'>;
+
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation private state and existing MCP read-back', () => {
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required');
   const db = new Firestore({ projectId: 'demo-day-workout' });
@@ -32,7 +35,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     let ready = false, entered!: () => void, release!: () => void;
     const started = new Promise<void>(resolve => { entered = resolve; }), blocked = new Promise<void>(resolve => { release = resolve; });
     const generate = vi.fn(async () => { entered(); await blocked; return { kind: 'rest', rationale: 'Keep it easy.' }; });
-    const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+    const deps: DailyTestDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
       prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
         evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
           { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null, importActive: async () => false, generate,
@@ -108,7 +111,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       if (!recover) throw new DayWorkoutModelError('unavailable');
       return { kind: 'rest', rationale: 'Keep it easy.' };
     });
-    const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+    const deps: DailyTestDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
       prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
         evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
           { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null, importActive: async () => false, generate,
@@ -192,7 +195,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       const original = response('daily-suggestion:2026-10-28');
       await store.charge(uid, controls.localDate, token!); await store.finish(uid, controls.localDate, token!, 'ready', controls, original);
       const finalize = vi.fn(), generate = vi.fn(async () => ({ kind: 'rest', rationale: 'Recovery remains appropriate.' }));
-      const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+      const deps: DailyTestDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
         coverage: async () => null, importActive: async () => false, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
         evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
           { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), context: vi.fn(), generate: vi.fn(), log: vi.fn(),
@@ -281,7 +284,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const callTool: Pick<AssistantMcpSession, 'callTool'>['callTool'] = async (name, args = {}) => ({ structuredContent: name === 'query_activities'
       ? { scanComplete: true, activities: [] } : await read(name as TrainingReadTool, args) });
     const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'A recovery day.' }));
-    const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+    const deps: DailyTestDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
       importActive: id => readDailyWorkoutHistoryImportActive(id, db), legal: async () => undefined, pro: async () => true, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls: selected,
         evidence: await deps.context(uid, { requestId: `daily-suggestion:${selected.localDate}`, controls: selected }, now,
           { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }),
@@ -475,7 +478,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const context = vi.fn(async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
       plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
       usedContext: [], missingContext: [], previousStrength: [], references: [] }));
-    const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+    const deps: DailyTestDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
       legal: async () => undefined, pro: async () => true, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls: selected,
         evidence: await deps.context(uid, { requestId: `daily-suggestion:${selected.localDate}`, controls: selected }, now,
           { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null,

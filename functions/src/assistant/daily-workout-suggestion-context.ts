@@ -17,7 +17,7 @@ export async function collectDailyWorkoutSuggestionContext(uid: string, preferen
       catch { throw new DayWorkoutTrainingNotReadyError(); }
       if (preparation.structuredContent.status !== 'ready') throw new DayWorkoutTrainingNotReadyError();
     }
-    const controls = await selectDailyWorkoutSuggestionSport(uid, preferences, now);
+    const controls = await selectDailyWorkoutSuggestionSport(preferences, now, session);
     // Reuse this session's preparation and its MCP ready-kind guard; never pass readiness to a new session.
     const preparedSession: Pick<AssistantMcpSession, 'callTool'> = {
       callTool: (name, input) => name === 'prepare_training_metrics' && preparation

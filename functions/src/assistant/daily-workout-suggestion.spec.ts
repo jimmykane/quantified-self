@@ -1,7 +1,7 @@
 import { readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { CONNECTION_HISTORY_CAPABILITIES as importServices, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { readFileSync } from 'node:fs';
-import { defaultDayWorkoutControls } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, type DayWorkoutControls } from '../../../shared/day-workout';
 import { parseDailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 
 describe('daily workout preferences', () => {
@@ -34,10 +34,11 @@ describe('daily workout preferences', () => {
 });
 
 import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
-import { dailyWorkoutSuggestionRoutineSport, type selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
+import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
 import { DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DayWorkoutModelError } from './day-workout-diagnostics';
+import type { DayWorkoutDependencies } from './day-workout-callable';
 
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), enforceAppCheck: (context: { app?: unknown }) => {
   if (!context.app) throw Error('App Check required');
@@ -56,13 +57,13 @@ function dependencies() {
   const store = { replace: vi.fn(async (_uid, _preferences, _expected, controls, result) => { status = { localDate: controls.localDate, state: 'ready', controls, result }; return status; }), read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
     assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result, failureReason?) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}), ...(failureReason ? { failureReason } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
-  const deps = { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn<typeof selectDailyWorkoutSuggestionSport>(async () => dailyControls),
-    prepareContext: vi.fn<DailyWorkoutSuggestionDependencies['prepareContext']>(async (uid, preferences, now, useAvailable) => {
-      const controls = await deps.selectSport(uid, preferences, now);
+  const deps = { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn<() => Promise<DayWorkoutControls>>(async () => dailyControls),
+    prepareContext: vi.fn<DailyWorkoutSuggestionDependencies['prepareContext']>(async (uid, ...[, now, useAvailable]) => {
+      const controls = await deps.selectSport();
       return { controls, evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
         { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) };
     }),
-    importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn<DailyWorkoutSuggestionDependencies['context']>(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
+    importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn<DayWorkoutDependencies['context']>(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
       usage?.({ available: true, inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }); return { kind: 'rest', rationale: 'Keep today easy.' };
     }), log: vi.fn() };
   return deps satisfies DailyWorkoutSuggestionDependencies;

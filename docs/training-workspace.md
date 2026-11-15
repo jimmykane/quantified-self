@@ -6506,7 +6506,9 @@ admit only one resumed generation; completed or failed charged receipts are neve
 Automatic preparation checks the selected, sport-independent Training kinds before weekday sport selection. A pending
 or failed check stops before the bounded weekday-history scan (up to two 100-item pages) and before reading the daily
 report, Timeline, nearby plans/goals, feedback and detailed duration routine. Ready-day collection reuses the preparation
-inside the same MCP session, preserving its ready-kind guard without a second preparation call. A subsequent selected
+inside the same MCP session, preserving its ready-kind guard without a second preparation call. Weekday sport selection
+also borrows that session instead of opening another transport; partial/failed history retains the saved sport without
+closing the session before recovery reads. The context collector owns cleanup on both success and failure. A subsequent selected
 snapshot read failure still defers immediately. Day coverage, account/import checks and Training preparation still read
 data; this is not a zero-read availability probe. Manual generation and explicit **Use available data** retain their
 best-effort context behavior. This private ordering change needs no user-facing Help or MCP contract update.
