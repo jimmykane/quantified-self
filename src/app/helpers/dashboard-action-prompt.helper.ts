@@ -15,7 +15,6 @@ import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
-export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId = 'unitSetup';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
 export const DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID: AppDashboardActionPromptId = 'connectActivityService';
 export const DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID: AppDashboardActionPromptId = 'enableActivityAutoSync';
@@ -108,9 +107,6 @@ export interface DashboardActionPromptControlChange {
 }
 
 export interface DashboardActionPromptBuildOptions {
-  showUnitSetupPrompt: boolean;
-  unitSetupBusy: boolean;
-  unitSetupError: string | null;
   showFirstActivityUploadPrompt: boolean;
   firstActivityUploadBusy: boolean;
   firstActivityUploadError: string | null;
@@ -227,27 +223,6 @@ export function buildDashboardActionPromptViewModels(
   options: DashboardActionPromptBuildOptions,
 ): DashboardActionPromptViewModel[] {
   const prompts: DashboardActionPromptViewModel[] = [];
-
-  if (options.showUnitSetupPrompt) {
-    prompts.push({
-      id: DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
-      icon: 'straighten',
-      title: 'Default units',
-      description: 'Choose your distance, speed, and pace units. Weight and week start stay as they are. You can customize units in Settings.',
-      busy: options.unitSetupBusy,
-      error: options.unitSetupError,
-      primaryAction: {
-        id: 'applyUnitSetup',
-        label: 'Apply',
-        loadingLabel: 'Saving...',
-      },
-      menuActions: [{
-        id: 'openUnitSettings',
-        label: 'Advanced settings',
-        icon: 'tune',
-      }],
-    });
-  }
 
   if (options.showFirstActivityUploadPrompt) {
     prompts.push({

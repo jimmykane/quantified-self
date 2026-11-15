@@ -10,7 +10,6 @@ import {
   DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_SOURCE,
-  DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   isDashboardActionPromptDismissed,
   hasGarminSleepHealthConnectionHistory,
   markDashboardActionPromptDismissed,
@@ -141,11 +140,8 @@ describe('dashboard-action-prompt.helper', () => {
     } as AppAppSettingsInterface, 'reconnectSuuntoService', sourceB)).toBe(false);
   });
 
-  it('builds the standard unit and service prompt view models', () => {
+  it('builds activity and service prompts without duplicate preference setup', () => {
     const prompts = buildDashboardActionPromptViewModels({
-      showUnitSetupPrompt: true,
-      unitSetupBusy: false,
-      unitSetupError: null,
       showFirstActivityUploadPrompt: true,
       firstActivityUploadBusy: false,
       firstActivityUploadError: null,
@@ -168,16 +164,13 @@ describe('dashboard-action-prompt.helper', () => {
     });
 
     expect(prompts.map(prompt => prompt.id)).toEqual([
-      DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
       DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
       DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
       DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
     ]);
-    expect(prompts[0].primaryAction?.id).toBe('applyUnitSetup');
-    expect(prompts[0].secondaryAction).toBeUndefined();
-    expect(prompts[0].menuActions?.[0]?.id).toBe('openUnitSettings');
-    expect(prompts[1]).toMatchObject({
+    expect(prompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
+    expect(prompts[0]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       title: 'Upload your first activities',
       description: 'Start with FIT, GPX, TCX, JSON, or SML files. Upgrade to Pro when you want automatic imports from Garmin, Suunto, COROS, or Wahoo.',
@@ -188,7 +181,7 @@ describe('dashboard-action-prompt.helper', () => {
         id: 'dismissFirstActivityUpload',
       },
     });
-    expect(prompts[2]).toMatchObject({
+    expect(prompts[1]).toMatchObject({
       busy: true,
       error: 'Could not save.',
       primaryAction: {
@@ -196,19 +189,19 @@ describe('dashboard-action-prompt.helper', () => {
         menuTrigger: true,
       },
     });
-    expect(prompts[2].menuActions?.map(action => action.value)).toEqual([
+    expect(prompts[1].menuActions?.map(action => action.value)).toEqual([
       ServiceNames.GarminAPI,
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
       ServiceNames.WahooAPI,
     ]);
-    expect(prompts[2].menuActions?.map(action => action.serviceName)).toEqual([
+    expect(prompts[1].menuActions?.map(action => action.serviceName)).toEqual([
       ServiceNames.GarminAPI,
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
       ServiceNames.WahooAPI,
     ]);
-    expect(prompts[3]).toMatchObject({
+    expect(prompts[2]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
       title: 'Send new activities to Suunto',
       description: 'Automatically send new Garmin and COROS activities to Suunto. You can sync past activities separately from Connections.',
@@ -221,7 +214,7 @@ describe('dashboard-action-prompt.helper', () => {
         label: 'Not now',
       },
     });
-    expect(prompts[4]).toMatchObject({
+    expect(prompts[3]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
       title: 'Import Garmin history',
       description: expect.stringContaining('up to five years'),
@@ -238,9 +231,6 @@ describe('dashboard-action-prompt.helper', () => {
 
   it('builds the Suunto reconnect prompt view model', () => {
     const prompts = buildDashboardActionPromptViewModels({
-      showUnitSetupPrompt: false,
-      unitSetupBusy: false,
-      unitSetupError: null,
       showFirstActivityUploadPrompt: false,
       firstActivityUploadBusy: false,
       firstActivityUploadError: null,

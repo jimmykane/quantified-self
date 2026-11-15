@@ -1,3 +1,4 @@
+import { PreferencesSetupComponent } from '../components/preferences-setup/preferences-setup.component';
 import { NotificationOfferComponent } from '../components/notification-offer/notification-offer.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
@@ -12,7 +13,7 @@ import { DashboardComponent } from '../components/dashboard/dashboard.component'
 import { HistoryImportCardsComponent } from '../components/history-import-progress/history-import-cards.component';
 @NgModule({
   imports: [
-    CommonModule, SharedModule, MaterialModule, DashboardLibraryModule,
+    PreferencesSetupComponent, CommonModule, SharedModule, MaterialModule, DashboardLibraryModule,
     NotificationOfferComponent, DashboardRoutingModule, UploadActivitiesComponent, EventTableModule, HistoryImportCardsComponent,
   ],
   declarations: [DashboardComponent, DashboardActionPromptsComponent],

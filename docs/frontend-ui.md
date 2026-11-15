@@ -2220,3 +2220,28 @@ No activity rewrite, provider send, reparse, derived rebuild or data migration i
 
 Both root and Functions pin the published Sports Lib 23.11.0 package with matching lockfile integrity. The shared
 display boundary uses its public APIs; no local adapters or node_modules patches are used.
+
+## Shared first-use preferences
+
+`PreferencesSetupComponent` replaces the Dashboard's old Default units action. It uses the same
+`settings.appSettings.unitSetupCompleted` marker through `PreferencesSetupService` and the existing
+shared `AppUserService.user$` stream. There is no additional backend endpoint, subscription, or polling.
+Only explicit `false` after completed onboarding and required policies invites setup; legacy accounts
+without the marker and completed accounts remain quiet. Starting intent never chooses a preset.
+
+The Dashboard retains the invitation after its first-activity actions. The app shell lazily places the same
+component on other normal account workspaces, including Connections, subscription selection and Compare.
+Public/shared pages, Settings, onboarding, login and authorization/checkout-return pages do not show it.
+`isPreferencesSetupWorkspace` owns this route boundary; Dashboard owner checks exclude another account's data.
+
+Review opens a Material dialog, bottom-aligned on phones, with current saved preferences. Presets preserve
+independent weight units and week start; custom multi-unit choices remain intact until explicitly changed.
+Only changed unit/appearance fields and the completion marker are merged. Keep defaults and the invitation's
+close action write only completion; canceling the dialog does not complete setup. A failed save retains the
+invitation and draft for retry. A shared busy state blocks duplicate actions; account revisions fence late writes
+and dialog loads. Completion elsewhere is observed by the existing user stream.
+
+The optional Training thresholds shortcut opens the existing editor over the unsaved preferences draft, using
+the saved account units. It changes no Training calculations, planning rules, provider action, or MCP contract.
+Regional formatting uses the existing cache/reload flow after a successful save. UI controls use Material and
+CompactSelect with the shared overlay/scrollbar theme and one haptic owner per accepted interaction.

@@ -1,9 +1,10 @@
 import type { PublicFeaturePreviewKey } from '../components/public-seo/public-feature-preview.types';
 
 export type DeferredLoadArea = PublicFeaturePreviewKey | 'navigation' | 'training-settings' | 'power-settings'
-  | 'notification-settings' | 'dashboard-map';
+  | 'notification-settings' | 'dashboard-map' | 'preferences-setup';
 
 const labels: Record<DeferredLoadArea, string> = {
+  'preferences-setup': 'Preferences setup',
   navigation: 'Navigation', 'training-settings': 'Training settings', 'power-settings': 'Workout power settings',
   'notification-settings': 'Notification settings', 'dashboard-map': 'Map',
   'health-overview': 'Preview', 'health-sleep': 'Preview', 'health-hrv': 'Preview', 'health-note-comparison': 'Preview',

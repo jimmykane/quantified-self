@@ -20,25 +20,3 @@
 .dashboard-action-prompts app-dashboard-action-prompt + app-dashboard-action-prompt {
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
-
-.dashboard-action-prompts__unit-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  width: fit-content;
-  max-width: 100%;
-}
-
-.dashboard-action-prompts__unit-toggle mat-button-toggle {
-  min-width: 7rem;
-}
-
-@media (max-width: 640px) {
-  .dashboard-action-prompts__unit-toggle {
-    width: 100%;
-  }
-
-  .dashboard-action-prompts__unit-toggle mat-button-toggle {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}

@@ -729,6 +729,50 @@ describe('AppShellComponent', () => {
         expect(component.showUploadActivities()).toBe(false);
     });
 
+    it('offers shared preferences on account workspaces without duplicating the Dashboard invitation', () => {
+        renderShellFixture();
+        component['currentUser'] = {
+            uid: 'u1', onboardingCompleted: true, acceptedTos: true, acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true, settings: { appSettings: { unitSetupCompleted: false } }
+        };
+        for (const route of ['/services', '/subscriptions', '/tools/compare', '/training']) {
+            syncRoute(route);
+            expect(component.showPreferencesSetup()).toBe(true);
+        }
+        for (const route of ['/dashboard', '/settings', '/onboarding', '/', '/user/other/event/activity']) {
+            syncRoute(route);
+            expect(component.showPreferencesSetup()).toBe(false);
+        }
+        syncRoute('/services');
+        component['currentUser'] = {
+            ...component['currentUser'], settings: { appSettings: { unitSetupCompleted: true } }
+        };
+        expect(component.showPreferencesSetup()).toBe(false);
+    });
+
+    it('renders an explicit preferences recovery action if its deferred component fails', async () => {
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Manual });
+        const capture = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => undefined);
+        renderShellFixture();
+        component['currentUser'] = {
+            uid: 'u1', onboardingCompleted: true, acceptedTos: true, acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true, settings: { appSettings: { unitSetupCompleted: false } }
+        };
+        syncRoute('/services');
+        fixture.detectChanges();
+        const blocks = await fixture.getDeferBlocks();
+        expect(blocks).toHaveLength(2);
+        await blocks[1].render(DeferBlockState.Error);
+        fixture.detectChanges();
+        const recovery = fixture.debugElement.query(By.directive(DeferredLoadErrorComponent));
+        expect(recovery).toBeTruthy();
+        expect(recovery.componentInstance.area()).toBe('preferences-setup');
+        expect(recovery.nativeElement.querySelector('button')).toBeTruthy();
+        expect(capture).toHaveBeenCalledWith('Deferred content failed to load', expect.objectContaining({
+            tags: { operation: 'deferred-load', area: 'preferences-setup' },
+        }));
+    });
+
     it('should place the impersonation banner inside the maintenance branch', () => {
         renderShellFixture();
         syncRoute('/dashboard');

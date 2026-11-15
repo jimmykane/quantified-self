@@ -3,14 +3,12 @@ import {
   AppDashboardActionPromptId,
 } from '../../../models/app-user.interface';
 import {
-  DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
   DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
   DashboardActionPromptControlChange,
   DashboardActionPromptEvent,
   DashboardActionPromptMenuEvent,
   DashboardActionPromptViewModel,
 } from '../../../helpers/dashboard-action-prompt.helper';
-import { UnitSetupPreset, UnitSetupPresetOption } from '../../../helpers/unit-setup-preset.helper';
 import { AppUserInterface } from '../../../models/app-user.interface';
 
 @Component({
@@ -30,8 +28,6 @@ export class DashboardActionPromptsComponent {
     return this._prompts;
   }
 
-  @Input() unitSetupOptions: readonly UnitSetupPresetOption[] = [];
-  @Input() selectedUnitSetupPreset: UnitSetupPreset | null = null;
   @Input() user: AppUserInterface | null = null;
 
   @Output() primary = new EventEmitter<DashboardActionPromptEvent>();
@@ -40,7 +36,6 @@ export class DashboardActionPromptsComponent {
   @Output() controlChange = new EventEmitter<DashboardActionPromptControlChange>();
 
   public orderedPrompts: DashboardActionPromptViewModel[] = [];
-  public readonly unitSetupPromptId = DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID;
   public readonly firstActivityUploadPromptId = DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID;
 
   private _prompts: DashboardActionPromptViewModel[] = [];

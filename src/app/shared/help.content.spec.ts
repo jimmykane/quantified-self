@@ -1186,7 +1186,7 @@ describe('help.content', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units & formatting → Customize units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
-    expect(copy).toContain('changing a distance preset does not reset that choice');
+    expect(copy).toContain('preserves your weight and week-start choices');
   });
 
   it('records verified Garmin strength delivery without promising every device or exercise', () => {
@@ -2230,7 +2230,9 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
-    expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('**Your units and preferences**');
+    expect(gettingStartedSection?.content).toContain('**Keep defaults**');
+    expect(gettingStartedSection?.content).toContain('same optional review');
     expect(gettingStartedSection?.content).not.toContain('Keep current units');
     expect(gettingStartedSection?.content).toContain('preserves your weight and week-start choices');
     expect(gettingStartedSection?.content).toContain('before your first activity');
@@ -2250,7 +2252,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
     expect(gettingStartedSection?.content).toContain('Turning it on affects new Garmin or COROS activities only');
     expect(gettingStartedSection?.content).toContain('use **Send past activities** in **Services** for activities already in Quantified Self');
-    expect(gettingStartedSection?.content).toContain('Advanced settings');
+    expect(gettingStartedSection?.content).toContain('**Customize individual units**');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units & formatting');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');

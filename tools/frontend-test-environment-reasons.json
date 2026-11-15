@@ -59,6 +59,14 @@
     "environment": "angular",
     "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
   },
+  "src/app/components/preferences-setup/preferences-setup-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the real Material preferences dialog and compact selectors in TestBed to verify saved values, independent unit choices, validation, account changes and haptics."
+  },
+  "src/app/components/preferences-setup/preferences-setup.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the shared invitation with Material controls and injected dialog, breakpoint and signal services to verify dismissal, account isolation, mobile presentation and haptics."
+  },
   "src/app/components/public-seo/daily-workout-preview.component.spec.ts": {
     "environment": "angular",
     "reason": "Renders Material toggles, compact rows and the real workout profile with TestBed to verify explicit review, rest transitions, unit settings and haptic ownership without account or generation services."
@@ -226,6 +234,10 @@
   "src/app/services/plan-generation.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection and DestroyRef to verify account-bound, single-use Assistant handoffs and lazy dialog navigation."
+  },
+  "src/app/services/preferences-setup.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and DestroyRef to verify the shared account stream, async preference writes, stale-owner fencing and haptic outcomes."
   },
   "src/app/services/public-pricing-catalog.service.spec.ts": {
     "environment": "angular",
