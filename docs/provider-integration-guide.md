@@ -1513,6 +1513,12 @@ completed-job policy. Coordinator admission adds no reads; legacy Wahoo adds one
 [manual history semantics and backend release](connection-history-import.md#manual-activity-imports-garmin-suunto-coros-and-wahoo).
 Monitoring is **covered/unchanged** under #847/#829; Help, frontend, MCP and Training need no contract change.
 
+Garmin's explicit manual activity history separately grants once-per-request restoration through its shared callback path.
+The existing metadata lease stores the selected range and current account/connection/credential fences before provider I/O;
+callbacks reopen only eligible completed receipts through the canonical writer and existing queue revisions. Pending retries,
+saved IDs/edits and conservative history-notification exclusions remain intact. Range matching is not proof of callback origin
+or complete ingestion. No scanner or saved-workout query is added. See [Garmin restoration and release](garmin-integration.md#availability-and-history).
+
 Derived refreshes automatically use a five-minute fixed build interval while an existing history checkpoint is active
 and recent. No per-account allowlist or environment activation is required. Provider admission, pacing, callbacks, child coverage, retries and lifecycle
 checks keep their existing semantics. The existing terminal history-write trigger can expedite pending derived work,

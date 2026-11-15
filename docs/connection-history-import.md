@@ -233,7 +233,17 @@ runbooks: the same committed child outcomes, retries, dispatch/worker failures a
 Existing Help describes manual date-range imports and remains accurate; no frontend, Rules, index, MCP/Assistant or
 Training contract change is required. Deploy `processConnectionHistoryTask` and `addWahooAPIHistoryToQueue` after
 separate approval to enable coordinator and legacy Wahoo restoration respectively; rollback restores those revisions.
-The import workers are unchanged. Any targeted recovery remains separately authorized.
+The Suunto/COROS/Wahoo import workers are unchanged. Any targeted recovery remains separately authorized.
+
+Garmin manual restoration uses its asynchronous callback path. Before requesting files, the existing lease write records
+a request/range permission bound to the current provider account, connection and OAuth-root generations. Matching callbacks
+can replace completed successes or verified copy skips once per request, preserving pending retry state and other protected
+outcomes. The canonical writer preserves retained IDs/edits and restores missing workouts. Coordinator callbacks carry the
+actual run ID on restored work; legacy requests use their lease as the queue revision. New recordings keep their existing
+notification/forwarding classification. This permission does not prove callback origin or
+whole-import completion. Existing notification exclusions, provider cooldowns and **History requested** remain unchanged.
+See [Garmin history](garmin-integration.md#availability-and-history) for transaction costs, lifecycle checks and the separately
+approved five-function release order. No bulk replay or frontend release is included.
 
 For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
 dispatch spread, tracks committed child outcomes and resumes with the same shared capacity, retry, deletion and

@@ -8,8 +8,10 @@ import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
+import { createGarminActivityHistoryRestoration } from './activity-history-restoration';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import type { ServiceConnectionMetaFields } from '../../../shared/service-connection';
 import {
   GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS,
   GARMIN_HISTORY_IMPORT_LIMIT_YEARS,
@@ -69,7 +71,7 @@ class GarminHistoryImportInProgressError extends Error {
   }
 }
 
-interface GarminHistoryServiceMeta extends UserServiceMetaInterface {
+interface GarminHistoryServiceMeta extends UserServiceMetaInterface, ServiceConnectionMetaFields {
   activitySyncCutoffMs?: number;
   activityNotificationHistoryEndMs?: number;
   historyImportLeaseOwner?: string;
@@ -239,7 +241,7 @@ async function assertGarminHistoryImportUserActive(userID: string): Promise<void
   }
 }
 
-async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string, endMs: number, execution?: HistoryExecution): Promise<void> {
+async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string, startMs: number, endMs: number, execution?: HistoryExecution): Promise<void> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
   const nowMs = Date.now();
@@ -272,6 +274,15 @@ async function acquireGarminHistoryImportLease(userID: string, leaseOwner: strin
     }
 
     const previousCutoffMs = meta?.activitySyncCutoffMs;
+    // Persist before the provider call: callbacks can arrive before it returns.
+    // Automatic connection history never grants restoration permission.
+    const restoreCompleted = !execution || execution.reimportCompletedActivities === true;
+    const root = restoreCompleted && meta?.connectionState === 'connected'
+      ? await transaction.get(db.collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(userID)) : undefined;
+    const restoration = restoreCompleted ? createGarminActivityHistoryRestoration(
+      meta ?? undefined, root?.data(), execution?.runId ?? leaseOwner,
+      startMs, endMs, execution?.runId,
+    ) : undefined;
     transaction.set(metaRef, {
       historyImportLeaseOwner: leaseOwner,
       historyImportLeaseExpiresAt: nowMs + HISTORY_IMPORT_LEASE_MS,
@@ -283,6 +294,7 @@ async function acquireGarminHistoryImportLease(userID: string, leaseOwner: strin
       // Persist before requesting files: asynchronous history callbacks share the live endpoint.
       // Keep the bound even on partial provider failure and include future end-of-day ranges.
       activityNotificationHistoryEndMs: Math.max(meta?.activityNotificationHistoryEndMs ?? 0, endMs),
+      ...(restoration ? { activityHistoryRestoration: restoration } : {}),
     }, { merge: true });
   });
 }
@@ -429,7 +441,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date, execution?: HistoryExecution) {
   const leaseOwner = crypto.randomUUID();
-  await acquireGarminHistoryImportLease(userID, leaseOwner, endDate.getTime(), execution);
+  await acquireGarminHistoryImportLease(userID, leaseOwner, startDate.getTime(), endDate.getTime(), execution);
   let leaseCompleted = false;
   try {
     const coverage = await requestGarminBackfill(userID, startDate, endDate, execution);

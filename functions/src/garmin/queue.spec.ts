@@ -383,6 +383,21 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(mockGetServiceConnectionMeta).toHaveBeenCalledExactlyOnceWith('firebase-user-id', ServiceNames.GarminAPI);
         });
 
+        it.each([999, 1000, 1001])('uses server-owned manual restoration permission only within its dates (%s)', async startTimeInSeconds => {
+            const permission = { id: '00000000-0000-4000-8000-000000000001', startMs: 1000000, endMs: 1000000,
+                providerUserId: 'garmin-user-id', connectionGeneration: 'connection', credentialGeneration: 'credential' };
+            mockGetServiceConnectionMeta.mockResolvedValue({ providerUserId: 'garmin-user-id', connectionState: 'connected',
+                connectionStateGeneration: 'connection', activityHistoryRestoration: permission });
+            req.body.activityFiles[0].startTimeInSeconds = startTimeInSeconds;
+            req.body.activityFiles[0].historyRestoration = permission; // A provider payload cannot grant this permission.
+            await insertGarminAPIActivityFileToQueue(req, res);
+            const queued = vi.mocked(addToQueueForGarmin).mock.calls[0][0];
+            if (startTimeInSeconds === 1000) expect(queued.historyRestoration).toEqual(permission);
+            else expect(queued).not.toHaveProperty('historyRestoration');
+            expect(mockGetServiceConnectionMeta).toHaveBeenCalledOnce();
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
         it('keeps a cutoff lookup failure retryable instead of accepting an unclassified callback', async () => {
             mockGetServiceConnectionMeta.mockRejectedValueOnce(new Error('Firestore unavailable'));
             await insertGarminAPIActivityFileToQueue(req, res);

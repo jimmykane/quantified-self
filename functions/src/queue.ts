@@ -13,6 +13,7 @@ import * as crypto from 'crypto';
 
 import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
+import { restoreCompletedGarminActivity, type GarminActivityHistoryRestoration } from './garmin/activity-history-restoration';
 import {
   QueueItemInterface,
   COROSAPIWorkoutQueueItemInterface,
@@ -188,6 +189,7 @@ type WorkoutQueueInsertIntent = 'provider_webhook' | 'manual_or_history_reproces
 type WorkoutQueueDispatchMode = 'immediate' | 'deferred';
 
 interface WorkoutQueueInsertOptions {
+  garminHistoryRestoration?: GarminActivityHistoryRestoration;
   intent: WorkoutQueueInsertIntent;
   dispatchMode: WorkoutQueueDispatchMode;
   activityNotificationOrigin?: 'live';
@@ -548,7 +550,7 @@ export async function addToQueueForSuunto(queueItem: {
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string, suppressAutomaticActivitySync?: boolean }): Promise<admin.firestore.DocumentReference> {
+export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string, suppressAutomaticActivitySync?: boolean, historyRestoration?: GarminActivityHistoryRestoration }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
@@ -566,11 +568,13 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     userAccessToken: queueItem.userAccessToken,
     callbackURL: queueItem.callbackURL,
     ...(queueItem.suppressAutomaticActivitySync === true ? { suppressAutomaticActivitySync: true } : {}),
+    ...(queueItem.historyRestoration ? { queueRevision: queueItem.historyRestoration.id } : {}),
     dispatchedToCloudTask: null,
   }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, {
     intent: 'provider_webhook',
     dispatchMode: queueItem.manual ? 'deferred' : 'immediate',
     activityNotificationOrigin: 'live',
+    garminHistoryRestoration: queueItem.historyRestoration,
   });
 }
 
@@ -1735,10 +1739,10 @@ async function advanceWorkoutQueueDispatchRecoveryGeneration(
       }
 
       const currentQueueItem = queueItemSnapshot.data() as Partial<QueueItemInterface>;
-      // Suunto history also has explicit revisions; a reserved old task name
-      // cannot authorize advancing or dispatching its replacement.
+      // A reserved old task name cannot authorize a replacement. Garmin's
+      // legacy callbacks can now be replaced by explicit manual restoration.
       if ((currentQueueItem as { processed?: unknown }).processed === true
-        || ((serviceName === ServiceNames.COROSAPI || normalizeQueueRevision(queueItem.queueRevision) !== null)
+        || ((serviceName === ServiceNames.COROSAPI || serviceName === ServiceNames.GarminAPI || normalizeQueueRevision(queueItem.queueRevision) !== null)
           && !workoutQueueGenerationMatches(queueItem, currentQueueItem as Record<string, unknown>))
         || currentQueueItem.dispatchedToCloudTask !== null && currentQueueItem.dispatchedToCloudTask !== undefined) {
         return { status: 'not_current' as const };
@@ -1871,7 +1875,7 @@ function createWorkoutQueueDispatchCurrentGuard(
     return createWahooQueueRevisionCurrentGuard(queueItem);
   }
   const hasQueueRevision = normalizeQueueRevision(queueItem.queueRevision) !== null;
-  if (!hasQueueRevision && serviceName !== ServiceNames.COROSAPI) {
+  if (!hasQueueRevision && serviceName !== ServiceNames.COROSAPI && serviceName !== ServiceNames.GarminAPI) {
     return undefined;
   }
   return currentQueueItem => currentQueueItem.processed !== true
@@ -2059,7 +2063,7 @@ async function updateDuplicateProviderWebhookPayloadIfNeeded(
       updateData,
       logPrefix: 'WorkoutQueue',
       actionDescription: 'duplicate provider payload refresh',
-      isCurrent: expectedQueueItem && serviceName === ServiceNames.COROSAPI
+      isCurrent: expectedQueueItem && (serviceName === ServiceNames.COROSAPI || serviceName === ServiceNames.GarminAPI)
         ? currentQueueItem => currentQueueItem.processed !== true
           && workoutQueueGenerationMatches(expectedQueueItem, currentQueueItem)
         : undefined,
@@ -2250,9 +2254,15 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
       await queueItemDocument.create(queuePayload);
     } catch (error) {
       if (isFirestoreAlreadyExistsError(error)) {
-        return handleDuplicateProviderWebhookQueueItem(queueItemDocument, queuePayload, serviceName, options.dispatchMode);
+        const restored = serviceName === ServiceNames.GarminAPI && options.garminHistoryRestoration
+          && await restoreCompletedGarminActivity(queueItemDocument, {
+            ...queuePayload as GarminAPIActivityQueueItemInterface, fromHistory: true, suppressAutomaticActivitySync: true,
+            ...(options.garminHistoryRestoration.runId ? { connectionHistoryRunId: options.garminHistoryRestoration.runId } : {}),
+          }, options.garminHistoryRestoration);
+        if (!restored) return handleDuplicateProviderWebhookQueueItem(queueItemDocument, queuePayload, serviceName, options.dispatchMode);
+      } else {
+        throw error;
       }
-      throw error;
     }
   } else {
     await queueItemDocument.set(queuePayload);

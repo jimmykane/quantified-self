@@ -87,7 +87,7 @@ export const processWorkoutTask = onTaskDispatched({
             queueItem?.dispatchRecoveryGeneration,
         ) ?? 0;
         const shouldCheckQueueRevision = expectedQueueRevision !== null
-            || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
+            || ((serviceName === ServiceNames.COROSAPI || serviceName === ServiceNames.GarminAPI) && currentQueueRevision !== null)
             || Number.isFinite(expectedQueueDateCreated);
         if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
             currentQueueItem: queueItem || {},

@@ -543,7 +543,9 @@ describe('shared import preservation', () => {
     expect(state.get).not.toHaveBeenCalled();
   });
 
-  it('reuploads through the real writer twice without adding duplicates and preserves live user edits', async () => {
+  it.each([undefined, { serviceName: ServiceNames.GarminAPI, serviceUserID: 'garmin-account', serviceActivityFileID: 'file', serviceActivityFileType: 'FIT' }])(
+    'reuploads through the real writer twice without adding duplicates and preserves live user edits (%j)', async provider => {
+    if (provider) state.garminProvider = provider;
     store('source-based-id', activity(), { sourceActivityKey: 'saved-source-key', creator: { name: 'Custom watch' } });
     const savedEvent = { name: 'Custom title', description: 'Custom description', tags: ['My tag'],
       notes: 'Private notes', privacy: 'private', rpe: 7, feeling: 3 };
@@ -554,7 +556,7 @@ describe('shared import preservation', () => {
     });
     const adapter: FirestoreAdapter = { setDoc, generateID: () => 'unexpected-new-id', createBlob: data => data,
       prepareTrainingLoad: async parsed => {
-        await prepareImportedEventWrite('owner', parsed, authorize);
+        await prepareImportedEventWrite('owner', parsed, authorize, provider);
         // An edit after the identity read must win over the parsed payload too.
         state.activities.get('source-based-id')!.creator = { name: 'Latest custom watch' };
         return async () => undefined;

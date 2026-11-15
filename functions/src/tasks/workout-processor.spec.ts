@@ -201,7 +201,7 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
-    it('skips a stale COROS task whose payload revision no longer matches the queue document', async () => {
+    it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])('skips a stale %s task whose payload revision no longer matches the queue document', async serviceName => {
         mockGet.mockResolvedValue({
             exists: true,
             data: () => ({ processed: false, queueRevision: 'revision-2' }),
@@ -210,7 +210,7 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)({
             data: {
                 queueItemId: 'stable-coros-id',
-                serviceName: ServiceNames.COROSAPI,
+                serviceName,
                 queueRevision: 'revision-1',
             },
         })).resolves.toBeUndefined();
@@ -218,7 +218,7 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
-    it('skips a legacy COROS task when the queue document has moved to revisioned processing', async () => {
+    it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])('skips a legacy %s task when the queue document has moved to revisioned processing', async serviceName => {
         mockGet.mockResolvedValue({
             exists: true,
             data: () => ({ processed: false, queueRevision: 'revision-2' }),
@@ -227,7 +227,7 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)({
             data: {
                 queueItemId: 'stable-coros-id',
-                serviceName: ServiceNames.COROSAPI,
+                serviceName,
             },
         })).resolves.toBeUndefined();
 
@@ -278,7 +278,7 @@ describe('processWorkoutTask', () => {
         );
     });
 
-    it('processes the matching COROS queue revision normally', async () => {
+    it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])('processes the matching %s queue revision normally', async serviceName => {
         mockGet.mockResolvedValue({
             exists: true,
             data: () => ({ processed: false, queueRevision: 'revision-2' }),
@@ -288,13 +288,13 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)({
             data: {
                 queueItemId: 'stable-coros-id',
-                serviceName: ServiceNames.COROSAPI,
+                serviceName,
                 queueRevision: 'revision-2',
             },
         })).resolves.toBeUndefined();
 
         expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(
-            ServiceNames.COROSAPI,
+            serviceName,
             expect.objectContaining({
                 id: 'stable-coros-id',
                 queueRevision: 'revision-2',
