@@ -36,6 +36,12 @@ export interface DayWorkoutContextOptions {
 export class DayWorkoutTrainingNotReadyError extends Error {
   constructor() { super('Selected Training metrics are not ready.'); }
 }
+export function dayWorkoutTrainingMetricKinds(controls: DayWorkoutControls) {
+  return [
+    ...(controls.freshnessContext !== false ? [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate] : []),
+    ...(controls.activityContext !== false ? [DERIVED_METRIC_KINDS.TrainingSummary] : []),
+  ];
+}
 export interface DayWorkoutContext {
   /** Private admission evidence; an empty ready snapshot is still ready. */
   trainingMetricsReady?: boolean;
@@ -217,10 +223,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     // The generator's sport-specific routine replaces the old all-sport recording-day buckets.
     if (name === 'query_metric' || name === 'query_activities' && controls.activityContext === false) return {};
     if (name === 'prepare_training_metrics') {
-      const metricKinds = [
-        ...(controls.freshnessContext !== false ? [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate] : []),
-        ...(controls.activityContext !== false ? [DERIVED_METRIC_KINDS.TrainingSummary] : []),
-      ];
+      const metricKinds = dayWorkoutTrainingMetricKinds(controls);
       if (!metricKinds.length) return { status: 'disabled', readyMetricKinds: [] };
       input = { ...input, metricKinds };
     }

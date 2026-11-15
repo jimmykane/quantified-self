@@ -6503,10 +6503,13 @@ failed or unavailable preparation/read becomes private `waiting-training` with `
 no history are allowed. Explicit **Use available data** can proceed from this deferred state with uncertainty stated
 in Context. Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction
 admit only one resumed generation; completed or failed charged receipts are never reset by Training updates.
-Automatic context collection stops immediately when preparation or a selected snapshot read cannot establish readiness,
-before reading the daily report, Timeline, nearby plans/goals, feedback and detailed duration routine. The already
-bounded weekday sport selection and day-coverage check still run; this is not a zero-read availability probe. Manual
-generation and explicit **Use available data** retain their best-effort context behavior.
+Automatic preparation checks the selected, sport-independent Training kinds before weekday sport selection. A pending
+or failed check stops before the bounded weekday-history scan (up to two 100-item pages) and before reading the daily
+report, Timeline, nearby plans/goals, feedback and detailed duration routine. Ready-day collection reuses the preparation
+inside the same MCP session, preserving its ready-kind guard without a second preparation call. A subsequent selected
+snapshot read failure still defers immediately. Day coverage, account/import checks and Training preparation still read
+data; this is not a zero-read availability probe. Manual generation and explicit **Use available data** retain their
+best-effort context behavior. This private ordering change needs no user-facing Help or MCP contract update.
 
 The existing dashboard derived-metric subscription includes the daily suggestion's selected core kinds only for
 opted-in Pro owners viewing Today. Daily-only kinds are read-only subscriptions: the dashboard's ensure call still
@@ -6532,8 +6535,9 @@ Cost model for this readiness change (USD list rates checked 2026-11-15; estimat
 - Illustration: 1,000 opted-in daily active users, 30 days, 10% of days needing one deferred check = 3,000 extra checks.
   Assuming 5–15 billed seconds, 100–400 document reads and two receipt writes per check gives $0.73–$2.30/month in
   request/compute/document operations, before free tiers, discounts and shared concurrency. These durations, read counts
-  and the 10% incidence are scenario assumptions, not measurements or guaranteed bounds; the existing bounded sport
-  scan can read up to 200 activity summaries. One additional snapshot read per user/day costs $0.0117/month here;
+  and the 10% incidence are scenario assumptions, not measurements or guaranteed bounds. Early Training deferral now
+  avoids the weekday sport scan; the illustrative read counts above predate that ordering optimization and must not
+  be treated as a measured post-change cost. One additional snapshot read per user/day costs $0.0117/month here;
   document updates and reconnects add reads.
 - [Gemini 3.1 Flash-Lite pricing](https://ai.google.dev/gemini-api/docs/pricing?hl=en) is $0.25/million text input tokens
   and $1.50/million output/thinking tokens. If each of those 3,000 recovered generations gains 1,000–10,000 input

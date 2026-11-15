@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { DailyWorkoutFailureReason, DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
+import { type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
@@ -14,7 +14,7 @@ import { DayWorkoutModelError } from './day-workout-diagnostics';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
-import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
+import { collectDailyWorkoutSuggestionContext } from './daily-workout-suggestion-context';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 import { readDailyWorkoutPlanContext } from './daily-workout-context';
 import { ASSISTANT_MODEL_NAME } from './model';
@@ -77,7 +77,7 @@ export interface DailyWorkoutSuggestionDependencies {
   now(): Date;
   legal: typeof assertAssistantLegalAccess;
   pro(uid: string): Promise<boolean>;
-  selectSport(uid: string, preferences: DailyWorkoutSuggestionPreferences, now: Date): Promise<DailyWorkoutSuggestionPreferences['controls']>;
+  prepareContext: typeof collectDailyWorkoutSuggestionContext;
   context: typeof dayWorkoutDependencies.context;
   coverage(uid: string, controls: DayWorkoutControls): Promise<DayCoverage>;
   importActive(uid: string): Promise<boolean>;
@@ -88,7 +88,7 @@ export interface DailyWorkoutSuggestionDependencies {
 const defaults: DailyWorkoutSuggestionDependencies = {
   store: createDailyWorkoutSuggestionStore(), regenerate: runGenerateDayWorkout, now: () => new Date(), legal: assertAssistantLegalAccess,
   pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
-  importActive: readDailyWorkoutHistoryImportActive, selectSport: selectDailyWorkoutSuggestionSport, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
+  importActive: readDailyWorkoutHistoryImportActive, prepareContext: collectDailyWorkoutSuggestionContext, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
 };
 const coveredStates = ['planned', 'completed', 'rest-day'];
@@ -191,9 +191,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       await dependencies.store.finish(uid, date, token, outcome);
       return { localDate: date, state: outcome };
     }
-    const controls = await dependencies.selectSport(uid, preferences, now);
+    const { controls, evidence } = await dependencies.prepareContext(uid, preferences, now, useAvailable);
     const request: GenerateDayWorkoutRequest = { requestId: `daily-suggestion:${date}`, controls };
-    const evidence = await dependencies.context(uid, request, now, { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable });
     const observedAt = dependencies.now();
     await assertActive();
     const skip = dailyWorkoutSuggestionSkip(evidence);

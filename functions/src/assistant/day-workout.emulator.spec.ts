@@ -33,7 +33,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const started = new Promise<void>(resolve => { entered = resolve; }), blocked = new Promise<void>(resolve => { release = resolve; });
     const generate = vi.fn(async () => { entered(); await blocked; return { kind: 'rest', rationale: 'Keep it easy.' }; });
     const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
-      selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
+      prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
+        evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
+          { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null, importActive: async () => false, generate,
       regenerate: vi.fn(), log: vi.fn(), context: async () => {
         if (early && !ready) throw new DayWorkoutTrainingNotReadyError();
         return { trainingMetricsReady: ready, evidence: { daily: {
@@ -107,7 +109,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       return { kind: 'rest', rationale: 'Keep it easy.' };
     });
     const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
-      selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
+      prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
+        evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
+          { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null, importActive: async () => false, generate,
       regenerate: vi.fn(), log: vi.fn(), context: async () => ({ evidence: { daily: {
         dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } },
         activitiesToday: { scanComplete: true, activities: [] },
@@ -189,7 +193,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       await store.charge(uid, controls.localDate, token!); await store.finish(uid, controls.localDate, token!, 'ready', controls, original);
       const finalize = vi.fn(), generate = vi.fn(async () => ({ kind: 'rest', rationale: 'Recovery remains appropriate.' }));
       const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
-        coverage: async () => null, importActive: async () => false, selectSport: async () => controls, context: vi.fn(), generate: vi.fn(), log: vi.fn(),
+        coverage: async () => null, importActive: async () => false, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls,
+        evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
+          { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), context: vi.fn(), generate: vi.fn(), log: vi.fn(),
         regenerate: (request, identity, defaults) => runGenerateDayWorkout(request, identity, { ...defaults!, now: () => now,
           store: createDayWorkoutStore(() => db, () => now.getTime()), legal: vi.fn(), reserve: vi.fn(async () => ({ reservationID: 'test' } as never)),
           finalize, release: vi.fn(), context: async () => ({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], references: [] }), generate }) };
@@ -276,7 +282,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       ? { scanComplete: true, activities: [] } : await read(name as TrainingReadTool, args) });
     const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'A recovery day.' }));
     const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
-      importActive: id => readDailyWorkoutHistoryImportActive(id, db), legal: async () => undefined, pro: async () => true, selectSport: async () => selected,
+      importActive: id => readDailyWorkoutHistoryImportActive(id, db), legal: async () => undefined, pro: async () => true, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls: selected,
+        evidence: await deps.context(uid, { requestId: `daily-suggestion:${selected.localDate}`, controls: selected }, now,
+          { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }),
       coverage: async () => collectDailyWorkoutSuggestionCoverage(selected, { callTool }),
       context: async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
         plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
@@ -468,7 +476,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
       usedContext: [], missingContext: [], previousStrength: [], references: [] }));
     const deps: DailyWorkoutSuggestionDependencies = { regenerate: vi.fn(), store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
-      legal: async () => undefined, pro: async () => true, selectSport: async () => selected, coverage: async () => null,
+      legal: async () => undefined, pro: async () => true, prepareContext: async (uid, _preferences, now, useAvailable) => ({ controls: selected,
+        evidence: await deps.context(uid, { requestId: `daily-suggestion:${selected.localDate}`, controls: selected }, now,
+          { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) }), coverage: async () => null,
       importActive: id => readDailyWorkoutHistoryImportActive(id, db), context, generate, log: () => undefined };
     const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
     try {
