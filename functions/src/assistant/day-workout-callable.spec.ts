@@ -180,6 +180,9 @@ describe('generateDayWorkout callable', () => {
     expect(Object.keys(alternatives[1].properties)).toEqual(sport === ActivityTypes.Running
       ? ['kind', 'title', 'rationale', 'structure'] : ['kind', 'title', 'rationale', 'strength', 'estimatedMinutes']);
     expect(alternatives.every(value => value.additionalProperties === false)).toBe(true);
+    expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"const":');
+    expect(JSON.stringify(input.output.jsonSchema)).toContain('"enum":["workout"]');
+    expect(JSON.stringify(input.output.jsonSchema)).toContain('"enum":[1]');
     expect(JSON.stringify(input.output.jsonSchema)).not.toMatch(/"maxItems":[1-9]/);
     expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"pattern":');
     if (sport === ActivityTypes.Running) {
@@ -272,13 +275,14 @@ describe('generateDayWorkout callable', () => {
       await expect(generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target } }, evidence))
         .resolves.toEqual(reply);
       const schema = JSON.stringify((generate.mock.calls[0][0] as { output: { jsonSchema: object } }).output.jsonSchema);
+      expect(schema).not.toContain('"const":');
       expect(schema).not.toContain('"absolute"');
       if (target === 'none') expect(schema).toContain('"maxItems":0');
       else {
-        expect(schema.includes('"const":180')).toBe(target === 'auto' || target === 'heart-rate');
-        expect(schema.includes('"const":250')).toBe(target === 'auto' || target === 'power');
-        expect(schema.includes('"const":3.5')).toBe(target === 'auto' || target === 'speed');
-        expect(schema.includes('"const":90')).toBe(target === 'auto');
+        expect(schema.includes('"enum":[180]')).toBe(target === 'auto' || target === 'heart-rate');
+        expect(schema.includes('"enum":[250]')).toBe(target === 'auto' || target === 'power');
+        expect(schema.includes('"enum":[3.5]')).toBe(target === 'auto' || target === 'speed');
+        expect(schema.includes('"enum":[90]')).toBe(target === 'auto');
       }
     } finally { generate.mockReset(); }
   });
@@ -354,6 +358,7 @@ describe('generateDayWorkout callable', () => {
       await generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target } }, evidence);
       const options = vi.mocked(assistantGenkit.generate).mock.calls.at(-1)![0] as { output: { jsonSchema: object } };
       const schema = JSON.stringify(options.output.jsonSchema);
+      expect(schema).not.toContain('"const":');
       if (target === 'garmin-power-zone') {
         expect(schema).toContain('garmin-zone');
         for (const forbidden of ['minimumWatts', 'minimumPercent', 'reference', 'allowEarlyLap', 'kilojoules', 'repetitions', 'poolLength']) {

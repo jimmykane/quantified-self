@@ -823,6 +823,8 @@ target and the exact athlete-reference snapshots already in context are offered,
 Auto may use the available reference kinds; effort-only or missing references require `targets: []`. The decoder
 retains only that zero-length array bound (`maxItems: 0`); other size/value bounds remain enforced after generation.
 The shared MCP editing schema still supports its existing absolute targets and is not narrowed by this private path.
+Fixed scalar choices and athlete-reference values use single-value `enum` constraints in the model schema;
+Gemini's documented `responseJsonSchema` subset does not include Zod's emitted `const` keyword.
 MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
 unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the

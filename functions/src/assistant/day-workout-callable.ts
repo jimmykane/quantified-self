@@ -133,6 +133,12 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
       prompt: JSON.stringify({ controls: promptControls, evidence: context.evidence, missingContext: context.missingContext,
         ...(correction ? { correction } : {}) }),
       output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
+        // Gemini's responseJsonSchema supports single-value enums, not const.
+        // Preserve fixed sport/format choices and exact numeric athlete references.
+        if (typeof jsonSchema.const === 'string' || typeof jsonSchema.const === 'number') {
+          jsonSchema.enum = [jsonSchema.const];
+          delete jsonSchema.const;
+        }
         // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
         // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
         for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
