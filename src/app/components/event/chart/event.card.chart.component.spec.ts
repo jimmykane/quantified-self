@@ -1539,7 +1539,7 @@ describe('EventCardChartComponent', () => {
     ]);
   });
 
-  it('orders a first-view Running stack by sport and caps it at three eligible charts', async () => {
+  it('shows running altitude alongside heart rate, pace and power on first view', async () => {
     chartSettingsSignal.set({...chartSettingsSignal(), showAllData: true});
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([
       DataHeartRate.type,
@@ -1570,6 +1570,7 @@ describe('EventCardChartComponent', () => {
       DataHeartRate.type,
       DataPace.type,
       DataPower.type,
+      DataAltitude.type,
     ]);
     expect(component.recommendedDataTypeLegendItems.map((item) => item.dataType)).toEqual([
       DataHeartRate.type,

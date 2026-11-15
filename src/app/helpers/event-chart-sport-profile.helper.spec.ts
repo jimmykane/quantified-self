@@ -288,7 +288,44 @@ describe('event chart sport profiles', () => {
     ]);
   });
 
-  it('selects up to three available and globally allowed families without padding', () => {
+  it.each([ActivityTypes.Running, 'Road Running'])('includes altitude alongside heart rate, pace and power for %s', activityType => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type, DataCadence.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).toEqual([
+      DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type,
+    ]);
+  });
+
+  it('includes running altitude with a non-default pace unit and a shared running profile', () => {
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.Running, 'Road Running']),
+      panels: [DataHeartRate.type, DataPaceMinutesPerMile.type, DataPower.type, DataAltitude.type].map(panel),
+      globallyAllowedDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type],
+    });
+
+    expect(result.automaticDataTypes).toEqual([
+      DataHeartRate.type, DataPaceMinutesPerMile.type, DataPower.type, DataAltitude.type,
+    ]);
+  });
+
+  it.each(['missing', 'globally disabled', 'excluded'])('preserves three running defaults when altitude is %s', availability => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type, DataCadence.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.Running]),
+      panels: dataTypes.filter(type => availability !== 'missing' || type !== DataAltitude.type).map(panel),
+      globallyAllowedDataTypes: dataTypes.filter(type => availability !== 'globally disabled' || type !== DataAltitude.type),
+      automaticExcludedDataTypes: availability === 'excluded' ? [DataAltitude.type] : [],
+    });
+
+    expect(result.automaticDataTypes).toEqual([DataHeartRate.type, DataPace.type, DataPower.type]);
+  });
+
+  it('selects available and globally allowed families without padding', () => {
     const profile = resolveEventChartSportProfile([ActivityTypes.Running]);
     const result = resolveEventChartRecommendations({
       profile,

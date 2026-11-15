@@ -354,7 +354,10 @@ export function resolveEventChartRecommendations(input: {
       .sort((left, right) => compareFamilyPanels(family, left.dataType, right.dataType));
     familyPanels.forEach((panel) => appendUnique(recommendedDataTypes, panel.dataType));
 
-    if (automaticDataTypes.length >= EVENT_CHART_AUTOMATIC_PANEL_LIMIT || excludedFamilies.has(family)) {
+    // Running keeps Heart Rate, Pace and Power while also showing recorded terrain.
+    const includeRunningAltitude = input.profile.profileID === PROFILE_IDS.Running && family === 'altitude';
+    if ((automaticDataTypes.length >= EVENT_CHART_AUTOMATIC_PANEL_LIMIT && !includeRunningAltitude)
+      || excludedFamilies.has(family)) {
       return;
     }
 

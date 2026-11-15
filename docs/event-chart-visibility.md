@@ -17,8 +17,11 @@ The chart applies these constraints in order:
    discovery later makes it available. An explicitly empty v2 custom preference remains empty.
 4. Without a custom preference, `resolveEventChartRecommendations` intersects the profile with the user's Default
    chart metrics, finite available panels, unit-derived selection keys, and explicit specialized-surface exclusions.
-5. The first up to three eligible recommendations become visible. The resolver does not pad a sparse profile with
-   unrelated panels and does not persist this automatic result as a custom choice.
+5. The first up to three eligible recommendations become visible. Running and Road Running also include the eligible
+   Altitude family, so recorded altitude remains visible alongside Heart Rate, Pace, and Power. This exception still
+   respects Default chart metrics and specialized exclusions; missing, disabled, or excluded altitude does not open a
+   fourth slot for another metric. The resolver does not pad a sparse profile with unrelated panels and does not
+   persist this automatic result as a custom choice. Existing custom selections continue to win until reset.
 
 The profile resolver is a pure helper in
 `src/app/helpers/event-chart-sport-profile.helper.ts`. Its registry deliberately covers every canonical activity type

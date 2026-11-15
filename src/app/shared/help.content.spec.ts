@@ -2513,6 +2513,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
     expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
     expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
+    expect(gettingStartedSection?.content).toContain('**Running and Road Running also show Altitude**');
+    expect(gettingStartedSection?.content).toContain('Saved custom chart selections still take precedence');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
