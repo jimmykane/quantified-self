@@ -2513,7 +2513,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
     expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
     expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
-    expect(gettingStartedSection?.content).toContain('**Running and Road Running also show Altitude**');
+    expect(gettingStartedSection?.content).toContain('**Running, Walking, and Cycling also show Altitude**');
+    expect(gettingStartedSection?.content).toContain('a fourth chart alongside the existing primary charts');
+    expect(gettingStartedSection?.content).toContain('both individual activities and comparisons');
+    expect(gettingStartedSection?.content).toContain('Missing or disabled altitude does not add another chart instead');
     expect(gettingStartedSection?.content).toContain('Saved custom chart selections still take precedence');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');

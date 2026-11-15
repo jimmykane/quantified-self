@@ -17,11 +17,17 @@ The chart applies these constraints in order:
    discovery later makes it available. An explicitly empty v2 custom preference remains empty.
 4. Without a custom preference, `resolveEventChartRecommendations` intersects the profile with the user's Default
    chart metrics, finite available panels, unit-derived selection keys, and explicit specialized-surface exclusions.
-5. The first up to three eligible recommendations become visible. Running and Road Running also include the eligible
-   Altitude family, so recorded altitude remains visible alongside Heart Rate, Pace, and Power. This exception still
-   respects Default chart metrics and specialized exclusions; missing, disabled, or excluded altitude does not open a
-   fourth slot for another metric. The resolver does not pad a sparse profile with unrelated panels and does not
-   persist this automatic result as a custom choice. Existing custom selections continue to win until reset.
+5. The first up to three eligible recommendations become visible. Each registry profile can declare
+   `additionalAutomaticFamilies` that remain eligible beyond that limit. Running, Walking, and Cycling declare the
+   Altitude family, so recorded altitude remains visible alongside the existing primary charts, including in their
+   outdoor variants and benchmark comparisons. This policy still respects Default chart metrics and specialized
+   exclusions; missing, disabled, or excluded altitude does not open a fourth slot for another metric. The resolver
+   does not pad a sparse profile with unrelated panels and does not persist this automatic result as a custom choice.
+   Existing custom selections continue to win until reset.
+
+Trail Running, Hiking, Mountain Biking, and skiing retain their existing altitude priorities. Track and Field,
+skating, indoor, swimming, water, diving, fitness, and team-sport profiles keep their current defaults; any discovered
+altitude panel remains manually selectable in **Visible charts**.
 
 The profile resolver is a pure helper in
 `src/app/helpers/event-chart-sport-profile.helper.ts`. Its registry deliberately covers every canonical activity type
