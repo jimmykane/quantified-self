@@ -50,6 +50,9 @@ describe('generateDayWorkout callable', () => {
       expect((await runGenerateDayWorkout(request, auth, deps)).kind).toBe('rest');
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.reserve).toHaveBeenCalledOnce(); expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(logger.info).toHaveBeenCalledWith('[DayWorkout] Generation completed.', {
+        outcome: 'completed', attempts: 2, durationMs: expect.any(Number),
+      });
     } finally { generate.mockReset(); }
   });
   it.each(['transport-first', 'schema-first', 'two-outages'])('never exceeds two total attempts with %s', async order => {
@@ -177,7 +180,7 @@ describe('generateDayWorkout callable', () => {
     expect(Object.keys(alternatives[1].properties)).toEqual(sport === ActivityTypes.Running
       ? ['kind', 'title', 'rationale', 'structure'] : ['kind', 'title', 'rationale', 'strength', 'estimatedMinutes']);
     expect(alternatives.every(value => value.additionalProperties === false)).toBe(true);
-    expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"maxItems":');
+    expect(JSON.stringify(input.output.jsonSchema)).not.toMatch(/"maxItems":[1-9]/);
     expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"pattern":');
     if (sport === ActivityTypes.Running) {
       expect(JSON.stringify(input.output.jsonSchema)).not.toContain('"repetitions"');
@@ -221,6 +224,8 @@ describe('generateDayWorkout callable', () => {
     } finally { generate.mockReset(); }
   });
   it('corrects an endurance ending rejected by the decoder without a second quota charge', async () => {
+    vi.mocked(logger.info).mockClear();
+    vi.mocked(logger.warn).mockClear();
     const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: { version: 1,
       sport: request.controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } };
     const invalid = structuredClone(reply);
@@ -237,7 +242,99 @@ describe('generateDayWorkout callable', () => {
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.reserve).toHaveBeenCalledOnce();
       expect(deps.finalize).toHaveBeenCalledOnce();
+      expect(logger.warn).toHaveBeenCalledWith('[DayWorkout] Invalid model prescription.', expect.objectContaining({
+        issueCodes: expect.arrayContaining(['unknown_field']),
+      }));
+      expect(logger.info).toHaveBeenCalledWith('[DayWorkout] Generation completed.', {
+        outcome: 'completed_after_correction', attempts: 2, durationMs: expect.any(Number),
+      });
     } finally { generate.mockReset(); }
+  });
+
+  it.each(['auto', 'heart-rate', 'power', 'speed', 'none'] as const)('constrains target formats, exact references and repeated steps for %s', async target => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    const heartRate = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'max-heart-rate', bpm: 180 } } as const;
+    const power = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'functional-threshold-power', watts: 250 } } as const;
+    const speed = { kind: 'speed', mode: 'relative', presentation: 'pace', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'threshold-speed', metersPerSecond: 3.5 } } as const;
+    const cadence = { kind: 'cadence', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'preferred-cadence', rpm: 90 } } as const;
+    evidence.references = [heartRate, power, speed, cadence];
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 },
+      targets: target === 'none' ? [] : target === 'power' ? [power] : target === 'speed' ? [speed]
+        : target === 'auto' ? [heartRate, cadence] : [heartRate] };
+    const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: { version: 1,
+      sport: request.controls.sport, nodes: [step, { kind: 'repeat', id: 'repeat', count: 2, steps: [{ ...step, id: 'repeated' }] }] } };
+    const { generate } = mockSdkOutputs(JSON.stringify(reply));
+    try {
+      await expect(generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target } }, evidence))
+        .resolves.toEqual(reply);
+      const schema = JSON.stringify((generate.mock.calls[0][0] as { output: { jsonSchema: object } }).output.jsonSchema);
+      expect(schema).not.toContain('"absolute"');
+      if (target === 'none') expect(schema).toContain('"maxItems":0');
+      else {
+        expect(schema.includes('"const":180')).toBe(target === 'auto' || target === 'heart-rate');
+        expect(schema.includes('"const":250')).toBe(target === 'auto' || target === 'power');
+        expect(schema.includes('"const":3.5')).toBe(target === 'auto' || target === 'speed');
+        expect(schema.includes('"const":90')).toBe(target === 'auto');
+      }
+    } finally { generate.mockReset(); }
+  });
+
+  it.each(['unavailable', 'disabled', 'absolute', 'changed-reference', 'wrong-kind'] as const)('rejects %s targets in the real decoder for standalone and repeated steps', async scenario => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    const reference = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'max-heart-rate', bpm: 180 } } as const;
+    const power = { kind: 'power', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'functional-threshold-power', watts: 250 } } as const;
+    evidence.references = scenario === 'unavailable' ? [] : [reference, power];
+    const target = scenario === 'absolute' ? { kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 120 }
+      : scenario === 'changed-reference' ? { ...reference, reference: { kind: 'max-heart-rate', bpm: 190 } }
+        : scenario === 'wrong-kind' ? power : reference;
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [target] };
+    for (const node of [step, { kind: 'repeat', id: 'repeat', count: 2, steps: [step] }]) {
+      const reply = { kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: {
+        version: 1, sport: request.controls.sport, nodes: [node] } };
+      const { generate } = mockSdkOutputs(JSON.stringify(reply));
+      try {
+        await expect(generateDayWorkoutSuggestion({ ...request, controls: { ...request.controls, target: scenario === 'disabled' ? 'none' : 'heart-rate' } }, evidence))
+          .rejects.toBeInstanceOf(DayWorkoutSuggestionValidationError);
+      } finally { generate.mockReset(); }
+    }
+  });
+
+  it('logs completed generation only after persistence and without private data', async () => {
+    const deps = dependencies();
+    const info = vi.mocked(logger.info); info.mockClear();
+    vi.mocked(deps.generate).mockResolvedValue({ kind: 'rest', rationale: 'PRIVATE_RATIONALE' });
+    vi.mocked(deps.store.finish).mockImplementation(async () => {
+      expect(info).not.toHaveBeenCalledWith('[DayWorkout] Generation completed.', expect.anything());
+    });
+    await runGenerateDayWorkout(request, auth, deps);
+    expect(info).toHaveBeenCalledWith('[DayWorkout] Generation completed.', {
+      outcome: 'completed', attempts: 1, durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain('PRIVATE_RATIONALE');
+    expect(JSON.stringify(info.mock.calls)).not.toContain(request.requestId);
+  });
+
+  it('does not log success when saving the result fails', async () => {
+    const deps = dependencies(); vi.mocked(logger.info).mockClear();
+    vi.mocked(deps.store.finish).mockRejectedValue(new Error('Save failed'));
+    await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+    expect(logger.info).not.toHaveBeenCalledWith('[DayWorkout] Generation completed.', expect.anything());
+  });
+
+  it('keeps a saved generation successful if completion logging fails', async () => {
+    const deps = dependencies();
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => { throw new Error('Telemetry failed'); });
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).resolves.toMatchObject({ kind: 'rest' });
+      expect(deps.store.finish).toHaveBeenCalledOnce();
+      expect(deps.generate).toHaveBeenCalledOnce();
+    } finally { info.mockRestore(); }
   });
   it('instructs generation to use automatic recovery evidence without treating missing or future signals as known', () => {
     for (const signal of ['freshness (Form)', 'ramp rate', 'sleep duration/quality', 'HRV personalRange',

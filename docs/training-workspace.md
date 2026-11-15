@@ -818,6 +818,11 @@ The first-party endurance decoder narrows standalone and repeated step endings t
 matching the generation validator. It must not advertise the full MCP editing union's `repetitions` or `kilojoules`:
 those can exhaust the one bounded correction and leave an included daily suggestion failed. Strength retains its
 separate repetitions/time schema. Pool length and the explicit Garmin-zone target choice are preserved.
+Ordinary endurance target choices are also narrowed before decoding: only relative formats matching the selected
+target and the exact athlete-reference snapshots already in context are offered, for standalone and repeated steps.
+Auto may use the available reference kinds; effort-only or missing references require `targets: []`. The decoder
+retains only that zero-length array bound (`maxItems: 0`); other size/value bounds remain enforced after generation.
+The shared MCP editing schema still supports its existing absolute targets and is not narrowed by this private path.
 MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
 unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
@@ -837,6 +842,10 @@ remaining second attempt after 500 ms and active-request checks before and after
 schema correction and provider-format improvement share that two-attempt ceiling, including mixed failures. Event-day
 guidance also permits one transport retry. Authorization, context, receipt and unknown errors are not model retries.
 This changes neither quota reservations nor daily admission; an unmetered response stays explicitly unknown in usage logs.
+Manual generation logs a fixed `completed` or `completed_after_correction` outcome, total model attempts and elapsed
+milliseconds only after saving the result. Telemetry failure cannot fail the saved request. Daily generation retains
+its existing final outcome/attempt/usage log. Validation issue codes are derived from the same bounded, sanitized
+diagnostics for canonical and Genkit failures, so schema corrections no longer have an empty code list when details exist.
 MCP impact review: no wire or consent impact; the diagnostics and correction prompt are private to first-party generation.
 Help explains bounded recovery and the manual-generation allowance after a confirmed daily failure.
 
