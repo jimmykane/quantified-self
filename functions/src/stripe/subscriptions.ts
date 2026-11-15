@@ -196,7 +196,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
     // Check if the user document exists before proceeding
     // This prevents creating orphaned subcollections when a user has been deleted
     if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'onSubscriptionUpdated')) {
-        logger.warn(`[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`);
+        logger.info(`[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`);
         return;
     }
 

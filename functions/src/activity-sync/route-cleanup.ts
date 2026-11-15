@@ -225,7 +225,8 @@ export async function disableActivitySyncRoutesForDisconnectedService(
     }
 
     if (deletionGuard.shouldSkip) {
-      logger.warn(
+      const log = deletionGuard.deletionInProgress ? logger.info : logger.warn;
+      log(
         `[ActivitySyncRouteCleanup] Skipping route disable for ${disconnectedServiceName} user ${userID} because the user is missing or deletion is in progress.`,
       );
       return;
@@ -321,7 +322,8 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
     }
 
     if (deletionGuard.shouldSkip) {
-      logger.warn(
+      const log = deletionGuard.deletionInProgress ? logger.info : logger.warn;
+      log(
         `[ActivitySyncRouteCleanup] Skipping route restore for ${serviceName} user ${userID} because the user is missing or deletion is in progress.`,
       );
       return;
