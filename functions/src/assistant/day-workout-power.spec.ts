@@ -20,6 +20,14 @@ function database(value: unknown = { version: 1, revision: 2, profiles: [profile
   return { db: { doc } as unknown as FirebaseFirestore.Firestore, get, doc };
 }
 describe('source-aware generation power references', () => {
+  it('omits FTP reads and warnings for event guidance', async () => {
+    const { db, doc } = database();
+    const context = await withWorkoutPowerContext('owner', controls, now, { ...base(), adviceOnly: true }, db);
+    expect(doc).not.toHaveBeenCalled();
+    expect(context.references).toEqual([]);
+    expect(context.missingContext).toEqual([]);
+  });
+
   it('uses only the exact sport source even without optional Training context; preserves the canonical snapshot', async () => {
     const { db, doc } = database();
     const context = await withWorkoutPowerContext('owner', { ...controls, trainingContext: false }, now, base(), db);

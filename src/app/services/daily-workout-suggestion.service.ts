@@ -18,14 +18,15 @@ import { parseDailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferen
 
 const MAX_CACHE_CHARACTERS = 400_000;
 const TRANSIENT_STATUS_CODES = ['internal', 'unavailable', 'deadline-exceeded'];
-const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'waiting-import', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
+const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'waiting-import', 'waiting-training', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
 interface CachedDailyWorkoutSuggestion {
   key: string; uid: string; status: DailyWorkoutSuggestionStatus | null; sleepKey: string | null;
+  trainingKey?: string | null;
   scheduleRevision?: number | null;
   restDayRevision?: number;
 }
 interface DailyWorkoutSuggestionCache extends CachedDailyWorkoutSuggestion {
-  authUser: FirebaseUserType | null; epoch: number; observedSleepKey: string | null;
+  authUser: FirebaseUserType | null; epoch: number; observedSleepKey: string | null; observedTrainingKey: string | null;
   pending: Map<string, Promise<DailyWorkoutSuggestionStatus>>;
 }
 
@@ -130,16 +131,17 @@ export class DailyWorkoutSuggestionService {
     const key = this.key(uid);
     if (this.cache?.key === key && this.cache.authUser === this.auth.currentUser) return this.cache;
     this.cache = { key, uid, authUser: this.auth.currentUser, epoch: 0, status: null, sleepKey: null,
-      observedSleepKey: null, pending: new Map() };
+      observedSleepKey: null, observedTrainingKey: null, trainingKey: null, pending: new Map() };
     try {
       const text = this.window.windowRef.sessionStorage.getItem(CACHE_KEY);
       if (text && text.length <= MAX_CACHE_CHARACTERS) {
         const saved = JSON.parse(text) as CachedDailyWorkoutSuggestion;
         if (saved.key === key && saved.uid === uid && this.validStatus(saved.status)
           && (saved.sleepKey === null || typeof saved.sleepKey === 'string')
+          && (saved.trainingKey == null || typeof saved.trainingKey === 'string')
           && (saved.scheduleRevision === undefined || saved.scheduleRevision === null || Number.isSafeInteger(saved.scheduleRevision))
           && (saved.restDayRevision === undefined || (Number.isSafeInteger(saved.restDayRevision) && saved.restDayRevision >= 0))) {
-          Object.assign(this.cache, { status: saved.status, sleepKey: saved.sleepKey, scheduleRevision: saved.scheduleRevision, restDayRevision: saved.restDayRevision });
+          Object.assign(this.cache, { status: saved.status, sleepKey: saved.sleepKey, trainingKey: saved.trainingKey ?? null, scheduleRevision: saved.scheduleRevision, restDayRevision: saved.restDayRevision });
         } else this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
       } else {
         this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
@@ -184,23 +186,31 @@ export class DailyWorkoutSuggestionService {
     const entry = this.cache;
     try {
       if (!entry?.status || entry.status.state === 'preparing') { this.window.windowRef.sessionStorage.removeItem(CACHE_KEY); return; }
-      const { key, uid, status, sleepKey, scheduleRevision, restDayRevision } = entry;
-      const text = JSON.stringify({ key, uid, status, sleepKey, scheduleRevision, restDayRevision });
+      const { key, uid, status, sleepKey, trainingKey, scheduleRevision, restDayRevision } = entry;
+      const text = JSON.stringify({ key, uid, status, sleepKey, trainingKey, scheduleRevision, restDayRevision });
       if (text.length <= MAX_CACHE_CHARACTERS) this.window.windowRef.sessionStorage.setItem(CACHE_KEY, text);
       else this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
     } catch { /* In-memory caching still works when session storage is unavailable. */ }
   }
-  cached(uid: string): Pick<CachedDailyWorkoutSuggestion, 'status' | 'sleepKey'> | null {
+  cached(uid: string): Pick<CachedDailyWorkoutSuggestion, 'status' | 'sleepKey' | 'trainingKey'> | null {
     if (!this.eligible(uid)) return null;
     const entry = this.entry(uid);
     if (entry.status?.state !== 'dismissed' && this.plans.lastCalendarRestDayRevision(uid, this.preferences().controls.localDate) === undefined) return null;
-    return entry.status && entry.pending.size === 0 ? { status: entry.status, sleepKey: entry.sleepKey } : null;
+    return entry.status && entry.pending.size === 0 ? { status: entry.status, sleepKey: entry.sleepKey, trainingKey: entry.trainingKey } : null;
   }
   observeSleep(uid: string, key: string): void {
     if (!this.eligible(uid)) return;
     const entry = this.entry(uid);
     entry.observedSleepKey = key;
     if (entry.status?.state === 'waiting-sleep' && entry.sleepKey !== key && entry.pending.size === 0) {
+      this.invalidate(); this.persist();
+    }
+  }
+  observeTraining(uid: string, key: string | null): void {
+    if (!this.eligible(uid)) return;
+    const entry = this.entry(uid);
+    entry.observedTrainingKey = key;
+    if (key !== null && entry.status?.state === 'waiting-training' && entry.trainingKey !== key && entry.pending.size === 0) {
       this.invalidate(); this.persist();
     }
   }
@@ -248,9 +258,9 @@ export class DailyWorkoutSuggestionService {
       return this.request(uid, action, current, expectedDate, action === 'prepare' ? false : refresh);
     }
     if (action === 'status' && !refresh && entry.status) return entry.status;
-    if (action === 'prepare' && !refresh && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
+    if (action === 'prepare' && !refresh && entry.status && !['waiting', 'waiting-sleep', 'waiting-import', 'waiting-training'].includes(entry.status.state)) return entry.status;
     if (action === 'dismiss') this.invalidate();
-    const epoch = entry.epoch, sleepKey = entry.observedSleepKey;
+    const epoch = entry.epoch, sleepKey = entry.observedSleepKey, trainingKey = entry.observedTrainingKey;
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser
       && this.eligible(uid) && this.key(uid) === entry.key;
     const request: DailyWorkoutSuggestionRequest = action === 'dismiss' || action === 'use-available-data'
@@ -277,6 +287,7 @@ export class DailyWorkoutSuggestionService {
         entry.status = data;
         // A receipt read does not check current Sleep evidence. Preserve the last actual context check.
         if (action !== 'status' || data.state !== 'waiting-sleep') entry.sleepKey = sleepKey;
+        if (action !== 'status' || data.state !== 'waiting-training') entry.trainingKey = trainingKey;
         this.persist(); return data;
       }).catch(error => {
         if (canExecute()) this.reportFailure(uid, action, error);

@@ -6498,6 +6498,19 @@ visit can prepare on a later foreground return at any hour. Sleep evidence recei
 while hidden coalesces into one revision-bound check on return, and explicit **Check again** remains available. A read
 that finishes while hidden retains its result, but its shown event waits until the row is visible. A status read that
 returns after hiding cannot start a new automatic model preparation until foreground return.
+Before charging, automatic daily preparation checks whether the selected Training snapshots are ready. A pending,
+failed or unavailable preparation/read becomes private `waiting-training` with `charged:false`; ready snapshots with
+no history are allowed. Explicit **Use available data** can proceed from this deferred state with uncertainty stated
+in Context. Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction
+admit only one resumed generation; completed or failed charged receipts are never reset by Training updates.
+
+The existing dashboard derived-metric subscription includes the daily suggestion's selected core kinds only for
+opted-in Pro owners viewing Today. A ready snapshot update resumes `waiting-training`, including an update arriving
+while the previous context request was in flight. The browser caches the checked Training update key across remounts
+and reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
+poller, collection or Firestore index is introduced. MCP impact: these are private first-party admission and browser
+recovery changes; public tools, projections, permissions, Training mutations and plugin contracts remain unchanged.
+
 `DailyWorkoutSuggestionService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
 requests independently of the component lifetime. A bounded, validated session-storage copy restores completed status
 and recipes on same-tab reload; unavailable storage falls back to memory. Restored controls must match the saved local
@@ -10698,6 +10711,11 @@ Combined calendar regressions cover live goal edits and activity totals, Month/3
 failures and activity retry, and late emissions after switching the viewed account. Adjacent grid dates retain goal
 markers for context while remaining outside recorded period totals; goal targets never contribute recorded volume.
 
+The shared owner-only Goals listener retries transient read errors or a 15-second initial server-snapshot timeout
+at most twice, after one and two seconds. Calendar and Goals consumers recover together; manual reopening still
+retries explicitly. Sign-out, a changed session or the last subscriber leaving cancels pending recovery. Invalid
+records and permission failures remain errors without automatic retry. Only confirmed server snapshots supply goals.
+
 Owner SDK CRUD writes `users/{uid}/trainingGoals/{id}` and `trainingGoalState/current` atomically, with per-goal
 revision, a separate goals revision and bounded retained count (200 including archived). Rules reject stale, foreign,
 extra-field, invalid-date and non-atomic writes. Goal edits never bump the workout schedule revision. Stable IDs and
@@ -10734,8 +10752,11 @@ is considered even if its sport differs, preventing an extra unrelated workout o
 Turning off Recent activities in manual generation keeps authored goals but skips goal progress reads and evidence.
 The aggregate progress completeness flag also reflects missing metrics in any individual goal result.
 
-An uncovered event date produces versioned private event advice, never a workout draft or provider action. It uses the
-same sleep/import deferrals, daily lease, admission and token telemetry as an ordinary daily suggestion. Admission
+An uncovered event date produces versioned private event advice, never a workout draft or provider action. Event advice
+omits workout-specific weekday/duration routine checks and power-source reads, so a fallback sport does not produce
+irrelevant routine or FTP warnings. Real selected-source gaps remain visible. Manual workout generation keeps its
+existing sport-specific context. Event advice uses the same sleep/Training/import deferrals, daily lease, admission
+and token telemetry as an ordinary daily suggestion. Admission
 checks the collected goals revision in the charging transaction; edits before charge abort safely, while edits after
 charge preserve the exact daily result. There is still only one included result per local day, including a failed
 charged result. Clients advertise `resultVersion: 2`; older clients cannot generate or deserialize advice. The stored

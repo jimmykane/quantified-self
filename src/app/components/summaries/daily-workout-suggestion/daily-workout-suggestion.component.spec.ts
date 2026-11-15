@@ -81,7 +81,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const request = vi.fn(async (_uid, action) => action === 'status' ? { localDate: '2026-10-30', state: 'waiting' }
     : { localDate: '2026-10-30', state: action === 'dismiss' ? 'dismissed' : 'ready', controls: preferences().controls, result });
   const cacheRevision = signal(0), cached = vi.fn(() => cachedStatus ? { status: cachedStatus, sleepKey: 'night-a' } : null);
-  const observeSleep = vi.fn(), remember = vi.fn();
+  const observeSleep = vi.fn(), observeTraining = vi.fn(), remember = vi.fn();
   const event = vi.fn(), save = vi.fn(async (_uid, value) => { preferences.set(value); });
   const open = vi.fn().mockResolvedValue(undefined), openEventGuidance = vi.fn().mockResolvedValue(undefined);
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
@@ -93,7 +93,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [importProvider(importActive),
     provideRouter([]), delivery, { provide: AppEventService, useValue: {} },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
-    { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
+    { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, observeTraining, remember } },
     { provide: DayWorkoutService, useValue: { open, openEventGuidance } }, { provide: AppHapticsService, useValue: haptics },
     { provide: AppUserService, useValue: { user, user$: of(user()) } },
     { provide: TrainingPlansService, useValue: { watchCalendarSchedule } },
@@ -110,6 +110,29 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
+  it('shows the Training wait and resumes from a ready snapshot once, without refocus regeneration', async () => {
+    const { fixture, request, setVisible } = setup(true);
+    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-training' });
+    await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Waiting for Training data');
+    expect(fixture.nativeElement.textContent).toContain('Use available data');
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(3000); expect(request).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('trainingKey', 'ready-a'); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges(); expect(request).toHaveBeenCalledTimes(2);
+    fixture.componentRef.setInput('trainingKey', 'ready-b'); fixture.detectChanges();
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(3000); expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('resumes if Training becomes ready during a context read', async () => {
+    const { fixture, request } = setup(true);
+    let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges();
+    fixture.componentRef.setInput('trainingKey', 'ready-a'); fixture.detectChanges();
+    finish({ localDate: '2026-10-30', state: 'waiting-training' });
+    await vi.advanceTimersByTimeAsync(0); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges(); expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it('offers Regenerate for one saved workout and opens an explicit replacement review without generating immediately', async () => {
     const { fixture, request, open, workouts } = setup(true, { localDate: '2026-10-30', state: 'planned' });
     workouts.next([savedWorkout()]); fixture.detectChanges(); await vi.advanceTimersByTimeAsync(0); fixture.detectChanges();

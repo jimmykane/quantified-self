@@ -1,7 +1,7 @@
 import { effect, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
-import { BehaviorSubject, firstValueFrom, filter } from 'rxjs';
+import { BehaviorSubject, Subject, firstValueFrom, filter } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
 import { TRAINING_GOAL_FIELDS, parseTrainingGoalFields, type TrainingGoalV1 } from '@shared/training-goals';
@@ -33,6 +33,44 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers());
 describe('TrainingGoalsService', () => {
+  it('automatically reconnects all consumers after a transient failure and keeps live updates', async () => {
+    vi.useFakeTimers(); const { service, rows } = setup();
+    const seen: any[] = [], other: any[] = [];
+    const a = service.watch('owner').subscribe(value => seen.push(value));
+    const b = service.watch('owner').subscribe(value => other.push(value));
+    rows.error(Object.assign(Error('offline'), { code: 'unavailable' }));
+    expect(seen.at(-1).status).toBe('error');
+    const recovered = new BehaviorSubject([{ ...goal, documentId: goal.id }]); mocks.data.mockReturnValue(recovered);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocks.data).toHaveBeenCalledTimes(2);
+    recovered.next([{ ...goal, revision: 2, documentId: goal.id }]);
+    expect(seen.at(-1)).toMatchObject({ status: 'ready', goals: [{ revision: 2 }] });
+    expect(other.at(-1)).toEqual(seen.at(-1));
+    const c = service.watch('owner').subscribe(); expect(mocks.data).toHaveBeenCalledTimes(2);
+    a.unsubscribe(); b.unsubscribe(); c.unsubscribe(); expect(recovered.observed).toBe(false);
+  });
+  it('bounds timeout recovery and cancels pending retries when the owner signs out', async () => {
+    vi.useFakeTimers(); const { service, auth, authEvents, user } = setup();
+    mocks.data.mockImplementation(() => new Subject());
+    const seen: any[] = [], sub = service.watch('owner').subscribe(value => seen.push(value));
+    await vi.advanceTimersByTimeAsync(15000); expect(seen.at(-1).status).toBe('error');
+    await vi.advanceTimersByTimeAsync(33000); expect(mocks.data).toHaveBeenCalledTimes(3);
+    expect(seen.at(-1).status).toBe('error');
+    await vi.advanceTimersByTimeAsync(60000); expect(mocks.data).toHaveBeenCalledTimes(3);
+    const b = service.watch('owner').subscribe();
+    await vi.advanceTimersByTimeAsync(15000);
+    auth.currentUser = null; authEvents.next(null); user.set(null); TestBed.flushEffects();
+    await vi.advanceTimersByTimeAsync(3000); expect(mocks.data).toHaveBeenCalledTimes(4);
+    expect(seen.at(-1)).toEqual({ status: 'ready', goals: [] });
+    sub.unsubscribe(); b.unsubscribe();
+  });
+  it('does not automatically retry permission failures', async () => {
+    vi.useFakeTimers(); const { service, rows } = setup();
+    const sub = service.watch('owner').subscribe();
+    rows.error(Object.assign(Error('denied'), { code: 'permission-denied' }));
+    await vi.advanceTimersByTimeAsync(60000); expect(mocks.data).toHaveBeenCalledOnce(); sub.unsubscribe();
+  });
+
   it('detaches on sign-out and shares a fresh goal listener after same-account reauthentication', () => {
     const { service, rows, user, auth, authEvents } = setup();
     const seen: unknown[] = [];

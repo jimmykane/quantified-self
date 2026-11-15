@@ -24,6 +24,35 @@ function session(fail?: string) {
   }) };
 }
 describe('Calendar generation context boundaries', () => {
+  it('distinguishes pending Training from ready snapshots with no history', async () => {
+    expect((await collectDayWorkoutContext(controls, now, session(), async () => training)).trainingMetricsReady).toBe(false);
+    const ready = session(), original = ready.callTool.getMockImplementation()!;
+    ready.callTool.mockImplementation(async (name, input) => name === 'prepare_training_metrics'
+      ? { structuredContent: { status: 'ready', readyMetricKinds: ['form', 'form_now', 'ramp_rate', 'training_summary'] } }
+      : original(name, input));
+    expect((await collectDayWorkoutContext(controls, now, ready, async () => training)).trainingMetricsReady).toBe(true);
+    ready.callTool.mockImplementation(async (name, input) => {
+      if (name === 'get_training_metric') throw Error('Temporary read failure');
+      if (name === 'prepare_training_metrics') return { structuredContent: { status: 'ready', readyMetricKinds: ['form'] } };
+      return original(name, input);
+    });
+    expect((await collectDayWorkoutContext(controls, now, ready, async () => training)).trainingMetricsReady).toBe(false);
+    expect((await collectDayWorkoutContext({ ...controls, freshnessContext: false, activityContext: false }, now,
+      session(), async () => training)).trainingMetricsReady).toBe(true);
+  });
+  it('omits workout-specific routine warnings only for daily event guidance', async () => {
+    const withGoals = { ...training, goals: { revision: 4, items: [{ name: 'MTB race' }],
+      events: [{ name: 'MTB race', localDate: controls.localDate }] } };
+    const selected = { ...controls, trainingContext: true, goalsContext: true };
+    const daily = await collectDayWorkoutContext(selected, now, session(), async () => withGoals, true);
+    expect(daily.adviceOnly).toBe(true);
+    expect(daily.evidence.goals).toEqual(withGoals.goals.items);
+    expect(daily.missingContext.some(message => message.startsWith('Training routine:'))).toBe(false);
+    const manual = await collectDayWorkoutContext(selected, now, session(), async () => withGoals);
+    expect(manual.adviceOnly).toBeUndefined();
+    expect(manual.missingContext.some(message => message.startsWith('Training routine:'))).toBe(true);
+  });
+
   it('exposes only the selected replacement summary while retaining other scheduled sessions', async () => {
     const replacement = { title: 'Original run', localDate: controls.localDate, sport: controls.sport };
     const result = await collectDayWorkoutContext({ ...controls, trainingContext: true }, now, session(), async () => ({ ...training, replacement,

@@ -27,7 +27,7 @@ export interface DayWorkoutDependencies {
   reserve: typeof reserveAssistantQuotaForRequest;
   finalize: typeof finalizeAssistantQuotaReservation;
   release: typeof releaseAssistantQuotaReservation;
-  context(uid: string, request: GenerateDayWorkoutRequest, now: Date): Promise<DayWorkoutContext>;
+  context(uid: string, request: GenerateDayWorkoutRequest, now: Date, allowEventAdvice?: boolean): Promise<DayWorkoutContext>;
   generate(request: GenerateDayWorkoutRequest, context: DayWorkoutContext, correction?: string): Promise<unknown>;
 }
 export const DAY_WORKOUT_SYSTEM = `Generate one cautious, reviewable workout or a rest suggestion. You have no tools and cannot save, delete, or send anything.
@@ -202,12 +202,12 @@ export async function generateValidatedDayWorkout(request: GenerateDayWorkoutReq
 export const dayWorkoutDependencies: DayWorkoutDependencies = {
   store: createDayWorkoutStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
   reserve: reserveAssistantQuotaForRequest, finalize: finalizeAssistantQuotaReservation, release: releaseAssistantQuotaReservation,
-  context: async (uid, request, now) => {
+  context: async (uid, request, now, allowEventAdvice = false) => {
     const session = await createAssistantMcpSession(uid, 'https://quantified-self.io', undefined, 'coordinate_free',
       request.controls.timelineContext, request.controls.trainingContext);
     try {
       const context = await collectDayWorkoutContext(request.controls, now, session,
-        () => readDayWorkoutTrainingContext(uid, request.controls, now, undefined, request.replaceWorkout));
+        () => readDayWorkoutTrainingContext(uid, request.controls, now, undefined, request.replaceWorkout), allowEventAdvice);
       return await withWorkoutPowerContext(uid, request.controls, now, context);
     }
     finally { await session.close(); }

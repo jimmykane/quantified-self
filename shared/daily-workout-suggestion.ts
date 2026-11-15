@@ -31,7 +31,7 @@ export function isDailyWorkoutFailureReason(value: unknown): value is DailyWorko
 }
 export interface DailyWorkoutSuggestionStatus {
   localDate: string;
-  state: 'off' | 'waiting' | 'waiting-sleep' | 'waiting-import' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
+  state: 'off' | 'waiting' | 'waiting-sleep' | 'waiting-import' | 'waiting-training' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
   controls?: DayWorkoutControls;
   result?: DailyWorkoutSuggestionResult;
   /** Fixed first-party failure category; never model output or provider error text. */

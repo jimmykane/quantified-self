@@ -94,7 +94,7 @@ describe('SummariesComponent', () => {
   let component: SummariesComponent;
   let fixture: ComponentFixture<SummariesComponent>;
   let mockThemeService: { getAppTheme: ReturnType<typeof vi.fn> };
-  let mockUserService: { user: WritableSignal<any>; updateUserProperties: ReturnType<typeof vi.fn> };
+  let mockUserService: { user: WritableSignal<any>; updateUserProperties: ReturnType<typeof vi.fn>; isProSignal: WritableSignal<boolean> };
   let mockDashboardDerivedMetricsService: {
     watch: ReturnType<typeof vi.fn>;
     ensureForDashboard: ReturnType<typeof vi.fn>;
@@ -134,7 +134,7 @@ describe('SummariesComponent', () => {
       getAppTheme: vi.fn().mockReturnValue(of('light')),
     };
     mockUserService = {
-      user: signal(null),
+      user: signal(null), isProSignal: signal(true),
       updateUserProperties: vi.fn().mockResolvedValue(true),
     };
     mockDashboardDerivedMetricsService = {
@@ -2238,6 +2238,24 @@ describe('SummariesComponent', () => {
       }));
       component['syncDerivedMetricsSubscription']();
       component['syncReadinessSleepSubscription']();
+    });
+
+    it('uses the shared metric subscription for opted-in daily Training readiness', () => {
+      component.isOwnerDashboard = true; component.showTodaySummary = true;
+      component.user.settings.appSettings = { dailyWorkoutSuggestion: { enabled: true, controls: { freshnessContext: true } } } as any;
+      component['syncDerivedMetricsSubscription']();
+      expect(mockDashboardDerivedMetricsService.watch).toHaveBeenLastCalledWith(component.user,
+        { metricKinds: expect.arrayContaining(['form', 'form_now', 'ramp_rate', 'training_summary']) });
+      load$.next({ ...loadState, trainingUpdatedAtMs: 100, formStatus: 'ready', trainingSummaryStatus: 'building' });
+      expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();
+      load$.next({ ...loadState, trainingUpdatedAtMs: 101, formStatus: 'ready', trainingSummaryStatus: 'ready' });
+      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 101]));
+      component.user.settings.appSettings.dailyWorkoutSuggestion.controls.freshnessContext = false;
+      load$.next({ ...loadState, trainingUpdatedAtMs: 102, formStatus: 'missing', formNowStatus: 'missing', rampRateStatus: 'missing', trainingSummaryStatus: 'ready' });
+      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 102]));
+      mockUserService.isProSignal.set(false);
+      expect(component['resolveDashboardDerivedMetricKinds']()).not.toContain('training_summary');
+      component['resetDerivedMetricsState'](); expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();
     });
 
     it('leaves Recovery hidden and unsubscribed until it is selected', () => {

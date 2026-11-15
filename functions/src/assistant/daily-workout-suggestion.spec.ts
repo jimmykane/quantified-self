@@ -63,6 +63,28 @@ function dependencies() {
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('waits for Training before charging, resumes once, and retains the saved result', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: false });
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-training');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.context).toHaveBeenCalledWith('owner', expect.any(Object), dailyNow, true);
+    deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: true });
+    const ready = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(ready.state).toBe('ready');
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(ready);
+    expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+  it('allows an explicit use-available choice after waiting for Training', async () => {
+    const deps = dependencies();
+    deps.context.mockImplementation(async () => ({ ...evidence(), trainingMetricsReady: false }));
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(result.state).toBe('ready'); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.generate.mock.calls[0][1].missingContext.join(' ')).toContain('explicitly chose to use available data');
+  });
+
   it('generates Auto for the final selected sport once and keeps the charged result after preferences change', async () => {
     const deps = dependencies(), read = deps.store.read.getMockImplementation()!;
     const automatic = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', ActivityTypes.Cycling);

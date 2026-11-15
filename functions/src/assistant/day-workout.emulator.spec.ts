@@ -24,6 +24,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('defers pending Training without a charge and admits only one concurrent resume', async () => {
+    const uid = `training-wait-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
+    const preferences = { enabled: true, followRoutine: false, controls };
+    await user.set({}); await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
+    let ready = false, entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; }), blocked = new Promise<void>(resolve => { release = resolve; });
+    const generate = vi.fn(async () => { entered(); await blocked; return { kind: 'rest', rationale: 'Keep it easy.' }; });
+    const deps: DailyWorkoutSuggestionDependencies = { store, now: () => now, legal: vi.fn(), pro: async () => true,
+      selectSport: async () => controls, coverage: async () => null, importActive: async () => false, generate,
+      regenerate: vi.fn(), log: vi.fn(), context: async () => ({ trainingMetricsReady: ready, evidence: { daily: {
+        dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } },
+        activitiesToday: { scanComplete: true, activities: [] },
+        plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } },
+      } }, usedContext: [], missingContext: [], previousStrength: [], references: [] }) };
+    const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
+    const receipt = user.collection('assistantConversations').doc('daily-workout-suggestion');
+    let pending: Promise<unknown> | undefined;
+    try {
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-training');
+      expect((await receipt.get()).get(`messages.${controls.localDate}`)).toMatchObject({ state: 'waiting-training', charged: false });
+      expect(generate).not.toHaveBeenCalled();
+      ready = true; pending = runDailyWorkoutSuggestion(input, identity, deps); await started;
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('preparing');
+      release(); const result = await pending;
+      expect(result).toMatchObject({ state: 'ready' });
+      expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(result);
+      expect(generate).toHaveBeenCalledOnce();
+      expect((await receipt.get()).get(`messages.${controls.localDate}`)).toMatchObject({ state: 'ready', charged: true });
+      expect((await user.collection('assistantUsage').get()).empty).toBe(true);
+    } finally { release(); await pending?.catch(() => undefined); await db.recursiveDelete(user); }
+  }, 30000);
   it('switches merged duration preferences without retaining incompatible fields or replacing the charged suggestion', async () => {
     const uid = `duration-settings-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-10-28T12:00Z');
     const settings = user.collection('config').doc('settings');
