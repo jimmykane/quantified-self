@@ -28,6 +28,7 @@ import { CompactSelectComponent } from '../../shared/compact-select/compact-sele
 })
 class PerformanceChartStubComponent {
   @Input() headerActions: TemplateRef<unknown> | null = null;
+  @Input() allowMetricSelection = false;
 }
 
 describe('EventPerformanceChartsComponent', () => {

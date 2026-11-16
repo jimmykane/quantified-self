@@ -446,10 +446,33 @@ describe('ActivitiesPageComponent', () => {
     expect(table.displayedColumns).toContain('Shared');
     expect(table.tablePageSize).toBe(25);
     expect(table.sportTotals.map(row => [row.sport, row.count])).toEqual([['Cycling', 1], ['Running', 26]]);
-    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row')).toHaveLength(2);
+    const visibleTotalRows = () => c.fixture.nativeElement.querySelectorAll('tr.activity-total-row:not([hidden])');
+    expect(table.totalsExpanded).toBe(false);
+    expect(visibleTotalRows()).toHaveLength(1);
+    expect(table.periodTotal?.count).toBe(27);
+    expect(table.periodTotal?.distance.value).toBe(imperial ? '167.81 mi' : '270.00 Km');
+    const activityCount = c.fixture.nativeElement.querySelectorAll('tr.activity-row').length;
+    const metricReads = records.map(record => vi.spyOn(record, 'getStat'));
+    const selections = c.haptics.selection.mock.calls.length;
+    const expandTotals = c.fixture.nativeElement.querySelector('.activity-total-toggle') as HTMLButtonElement;
+    expect(expandTotals.getAttribute('aria-expanded')).toBe('false');
+    expandTotals.click(); await render(c);
+    expect(expandTotals.getAttribute('aria-expanded')).toBe('true');
+    expect(visibleTotalRows()).toHaveLength(3);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(selections + 1);
+    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-row')).toHaveLength(activityCount);
+    expect(table.data.data).toHaveLength(27);
+    for (const read of metricReads) expect(read).not.toHaveBeenCalled();
+    for (const id of expandTotals.getAttribute('aria-controls')!.split(' ')) {
+      expect(c.fixture.nativeElement.querySelector(`[id="${id}"]`)?.hidden).toBe(false);
+    }
+    expandTotals.click(); await render(c);
+    expect(visibleTotalRows()).toHaveLength(1);
+    expect(expandTotals.getAttribute('aria-expanded')).toBe('false');
+    expandTotals.click(); await render(c);
     expect(c.fixture.nativeElement.querySelectorAll('table[mat-table]')).toHaveLength(1);
     expect(c.fixture.nativeElement.querySelector('tr.activity-total-row').textContent).toContain('Totals');
-    const totalNames = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-total-row .activity-total-name')]
+    const totalNames = () => [...c.fixture.nativeElement.querySelectorAll('tr.activity-total-row:not(.activity-period-total-row) .activity-total-name')]
       .map((name: HTMLElement) => name.textContent?.trim());
     expect(totalNames()).toEqual(['Cycling', 'Running']);
     expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row .mat-column-Activity-Types app-activity-type-icon')).toHaveLength(2);
@@ -462,7 +485,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.fixture.nativeElement.querySelector('th.mat-column-Average-Grade-Adjusted-Pace').textContent).toContain('GAP');
     table.paginator.nextPage(); await render(c);
     expect(table.sportTotals.find(row => row.sport === 'Running')?.count).toBe(26);
-    expect(c.fixture.nativeElement.querySelectorAll('tr.activity-total-row')).toHaveLength(2);
+    expect(visibleTotalRows()).toHaveLength(3);
     table.search('Run 0'); await render(c);
     expect(table.sportTotals.map(row => [row.sport, row.count])).toEqual([['Running', 1]]);
     table.clearSearch(); await render(c);

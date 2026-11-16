@@ -61,7 +61,7 @@
     }
     @switch (activeTab) {
     @case ('intensity') {
-    <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
+    <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme" [allowMetricSelection]="true"
       [headerActions]="shouldShowTabs ? null : disclosure">
     </app-event-intensity-zones>
     }

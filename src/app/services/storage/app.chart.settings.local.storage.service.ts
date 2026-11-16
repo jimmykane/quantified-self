@@ -27,6 +27,19 @@ interface EventChartVisibilityStateV2 {
 export class AppChartSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'chart.settings.service.';
 
+  public getHiddenIntensityZoneMetrics(): string[] {
+    try {
+      const value: unknown = JSON.parse(this.getItem('hiddenIntensityZoneMetrics') || '[]');
+      return Array.isArray(value) ? [...new Set(value.filter((type): type is string => typeof type === 'string'))] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public setHiddenIntensityZoneMetrics(types: readonly string[]): void {
+    this.setItem('hiddenIntensityZoneMetrics', JSON.stringify([...new Set(types)]));
+  }
+
   public getEventChartVisibilityPreference(
     event: EventInterface,
     activityTypeSignature: string,

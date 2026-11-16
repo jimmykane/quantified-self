@@ -65,11 +65,14 @@ import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dial
 import { resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
-import { buildTrainingLogSportTotals, type TrainingLogSportTotal } from '../../helpers/activity-training-log.helper';
+import { buildTrainingLogTotals, type TrainingLogSportTotal, type TrainingLogTotal } from '../../helpers/activity-training-log.helper';
 import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/metrics';
 
 interface ActivityTableTotalRow {
-  'Sport Total': TrainingLogSportTotal;
+  'Sport Total': TrainingLogTotal;
+  'Total Sport'?: string;
+  'Overall Total': boolean;
+  'Total Row ID': string;
   Color: string;
   Duration: string; Distance: string; Ascent: string;
   'Total Coverage': Record<string, string>;
@@ -145,6 +148,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   readonly columnSaveError = signal<string | null>(null);
   private columnSaveGeneration = 0;
   sportTotals: TrainingLogSportTotal[] = [];
+  periodTotal: TrainingLogTotal | null = null;
+  totalsExpanded = false;
+  private static nextTotalsID = 0;
+  private readonly totalsID = `activity-totals-${EventTableComponent.nextTotalsID++}`;
+  sportTotalRowIDs = '';
   totalSportColumn = 'Start Date';
   private readonly totalRows = new BehaviorSubject<ActivityTableTotalRow[]>([]);
   readonly renderedRows$ = defer(() => combineLatest([this.data.connect(), this.totalRows]).pipe(
@@ -342,6 +350,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.rowCache.clear();
       this.selection.clear();
       this.sportTotals = [];
+      this.periodTotal = null;
+      this.totalsExpanded = false;
       this.totalRows.next([]);
       this.mutationLoading.set(false);
     }
@@ -635,7 +645,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   trackByEventId = (index: number, row: StatRowElement | ActivityTableTotalRow): string | number => {
     if (!row) return index;
-    if (row['Sport Total']) return `total:${row['Sport Total'].sport}`;
+    if (row['Sport Total']) return row['Total Row ID'];
     const event = ('Event' in row ? row.Event : undefined) as EventRead | undefined;
     return event?.getID ? event.getID() : index;
   }
@@ -1415,16 +1425,29 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private updateSportTotals(): void {
-    this.sportTotals = !this.isBrowsePresentation && !this.tableIsLoading && !this.hasLoadError
-      ? buildTrainingLogSportTotals((this.data.filteredData ?? this.data.data).map(row => row.Event),
-        this.user?.settings?.unitSettings, this.user?.settings?.summariesSettings) : [];
-    this.totalRows.next(this.sportTotals.map(total => ({
-      'Sport Total': total,
-      Color: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-        ActivityTypesHelper.resolveActivityType(total.sport) || ActivityTypes.unknown),
+    const totals = !this.isBrowsePresentation && !this.tableIsLoading && !this.hasLoadError
+      ? buildTrainingLogTotals((this.data.filteredData ?? this.data.data).map(row => row.Event),
+        this.user?.settings?.unitSettings, this.user?.settings?.summariesSettings) : { overall: null, sports: [] };
+    this.sportTotals = totals.sports;
+    this.periodTotal = totals.overall;
+    this.sportTotalRowIDs = this.sportTotals.map((_, index) => `${this.totalsID}-${index}`).join(' ');
+    const row = (total: TrainingLogTotal, sport: string | undefined, id: string): ActivityTableTotalRow => ({
+      'Sport Total': total, 'Total Sport': sport, 'Overall Total': !sport, 'Total Row ID': id,
+      Color: sport ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+        ActivityTypesHelper.resolveActivityType(sport) || ActivityTypes.unknown) : '',
       Duration: total.duration.value, Distance: total.distance.value, Ascent: total.ascent.value,
       'Total Coverage': { Duration: total.duration.coverage, Distance: total.distance.coverage, Ascent: total.ascent.coverage },
-    })));
+    });
+    this.totalRows.next(totals.overall ? [
+      row(totals.overall, undefined, this.totalsID),
+      ...this.sportTotals.map((total, index) => row(total, total.sport, `${this.totalsID}-${index}`)),
+    ] : []);
+  }
+
+  toggleSportTotals(): void {
+    if (!this.periodTotal) return;
+    this.totalsExpanded = !this.totalsExpanded;
+    this.hapticsService.selection();
   }
 
   private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {

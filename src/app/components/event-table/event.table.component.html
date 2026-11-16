@@ -158,18 +158,29 @@
             [class.activity-total-fallback-cell]="!!row?.['Sport Total'] && column === 'Start Date' && totalSportColumn === column"
             [class.event-activity-cell]="isLibraryPresentation && column === 'Name'">
             @if (row?.['Sport Total']; as total) {
-              @if (column === totalSportColumn) {
+              @if (row['Overall Total'] && column === 'Start Date') {
+                <span class="activity-total-label">
+                  <button mat-button type="button" class="activity-total-toggle" [attr.aria-expanded]="totalsExpanded"
+                    [attr.aria-controls]="sportTotalRowIDs" [attr.aria-label]="totalsExpanded ? 'Hide totals by sport' : 'Show totals by sport'"
+                    (click)="$event.stopPropagation(); toggleSportTotals()">
+                    <mat-icon aria-hidden="true">{{ totalsExpanded ? 'expand_more' : 'chevron_right' }}</mat-icon>Totals
+                  </button>
+                  <small class="activity-total-summary-count">{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small>
+                </span>
+              } @else if (row['Overall Total'] && column === totalSportColumn) {
+                <span class="activity-total-name">All sports</span>
+              } @else if (column === totalSportColumn) {
                 <span class="activity-total-sport" matTooltip="Period totals across all matching activities and pages; merged comparisons are excluded.">
-                  <app-activity-type-icon [activityType]="total.sport" size="20px" aria-hidden="true"></app-activity-type-icon>
+                  <app-activity-type-icon [activityType]="row['Total Sport']" size="20px" aria-hidden="true"></app-activity-type-icon>
                   <span class="activity-total-copy">
-                    <span class="activity-total-name">{{ total.sport }}</span>
+                    <span class="activity-total-name">{{ row['Total Sport'] }}</span>
                     @if (column === 'Start Date') {
-                      <small>Totals · {{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small>
+                      <small>{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small>
                     }
                   </span>
                 </span>
               } @else if (column === 'Start Date') {
-                <span class="activity-total-label" matTooltip="Period totals across all matching activities and pages; merged comparisons are excluded.">Totals<small>{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small></span>
+                <span class="activity-total-label"><small>{{ total.count | number }} {{ total.count === 1 ? 'activity' : 'activities' }}</small></span>
               } @else if (column === 'Duration' || column === 'Distance' || column === 'Ascent') {
                 {{ row[column] }}
                 @if (row['Total Coverage'][column]) { <small class="activity-total-coverage">{{ row['Total Coverage'][column] }}</small> }
@@ -308,9 +319,11 @@
 
         <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+          [attr.id]="row?.['Total Row ID'] || null" [hidden]="row?.['Sport Total'] && !row['Overall Total'] && !totalsExpanded"
           [routerLink]="tableIsLoading || row?.['Sport Total'] ? null : ['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
           [class.merged]="!showInitialLoading && row['Merged Event']" [style.--row-gradient]="showInitialLoading ? null : row['Sport Total'] ? row.Color : row['Gradient']"
           [class.activity-row]="!showInitialLoading && !row?.['Sport Total']" [class.activity-total-row]="!!row?.['Sport Total']" [class.activity-table-skeleton-row]="showInitialLoading"
+          [class.activity-period-total-row]="!!row?.['Overall Total']"
           [attr.aria-hidden]="showInitialLoading ? true : null" [class.normal-row]="!row?.['Sport Total']">
         </tr>
 
