@@ -170,6 +170,41 @@ describe('EventSummaryComponent', () => {
         expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
         expect(fixture.nativeElement.querySelector('app-hero-metrics')).not.toBeNull();
     });
+
+    it('refreshes comparison context when recordings or merge metadata update in place', () => {
+        const activities = [{type: ActivityTypes.Running}];
+        const event = {...mockEvent, isMerge: true, mergeType: 'benchmark', getActivities: () => activities};
+        fixture.componentRef.setInput('event', event);
+        fixture.componentRef.setInput('selectedActivities', activities);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+
+        activities.push({type: ActivityTypes.Running});
+        expect(component.comparisonTotalsHeading).toBe('Combined totals · 2 recordings');
+        fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.metrics-context-heading')?.textContent).toContain('Combined totals · 2 recordings');
+
+        activities.push({type: ActivityTypes.Running});
+        fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.metrics-context-heading')?.textContent).toContain('Combined totals · 3 recordings');
+
+        event.mergeType = 'multi';
+        fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('gives the benchmark analysis icon button an accessible name', () => {
+        fixture.componentRef.setInput('event', {...mockEvent, isMerge: true,
+            getActivities: () => [{type: ActivityTypes.Running}, {type: ActivityTypes.Running}]});
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button.benchmark-btn')?.getAttribute('aria-label')).toBe('Benchmark analysis');
+    });
+
     it.each([
         { value: 0, settings: {} },
         { value: 0.5, settings: { distanceUnits: [DistanceUnits.Miles] } },

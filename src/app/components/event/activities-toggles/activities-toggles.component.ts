@@ -17,6 +17,7 @@ import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-
 import { firstValueFrom } from 'rxjs';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -38,6 +39,7 @@ export class ActivitiesTogglesComponent {
   private snackBar = inject(MatSnackBar);
   private eventService = inject(AppEventService);
   private logger = inject(LoggerService);
+  private hapticsService = inject(AppHapticsService);
   public activitySelectionService = inject(AppActivitySelectionService);
   public eventColorService = inject(AppEventColorService);
 
@@ -113,7 +115,9 @@ export class ActivitiesTogglesComponent {
    * Toggle activity selection.
    */
   toggleActivity(activity: ActivityInterface): void {
-    this.activitySelectionService.toggleActivitySelection(activity, this.selectedActivities(), true);
+    if (this.activitySelectionService.toggleActivitySelection(activity, this.selectedActivities(), true)) {
+      this.hapticsService.selection();
+    }
   }
 
   canDeselectActivity(activity: ActivityInterface): boolean {

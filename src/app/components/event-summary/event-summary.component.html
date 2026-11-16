@@ -29,7 +29,7 @@
           <mat-icon>edit_note</mat-icon>
         </button>
         @if (event.isMerge && eventActivitiesCount >= 2) {
-        <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis"
+        <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" aria-label="Benchmark analysis"
           class="benchmark-btn qs-app-badge qs-app-badge--small"
           [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeSize="small">
           <mat-icon [class.has-result]="benchmarkCount > 0">

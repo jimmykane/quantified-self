@@ -58,7 +58,6 @@ export class EventSummaryComponent implements OnChanges {
   private heroStatsValue: string[] = [];
   private heroEffortStatTypeValue: string = DataSpeedAvg.type;
   private eventActivitiesCountValue = 0;
-  private comparisonTotalsHeadingValue = '';
   readonly comparisonTotalsDescription = 'Time and distance are summed across all recordings, including overlapping recordings. Selecting a recording below changes the comparison view, not these totals.';
   private mainActivityTypeValue = 'Other';
   private eventActivityTypesValue: ActivityTypes[] = [];
@@ -268,8 +267,10 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   get comparisonTotalsHeading(): string {
-    this.ensureTemplateState();
-    return this.comparisonTotalsHeadingValue;
+    if (!isBenchmarkEvent(this.event)) return '';
+    // Recordings can hydrate in place without replacing the event or selection inputs.
+    const recordingCount = this.event?.getActivities?.()?.length ?? 0;
+    return recordingCount > 1 ? `Combined totals · ${recordingCount} recordings` : '';
   }
 
   get benchmarkCount(): number {
@@ -334,8 +335,6 @@ export class EventSummaryComponent implements OnChanges {
       ? this.selectedActivities
       : activities;
     this.eventActivitiesCountValue = activities.length;
-    this.comparisonTotalsHeadingValue = isBenchmarkEvent(this.event) && activities.length > 1
-      ? `Combined totals · ${activities.length} recordings` : '';
     this.mainActivityTypeValue = activities[0]?.type || 'Other';
     this.eventActivityTypesValue = activities.map(activity => activity.type);
     this.heroEffortStatTypeValue = resolvePreferredSpeedDerivedAverageTypeForActivity(this.mainActivityTypeValue) || DataSpeedAvg.type;

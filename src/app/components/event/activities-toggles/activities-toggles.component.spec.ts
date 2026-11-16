@@ -1,5 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { of } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -11,6 +16,7 @@ import { AppEventService } from '../../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
 import { ActivityTypes, DataDistance, DataDuration, DistanceUnits, EventImporterJSON, FileType, Privacy } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 const createActivity = (id: string, creatorName: string, serialNumber: string, swInfo = ''): any => ({
   getID: () => id,
@@ -32,6 +38,7 @@ describe('ActivitiesTogglesComponent', () => {
   let mockEventService: { updateActivityProperties: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn> };
+  let mockHaptics: { selection: ReturnType<typeof vi.fn> };
 
   const mockSelectionService = {
     selectedActivities: {
@@ -89,14 +96,17 @@ describe('ActivitiesTogglesComponent', () => {
   } as any;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     mockDialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
     mockEventService = {
       updateActivityProperties: vi.fn().mockResolvedValue(undefined),
     };
     mockSnackBar = { open: vi.fn() };
     mockLogger = { error: vi.fn() };
+    mockHaptics = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
+      imports: [NoopAnimationsModule, MatChipsModule, MatButtonModule, MatIconModule, MatTooltipModule],
       declarations: [ActivitiesTogglesComponent],
       providers: [
         { provide: AppActivitySelectionService, useValue: mockSelectionService },
@@ -105,6 +115,7 @@ describe('ActivitiesTogglesComponent', () => {
         { provide: AppEventService, useValue: mockEventService },
         { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: LoggerService, useValue: mockLogger },
+        { provide: AppHapticsService, useValue: mockHaptics },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -249,6 +260,7 @@ describe('ActivitiesTogglesComponent', () => {
 
     expect(mockSelectionService.selectedActivities.deselect).not.toHaveBeenCalled();
     expect(mockSelectionService.selectedActivities.select).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
   });
 
   it('deselects when more than one activity is selected', () => {
@@ -257,6 +269,7 @@ describe('ActivitiesTogglesComponent', () => {
     component.toggleActivity(a1);
 
     expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledWith(a1);
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('selects activity when it is not selected', () => {
@@ -267,6 +280,43 @@ describe('ActivitiesTogglesComponent', () => {
     component.toggleActivity(a2);
 
     expect(mockSelectionService.selectedActivities.select).toHaveBeenCalledWith(a2);
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {key: ' ', code: 'Space', keyCode: 32},
+    {key: 'Enter', code: 'Enter', keyCode: 13},
+  ])('updates comparison selection once for keyboard $code', keyboard => {
+    const {a2} = setupInputs(false);
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    const options = fixture.nativeElement.querySelectorAll('[role="option"]');
+    options[1].dispatchEvent(new KeyboardEvent('keydown', {...keyboard, bubbles: true}));
+    fixture.detectChanges();
+    expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledTimes(1);
+    expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledWith(a2);
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates comparison selection once for a pointer click', () => {
+    const {a2} = setupInputs(false);
+    fixture.nativeElement.querySelectorAll('[role="option"]')[1].click();
+    fixture.detectChanges();
+    expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledTimes(1);
+    expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledWith(a2);
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps hydration and the last selected recording silent', () => {
+    const {a1} = setupInputs(false);
+    fixture.componentRef.setInput('selectedActivities', [a1]);
+    fixture.detectChanges();
+    const option = fixture.nativeElement.querySelector('[role="option"]');
+    expect(option.getAttribute('aria-disabled')).toBe('true');
+    option.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', code: 'Space', keyCode: 32, bubbles: true}));
+    option.click();
+    expect(mockSelectionService.selectedActivities.deselect).not.toHaveBeenCalled();
+    expect(mockSelectionService.selectedActivities.select).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
   });
 
   it('uses reference equality when activity IDs are missing', () => {
