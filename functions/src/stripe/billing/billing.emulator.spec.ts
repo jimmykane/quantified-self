@@ -618,6 +618,78 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
       expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
       expect(f.stripe.subscriptions.list).toHaveBeenCalledTimes(2);
     });
+    it.each([false, true])('recovers every accepted reuse after another tab selects the same offer (newest first: %s)', async newestFirst => {
+      const f = await fixture();
+      const data = { ...f.request, trial_period_days: 7 };
+      await f.ref.set(data);
+      await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+      const older = await nextRequest(f, data), newer = await nextRequest(f, data);
+      const accepted = newestFirst ? [newer, older] : [older, newer];
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try {
+        for (const selected of accepted) await createBillingCheckout(f.ctx, lease, f.uid, selected.requestId, data);
+      } finally { await releaseBillingLease(db, lease); }
+      await policy(0, 0);
+      for (const selected of accepted) {
+        await f.run(selected.id);
+        const result = await selected.ref.get();
+        expect(result.get('error')).toBeNull();
+        expect(result.get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
+      }
+      const original = await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get();
+      expect(original.get('selection.requestId')).toBe(newer.requestId);
+      expect(original.get('params.subscription_data.trial_period_days')).toBe(7);
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+      expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    });
+    it('retains recovery of the latest accepted reuse from an older journal without a receipt', async () => {
+      const f = await fixture(); await f.run((await f.admit())!);
+      const reused = await nextRequest(f);
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try { await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request); }
+      finally { await releaseBillingLease(db, lease); }
+      // Simulate the pre-receipt journal: only the original selection was saved.
+      await reused.operation.delete();
+      await policy(0, 0);
+      await f.run(reused.id);
+      expect((await reused.ref.get()).get('error')).toBeNull();
+      expect((await reused.ref.get()).get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    });
+    it('does not recover accepted reuse through a newer, different checkout', async () => {
+      const f = await fixture(); await f.run((await f.admit())!);
+      const reused = await nextRequest(f);
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try { await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request); }
+      finally { await releaseBillingLease(db, lease); }
+      const next = await nextRequest(f, await changePrice(f)); await f.run(next.id);
+      const successor = (await next.operation.get()).data();
+      await f.run(reused.id);
+      expect((await reused.ref.get()).get('error.code')).toBe('checkout_replaced');
+      expect((await reused.ref.get()).get('url')).toBeUndefined();
+      expect((await next.operation.get()).data()).toEqual(successor);
+      expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}`).get()).get('activeCheckout')).toBe(`checkout_${next.requestId}`);
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+      expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
+    });
+    it.each(['key', 'session', 'customer'])('rejects accepted reuse after its original %s binding changes', async changed => {
+      const f = await fixture(); await f.run((await f.admit())!);
+      const reused = await nextRequest(f);
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try {
+        await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request);
+        const original = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+        await original.update(changed === 'key' ? { key: 'other-operation' }
+          : changed === 'session' ? { 'result.id': 'cs_other' } : { 'params.customer': 'cus_other' });
+        f.stripe.checkout.sessions.retrieve.mockClear();
+        await expect(createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request)).rejects.toMatchObject({
+          code: changed === 'customer' ? 'customer_conflict' : 'operation_uncertain',
+        });
+        expect(f.stripe.checkout.sessions.retrieve).not.toHaveBeenCalled();
+      } finally { await releaseBillingLease(db, lease); }
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+      expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    });
     it('rejects stale selections without expiring an existing issued offer', async () => {
       const f = await fixture(); await f.run((await f.admit())!);
       await policy(0, 0);
@@ -1126,8 +1198,16 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     } finally { await db.doc(BILLING_CONTROL).update({ owner: 'native' }); }
   });
   it.each(['auth-first', 'document-first'])('preserves deletion identity with %s ordering', async ordering => {
-    const f = await fixture(); await db.doc(`customers/${f.uid}`).set({ stripeId: f.customerId });
+    const f = await fixture(); await f.run((await f.admit())!);
+    const reused = await nextRequest(f);
+    const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+    try { await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request); }
+    finally { await releaseBillingLease(db, lease); }
+    expect((await reused.operation.get()).get('reusedOperation')).toBe(`checkout_${f.requestId}`);
     await db.doc(`userDeletionTombstones/${f.uid}`).set({});
+    await f.run(reused.id);
+    expect((await reused.ref.get()).get('url')).toBeUndefined();
+    expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
     if (ordering === 'auth-first') await requestBillingDeletion(db, f.uid);
     await db.recursiveDelete(db.doc(`customers/${f.uid}`));
     await requestBillingDeletion(db, f.uid, f.customerId);
@@ -1135,6 +1215,8 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     await f.run(billingId('delete', f.uid));
     expect(f.stripe.customers.del).toHaveBeenCalledWith(f.customerId);
     expect((await db.doc(`customers/${f.uid}`).get()).exists).toBe(false);
+    expect((await reused.operation.get()).exists).toBe(false);
+    expect((await db.collection(`${BILLING_ACCOUNTS}/${f.uid}/operations`).get()).empty).toBe(true);
   });
   it('retains a late customer deletion identity when Auth cleanup is already removing the private journal', async () => {
     const f = await fixture(); const id = billingId('delete', f.uid);

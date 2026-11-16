@@ -88,9 +88,14 @@ operation reservation/replacement transaction, closing the read-to-reservation r
 boundary: retries of an accepted operation retain frozen Stripe parameters and idempotency keys, including when an
 admin later disables trials. Already-issued Checkout URLs keep their accepted terms until their normal expiry.
 A durably recorded reuse of an existing Checkout follows the same recovery rule: a lost public-result commit
-does not re-evaluate its accepted offer against a later trial policy. Customer ownership, deletion and lease checks
-still apply, and completed/expired sessions remain closed. A new stale selection cannot expire an earlier offer,
-and a changed offer never silently becomes a paid checkout.
+does not re-evaluate its accepted offer against a later trial policy. Each accepted request has an immutable reuse
+receipt in the existing operations collection, so another tab's later selection cannot erase its acceptance.
+The receipt pins the original operation, idempotency key and session; it cannot create a session, change the active
+checkout or resume a superseded operation. Customer ownership, deletion and lease checks still apply, and
+completed/expired sessions remain closed. Account cleanup recursively removes these receipts with the other
+operations. This adds one Firestore document write per accepted reuse, with no new listener or Stripe call.
+Older journals retain recovery through their latest recorded selection. A new stale selection cannot expire an
+earlier offer, and a changed offer never silently becomes a paid checkout.
 
 Public prerendered HTML deliberately omits exact introductory offers; the browser loads current terms after hydration.
 Recurring prices/amounts remain prerendered. See [public pricing rendering](public-pricing-prerender.md). A policy read

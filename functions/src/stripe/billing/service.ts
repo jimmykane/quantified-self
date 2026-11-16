@@ -70,6 +70,7 @@ function validateCustomer(customer: Stripe.Customer | Stripe.DeletedCustomer, ui
 }
 interface Operation { key: string; startedAt: Timestamp; params: DocumentData; result?: { id: string; url?: string | null }; rejected?: boolean;
   replacement?: { operation: string; sessionId: string }; replacedBy?: string; completed?: boolean;
+  reusedOperation?: string;
   selection?: { requestId: string; createdAt: Timestamp } }
 
 /** The reservation is the offer acceptance boundary. Later retries retain its frozen terms. */
@@ -256,6 +257,10 @@ async function selectOpenCheckout(ctx: BillingDependencies, lease: BillingLease,
     await assertTrialPolicyRevision(tx, ctx.db, request.data() as CheckoutRequest);
     const selection = checkoutSelection(request, previousRequest, original.data() as Operation, !replace);
     if (!replace) {
+      // Selection orders tabs; a separate receipt preserves each accepted reuse
+      // if another tab later becomes the latest selection before recovery.
+      tx.create(ref, { reusedOperation: previousName, key: previous.key, startedAt: previous.startedAt,
+        params: previous.params, result: previous.result });
       tx.update(previousRef, { selection });
       return previous;
     }
@@ -328,6 +333,19 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
   if (saved?.replacedBy) throw new BillingError('checkout_replaced');
   if (saved?.completed) throw new BillingError('checkout_completed');
   const active = (await root.get()).get('activeCheckout') as string | undefined;
+  if (saved?.reusedOperation) {
+    const original = (await operationRef(ctx.db, uid, saved.reusedOperation).get()).data() as Operation | undefined;
+    if (original?.replacedBy) throw new BillingError('checkout_replaced');
+    if (original?.completed) throw new BillingError('checkout_completed');
+    if (active !== saved.reusedOperation || !original?.result || original.key !== saved.key
+      || original.result.id !== saved.result?.id) throw new BillingError('operation_uncertain');
+    if (original.params.customer !== customer || saved.params.customer !== customer) throw new BillingError('customer_conflict');
+    await assertBillingAuthority(ctx, lease, uid, customer);
+    const session = await ctx.stripe.checkout.sessions.retrieve(original.result.id);
+    await assertBillingAuthority(ctx, lease, uid, customer);
+    if (stripeId(session.customer) !== customer) throw new BillingError('customer_conflict');
+    return checkoutResult(session, customer);
+  }
   if (active && active !== name) {
     // Recovery belongs to this operation's original Stripe identity. It must
     // neither return a newer session nor replace that operation's reservation.
