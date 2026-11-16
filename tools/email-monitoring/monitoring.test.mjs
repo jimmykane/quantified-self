@@ -123,10 +123,12 @@ test('offline CLI preview is credential-free, unconfirmed apply refuses, CI runs
   assert.equal(/^TTL_EXPIRE_TYPE=never$/m.test(readFileSync('extensions/firestore-send-email.env', 'utf8')), true, 'Initializing PENDING must preserve the configured external TTL boundary.');
 });
 test('all application and operator mail producers initialize pending metadata in their existing write', () => {
-  const paths = ['email/registration-welcome.ts', 'stripe/email-triggers.ts', 'user/user.ts', 'schedule/notifications.ts',
+  const paths = ['email/registration-welcome.ts', 'stripe/email-triggers.ts', 'users/initiate-deletion.ts', 'users/inactivity.ts', 'schedule/notifications.ts',
     'admin/handlers/subscription-gifts.handlers.ts', 'admin/marketing/service.ts', 'scripts/test-all-emails.ts',
     'scripts/queue-mcp-connection-update.ts', 'scripts/queue_development_update_emails.ts'];
   for (const path of paths) assert.match(readFileSync(`functions/src/${path}`, 'utf8'), /\.\.\.newEmailDeliveryFields\(\)/, `${path} must use existing-mail metadata, never a second queue.`);
+  assert.match(readFileSync('functions/src/user/user.ts', 'utf8'), /await deleteAuthAccountAndNotify\(uid, userEmail\)/,
+    'Self-deletion must keep using the verified shared confirmation sender.');
   assert.doesNotMatch(readFileSync('functions/src/email/monitoring-probe.ts', 'utf8'), /\.set\(|\.update\(|\.create\(|\.delete\(|runTransaction|\.collection\('email/);
   const docs = readFileSync('docs/email-lifecycle.md', 'utf8');
   assert.match(docs, /## Cloud Monitoring \(#835\)/); assert.match(docs, /Future production deployments/);

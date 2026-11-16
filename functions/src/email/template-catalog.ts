@@ -68,6 +68,16 @@ export const EMAIL_PARTIAL_CATALOG: readonly EmailPartialCatalogEntry[] = [
 
 export const REFRESHED_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntry[] = [
     {
+        id: 'account_inactivity_warning',
+        subject: 'Sign in within 30 days to keep your Quantified Self account',
+        htmlFile: 'account_inactivity_warning.hbs',
+        textFile: 'account_inactivity_warning.txt.hbs',
+        partials: TRANSACTIONAL_PARTIALS,
+        previewCases: [{ name: 'inactive-free-account', data: {
+            login_url: 'https://quantified-self.io/login', support_email: 'support@quantified-self.io',
+        } }],
+    },
+    {
         id: 'registration_welcome',
         subject: 'Welcome to Quantified Self — a note from Dimitrios',
         htmlFile: 'registration_welcome.hbs',

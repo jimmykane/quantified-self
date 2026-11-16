@@ -37,6 +37,7 @@
  * @module stripe/subscriptions
  */
 
+import { invalidateInactivityWarning } from '../users/inactivity-cancellation';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -204,6 +205,13 @@ export const onSubscriptionUpdated = onDocumentWritten({
     if (!userDoc.exists) {
         logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists in Firestore. Skipping to prevent orphaned subcollections.`);
         return;
+    }
+
+    // A brief restored membership between daily scans must invalidate the old notice.
+    if (event.data) {
+        const changedAt = event.data.after.updateTime?.toMillis() ?? Date.parse(event.time);
+        if (!Number.isFinite(changedAt)) throw new Error('subscription_event_time_unavailable');
+        await invalidateInactivityWarning(firestore, uid, changedAt);
     }
 
     let latestReconciledRole: string | null = null;

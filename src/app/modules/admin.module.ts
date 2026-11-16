@@ -8,6 +8,7 @@ import { AdminMarketingComponent } from '../components/admin/admin-marketing/adm
 import { AdminQueueMonitorComponent } from '../components/admin/admin-queue-monitor/admin-queue-monitor.component';
 import { RouterModule, Routes } from '@angular/router';
 import { adminGuard } from '../authentication/admin.guard';
+import { AdminInactiveAccountsComponent } from '../components/admin/admin-inactive-accounts/admin-inactive-accounts.component';
 
 export const adminRoutes: Routes = [
     {
@@ -19,6 +20,10 @@ export const adminRoutes: Routes = [
         path: 'marketing',
         component: AdminMarketingComponent,
         canActivate: [adminGuard]
+    },
+    {
+        path: 'inactive-accounts', component: AdminInactiveAccountsComponent, canActivate: [adminGuard],
+        data: { title: 'Inactive accounts', robots: 'noindex, nofollow' }
     },
     {
         path: 'maintenance',
@@ -112,6 +117,7 @@ export const adminRoutes: Routes = [
         CommonModule,
         RouterModule.forChild(adminRoutes),
         AdminDashboardComponent,
+        AdminInactiveAccountsComponent,
         AdminMarketingComponent,
         AdminMaintenanceComponent,
         AdminUserWorkspaceComponent,
