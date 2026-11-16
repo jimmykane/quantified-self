@@ -2719,7 +2719,8 @@ within the last 30 days and requires at least three before returning an average 
 
 Current formula 5 keeps HRV within or above its personal range at the neutral component score of 50; only below-range
 values reduce it. Above-range evidence retains its numeric range classification but has a neutral tone. MCP instructions,
-the built-in Assistant and daily/manual workout generation share the same interpretation: elevated HRV alone does not
+the built-in Assistant and daily/manual workout generation share the same interpretation. The guidance is also sent to
+clients with only Health or Sleep grants, without granting access to readiness tools. Elevated HRV alone does not
 establish stress, poor recovery or a reason to prescribe rest. There is no automatic bonus either. The current tools are
 still additive to the registered baseline; update the digest-bound pending record and rescan after an approved release.
 Legacy formula-3 tools keep their frozen evaluator and projection. No new grants, reads or mutation permissions are added.

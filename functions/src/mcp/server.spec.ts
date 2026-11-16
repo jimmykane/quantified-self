@@ -163,6 +163,22 @@ describe('MCP HTTP scope enforcement', () => {
     }
   });
 
+  it.each([MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead])(
+    'keeps above-range HRV informational with only %s access', async scope => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json',
+        connectionId: 'connection-1', scopes: [scope] }, 'https://quantified-self.io');
+      const client = new Client({ name: 'hrv-interpretation-client', version: '1.0.0' });
+      try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        expect(client.getInstructions()).toContain('Above-range HRV is informational');
+        expect(client.getInstructions()).toContain('Do not reduce workout intensity or recommend rest solely because HRV is higher');
+        expect((await client.listTools()).tools.some(tool => tool.name === 'get_current_readiness')).toBe(false);
+      } finally { await client.close(); await server.close(); }
+    },
+  );
+
   it('requires Health and Sleep before serving shared HRV ranges', () => {
     expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_hrv_personal_range' } }))
       .toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);

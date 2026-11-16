@@ -1580,7 +1580,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('band continues across missing-reading days');
     expect(healthSection?.content).toContain('Until 14 nights exist');
     expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
-    expect(healthSection?.content).toContain('within, outside, or far outside');
+    expect(healthSection?.content).toContain('within, above, or below');
+    expect(healthSection?.content).toContain('Above-range HRV is informational and neutral');
     expect(healthSection?.content).toContain('color is never the only signal');
     expect(healthSection?.content).toContain('average or overnight HRV');
     expect(healthSection?.content).toContain('even if no standalone Health HRV record exists');

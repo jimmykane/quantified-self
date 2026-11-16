@@ -6734,7 +6734,7 @@ It does not infer causes, prescribe training, add thresholds or introduce a new 
 so it cannot be confused with the latest nightly value. Missing today's sleep remains pending, not a positive assessment.
 
 Each phrase uses existing theme tokens independently: positive Training/Ready/within-range evidence stays green,
-Mixed and outside-range evidence uses caution, and Recover, negative Training/overnight-HR or unavailable evidence
+Mixed and below-range HRV evidence uses caution; above-range HRV is informational and neutral. Recover, negative Training/overnight-HR or unavailable evidence
 uses error. Neutral classifications, loading, insufficient and recorded-only context stay neutral. The existing
 assessment color is carried separately from availability so an available neutral Training state is not made positive.
 A neighboring caution/error phrase never recolors positive phrases; punctuation and the greeting remain neutral. Missing/unavailable inputs are stated rather than hidden behind a reassuring

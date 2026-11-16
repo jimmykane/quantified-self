@@ -912,9 +912,12 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
     );
   }
+  if ([MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]
+    .some(scope => auth.scopes.includes(scope))) {
+    instructions.push(HRV_INTERPRETATION_GUIDANCE);
+  }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     instructions.push(
-      HRV_INTERPRETATION_GUIDANCE,
       'Use list_training_metrics to discover Training-derived kinds. Call prepare_training_metrics for the selected kinds before get_training_metric; if preparation is still pending, retry preparation later, then read the ready snapshots. Use list_metrics and query_metric for activity and other numeric event metrics; use query_metrics to compare up to four over one bounded range. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot.',
     );
   }
