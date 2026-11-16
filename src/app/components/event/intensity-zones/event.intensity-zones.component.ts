@@ -13,6 +13,7 @@ import {
   SimpleChanges,
   TemplateRef,
   ViewChild,
+  signal,
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subscription } from 'rxjs';
@@ -80,6 +81,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   private chartSettings: AppChartSettingsLocalStorageService | null = null;
   metricOptions: { type: string; label: string; color: string; selected: boolean }[] = [];
   selectedMetricCount = 0;
+  readonly metricPreferenceSaveFailed = signal(false);
 
   constructor(
     private breakpointObserver: BreakpointObserver,
@@ -161,7 +163,13 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const hidden = new Set(this.hiddenMetricTypes);
     if (hidden.has(type)) hidden.delete(type);
     else hidden.add(type);
-    this.chartSettings.setHiddenIntensityZoneMetrics([...hidden]);
+    try {
+      this.chartSettings.setHiddenIntensityZoneMetrics([...hidden]);
+      this.metricPreferenceSaveFailed.set(false);
+    } catch (error) {
+      this.metricPreferenceSaveFailed.set(true);
+      this.logger.error('[EventIntensityZonesComponent] Could not save metric visibility', error);
+    }
     this.hiddenMetricTypes = hidden;
     this.updateMetricOptions();
     this.updateChart();

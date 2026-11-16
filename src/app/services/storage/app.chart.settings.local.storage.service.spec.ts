@@ -6,7 +6,7 @@ import {
   DataSpeed,
   EventInterface,
 } from '@sports-alliance/sports-lib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_STORAGE } from './app.storage.token';
 import { MemoryStorage } from './memory.storage';
 import { AppChartSettingsLocalStorageService } from './app.chart.settings.local.storage.service';
@@ -53,6 +53,11 @@ describe('AppChartSettingsLocalStorageService', () => {
   it('ignores invalid stored metric entries', () => {
     storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', '["Power",null,42,"Power","Speed"]');
     expect(service.getHiddenIntensityZoneMetrics()).toEqual(['Power', 'Speed']);
+  });
+
+  it('uses default intensity visibility when browser storage cannot be read', () => {
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new DOMException('Storage is unavailable', 'SecurityError'); });
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
   });
 
   it('persists custom visibility independently for each activity-type signature', () => {

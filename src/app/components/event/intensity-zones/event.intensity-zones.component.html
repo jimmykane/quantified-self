@@ -25,6 +25,9 @@
     }
   </div>
   }
+  @if (allowMetricSelection && metricPreferenceSaveFailed()) {
+  <p class="intensity-metrics-save-error" role="status">Your selection applies to this view but could not be saved.</p>
+  }
   <mat-menu #metricsMenu="matMenu" class="qs-menu-panel" aria-label="Intensity metrics">
     @for (metric of metricOptions; track metric.type) {
     <button mat-menu-item type="button" role="menuitemcheckbox" [attr.aria-checked]="metric.selected"

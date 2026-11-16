@@ -205,6 +205,29 @@ describe('EventIntensityZonesComponent', () => {
     expect(getLastOption().series[0].data).toEqual([100, 200]);
   });
 
+  it('keeps metric toggles working when browser storage rejects the save and clears the message after recovery', async () => {
+    component.allowMetricSelection = true;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const error = new DOMException('Storage is unavailable', 'QuotaExceededError');
+    chartSettings.setHiddenIntensityZoneMetrics.mockImplementationOnce(() => { throw error; });
+
+    component.toggleMetric('Heart Rate');
+    fixture.detectChanges();
+    expect(component.selectedMetricCount).toBe(0);
+    expect(getLastOption().series).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.intensity-metrics-save-error').textContent).toContain('could not be saved');
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Could not save metric visibility'), error);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+
+    component.toggleMetric('Heart Rate');
+    fixture.detectChanges();
+    expect(component.selectedMetricCount).toBe(1);
+    expect(getLastOption().series).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.intensity-metrics-save-error')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('provides a checkmarked metric menu that stays open for multiple choices', async () => {
     component.allowMetricSelection = true;
     fixture.detectChanges();
