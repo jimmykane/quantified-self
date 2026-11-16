@@ -83,9 +83,10 @@ Pro trials continue to require a payment method; no-trial checkout omits `subscr
 
 Recurring requests include the displayed `trial_policy_revision`. Missing revisions mean zero for cached clients
 before the first policy save. Rules, browser preflight and the worker reject stale revisions; the worker independently
-checks the requested duration against the current policy and live Stripe history. It rechecks revision inside the
-operation reservation/replacement transaction, closing the read-to-reservation race. That reservation is the acceptance
-boundary: retries of an accepted operation retain frozen Stripe parameters and idempotency keys, including when an
+checks the requested duration against the current policy and live Stripe history. Reservation, reuse and replacement
+transactions recheck the revision of the worker's prepared request, closing the read-to-reservation race even if an
+owner deletes and recreates the public request at the same path. That reservation is the acceptance boundary:
+retries of an accepted operation retain frozen Stripe parameters and idempotency keys, including when an
 admin later disables trials. Already-issued Checkout URLs keep their accepted terms until their normal expiry.
 A durably recorded reuse of an existing Checkout follows the same recovery rule: a lost public-result commit
 does not re-evaluate its accepted offer against a later trial policy. Each accepted request has an immutable reuse

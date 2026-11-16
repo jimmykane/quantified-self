@@ -573,6 +573,37 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
         expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).exists).toBe(false);
       } finally { resolve.mockRestore(); }
     });
+    it.each(['create', 'reuse', 'replace'])('checks prepared terms when a source request is recreated during %s', async action => {
+      const f = await fixture();
+      const originalData = { ...f.request, trial_period_days: 7 };
+      await f.ref.set(originalData);
+      if (action !== 'create') await f.run((await admitBillingCheckout(db, f.uid, f.requestId, originalData, Timestamp.now()))!);
+      const data = action === 'replace' ? { ...await changePrice(f), trial_period_days: 7 } : originalData;
+      const selected = action === 'create'
+        ? { ref: f.ref, requestId: f.requestId, id: (await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))! }
+        : await nextRequest(f, data);
+      const baselineCreates = f.stripe.checkout.sessions.create.mock.calls.length;
+      const policyRef = db.doc(BILLING_TRIAL_POLICY_PATH), readPolicy = policyRef.get.bind(policyRef);
+      vi.spyOn(policyRef, 'get').mockImplementationOnce(async () => {
+        const prepared = await readPolicy();
+        await policy(0, 0);
+        // Clients can delete their own checkout document, then create a new
+        // current-policy request at the same path; the queued job is unchanged.
+        await selected.ref.delete();
+        await selected.ref.set({ ...f.request, price: data.price, trial_policy_revision: 1 });
+        return prepared;
+      });
+      const document = db.doc.bind(db);
+      const resolve = vi.spyOn(db, 'doc').mockImplementation(path => path === BILLING_TRIAL_POLICY_PATH ? policyRef : document(path));
+      try {
+        await f.run(selected.id);
+        expect((await selected.ref.get()).get('error.code')).toBe('trial_policy_changed');
+        expect((await selected.ref.get()).get('sessionId')).toBeUndefined();
+        expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${selected.requestId}`).get()).exists).toBe(false);
+        expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(baselineCreates);
+        expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+      } finally { resolve.mockRestore(); }
+    });
     it('preserves an accepted operation across policy changes and recovery', async () => {
       const f = await fixture();
       const data = { ...f.request, trial_period_days: 7 };
