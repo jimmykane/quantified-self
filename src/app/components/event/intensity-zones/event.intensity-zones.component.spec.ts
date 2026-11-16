@@ -57,6 +57,7 @@ describe('EventIntensityZonesComponent', () => {
   const mockedConvert = vi.mocked(convertIntensityZonesStatsToEchartsData);
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
+    dispatchAction: vi.fn(),
   };
 
   const getLastOption = (): Record<string, any> => {
@@ -76,6 +77,7 @@ describe('EventIntensityZonesComponent', () => {
   };
 
   beforeEach(async () => {
+    mockChart.dispatchAction.mockClear();
     chartSettings = { getHiddenIntensityZoneMetrics: vi.fn().mockReturnValue([]), setHiddenIntensityZoneMetrics: vi.fn() };
     haptics = { selection: vi.fn() };
     breakpointSubject = new Subject<{ matches: boolean }>();
@@ -158,7 +160,7 @@ describe('EventIntensityZonesComponent', () => {
     component.useAnimations = false;
   });
 
-  it('changes only selected series, retaining zone values and tooltips without aggregating again', async () => {
+  it('updates selected series and tooltip data without aggregating again or retaining the previous tooltip', async () => {
     const heartRate = { type: 'Heart Rate', values: [100, 200], percentages: [33.3333, 66.6666] };
     const power = { type: 'Power', values: [250, 50], percentages: [83.3333, 16.6666] };
     mockedConvert.mockReturnValue({ zones: ['Zone 1', 'Zone 2'], series: [heartRate, power] });
@@ -167,6 +169,7 @@ describe('EventIntensityZonesComponent', () => {
     await waitForChartStabilization();
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(chartSettings.setHiddenIntensityZoneMetrics).not.toHaveBeenCalled();
+    expect(mockChart.dispatchAction).not.toHaveBeenCalled();
     const conversions = mockedConvert.mock.calls.length;
 
     component.toggleMetric('Heart Rate');
@@ -178,9 +181,12 @@ describe('EventIntensityZonesComponent', () => {
     expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenLastCalledWith(['Heart Rate']);
     expect(mockedConvert).toHaveBeenCalledTimes(conversions);
     expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockChart.dispatchAction).toHaveBeenCalledExactlyOnceWith({ type: 'hideTip' });
+    expect(mockChart.dispatchAction.mock.invocationCallOrder[0]).toBeLessThan(mockLoader.setOption.mock.invocationCallOrder.at(-1)!);
 
     component.toggleMetric('not recorded');
     expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockChart.dispatchAction).toHaveBeenCalledOnce();
     component.toggleMetric('Power');
     fixture.detectChanges();
     expect(getLastOption().series).toEqual([]);
@@ -203,6 +209,24 @@ describe('EventIntensityZonesComponent', () => {
     component.toggleMetric('Heart Rate');
     expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenLastCalledWith(['Speed']);
     expect(getLastOption().series[0].data).toEqual([100, 200]);
+  });
+
+  it('retains a metric choice made while the chart is still initializing', async () => {
+    let finishLoading!: (chart: typeof mockChart) => void;
+    mockLoader.init.mockReturnValue(new Promise<typeof mockChart>(resolve => { finishLoading = resolve; }));
+    component.allowMetricSelection = true;
+    fixture.detectChanges();
+
+    component.toggleMetric('Heart Rate');
+    expect(component.selectedMetricCount).toBe(0);
+    expect(mockChart.dispatchAction).not.toHaveBeenCalled();
+    expect(mockLoader.setOption).not.toHaveBeenCalled();
+
+    finishLoading(mockChart);
+    await waitForChartStabilization();
+    expect(getLastOption().series).toEqual([]);
+    expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenCalledExactlyOnceWith(['Heart Rate']);
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('keeps metric toggles working when browser storage rejects the save and clears the message after recovery', async () => {

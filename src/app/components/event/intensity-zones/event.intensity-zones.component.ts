@@ -172,6 +172,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     }
     this.hiddenMetricTypes = hidden;
     this.updateMetricOptions();
+    // Tap tooltips retain their content across series changes.
+    this.chartHost.hideTooltip();
     this.updateChart();
     this.haptics.selection();
   }
