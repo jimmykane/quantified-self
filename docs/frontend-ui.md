@@ -875,6 +875,18 @@ Rows keep their original lap objects, types, metrics and source-index selection/
 hydrating another lap type makes an assignment ambiguous. Only the table projection changes: source files, storage,
 chart/map marker exclusions, Training and MCP contracts remain unchanged; no reparse or migration is needed.
 
+Merged/benchmark comparisons opt into `includeWholeActivityLaps` in the lap-table visibility projection. A sole
+recorded lap stays inspectable even when it repeats its source activity's totals; ordinary activity views retain
+duplicate suppression. A single original lap whose positive time span covers the source activity within one second
+gets a **Whole activity** caption above its table. That caption is independent of duration/distance summary equality,
+so small source-summary differences cannot make compared devices appear to have different lap availability.
+The caption sits outside the narrow pinned number column and does not change recorded lap types, numbering or metrics.
+Each selected comparison source without original laps gets a labelled **No laps recorded** state when its active view
+has no projected intervals either. The parent Laps section remains present even when every selected comparison source
+has no laps, and disappears when no source is selected. Swim interval projections retain their current default;
+switching to Original laps exposes the per-source absence state. This is a UI-only projection: marker exclusions,
+cross-leg ownership, original files, storage, Training and MCP contracts remain unchanged; no reparse is needed.
+
 The persistent lap Summary row appears only when an activity/display-group table contains at least two visible original
 laps and has summary metrics. A single lap retains its recorded row without a duplicate summary. Count original laps
 including any appended final segment before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:

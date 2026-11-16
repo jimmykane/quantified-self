@@ -2324,7 +2324,10 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event lap tables');
-    expect(gettingStartedSection?.content).toContain('A sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain('For ordinary activities, a sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain("Comparisons retain each source's recorded whole-activity lap");
+    expect(gettingStartedSection?.content).toContain('labelled **Whole activity**');
+    expect(gettingStartedSection?.content).toContain('**No laps recorded**');
     expect(gettingStartedSection?.content).toContain('If the lap and activity totals cannot be compared reliably, the lap stays visible');
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('the last numbered row with a **Final lap** label, without a separate tab');

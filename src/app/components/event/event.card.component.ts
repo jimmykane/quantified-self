@@ -46,6 +46,7 @@ import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcil
 import { hasEventChartableData } from '../../helpers/event-echarts-data.helper';
 import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.helper';
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
+import { isMergeOrBenchmarkEvent } from '../../helpers/event-visibility.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
 import { getSwimIntervalActivity } from '../../helpers/event-swim-interval.helper';
@@ -109,7 +110,8 @@ export class EventCardComponent implements OnInit {
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
-    hasVisibleEventLaps(this.selectedActivitiesInstant())
+    (isMergeOrBenchmarkEvent(this.event()) && this.selectedActivitiesInstant().length > 0)
+      || hasVisibleEventLaps(this.selectedActivitiesInstant())
       || this.selectedActivitiesInstant().some(activity => !!getSwimIntervalActivity(activity))
   );
 
