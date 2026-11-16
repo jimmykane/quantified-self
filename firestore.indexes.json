@@ -1798,9 +1798,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "stripeBillingJobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "state", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "userDeletionTombstones", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source", "order": "ASCENDING" }, { "fieldPath": "cleanupStatus", "order": "ASCENDING" }]
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "inactivityRetention", "fieldPath": "state", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" }, { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
+    { "collectionGroup": "inactivityRetention", "fieldPath": "nextCheckAt", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" }, { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
+    { "collectionGroup": "inactivityRetention", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "pushState", "fieldPath": "trainingDueAt", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "expireAt", "ttl": true, "indexes": []},
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "goal", "ttl": false, "indexes": []},

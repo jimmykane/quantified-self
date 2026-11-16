@@ -117,7 +117,7 @@ Production has independent Secret Manager bindings:
 
 | Credential | Consumers | Required access |
 | --- | --- | --- |
-| `STRIPE_BILLING_KEY` | native portal, compatibility portal, private worker | Customers and Checkout Sessions write; Billing Portal sessions write; Products, Prices, Subscriptions, Invoices, PaymentIntents, Charges and Tax Rates read. Validate restricted-key resource grouping in Stripe test mode. |
+| `STRIPE_BILLING_KEY` | native portal, compatibility portal, private worker, off-by-default `processInactiveAccounts` | Customers and Checkout Sessions write; Billing Portal sessions write; Products, Prices, Subscriptions, Subscription Schedules, Invoices, PaymentIntents, Charges and Tax Rates read. Validate restricted-key resource grouping in Stripe test mode. Retention adds Subscription Schedules read; verify permission before activation. |
 | `STRIPE_BILLING_WEBHOOK_SECRET` | ingress only | Endpoint signing secret; not an API credential |
 | `STRIPE_SECRET_KEY` | existing claims/linking/renewal paths | Existing policy unchanged |
 | `STRIPE_ADMIN_BILLING_KEY` | gift preview/grant only | Existing Subscription read/write restriction unchanged |

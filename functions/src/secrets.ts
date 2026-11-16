@@ -69,6 +69,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   'ext-firestore-stripe-payments-createPortalLink': [SECRET_PARAMS.STRIPE_BILLING_KEY],
   stripeBillingWebhook: [SECRET_PARAMS.STRIPE_BILLING_WEBHOOK_SECRET],
   processStripeBillingTask: [SECRET_PARAMS.STRIPE_BILLING_KEY],
+  processInactiveAccounts: [SECRET_PARAMS.STRIPE_BILLING_KEY],
   addCOROSAPIHistoryToQueue: COROS,
   addSuuntoAppHistoryToQueue: SUUNTO_API,
   addSuuntoAppRoutesToQueue: SUUNTO_API,

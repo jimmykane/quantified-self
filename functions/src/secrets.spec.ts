@@ -24,6 +24,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   createStripePortalLink: ['STRIPE_BILLING_KEY'],
   'ext-firestore-stripe-payments-createPortalLink': ['STRIPE_BILLING_KEY'],
   processStripeBillingTask: ['STRIPE_BILLING_KEY'],
+  processInactiveAccounts: ['STRIPE_BILLING_KEY'],
   stripeBillingWebhook: ['STRIPE_BILLING_WEBHOOK_SECRET'],
   addCOROSAPIHistoryToQueue: COROS,
   addSuuntoAppHistoryToQueue: SUUNTO_API,

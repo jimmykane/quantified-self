@@ -429,6 +429,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/health/compare')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/admin/inactive-accounts')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
@@ -518,7 +519,7 @@ describe('Firebase Hosting configuration', () => {
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
     // Approved corrections preserve manual Health permissions and link existing account tools.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
@@ -606,9 +607,10 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
+    // Inactive Free account notice and retention policy (2026-11-13).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-11-13');
   });
 
   it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {

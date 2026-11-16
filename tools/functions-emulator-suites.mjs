@@ -61,6 +61,7 @@ export const EMULATOR_SUITES = {
     'src/admin/marketing/marketing.emulator.spec.ts',
     'src/service-disconnect-cleanup.integration.spec.ts',
     'src/users/data-cleanup.emulator.spec.ts',
+    'src/users/inactivity.emulator.spec.ts',
   ],
 };
 

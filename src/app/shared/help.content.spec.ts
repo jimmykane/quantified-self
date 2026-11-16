@@ -686,6 +686,14 @@ describe('help.content', () => {
     expect(copy).toContain('Those with a 90-day expiry are removed automatically after that date');
     expect(copy).toContain('This action cannot be undone');
   });
+  it('explains inactive Free account notice, cancellation and paid protection', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    for (const phrase of ['six calendar months', 'Sign in within 30 days', 'no purchase is required',
+      'Provider sync and MCP requests do not reset', 'fresh warning period', 'Basic and Pro access',
+      'trials and gifts', 'grace period protect', 'run daily', 'Unconfirmed warning delivery prevents deletion']) {
+      expect(copy).toContain(phrase);
+    }
+  });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     expect(copy).toContain('Set **Sender name**');

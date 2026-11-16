@@ -145,7 +145,7 @@ billing sandbox state retains its separate path and is not migrated or deleted b
 
 ### Stripe key separation
 
-Native billing uses `STRIPE_BILLING_KEY` only on its portal/compatibility portal and private worker; ingress binds only `STRIPE_BILLING_WEBHOOK_SECRET`. These are independent of the installed extension and gift credentials. See [Stripe billing](stripe-billing.md#credentials) for permissions, the two-value local test file, and cutover prerequisites.
+Native billing uses `STRIPE_BILLING_KEY` on its portal/compatibility portal, private worker and the off-by-default `processInactiveAccounts` daily retention check; ingress binds only `STRIPE_BILLING_WEBHOOK_SECRET`. Retention uses read-only Customer, Subscription, Subscription Schedule and Checkout Session checks; verify Subscription Schedules read access before activation. These are independent of the installed extension and gift credentials. See [Stripe billing](stripe-billing.md#credentials) for permissions, the two-value local test file, and cutover prerequisites.
 
 `STRIPE_SECRET_KEY` remains the general server key used by the existing custom Stripe Functions. `STRIPE_ADMIN_BILLING_KEY` is a separate restricted key used only by `previewAdminSubscriptionGift` and `grantAdminSubscriptionGift`. In Stripe Dashboard, create one environment-specific restricted key with subscription read/write access (`Subscriptions: Write`, which permits the retrieve and update calls) and leave every unrelated resource permission disabled. Do not reuse the Invertase extension key or the general server key for this admin path.
 
