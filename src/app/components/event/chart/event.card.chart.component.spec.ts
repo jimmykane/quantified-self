@@ -1540,23 +1540,24 @@ describe('EventCardChartComponent', () => {
   });
 
   it.each([
-    {activityType: ActivityTypes.Running, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type]},
-    {activityType: ActivityTypes.Walking, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataCadence.type]},
-    {activityType: ActivityTypes.Cycling, primaryDataTypes: [DataHeartRate.type, DataPower.type, DataSpeed.type]},
+    {activityType: ActivityTypes.Running, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type], additionalDataType: DataAltitude.type},
+    {activityType: ActivityTypes.Walking, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataCadence.type], additionalDataType: DataAltitude.type},
+    {activityType: ActivityTypes.Cycling, primaryDataTypes: [DataHeartRate.type, DataPower.type, DataSpeed.type], additionalDataType: DataAltitude.type},
+    {activityType: ActivityTypes.TrailRunning, primaryDataTypes: [DataPace.type, DataPower.type, DataAltitude.type], additionalDataType: DataHeartRate.type},
   ].flatMap(example => [false, true].map(isComparison => ({...example, isComparison}))))(
-    'shows primary charts and altitude for $activityType (comparison: $isComparison)', async ({activityType, primaryDataTypes, isComparison}) => {
-    mockUserService.getUserChartDataTypesToUse.mockReturnValue([...primaryDataTypes, DataAltitude.type]);
+    'shows primary charts and $additionalDataType for $activityType (comparison: $isComparison)', async ({activityType, primaryDataTypes, additionalDataType, isComparison}) => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([...primaryDataTypes, additionalDataType]);
     const activities = Array.from({length: isComparison ? 2 : 1}, (_, index) => ({type: activityType, getID: () => `activity-${index}`}));
     component.selectedActivities = activities as any;
     component.event = {
       hasBenchmark: isComparison,
-      getID: () => 'event-altitude-defaults',
+      getID: () => 'event-sport-defaults',
       getActivities: () => activities,
       isMultiSport: () => false,
     } as any;
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       chartPanel(DataTemperature.type),
-      chartPanel(DataAltitude.type),
+      chartPanel(additionalDataType),
       ...[...primaryDataTypes].reverse().map(chartPanel),
     ] as any);
 
@@ -1564,13 +1565,41 @@ describe('EventCardChartComponent', () => {
     await fixture.whenStable();
 
     expect(component.visibilityMode).toBe('automatic');
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([...primaryDataTypes, DataAltitude.type]);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([...primaryDataTypes, additionalDataType]);
     expect(component.recommendedDataTypeLegendItems.map((item) => item.dataType)).toEqual([
-      ...primaryDataTypes, DataAltitude.type, DataTemperature.type,
+      ...primaryDataTypes, additionalDataType, DataTemperature.type,
     ]);
     expect(component.allRecordedMetricsForced).toBe(isComparison);
     expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
+
+  it.each([{selectionKeys: []}, {selectionKeys: [DataPace.type, DataPower.type, DataAltitude.type]}])(
+    'preserves the saved trail selection $selectionKeys until an explicit reset', async ({selectionKeys}) => {
+      const dataTypes = [DataPace.type, DataPower.type, DataAltitude.type, DataHeartRate.type];
+      mockUserService.getUserChartDataTypesToUse.mockReturnValue(dataTypes);
+      mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys });
+      const activity = {type: ActivityTypes.TrailRunning, getID: () => 'trail-source'};
+      component.selectedActivities = [activity] as any;
+      component.event = {
+        getID: () => 'event-trail-custom', getActivities: () => [activity], isMultiSport: () => false,
+      } as any;
+      vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue(dataTypes.map(chartPanel) as any);
+
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(component.visibilityMode).toBe('custom');
+      expect(component.chartPanels.map(panel => panel.dataType)).toEqual(selectionKeys);
+      expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
+      component.onResetToSportDefaults();
+      expect(component.chartPanels.map(panel => panel.dataType)).toEqual(dataTypes);
+      expect(component.visibilityMode).toBe('automatic');
+      expect(component.visibilityAnnouncement()).toContain('Reset to Trail Running defaults');
+      expect(mockChartSettingsStorage.resetEventChartVisibilityPreference).toHaveBeenCalledWith(
+        component.event, component.sportProfile.signature,
+      );
+    },
+  );
 
   it('treats the global Pace preference as Swim Pace for swimming defaults', async () => {
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([

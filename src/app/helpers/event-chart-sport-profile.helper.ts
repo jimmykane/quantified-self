@@ -131,7 +131,7 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.Multisport]: profile(PROFILE_IDS.Multisport, 'Multisport', ['heart-rate', 'speed', 'altitude', 'temperature', 'epoc']),
   [PROFILE_IDS.Running]: profile(PROFILE_IDS.Running, 'Running', ['heart-rate', 'pace', 'power', 'altitude', 'cadence', 'speed', 'epoc', 'vertical-speed', 'temperature'], ['altitude']),
   [PROFILE_IDS.Treadmill]: profile(PROFILE_IDS.Treadmill, 'Treadmill', ['heart-rate', 'pace', 'power', 'cadence', 'speed', 'epoc', 'temperature']),
-  [PROFILE_IDS.TrailRunning]: profile(PROFILE_IDS.TrailRunning, 'Trail Running', ['pace', 'power', 'altitude', 'heart-rate', 'vertical-speed', 'cadence', 'speed', 'epoc', 'temperature']),
+  [PROFILE_IDS.TrailRunning]: profile(PROFILE_IDS.TrailRunning, 'Trail Running', ['pace', 'power', 'altitude', 'heart-rate', 'vertical-speed', 'cadence', 'speed', 'epoc', 'temperature'], ['heart-rate']),
   [PROFILE_IDS.TrackAndField]: profile(PROFILE_IDS.TrackAndField, 'Track and Field', ['heart-rate', 'pace', 'temperature']),
   [PROFILE_IDS.Walking]: profile(PROFILE_IDS.Walking, 'Walking', ['heart-rate', 'pace', 'power', 'cadence', 'altitude', 'vertical-speed', 'speed', 'temperature'], ['altitude']),
   [PROFILE_IDS.IndoorWalking]: profile(PROFILE_IDS.IndoorWalking, 'Indoor Walking', ['heart-rate', 'pace', 'power', 'cadence', 'speed', 'temperature']),

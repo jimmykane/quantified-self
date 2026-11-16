@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import {
   DataPace,
   DataPaceMinutesPerMile,
+  DataAltitude,
   DataPower,
   DataSpeed,
   EventInterface,
@@ -85,6 +86,21 @@ describe('AppChartSettingsLocalStorageService', () => {
       mode: 'custom',
       selectionKeys: [],
     });
+  });
+
+  it('retains a saved three-chart trail selection across reloads until that signature is reset', () => {
+    const event = mockEvent('trail-default-update');
+    const signature = 'types-v1:Trail%20Running';
+    const selectionKeys = [DataPace.type, DataPower.type, DataAltitude.type];
+    service.setEventChartCustomVisibilityPreference(event, signature, selectionKeys);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPower.type]);
+
+    const restored = new AppChartSettingsLocalStorageService(storage);
+    expect(restored.getEventChartVisibilityPreference(event, signature)).toEqual({mode: 'custom', selectionKeys});
+    restored.resetEventChartVisibilityPreference(event, signature);
+    expect(restored.getEventChartVisibilityPreference(event, signature)).toEqual({mode: 'automatic', selectionKeys: []});
+    expect(restored.getEventChartVisibilityPreference(event, 'types-v1:Running'))
+      .toEqual({mode: 'custom', selectionKeys: [DataPower.type]});
   });
 
   it('ignores selections from the unversioned visibility store', () => {

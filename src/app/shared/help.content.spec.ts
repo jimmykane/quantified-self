@@ -2539,6 +2539,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('a fourth chart alongside the existing primary charts');
     expect(gettingStartedSection?.content).toContain('both individual activities and comparisons');
     expect(gettingStartedSection?.content).toContain('Missing or disabled altitude does not add another chart instead');
+    expect(gettingStartedSection?.content).toContain('**Trail Running also shows Heart Rate** alongside Pace, Power, and Altitude when recorded and enabled');
+    expect(gettingStartedSection?.content).toContain('including Orienteering and Vertical Running');
+    expect(gettingStartedSection?.content).toContain('Missing or disabled Heart Rate does not add another chart instead');
     expect(gettingStartedSection?.content).toContain('Saved custom chart selections still take precedence');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');

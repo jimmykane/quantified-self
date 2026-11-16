@@ -8,12 +8,14 @@ import {
   DataCadence,
   DataDepth,
   DataDepthFeet,
+  DataEPOC,
   DataHeartRate,
   DataPace,
   DataPaceMinutesPerMile,
   DataPower,
   DataPowerLeft,
   DataPowerRight,
+  DataSeaLevelPressure,
   DataSpeed,
   DataSpeedKnots,
   DataStrokeRate,
@@ -349,6 +351,91 @@ describe('event chart sport profiles', () => {
     ]);
   });
 
+  it.each([
+    [ActivityTypes.TrailRunning], [ActivityTypes.Orienteering], ['Vertical Running'],
+    [ActivityTypes.TrailRunning, ActivityTypes.Orienteering, 'Vertical Running'],
+  ])('keeps pace, power, altitude and recorded heart rate automatic for %j', (...activityTypes) => {
+    const dataTypes = [DataPace.type, DataPower.type, DataAltitude.type, DataHeartRate.type, DataCadence.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile(activityTypes),
+      panels: [...dataTypes].reverse().map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).toEqual(dataTypes.slice(0, 4));
+  });
+
+  it('keeps the non-default pace unit when adding trail heart rate', () => {
+    const dataTypes = [DataPaceMinutesPerMile.type, DataPower.type, DataAltitude.type, DataHeartRate.type];
+    expect(resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.TrailRunning]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: [DataPace.type, DataPower.type, DataAltitude.type, DataHeartRate.type],
+    }).automaticDataTypes).toEqual(dataTypes);
+  });
+
+  it.each(['missing', 'globally disabled', 'excluded'])(
+    'keeps three trail charts without substituting another metric when heart rate is %s', availability => {
+      const dataTypes = [DataPace.type, DataPower.type, DataAltitude.type, DataHeartRate.type, DataCadence.type, DataTemperature.type];
+      expect(resolveEventChartRecommendations({
+        profile: resolveEventChartSportProfile([ActivityTypes.TrailRunning]),
+        panels: dataTypes.filter(type => availability !== 'missing' || type !== DataHeartRate.type).map(panel),
+        globallyAllowedDataTypes: dataTypes.filter(type => availability !== 'globally disabled' || type !== DataHeartRate.type),
+        automaticExcludedDataTypes: availability === 'excluded' ? [DataHeartRate.type] : [],
+      }).automaticDataTypes).toEqual([DataPace.type, DataPower.type, DataAltitude.type]);
+    },
+  );
+
+  it('does not duplicate trail heart rate or fill an extra slot when a primary metric is missing', () => {
+    const dataTypes = [DataPace.type, DataAltitude.type, DataHeartRate.type, DataCadence.type];
+    expect(resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.TrailRunning]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    }).automaticDataTypes).toEqual([DataPace.type, DataAltitude.type, DataHeartRate.type]);
+  });
+
+  it('keeps recorded heart rate automatic across the sport catalog except trajectory-first sky dives and transitions', () => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type, DataSpeed.type,
+      DataVerticalSpeed.type, DataCadence.type, DataStrokeRate.type, DataSwimPace.type, DataDepth.type,
+      DataTemperature.type, DataSeaLevelPressure.type, DataEPOC.type];
+    const withoutAutomaticHeartRate = ActivityTypesHelper.getActivityTypesAsUniqueArray().filter(activityType => (
+      !resolveEventChartRecommendations({
+        profile: resolveEventChartSportProfile([activityType]),
+        panels: dataTypes.map(panel),
+        globallyAllowedDataTypes: dataTypes,
+      }).automaticDataTypes.includes(DataHeartRate.type)
+    ));
+    expect(withoutAutomaticHeartRate.sort()).toEqual([
+      ActivityTypes.SkyDiving, ActivityTypes.Jumpmaster, ActivityTypes.Transition,
+    ].sort());
+  });
+
+  it('already includes snowmobiling heart rate after speed and altitude', () => {
+    const dataTypes = [DataSpeed.type, DataAltitude.type, DataHeartRate.type, DataTemperature.type];
+    expect(resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.Snowmobiling]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    }).automaticDataTypes).toEqual(dataTypes.slice(0, 3));
+  });
+
+  it.each([ActivityTypes.SkyDiving, ActivityTypes.Jumpmaster])('keeps trajectory charts first and heart rate selectable for %s', activityType => {
+    const dataTypes = [DataAltitude.type, DataVerticalSpeed.type, DataSpeed.type, DataHeartRate.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+    expect(result.automaticDataTypes).toEqual(dataTypes.slice(0, 3));
+    expect(result.recommendedDataTypes).toEqual(dataTypes);
+    expect(resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.filter(type => type !== DataVerticalSpeed.type).map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    }).automaticDataTypes).toEqual([DataAltitude.type, DataSpeed.type, DataHeartRate.type]);
+  });
+
   it.each(altitudeProfileCases.filter(({activityType}) => ['Running', 'Walking', 'Cycling'].includes(activityType))
     .flatMap(example => ['missing', 'globally disabled', 'excluded'].map(availability => ({...example, availability}))))(
     'preserves three $activityType defaults when altitude is $availability', ({activityType, primaryDataTypes, availability}) => {
@@ -364,7 +451,7 @@ describe('event chart sport profiles', () => {
   });
 
   it.each([
-    [ActivityTypes.TrailRunning, [DataPace.type, DataPower.type, DataAltitude.type]],
+    [ActivityTypes.TrailRunning, [DataPace.type, DataPower.type, DataAltitude.type, DataHeartRate.type]],
     [ActivityTypes.Hiking, [DataHeartRate.type, DataAltitude.type, DataSpeed.type]],
     [ActivityTypes.MountainBiking, [DataHeartRate.type, DataSpeed.type, DataAltitude.type]],
     [ActivityTypes.CrosscountrySkiing, [DataAltitude.type, DataHeartRate.type, DataPower.type]],

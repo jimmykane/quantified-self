@@ -378,6 +378,7 @@ describe('Firebase Hosting configuration', () => {
     // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
+    // Same-day chart help adds automatic Trail Running Heart Rate and preserves custom selections (2026-11-16).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-16');
   });
 
