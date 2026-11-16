@@ -96,7 +96,7 @@ export interface DashboardDerivedMetricsState {
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
   formUpdatedAtMs?: number | null;
-  trainingUpdatedAtMs?: number | null;
+  trainingSnapshotKey?: string;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
   rampRateStatus: DashboardDerivedMetricStatus;
@@ -419,16 +419,20 @@ export class DashboardDerivedMetricsService {
           DerivedMetricStateStatusKey | DerivedMetricStateContextKey,
           unknown
         >;
+        const trainingSnapshots: Array<[DerivedMetricKind, DashboardDerivedMetricStatus, number | null]> = [];
         snapshots.forEach((snapshot, index) => {
           const descriptor = metricDescriptors[index];
-          mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
+          const status = this.resolveSnapshotStatus(descriptor.kind, snapshot);
+          mutableState[descriptor.statusKey] = status;
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
           if ([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate,
             DERIVED_METRIC_KINDS.TrainingSummary].some(kind => kind === descriptor.kind)) {
-            nextState.trainingUpdatedAtMs = Math.max(nextState.trainingUpdatedAtMs ?? 0, this.toFiniteNumber(snapshot?.updatedAtMs) ?? 0);
+            // Each snapshot can arrive separately; a maximum timestamp hides later updates to other kinds.
+            trainingSnapshots.push([descriptor.kind, status, this.toFiniteNumber(snapshot?.updatedAtMs)]);
           }
           if (descriptor.kind === DERIVED_METRIC_KINDS.Form) nextState.formUpdatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
         });
+        nextState.trainingSnapshotKey = JSON.stringify(trainingSnapshots);
         return nextState;
       }),
     );

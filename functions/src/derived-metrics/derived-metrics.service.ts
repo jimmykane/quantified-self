@@ -5927,6 +5927,8 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         background?: boolean;
         // Internal history completion only: promote the pending union without invalidating inputs.
         completedHistory?: { runId: string; revision: number; repairOnly?: boolean };
+        // Foreground preparation can expedite this exact queued generation without invalidating inputs.
+        expediteGeneration?: number;
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5980,7 +5982,16 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         const rawCoordinatorData = coordinatorSnapshot.data();
         const coordinator = parseCoordinator(rawCoordinatorData);
         const completedHistory = options?.completedHistory;
-        const flushPending = completedHistory !== undefined;
+        const flushPending = completedHistory !== undefined || options?.expediteGeneration !== undefined;
+        if (options?.expediteGeneration !== undefined) {
+            const deadline = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs);
+            if (!Number.isSafeInteger(options.expediteGeneration) || options.expediteGeneration <= 0
+                || coordinator.generation !== options.expediteGeneration || coordinator.status !== 'queued'
+                || !coordinator.dirtyMetricKinds.length || deadline === null || deadline <= nowMs) {
+                generationToQueue = coordinator.generation;
+                return;
+            }
+        }
         let historyFlushRef: FirebaseFirestore.DocumentReference | undefined;
         const recordHistoryFlush = (generation: number | null): void => {
             if (historyFlushRef && completedHistory) transaction.update(historyFlushRef, {

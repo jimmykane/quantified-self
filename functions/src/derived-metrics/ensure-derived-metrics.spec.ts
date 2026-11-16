@@ -504,7 +504,7 @@ describe('prepareDerivedMetricsForUser', () => {
             ensure, readProbe, now: () => nowMs, sleep: vi.fn().mockResolvedValue(undefined),
         });
         expect(result).toEqual({ status: 'ready', metricKinds: [kind], readyMetricKinds: [kind], retryAfterSeconds: null });
-        expect(ensure).toHaveBeenCalledOnce();
+        expect(ensure).toHaveBeenCalledExactlyOnceWith('owner', [kind], { foreground: true });
         expect(readProbe).toHaveBeenCalledTimes(2);
     });
 

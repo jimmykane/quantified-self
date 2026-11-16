@@ -6511,9 +6511,14 @@ that finishes while hidden retains its result, but its shown event waits until t
 returns after hiding cannot start a new automatic model preparation until foreground return.
 Before charging, automatic daily preparation checks whether the selected Training snapshots are ready. A pending,
 failed or unavailable preparation/read becomes private `waiting-training` with `charged:false`; ready snapshots with
-no history are allowed. Explicit **Use available data** can proceed from this deferred state with uncertainty stated
-in Context. Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction
-admit only one resumed generation; completed or failed charged receipts are never reset by Training updates.
+no history are allowed. The shared foreground preparation brings a delayed queued rebuild forward through the existing
+coordinator, preserving its dirty union and input revisions. It never restarts claimed work. Passive dashboard freshness
+probes retain background batching. Today labels this state **Refreshing your Training summary…**, shows the shared
+Material progress bar and a primary **Check again** action, and explains that the daily suggestion remains unused.
+**Use available data** stays available in the options menu and can proceed with uncertainty stated in Context.
+A `preparing` receipt also keeps the progress bar visible after the initiating request finishes; this adds no polling.
+Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction admits only
+one resumed generation; completed or failed charged receipts are never reset by Training updates.
 Automatic preparation checks the selected, sport-independent Training kinds before weekday sport selection. A pending
 or failed check stops before the bounded weekday-history scan (up to two 100-item pages) and before reading the daily
 report, Timeline, nearby plans/goals, feedback and detailed duration routine. Ready-day collection reuses the preparation
@@ -6528,8 +6533,10 @@ The existing dashboard derived-metric subscription includes the daily suggestion
 opted-in Pro owners viewing Today. Daily-only kinds are read-only subscriptions: the dashboard's ensure call still
 contains only its displayed metrics. The uncovered-day generator owns preparation of additional daily context, so a
 covered/dismissed/cached day does not cause a new Training-summary build solely for the suggestion. A ready snapshot update resumes `waiting-training`, including an update arriving
-while the previous context request was in flight. The browser caches the checked Training update key across remounts
-and reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
+while the previous context request was in flight. Its key includes each selected core snapshot's kind, resolved status
+and update time, rather than their maximum update time: one newer snapshot cannot conceal another kind arriving later.
+Unrelated Recovery updates do not change this key. The browser caches the checked Training key across remounts and
+reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
 poller, collection or Firestore index is introduced. MCP impact: these are private first-party admission and browser
 recovery changes; public tools, projections, permissions, Training mutations and plugin contracts remain unchanged.
 
@@ -6887,18 +6894,24 @@ there is still only one active claim. Completion queues any pending work, and wr
 pending kinds with the same bounded background deadline. Neither path needs a later import to wake the final rebuild.
 All generation, claim, revision, enqueue-failure and account-deletion guards remain in force.
 
-Opening Training/Dashboard, automatic freshness probes, MCP preparation and the generic refresh retry join this same
-policy; they cannot cancel the delay by requesting a missing kind. A scheduled rebuild is still preparing, not a fresh
-zero-valued result. The added background wait is at most two minutes under a healthy queue, in addition to the existing
-up-to-30-second ingress bucket plus buffer, processing time and queue delivery latency. Explicit owner edits bypass the
-build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot schemas are
-unchanged; no activity reparse or data migration is required for this scheduling change.
+Opening Training/Dashboard, automatic freshness probes and the generic dashboard refresh retry retain this background
+policy. Foreground `prepare_training_metrics` calls from MCP, the Assistant and daily-workout preparation bypass the
+batching delay. They can promote only the exact still-delayed queued generation observed by the freshness probe, keeping
+its dirty union and source/workout-input revisions. Concurrent calls promote it once; a claimed, settled, superseded or
+already-immediate generation is left alone. The old delayed task remains fenced by its generation. Missing selected
+kinds use the existing priority enqueue path. There is no second calculation for a repeated preparation of queued or
+claimed kinds, and no reset of the daily AI allowance. A scheduled rebuild is still preparing, not a fresh zero-valued
+result. Background wait is at most two minutes under a healthy queue, in addition to the existing up-to-30-second
+ingress bucket plus buffer, processing time and queue delivery latency. Foreground preparation and explicit owner edits
+bypass the build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot
+schemas are unchanged; no activity reparse or data migration is required for this scheduling change.
 
 Validation uses synthetic fixtures in the existing isolated Firestore emulator suite: fourteen ingress arrivals 30
 seconds apart with representative 21-second builds require five background builds instead of fourteen prompt builds,
 while the final ready snapshot includes all fourteen mutation revisions. This is a scheduling comparison, not a measured
 production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
-automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
+automatic freshness batching, concurrent foreground promotion and ready completion, completion/write-block follow-ups,
+stale tasks and account deletion.
 Focused unit regressions additionally cover slow enqueue retries and claims delayed by transaction contention.
 Emulator regressions cover ingress enqueue failure, repeated completion/write-block handoff failures, predecessor
 redelivery without another source write, and handoff fencing after deletion, priority promotion or a successor claim.
@@ -9689,9 +9702,11 @@ contract for every kind, whether or not that kind needs an additional public pro
 It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
 requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
 An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result
-and then call the unchanged `get_training_metric` read. Repeated preparation joins queued work without creating a
-new generation. A future email worker can call the same authenticated backend service without opening `/training`;
-this change adds no email job or sending behavior.
+and then call the unchanged `get_training_metric` read. Foreground preparation expedites a still-delayed generation
+once through the existing queue; repeated preparation then joins immediate queued or claimed work without creating
+another generation or invalidating its inputs. The public input/output schema, scopes and redaction are unchanged;
+this internal scheduling change needs no registered-app rescan or plugin rebuild. A future email worker can call the same
+authenticated backend service without opening `/training`; this change adds no email job or sending behavior.
 
 The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
@@ -9911,6 +9926,14 @@ exactly-once audit ledger or unique-task/account counts. A multi-kind failure pr
 kind; failure policies group by kind instead of summing a single failed generation into a global surge. Exceptions
 before a guarded failure write remain visible in attempts/native HTTP charts, but cannot establish committed failure.
 Existing claims, revisions, publication fences, retry policy, source reads and calculation results remain authoritative.
+
+Foreground Training preparation monitoring review (16 November 2026): **covered in the source definitions**. The existing
+bundle now includes `generatedayworkout` alongside `mcpapi` and `assistantchat`, so guarded dispatch failures from
+promotion reach the existing enqueue-failure metric and policy. Native queue depth/latency, committed failures,
+pending-age and unknown-coverage probes retain the same queues, labels, thresholds and owners. Promoted deadlines
+become eligible immediately; superseded delayed-task acknowledgements remain non-failures. No new telemetry, scanner,
+scheduler or alert resource is added. Offline filter/reapply tests cover the addition. The filter update requires a
+separately approved monitoring apply; code verification does not establish live activation.
 
 #### Bounded pending-generation observation
 

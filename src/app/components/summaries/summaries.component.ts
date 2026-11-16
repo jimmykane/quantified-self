@@ -975,7 +975,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const freshness = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion?.controls?.freshnessContext !== false;
       const trainingReady = state.trainingSummaryStatus === 'ready'
         && (!freshness || [state.formStatus, state.formNowStatus, state.rampRateStatus].every(status => status === 'ready'));
-      const trainingKey = trainingReady ? JSON.stringify([uid, state.trainingUpdatedAtMs ?? 0]) : null;
+      const trainingKey = trainingReady ? JSON.stringify([uid, state.trainingSnapshotKey ?? '']) : null;
       if (trainingKey !== this.dailyWorkoutSuggestionTrainingKey) {
         this.dailyWorkoutSuggestionTrainingKey = trainingKey;
         this.changeDetector.markForCheck();

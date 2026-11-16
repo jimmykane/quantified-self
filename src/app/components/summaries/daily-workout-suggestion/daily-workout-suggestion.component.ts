@@ -59,6 +59,9 @@ export class DailyWorkoutSuggestionComponent {
   readonly actionBusy = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
+  readonly progressLabel = computed(() => this.actionBusy() ? 'Updating daily preferences'
+    : this.busy() || this.status()?.state === 'preparing' ? 'Preparing daily suggestion'
+      : this.status()?.state === 'waiting-training' ? 'Refreshing Training summary' : null);
   // A request failure does not establish that the model failed or spent today's allowance.
   readonly error = signal<string | null>(null);
   // Reuse Calendar's bounded reader only for the current owner's planned date.
@@ -119,7 +122,7 @@ export class DailyWorkoutSuggestionComponent {
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
     if (value?.state === 'waiting-import') return 'Waiting for history import. Today’s AI allowance has not been used.';
-    if (value?.state === 'waiting-training') return 'Waiting for Training data. Today’s AI allowance has not been used.';
+    if (value?.state === 'waiting-training') return 'Refreshing your Training summary…';
     if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
     return 'Prepared on your first visit to Today each day.';
   });

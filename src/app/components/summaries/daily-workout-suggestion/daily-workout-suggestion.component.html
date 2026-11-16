@@ -10,10 +10,12 @@
       }
       @if (status()?.state === 'ready' && error()) { <small role="status">Could not check for changes. Showing your saved suggestion.</small> }
       @if (plannedWorkouts().length) { <small>Planned for today</small> }
-      @if (waitingForData()) { <small>Using available data uses today’s included suggestion</small> }
+      @if (status()?.state === 'waiting-training') {
+        <small>Continues automatically when ready. Your daily suggestion hasn’t been used.</small>
+      } @else if (waitingForData()) { <small>Using available data uses today’s included suggestion</small> }
       @if (status()?.state === 'failed') { <small>Generate manually uses your Assistant allowance.</small> }
       @if (actionError()) { <p role="alert">{{ actionError() }}</p> }
-      @if (busy()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="actionBusy() ? 'Updating daily preferences' : 'Preparing daily suggestion'"></mat-progress-bar> }
+      @if (progressLabel(); as label) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="label"></mat-progress-bar> }
     <div compactRowAction class="actions">
       @if (plannedWorkout(); as workout) {
         <a mat-button appHapticTap [routerLink]="plannedWorkoutRoute()" [attr.aria-label]="'Open ' + workout.title">Open</a>
@@ -27,11 +29,13 @@
         @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">{{ status()?.result?.kind === 'event-advice' ? 'View guidance' : 'Review' }}</button> }
         @if (canRegenerate()) { <button mat-button appHapticTap [disabled]="busy()" (click)="review(true)">Regenerate</button> }
         @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }
-        @if (waitingForData()) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button> }
-        @if (status()?.state !== 'ready' && status()?.state !== 'failed' && !waitingForData() && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
+        @if (waitingForData() && status()?.state !== 'waiting-training') { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button> }
+        @if (status()?.state === 'waiting-training' || status()?.state !== 'ready' && status()?.state !== 'failed' && !waitingForData() && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
         <button mat-icon-button appHapticTap [matMenuTriggerFor]="options" [disabled]="busy()" aria-label="Daily workout options"><mat-icon>more_vert</mat-icon></button>
         <mat-menu #options="matMenu" class="qs-menu-panel">
-          @if (waitingForData()) { <button mat-menu-item appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
+          @if (status()?.state === 'waiting-training') {
+            <button mat-menu-item appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button>
+          } @else if (waitingForData()) { <button mat-menu-item appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
           <button mat-menu-item appHapticTap (click)="configure()">Preferences</button>
           <button mat-menu-item (click)="dismiss()">Dismiss for today</button>
           <button mat-menu-item (click)="disable()">Turn off daily suggestions</button>

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -183,6 +183,27 @@ describe('DashboardDerivedMetricsService', () => {
     expect((await firstValueFrom(service.watch({ uid: 'owner' }, { metricKinds, reportReadErrors: true }))).acwrStatus).toBe('failed');
   });
 
+  it('tracks each Training snapshot arriving independently even below the latest timestamp', () => {
+    const nowMs = Date.now();
+    const form$ = new BehaviorSubject({ status: 'building', updatedAtMs: nowMs - 200 });
+    const summary$ = new BehaviorSubject({ status: 'building', updatedAtMs: nowMs - 300 });
+    const recovery$ = new BehaviorSubject({ status: 'building', updatedAtMs: nowMs - 100 });
+    hoisted.docDataMock.mockReturnValueOnce(form$).mockReturnValueOnce(recovery$).mockReturnValueOnce(summary$);
+    const keys: string[] = [];
+    const subscription = service.watch({ uid: 'owner' }, {
+      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow, DERIVED_METRIC_KINDS.TrainingSummary],
+    }).subscribe(state => keys.push(state.trainingSnapshotKey!));
+
+    summary$.next({ status: 'building', updatedAtMs: nowMs - 250 });
+    expect(keys[1]).not.toBe(keys[0]);
+    summary$.next({ status: 'failed', updatedAtMs: nowMs - 250 });
+    expect(keys[2]).not.toBe(keys[1]);
+    recovery$.next({ status: 'building', updatedAtMs: nowMs });
+    expect(keys[3]).toBe(keys[2]);
+    expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
   it('maps derived snapshots to form points and recovery-now context', async () => {
     const uid = 'user-1';
     const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
@@ -225,7 +246,8 @@ describe('DashboardDerivedMetricsService', () => {
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(false);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(false);
     expect(state.formStatus).toBe('ready');
-    expect(state.trainingUpdatedAtMs).toBe(100); // Unrelated Recovery updates never resume generation.
+    expect(JSON.parse(state.trainingSnapshotKey!)).toContainEqual([DERIVED_METRIC_KINDS.Form, 'ready', 100]);
+    expect(JSON.parse(state.trainingSnapshotKey!).some(([kind]) => kind === DERIVED_METRIC_KINDS.RecoveryNow)).toBe(false);
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
     expect(state.rampRateStatus).toBe('missing');

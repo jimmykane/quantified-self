@@ -373,10 +373,15 @@ export function resolveDerivedMetricKindsToQueue(probe: DerivedMetricsProbe): De
 export async function ensureDerivedMetricsForUser(
     uid: string,
     metricKinds: DerivedMetricKind[],
+    options?: { foreground?: boolean },
 ): Promise<EnsureDerivedMetricsResponse> {
     const probe = await readDerivedMetricsProbe(uid, metricKinds);
     const metricKindsToQueue = resolveDerivedMetricKindsToQueue(probe);
     if (!metricKindsToQueue.length) {
+        if (options?.foreground && probe.input.coordinatorStatus === 'queued' && probe.generation !== null) {
+            // Promote only the observed pending generation; never dirty already claimed or completed work.
+            return markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, { expediteGeneration: probe.generation });
+        }
         return {
             accepted: true,
             queued: false,
@@ -388,7 +393,7 @@ export async function ensureDerivedMetricsForUser(
     return markDerivedMetricsDirtyAndMaybeQueue(
         uid,
         metricKindsToQueue,
-        { background: true },
+        { background: options?.foreground !== true },
     );
 }
 
@@ -423,7 +428,7 @@ export async function prepareDerivedMetricsForUser(
         sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     },
 ): Promise<PrepareDerivedMetricsResult> {
-    const initial = await dependencies.ensure(uid, metricKinds);
+    const initial = await dependencies.ensure(uid, metricKinds, { foreground: true });
     if (!initial.accepted) {
         return { status: 'unavailable', metricKinds, readyMetricKinds: [], retryAfterSeconds: null };
     }

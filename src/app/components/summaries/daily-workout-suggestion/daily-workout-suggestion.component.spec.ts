@@ -114,13 +114,36 @@ describe('compact daily workout in Today', () => {
     const { fixture, request, setVisible } = setup(true);
     request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-training' });
     await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Waiting for Training data');
-    expect(fixture.nativeElement.textContent).toContain('Use available data');
+    expect(fixture.nativeElement.textContent).toContain('Refreshing your Training summary');
+    expect(fixture.nativeElement.textContent).toContain('Continues automatically when ready');
+    expect(fixture.nativeElement.textContent).toContain('Check again');
+    expect(fixture.nativeElement.textContent).not.toContain('Use available data');
+    expect(fixture.nativeElement.querySelector('mat-progress-bar')?.getAttribute('aria-label')).toBe('Refreshing Training summary');
+    exportQa(fixture.nativeElement, 'training-refresh');
     setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(3000); expect(request).toHaveBeenCalledOnce();
     fixture.componentRef.setInput('trainingKey', 'ready-a'); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1500); fixture.detectChanges(); expect(request).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeNull();
     fixture.componentRef.setInput('trainingKey', 'ready-b'); fixture.detectChanges();
     setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(3000); expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('keeps the deliberate available-data fallback in the Training refresh menu', async () => {
+    const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'waiting-training' });
+    fixture.nativeElement.querySelector('[aria-label="Daily workout options"]').click();
+    fixture.detectChanges(); await vi.advanceTimersByTimeAsync(0);
+    const fallback = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find(button => button.textContent?.includes('Use available data'))!;
+    expect(fallback).toBeTruthy(); fallback.click();
+    await vi.advanceTimersByTimeAsync(0); fixture.detectChanges();
+    expect(request).toHaveBeenCalledWith('owner', 'use-available-data', expect.any(Function), '2026-10-30');
+  });
+  it('shows ongoing preparation even when another request owns the job', () => {
+    const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'preparing' });
+    expect(fixture.nativeElement.querySelector('mat-progress-bar')?.getAttribute('aria-label')).toBe('Preparing daily suggestion');
+    expect(fixture.nativeElement.textContent).toContain('Your suggestion is being prepared');
+    expect(fixture.nativeElement.textContent).toContain('Check again');
+    expect(request).not.toHaveBeenCalled();
+    exportQa(fixture.nativeElement, 'suggestion-preparing');
   });
   it('resumes if Training becomes ready during a context read', async () => {
     const { fixture, request } = setup(true);
