@@ -141,6 +141,8 @@ export function getVisibleEventLaps(
   options: EventLapVisibilityOptions = {},
 ): LapInterface[] {
   const laps = activity.getLaps?.() || [];
+  const includeWholeActivityLap = options.includeWholeActivityLaps && laps.length === 1
+    && isWholeActivityLapSpan(activity, laps[0]);
   if (!options.includeWholeActivityLaps && laps.length === 1 && isWholeActivityLap(activity, laps[0])) {
     return [];
   }
@@ -149,7 +151,9 @@ export function getVisibleEventLaps(
   // remainders. The provider's trigger does not determine table visibility.
   return laps.filter(lap => {
     if (!normalizeEventLapType(lap.type)) return false;
-    if (isEventLapEndpointInActivity(activity, lap)) return true;
+    // A rounded source boundary must not transfer its whole-activity lap to
+    // another compared device with the same recorded lap timestamps.
+    if (includeWholeActivityLap || isEventLapEndpointInActivity(activity, lap)) return true;
     const owners = activities.filter(a => a !== activity && isEventLapEndpointInActivity(a, lap)
       && Number.isFinite(a.startDate?.getTime()) && Number.isFinite(a.endDate?.getTime())
       && a.getLaps().filter(other => +other.startDate === +lap.startDate && +other.endDate === +lap.endDate

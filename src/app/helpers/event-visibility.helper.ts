@@ -1,4 +1,5 @@
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { isBenchmarkEvent as isPersistedBenchmarkEvent } from '@shared/event-classification';
 
 type BenchmarkAwareEvent = EventInterface & {
   hasBenchmark?: boolean;
@@ -8,7 +9,7 @@ type BenchmarkAwareEvent = EventInterface & {
 };
 
 export function isMergeOrBenchmarkEvent(event: EventInterface | null | undefined): boolean {
-  return event?.isMerge === true || isBenchmarkEvent(event);
+  return event?.isMerge === true || isPersistedBenchmarkEvent(event) || isBenchmarkEvent(event);
 }
 
 export function isBenchmarkEvent(event: EventInterface | null | undefined): boolean {

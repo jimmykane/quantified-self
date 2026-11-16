@@ -199,6 +199,21 @@ describe('event lap table visibility', () => {
     expect(isWholeActivityLapSpan(activity, createLap(LapTypes.Unknown, start, end, 400, 1000))).toBe(expected);
   });
 
+  it.each([1, 1000])('retains a comparison source lap ending %s ms after its rounded activity boundary', rounding => {
+    const first = createActivity([createLap(LapTypes.Unknown)]);
+    first.endDate = new Date(600_000 - rounding);
+    const second = createActivity([createLap(LapTypes.Unknown)]);
+    const activities = [first, second];
+    const before = activities.map(activity => JSON.stringify(activity.toJSON()));
+
+    for (const activity of activities) {
+      expect(getVisibleEventLaps(activity, activities, {includeWholeActivityLaps: true})).toEqual(activity.getLaps());
+      expect(getEventLapTableGroups(activity, activities, {includeWholeActivityLaps: true}))
+        .toEqual([{lapType: LapTypes.Unknown, laps: activity.getLaps()}]);
+    }
+    expect(activities.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+  });
+
   it('shows a shared multisport lap only in its ending leg without clipping its source interval', () => {
     const lap = createLap(LapTypes.Manual, 0, 450_000, 450, 1200);
     const first = createActivity([lap]);
@@ -209,6 +224,8 @@ describe('event lap table visibility', () => {
     last.type = ActivityTypes.Running;
     expect(getVisibleEventLaps(first, [first, last])).toEqual([]);
     expect(getVisibleEventLaps(last, [first, last])).toHaveLength(1);
+    expect(getVisibleEventLaps(first, [first, last], {includeWholeActivityLaps: true})).toEqual([]);
+    expect(getVisibleEventLaps(last, [first, last], {includeWholeActivityLaps: true})).toHaveLength(1);
     expect(getEventLapContextLabel(last, last.getLaps()[0], [first, last])).toBe('Multisport lap');
     expect(isEventLapEndpointInActivity(first, lap)).toBe(false);
     expect(isEventLapEndpointInActivity(last, lap)).toBe(true);

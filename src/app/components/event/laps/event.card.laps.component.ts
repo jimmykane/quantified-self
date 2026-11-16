@@ -322,7 +322,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
     this.displayActivities.forEach((activity, activityIndex) => {
       groupsByActivity.get(activity)!.forEach(({ lapType, laps }) => {
-        const data = this.generateLapData(activity, lapType, laps);
+        const isWholeActivity = this.isComparison && !this.intervalActivities.has(activity)
+          && activity.getLaps().length === 1 && isWholeActivityLapSpan(activity, laps[0]);
+        const data = this.generateLapData(activity, lapType, laps, isWholeActivity);
         const key = this.getKey(activity, lapType);
 
         if (data.length > 0) {
@@ -351,8 +353,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
             key,
             activity,
             sourceActivity: this.selectedActivities[activityIndex],
-            isWholeActivity: this.isComparison && !this.intervalActivities.has(activity)
-              && activity.getLaps().length === 1 && isWholeActivityLapSpan(activity, laps[0]),
+            isWholeActivity,
             columnTooltips: resolveEventLapSportFamily(activity.type) !== 'swimming' ? {}
               : this.showOriginalLaps() && projections.get(activity) ? { ...SWIM_TABLE_HEADER_TOOLTIPS,
                 'Total strokes': 'Stroke count for this source lap. Use Intervals for complete set totals.',
@@ -412,7 +413,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return `${activity.getID()}-${this.intervalActivities.has(activity) ? 'intervals-' : ''}${lapType}`;
   }
 
-  private generateLapData(activity: ActivityInterface, lapType: LapTypes, laps: readonly LapInterface[]): LapTableRow[] {
+  private generateLapData(activity: ActivityInterface, lapType: LapTypes, laps: readonly LapInterface[], isWholeActivity = false): LapTableRow[] {
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
     const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
@@ -424,7 +425,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         '#': index + 1,
       };
       const sourceIndex = sourceIndexes.get(lap) ?? index;
-      const contextLabel = getEventLapContextLabel(activity, lap, this.sourceEventActivities);
+      const contextLabel = isWholeActivity ? '' : getEventLapContextLabel(activity, lap, this.sourceEventActivities);
       const swim = contextLabel ? undefined : analytics.get(lap);
       // Synthetic row numbers can change when source lengths regroup during a live
       // refresh. State follows the same interval window and kind, never a reused number.

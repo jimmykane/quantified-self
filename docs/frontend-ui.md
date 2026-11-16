@@ -880,6 +880,10 @@ recorded lap stays inspectable even when it repeats its source activity's totals
 duplicate suppression. A single original lap whose positive time span covers the source activity within one second
 gets a **Whole activity** caption above its table. That caption is independent of duration/distance summary equality,
 so small source-summary differences cannot make compared devices appear to have different lap availability.
+Whole-activity rows also retain that source when its session boundary rounds up to one second before the lap end,
+even if another compared device has the same lap timestamps. These rows do not receive a cross-leg context label;
+actual laps spanning activity legs keep the existing ownership projection. Explicit `mergeType: 'benchmark'`
+metadata enables the comparison presentation even without a legacy merge flag.
 The caption sits outside the narrow pinned number column and does not change recorded lap types, numbering or metrics.
 Each selected comparison source without original laps gets a labelled **No laps recorded** state when its active view
 has no projected intervals either. The parent Laps section remains present even when every selected comparison source

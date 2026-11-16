@@ -1177,6 +1177,7 @@ describe('EventCardComponent', () => {
 
         it.each([
             { isMerge: true }, { hasBenchmark: true }, { benchmarkResults: { pair: {} } },
+            { isMerge: false, mergeType: 'benchmark' },
         ])('keeps the comparison laps section available for whole-activity and missing laps: %j', flags => {
             const wholeActivity = {
                 ...activityWithData,

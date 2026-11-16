@@ -1887,6 +1887,7 @@ describe('EventCardLapsComponent', () => {
     it.each([
         { flags: { isMerge: true }, distanceUnits: DistanceUnits.Kilometers, distance: '2.00 Km' },
         { flags: { hasBenchmark: true }, distanceUnits: DistanceUnits.Miles, distance: '1.24 mi' },
+        { flags: { isMerge: false, mergeType: 'benchmark' }, distanceUnits: DistanceUnits.Kilometers, distance: '2.00 Km' },
     ])('keeps both comparison whole-activity laps with $distanceUnits units', ({ flags, distanceUnits, distance }) => {
         const sources = [2000, 1998.33].map((lapDistance, index) => {
             const activity = createHydratedActivity([{
@@ -1927,6 +1928,34 @@ describe('EventCardLapsComponent', () => {
         fixture.detectChanges();
         expect(component.lapTableGroups[0].tables).toHaveLength(1);
         expect(fixture.nativeElement.querySelectorAll('.lap-whole-activity-label')).toHaveLength(1);
+        expect(sources.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+    });
+
+    it('keeps rounded whole-activity source laps without a false cross-leg label', () => {
+        const sources = [0, 1].map(index => {
+            const activity = createHydratedActivity([{
+                lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.Unknown, stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+            }]);
+            activity.setID(`rounded-source-${index}`);
+            return activity;
+        });
+        sources[0].endDate = new Date(599_000);
+        const before = sources.map(activity => JSON.stringify(activity.toJSON()));
+        component.selectedActivities = sources;
+        component.event = { isMerge: true, getActivities: () => sources } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const tables = component.lapTableGroups[0].tables;
+        expect(tables).toHaveLength(2);
+        tables.forEach(table => {
+            expect(table.isWholeActivity).toBe(true);
+            expect(table.hasContextLabels).toBe(false);
+            expect(table.dataSource.data[0].contextLabel).toBe('');
+        });
+        expect(fixture.nativeElement.querySelectorAll('.lap-whole-activity-label')).toHaveLength(2);
+        expect(fixture.nativeElement.textContent).not.toContain('Across activity legs');
         expect(sources.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
     });
 
