@@ -81,7 +81,7 @@ export const sendActivitySyncNotifications = onSchedule({
     let trainingSendPair: ReturnType<typeof parseVapidKeyPair> | undefined;
     const trainingSendDeps: ActivityPushDependencies = { ...deps,
       configuration: () => trainingSendConfig ??= (async () => {
-        const setting = await automaticPushConfiguration('web_push_training_send_enabled');
+        const setting = await automaticPushConfiguration('web_push_training_sync_enabled');
         if (setting.enabled) {
           trainingSendPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
           if (trainingSendPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');

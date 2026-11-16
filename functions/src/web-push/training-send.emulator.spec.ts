@@ -166,8 +166,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
   });
   it.each(['flag', 'category', 'no devices', 'old key', 'malformed category'])('does not capture without %s admission', async reason => {
     if (reason === 'flag') runtime.notificationConfiguration = async () => ({ enabled: false, publicKey: key });
-    if (reason === 'category') await db.doc(`${root}/notificationPreferences/training_send`).set({ schemaVersion: 1, enabled: false, revision: 1 });
-    if (reason === 'malformed category') await db.doc(`${root}/notificationPreferences/training_send`).set({ enabled: true });
+    if (reason === 'category') await db.doc(`${root}/notificationPreferences/training_sync`).set({ schemaVersion: 1, enabled: false, revision: 1 });
+    if (reason === 'malformed category') await db.doc(`${root}/notificationPreferences/training_sync`).set({ enabled: true });
     if (reason === 'no devices') await db.doc(`${root}/pushSubscriptions/${device}`).delete();
     if (reason === 'old key') await db.doc(`${root}/pushSubscriptions/${device}`).update({ vapidPublicKey: 'C' + 'A'.repeat(86) });
     await command(); expect((await stateRef().get()).exists).toBe(false);
@@ -181,7 +181,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
   it.each(['flag', 'category', 'device', 'generation', 'key', 'epoch', 'account', 'reconnect', 'edit', 'completion', 'stop', 'lock', 'expired'])('cancels a ready result after %s changes', async reason => {
     await command(); await drain(); await deliver();
     if (reason === 'flag') deps.configuration = async () => ({ enabled: false, publicKey: key });
-    if (reason === 'category') await db.doc(`${root}/notificationPreferences/training_send`).set({ schemaVersion: 1, enabled: false, revision: 1 });
+    if (reason === 'category') await db.doc(`${root}/notificationPreferences/training_sync`).set({ schemaVersion: 1, enabled: false, revision: 1 });
     if (reason === 'device') await db.doc(`${root}/pushSubscriptions/${device}`).delete();
     if (reason === 'generation') await db.doc(`${root}/pushSubscriptions/${device}`).update({ generation: randomUUID() });
     if (reason === 'key') deps.configuration = async () => ({ enabled: true, publicKey: 'C' + 'A'.repeat(86) });

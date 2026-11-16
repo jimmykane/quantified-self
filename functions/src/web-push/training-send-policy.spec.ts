@@ -11,7 +11,7 @@ describe('Training send policy', () => {
   it.each(['missing', 'off', 'conditional', 'enabled'])('requires an unconditional foundation and sender flag: %s', async kind => {
     const parameters: Record<string, unknown> = { web_push_enabled: { defaultValue: { value: 'true' } },
       web_push_vapid_public_key: { defaultValue: { value: 'public-key' } } };
-    if (kind !== 'missing') parameters.web_push_training_send_enabled = { defaultValue: { value: kind === 'off' ? 'false' : 'true' },
+    if (kind !== 'missing') parameters.web_push_training_sync_enabled = { defaultValue: { value: kind === 'off' ? 'false' : 'true' },
       ...(kind === 'conditional' ? { conditionalValues: { beta: { value: 'true' } } } : {}) };
     mocks.template.mockResolvedValue({ parameters });
     await expect(trainingSendConfiguration()).resolves.toEqual({ enabled: kind === 'enabled', publicKey: 'public-key' });

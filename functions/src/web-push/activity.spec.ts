@@ -31,7 +31,7 @@ const run = () => sendActivitySyncNotifications.run({} as never);
 describe('bounded activity notification scheduler', () => {
   it('dispatches explicit Training results lazily on the shared sweep, without coalescing different requests in transport', async () => {
     const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
-    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_training_send_enabled', publicKey: pair.publicKey }));
+    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_training_sync_enabled', publicKey: pair.publicKey }));
     mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/trainingSend_plan_p_garmin` } })) });
     vi.mocked(sendTrainingSendResult).mockImplementation(async (_uid, id, deps) => {
       expect(id).toBe('trainingSend_plan_p_garmin'); expect((await deps.configuration()).enabled).toBe(true);

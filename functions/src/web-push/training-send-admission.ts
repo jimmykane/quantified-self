@@ -13,7 +13,7 @@ import { TRAINING_SEND, trainingSendId, type TrainingSendState, type TrainingSen
 /** Optional runtime hook: no notification configuration enters the public command or MCP contract. */
 export async function trainingSendConfiguration(): Promise<{ enabled: boolean; publicKey: string }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try { return await Promise.race([automaticPushConfiguration('web_push_training_send_enabled'), new Promise<never>((_, reject) => {
+  try { return await Promise.race([automaticPushConfiguration('web_push_training_sync_enabled'), new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('Training notification configuration timed out.')), 5000);
   })]); }
   catch { logger.error('[TrainingSendPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' });
@@ -37,7 +37,7 @@ export async function prepareTrainingSend(runtime: DeliveryRuntime, tx: Transact
   const eligible = workouts.flatMap((workout, index) => workout.lifecycle === 'planned' && workout.localDate >= today
     && (Date.parse(workout.localDate) - Date.parse(today)) / 86400000 <= transport.horizonDays ? [{ workout, strength: strengths[index] }] : []);
   if (!eligible.length) return null;
-  const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_send')))).data());
+  const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_sync')))).data());
   if (!preference?.enabled) return null;
   const devices = await tx.get(user.collection('pushSubscriptions').where('origin', 'in', [...WEB_PUSH_ORIGINS]).limit(TRAINING_SEND.deviceLimit));
   const targets = devices.docs.flatMap(doc => {

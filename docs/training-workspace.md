@@ -3155,11 +3155,11 @@ and reject private receipt fields. No plugin rebuild or registered schema change
 
 #### Explicit Training send result notifications
 
-The independent default-on `training_send` category reports one combined result per explicit provider operation:
+The existing default-on `training_sync` category also reports one combined result per explicit provider operation:
 Send, Add & send, initial Enable sync and manual Retry. A multi-workout plan waits for all captured, eligible workouts;
 partial failures become one summary. Already-current/completed/suppressed/past/outside-horizon workouts and no-op
 requests are silent. Provider acceptance is not watch receipt. Background horizon sync, configuration edits, Resume
-and automatic retries do not create result requests. Existing Training attention alerts remain independent, while
+and automatic retries do not create result requests. The same category controls Training attention alerts, while
 failures captured by an explicit result do not also create per-workout attention pushes. Recovery still closes old
 issue receipts. Connection issue alerts keep their existing account-wide policy.
 
@@ -3171,9 +3171,9 @@ rechecked before claim; device preparation also rechecks authority and the sched
 from public statuses and MCP reads. MCP confirmed delivery uses the same internal admission without a wire change.
 
 Monitoring is **covered in source** by the Web Push bundle using the existing channel, with fixed
-`[TrainingSendPush]` admission/send/sweep outcomes and the shared sweep health signals. Keep
-`web_push_training_send_enabled=false` until deployment verification. See the [result runbook and deployment
-list](web-push-notifications.md#explicit-training-send-results) for bounds, cancellation, rollout and rollback.
+`[TrainingSendPush]` admission/send/sweep outcomes and the shared sweep health signals. The existing
+`web_push_training_sync_enabled` flag controls both attention alerts and these results; no new flag is added.
+If existing switches are on, result capture starts with deployment. See the [result runbook and deployment list](web-push-notifications.md#explicit-training-send-results) for bounds, cancellation, rollout and rollback.
 
 #### Reconciliation database work
 
