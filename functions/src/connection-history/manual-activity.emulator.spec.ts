@@ -8,6 +8,10 @@ vi.mock('../token-refresh-coordinator', () => ({ ACTIVE_OAUTH_CREDENTIAL_GENERAT
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { startManualActivityHistory } from './manual-activity';
 import { historyProjection, type ConnectionHistoryRun } from './model';
+import { assertHistoryConnectionCurrent, historyExecution } from './execution';
+import { createGarminActivityHistoryRestoration, restoreCompletedGarminActivity } from '../garmin/activity-history-restoration';
+import type { GarminAPIActivityQueueItemInterface } from '../queue/queue-item.interface';
+import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../suunto/health-webhook-binding';
 import { sendHistoryCompletion, type HistoryPushDependencies } from '../web-push/history-service';
 const pushMock = vi.hoisted(() => ({ template: vi.fn() }));
 vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTemplate: pushMock.template }) }));
@@ -33,6 +37,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     await batch.commit(); return meta;
   }
   // Real contention can trigger Firestore SDK backoff beyond the five-second unit-test default.
+  it('reopens a completed Garmin receipt only once under concurrent callbacks, without changing the saved workout', async () => {
+    const meta = await seed(ServiceNames.GarminAPI);
+    const admitted = await startManualActivityHistory('owner', ServiceNames.GarminAPI, start, end);
+    const permission = createGarminActivityHistoryRestoration((await meta.get()).data(),
+      (await mocks.db.doc('garminAPITokens/owner').get()).data(), admitted.runId, +start, +end, admitted.runId)!;
+    await meta.set({ activityHistoryRestoration: permission }, { merge: true });
+    const queue = mocks.db.doc('garminAPIActivityQueue/file');
+    await queue.set({ firebaseUserID: 'owner', userID: 'account', activityFileID: 'file', processed: true, retryCount: 9 });
+    const saved = mocks.db.doc('users/owner/events/saved');
+    await saved.set({ name: 'Edited title', notes: 'Saved note' });
+    const before = await saved.get();
+    const payload: GarminAPIActivityQueueItemInterface = {
+      id: 'file', firebaseUserID: 'owner', userID: 'account', activityFileID: 'file', activityFileType: 'FIT',
+      manual: false, token: 'synthetic', userAccessToken: 'synthetic', callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file',
+      startTimeInSeconds: +start / 1000, dateCreated: Date.now(), processed: false, retryCount: 0, totalRetryCount: 0,
+      queueRevision: admitted.runId, connectionHistoryRunId: admitted.runId, fromHistory: true, suppressAutomaticActivitySync: true,
+      dispatchedToCloudTask: null,
+    };
+    const results = await Promise.all([restoreCompletedGarminActivity(queue, payload, permission), restoreCompletedGarminActivity(queue, payload, permission)]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect((await queue.get()).data()).toEqual(payload);
+    await queue.update({ processed: true });
+    await expect(restoreCompletedGarminActivity(queue, payload, permission)).resolves.toBe(false);
+    expect((await saved.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+  }, 30_000);
   it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('admits only one of two concurrent %s requests with its matching reservation and projection', async service => {
     const meta = await seed(service);
     const results = await Promise.allSettled([
@@ -89,6 +118,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     expect((await meta.get()).data()).not.toHaveProperty('providerUserId');
     expect((await meta.get()).data()).not.toHaveProperty('connectionHistoryImport');
     expect((await mocks.db.collection('connectionHistoryImports').get()).empty).toBe(true);
+  });
+  it.each([true, false])('admits migrated Suunto generations atomically and preserves the original credentials (missing ID: %s)', async missing => {
+    const meta = await seed(ServiceNames.SuuntoApp, missing);
+    const root = mocks.db.doc('suuntoAppAccessTokens/owner'), token = root.collection('tokens').doc('account');
+    await root.update({ activeOAuthCredentialGeneration: 'independent-root' });
+    await getSuuntoHealthWebhookAccountBindingRef(mocks.db, 'account', 'owner').set(
+      buildSuuntoHealthWebhookAccountBinding('owner', 'account', 'credential', 'provider_refresh'));
+    const before = await mocks.db.getAll(root, token);
+    const result = await startManualActivityHistory('owner', ServiceNames.SuuntoApp, start, end);
+    const run = (await mocks.db.doc(`connectionHistoryImports/${result.runId}`).get()).data() as ConnectionHistoryRun;
+    expect(run).toMatchObject({ credentialGeneration: 'credential', rootOAuthCredentialGeneration: 'independent-root' });
+    expect(result).not.toHaveProperty('rootOAuthCredentialGeneration');
+    expect((await meta.get()).data()).toMatchObject({ providerUserId: 'account', connectionHistoryReservation: run.id });
+    const after = await mocks.db.getAll(root, token);
+    expect(after.every((snapshot, i) => snapshot.updateTime!.isEqual(before[i].updateTime!))).toBe(true);
+    await mocks.db.runTransaction(tx => assertHistoryConnectionCurrent(run, tx));
+    expect(historyExecution(run, []).requiredDocumentFieldValues[0].expectedFields).toEqual({ activeOAuthCredentialGeneration: 'independent-root' });
+    await root.update({ activeOAuthCredentialGeneration: 'new-root' });
+    await expect(mocks.db.runTransaction(tx => assertHistoryConnectionCurrent(run, tx))).rejects.toThrow('earlier connection');
   });
   it.each(['second current token', 'stale token', 'deleted token', 'mismatched identity', 'disconnect', 'deletion'])(
     'rejects unsafe recovery with %s in Firestore', async reason => {

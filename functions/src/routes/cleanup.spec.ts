@@ -186,18 +186,18 @@ describe('cleanupRouteFiles', () => {
     });
   });
 
-  it('skips route quota and marker writes when account deletion is in progress', async () => {
+  it.each([[true, true], [false, true], [false, false]])('skips route quota writes with correct severity (user exists: %s, deleting: %s)', async (userExists, deletionInProgress) => {
     const wrapped = cleanupRouteFiles as unknown as (event: unknown) => Promise<void>;
     hoisted.transactionGetMock.mockImplementation(async (ref: { path: string }) => {
       if (ref.path === 'users/user-1') {
         return {
-          exists: true,
+          exists: userExists,
           data: () => ({}),
         };
       }
       if (ref.path === 'userDeletionTombstones/user-1') {
         return {
-          exists: true,
+          exists: deletionInProgress,
           data: () => ({}),
         };
       }
@@ -219,6 +219,11 @@ describe('cleanupRouteFiles', () => {
 
     expect(hoisted.routesCountGetMock).not.toHaveBeenCalled();
     expect(hoisted.transactionSetMock).not.toHaveBeenCalled();
+    const message = 'Skipping route quota reconciliation because user is missing or deletion is in progress';
+    expect(deletionInProgress ? logger.info : logger.warn).toHaveBeenCalledWith(message, expect.objectContaining({
+      userExists, deletionInProgress,
+    }));
+    expect(deletionInProgress ? logger.warn : logger.info).not.toHaveBeenCalledWith(message, expect.anything());
     expect(hoisted.recursiveDeleteMock).not.toHaveBeenCalled();
     expect(hoisted.deleteFilesMock).toHaveBeenCalledWith({
       prefix: 'users/user-1/routes/route-1/',

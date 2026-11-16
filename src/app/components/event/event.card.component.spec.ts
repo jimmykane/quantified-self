@@ -1175,6 +1175,32 @@ describe('EventCardComponent', () => {
             expect(component.hasLapsFlag()).toBe(false);
         });
 
+        it.each([
+            { isMerge: true }, { hasBenchmark: true }, { benchmarkResults: { pair: {} } },
+        ])('keeps the comparison laps section available for whole-activity and missing laps: %j', flags => {
+            const wholeActivity = {
+                ...activityWithData,
+                startDate: new Date(0), endDate: new Date(600_000),
+                getSwimLengths: () => [],
+                getDuration: () => new DataDuration(600),
+                getLaps: () => [{
+                    type: LapTypes.Unknown, startDate: new Date(0), endDate: new Date(600_000),
+                    getDuration: () => new DataDuration(600),
+                }],
+            } as unknown as ActivityInterface;
+            const noLaps = { ...wholeActivity, getID: () => 'no-laps', getLaps: () => [] } as ActivityInterface;
+            component.event.set({ ...eventWithData, ...flags, getActivities: () => [wholeActivity, noLaps] } as EventInterface);
+            component.selectedActivitiesInstant.set([wholeActivity, noLaps]);
+            fixture.detectChanges();
+            expect(component.hasLapsFlag()).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-event-card-laps')).not.toBeNull();
+
+            component.selectedActivitiesInstant.set([noLaps]);
+            expect(component.hasLapsFlag()).toBe(true);
+            component.selectedActivitiesInstant.set([]);
+            expect(component.hasLapsFlag()).toBe(false);
+        });
+
         it.each(['none', 'whole-activity'])('shows swim intervals when original laps are %s', kind => {
             const activity = createSwimIntervalFixture();
             activity.getLaps().splice(0, kind === 'none' ? 2 : 1);

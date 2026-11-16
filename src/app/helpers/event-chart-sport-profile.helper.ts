@@ -75,6 +75,7 @@ interface EventChartSportProfile {
   id: EventChartSportProfileID;
   label: string;
   candidates: readonly EventChartMetricFamily[];
+  additionalAutomaticFamilies: readonly EventChartMetricFamily[];
 }
 
 export const EVENT_CHART_AUTOMATIC_PANEL_LIMIT = 3;
@@ -128,11 +129,11 @@ export type EventChartSportProfileID = typeof PROFILE_IDS[keyof typeof PROFILE_I
 
 const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.Multisport]: profile(PROFILE_IDS.Multisport, 'Multisport', ['heart-rate', 'speed', 'altitude', 'temperature', 'epoc']),
-  [PROFILE_IDS.Running]: profile(PROFILE_IDS.Running, 'Running', ['heart-rate', 'pace', 'power', 'altitude', 'cadence', 'speed', 'epoc', 'vertical-speed', 'temperature']),
+  [PROFILE_IDS.Running]: profile(PROFILE_IDS.Running, 'Running', ['heart-rate', 'pace', 'power', 'altitude', 'cadence', 'speed', 'epoc', 'vertical-speed', 'temperature'], ['altitude']),
   [PROFILE_IDS.Treadmill]: profile(PROFILE_IDS.Treadmill, 'Treadmill', ['heart-rate', 'pace', 'power', 'cadence', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.TrailRunning]: profile(PROFILE_IDS.TrailRunning, 'Trail Running', ['pace', 'power', 'altitude', 'heart-rate', 'vertical-speed', 'cadence', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.TrackAndField]: profile(PROFILE_IDS.TrackAndField, 'Track and Field', ['heart-rate', 'pace', 'temperature']),
-  [PROFILE_IDS.Walking]: profile(PROFILE_IDS.Walking, 'Walking', ['heart-rate', 'pace', 'power', 'cadence', 'altitude', 'vertical-speed', 'speed', 'temperature']),
+  [PROFILE_IDS.Walking]: profile(PROFILE_IDS.Walking, 'Walking', ['heart-rate', 'pace', 'power', 'cadence', 'altitude', 'vertical-speed', 'speed', 'temperature'], ['altitude']),
   [PROFILE_IDS.IndoorWalking]: profile(PROFILE_IDS.IndoorWalking, 'Indoor Walking', ['heart-rate', 'pace', 'power', 'cadence', 'speed', 'temperature']),
   [PROFILE_IDS.Hiking]: profile(PROFILE_IDS.Hiking, 'Hiking', ['heart-rate', 'altitude', 'speed', 'vertical-speed', 'temperature', 'pace', 'power', 'cadence', 'epoc']),
   [PROFILE_IDS.SkiTouring]: profile(PROFILE_IDS.SkiTouring, 'Ski Touring', ['heart-rate', 'altitude', 'vertical-speed', 'speed', 'cadence', 'pace', 'temperature', 'epoc']),
@@ -144,7 +145,7 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.IndoorClimbing]: profile(PROFILE_IDS.IndoorClimbing, 'Indoor Climbing', ['heart-rate', 'temperature']),
   [PROFILE_IDS.FloorClimbing]: profile(PROFILE_IDS.FloorClimbing, 'Floor Climbing', ['heart-rate', 'cadence', 'vertical-speed']),
   [PROFILE_IDS.SkyDiving]: profile(PROFILE_IDS.SkyDiving, 'Sky Diving', ['altitude', 'vertical-speed', 'speed', 'heart-rate']),
-  [PROFILE_IDS.Cycling]: profile(PROFILE_IDS.Cycling, 'Cycling', ['heart-rate', 'power', 'speed', 'altitude', 'vertical-speed', 'cadence', 'epoc', 'temperature']),
+  [PROFILE_IDS.Cycling]: profile(PROFILE_IDS.Cycling, 'Cycling', ['heart-rate', 'power', 'speed', 'altitude', 'vertical-speed', 'cadence', 'epoc', 'temperature'], ['altitude']),
   [PROFILE_IDS.IndoorCycling]: profile(PROFILE_IDS.IndoorCycling, 'Indoor Cycling', ['heart-rate', 'power', 'cadence', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.MountainBiking]: profile(PROFILE_IDS.MountainBiking, 'Mountain Biking', ['heart-rate', 'speed', 'altitude', 'vertical-speed', 'power', 'cadence', 'epoc', 'temperature']),
   [PROFILE_IDS.Motor]: profile(PROFILE_IDS.Motor, 'Motor sport', ['speed', 'altitude', 'heart-rate', 'temperature']),
@@ -341,6 +342,7 @@ export function resolveEventChartRecommendations(input: {
 }): EventChartRecommendationResult {
   const panels = Array.isArray(input.panels) ? input.panels.filter((panel) => !!panel?.dataType) : [];
   const candidateFamilies = resolveAvailableCandidateFamilies(input.profile, panels);
+  const additionalAutomaticFamilies = PROFILES[input.profile.profileID].additionalAutomaticFamilies;
   const allowedSelectionKeys = new Set((input.globallyAllowedDataTypes || []).map(getEventChartSelectionKey));
   const excludedFamilies = new Set((input.automaticExcludedDataTypes || [])
     .map(getEventChartMetricFamily)
@@ -354,7 +356,8 @@ export function resolveEventChartRecommendations(input: {
       .sort((left, right) => compareFamilyPanels(family, left.dataType, right.dataType));
     familyPanels.forEach((panel) => appendUnique(recommendedDataTypes, panel.dataType));
 
-    if (automaticDataTypes.length >= EVENT_CHART_AUTOMATIC_PANEL_LIMIT || excludedFamilies.has(family)) {
+    if ((automaticDataTypes.length >= EVENT_CHART_AUTOMATIC_PANEL_LIMIT && !additionalAutomaticFamilies.includes(family))
+      || excludedFamilies.has(family)) {
       return;
     }
 
@@ -399,9 +402,10 @@ export function getUnclassifiedEventChartActivityTypes(): string[] {
 function profile(
   id: EventChartSportProfileID,
   label: string,
-  candidates: readonly EventChartMetricFamily[]
+  candidates: readonly EventChartMetricFamily[],
+  additionalAutomaticFamilies: readonly EventChartMetricFamily[] = [],
 ): EventChartSportProfile {
-  return { id, label, candidates };
+  return { id, label, candidates, additionalAutomaticFamilies };
 }
 
 function register(

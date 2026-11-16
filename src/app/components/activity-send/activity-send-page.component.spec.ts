@@ -24,7 +24,7 @@ describe('activity sending workspace', () => {
   beforeEach(() => {
     push = { deliveryNotificationsAvailable: signal(false), canNotifyDelivery: signal(false), state: signal('disabled'), operation: signal(null), canEnable: signal(true), enable: vi.fn(), deliveryNotificationTarget: vi.fn() };
     preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), saving: signal(null), setEnabled: vi.fn() };
-    sends = { batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
+    sends = { summary: signal(null), summaryError: signal(null), loadingSummary: signal(false), refreshSummary: vi.fn(), batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
     TestBed.configureTestingModule({ imports: [ActivitySendPageComponent, NoopAnimationsModule], providers: [provideRouter([]), { provide: AppPushService, useValue: push }, { provide: AppNotificationPreferencesService, useValue: preferences }, { provide: ActivitySendService, useValue: sends }, { provide: AppUserService, useValue: users }, { provide: AppHapticsService, useValue: haptics }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'batch-1' } }] });
@@ -34,6 +34,19 @@ describe('activity sending workspace', () => {
     fixture.componentInstance.provider.set('suunto'); fixture.detectChanges();
     return fixture;
   }
+  it('renders whole-batch outcomes rather than deriving success from the visible page', () => {
+    const fixture = render();
+    sends.batch.set({ ...batchValue, state: 'complete', total: 100, finished: 100 });
+    sends.rows.set([{ ...row, status: 'delivered' }]);
+    sends.summary.set({ delivered: 95, duplicate: 3, needs_action: 2, pending: 0, stopped: 0, checkedAt: 1700000000000, updatedAt: 2 });
+    fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector('.delivery-summary');
+    expect(summary.textContent).toContain('95 delivered'); expect(summary.textContent).toContain('2 need attention');
+    expect(summary.textContent).toContain('Includes all 100 activities');
+    expect(fixture.nativeElement.textContent).not.toContain('100 delivered');
+    summary.querySelector('button').click();
+    expect(sends.refreshSummary).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('renders a viewable Pro upsell without a file picker or mutation', () => {
     users.hasProAccessSignal.set(false);
     const fixture = render();
@@ -313,7 +326,7 @@ describe('activity sending workspace', () => {
   it('keeps confirmed delivery counts distinct from draft checking', () => {
     const fixture = render(); sends.batch.set({ ...batchValue, state: 'confirmed', total: 50, finished: 20 }); fixture.detectChanges();
     const summary = fixture.nativeElement.querySelector('.review-summary').textContent.replace(/\s+/g, ' ');
-    expect(summary).toContain('20/50 finished'); expect(summary).not.toContain('checked');
+    expect(summary).toContain('20/50 processed'); expect(summary).not.toContain('checked');
     expect(fixture.nativeElement.textContent).not.toContain('Sending starts only after you confirm Send');
   });
   it.each(['deadline-exceeded', 'functions/deadline-exceeded', undefined])('explains saved preview timeout %s and resumes only when requested', async code => {

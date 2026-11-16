@@ -430,6 +430,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public todayRestDate = '';
   public dailyWorkoutSuggestionSleepRevision = 0;
   public dailyWorkoutSuggestionSleepKey: string | null = null;
+  public dailyWorkoutSuggestionTrainingKey: string | null = null;
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
   private todayDetailsOwnerUID: string | null = null;
@@ -609,6 +610,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         && equal(previousDependencySnapshot, currentDependencySnapshot)
         && equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)
       ) {
+        // Daily opt-in/source changes can need Training snapshots without rebuilding dashboard tiles.
+        this.syncDerivedMetricsSubscription();
         return;
       }
       return this.unsubscribeAndCreateCharts();
@@ -946,7 +949,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const metricKinds = this.resolveDashboardDerivedMetricKinds();
-    const subscriptionKey = `${uid}:${[...metricKinds].sort().join(',')}`;
+    // Daily-only snapshots are observed here; the uncovered-day generator owns their preparation.
+    const ensureMetricKinds = this.resolveDashboardDerivedMetricKinds(false);
+    const subscriptionKey = `${uid}:${[...metricKinds].sort().join(',')}:${[...ensureMetricKinds].sort().join(',')}`;
 
     if (this.derivedMetricsUserUID === subscriptionKey && (this.derivedMetricsSubscription || !metricKinds.length)) {
       return;
@@ -966,7 +971,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
     this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user, { metricKinds }).subscribe((state) => {
-      this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state, { metricKinds });
+      if (ensureMetricKinds.length) this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state, { metricKinds: ensureMetricKinds });
+      const freshness = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion?.controls?.freshnessContext !== false;
+      const trainingReady = state.trainingSummaryStatus === 'ready'
+        && (!freshness || [state.formStatus, state.formNowStatus, state.rampRateStatus].every(status => status === 'ready'));
+      const trainingKey = trainingReady ? JSON.stringify([uid, state.trainingUpdatedAtMs ?? 0]) : null;
+      if (trainingKey !== this.dailyWorkoutSuggestionTrainingKey) {
+        this.dailyWorkoutSuggestionTrainingKey = trainingKey;
+        this.changeDetector.markForCheck();
+      }
       const wasHydrated = this.derivedMetricsHydrated;
       if (!wasHydrated) {
         this.derivedMetricsHydrated = true;
@@ -1099,13 +1112,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
   }
 
-  private resolveDashboardDerivedMetricKinds(): DerivedMetricKind[] {
+  private resolveDashboardDerivedMetricKinds(includeDailySuggestion = true): DerivedMetricKind[] {
     const metricKinds = (this.user?.settings?.dashboardSettings?.tiles || [])
       .filter(tile => tile.type === TileTypes.Chart)
       .flatMap(dashboardTileMetricKinds);
     const needed = dashboardTodayDependencies(this.todaySettings);
     if (this.showTodaySummary && needed.load) metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
     if (this.showTodaySummary && needed.recovery) metricKinds.push(DERIVED_METRIC_KINDS.RecoveryNow);
+    const daily = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion;
+    if (includeDailySuggestion && this.showTodaySummary && this.isOwnerDashboard && daily?.enabled
+      && this.userService.isProSignal()) {
+      metricKinds.push(DERIVED_METRIC_KINDS.TrainingSummary);
+      if (daily.controls?.freshnessContext !== false) {
+        metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
+      }
+    }
     return [...new Set(metricKinds)];
   }
 
@@ -2108,6 +2129,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private resetDerivedMetricsState(): void {
+    this.dailyWorkoutSuggestionTrainingKey = null;
     this.derivedMetricsHydrated = false;
     this.clearRecoveryRefreshTimer();
     this.derivedFormPoints = null;

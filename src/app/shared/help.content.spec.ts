@@ -1194,7 +1194,7 @@ describe('help.content', () => {
     const copy = JSON.stringify(HELP_SECTIONS);
     expect(copy).toContain('Weight input and display use your **Settings → Units & formatting → Customize units → Weight** choice (kg or lb)');
     expect(copy).toContain('saved measurements remain in canonical kg');
-    expect(copy).toContain('changing a distance preset does not reset that choice');
+    expect(copy).toContain('preserves your weight and week-start choices');
   });
 
   it('records verified Garmin strength delivery without promising every device or exercise', () => {
@@ -2238,7 +2238,9 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
-    expect(gettingStartedSection?.content).toContain('dashboard **Default units** action prompt');
+    expect(gettingStartedSection?.content).toContain('**Your units and preferences**');
+    expect(gettingStartedSection?.content).toContain('**Keep defaults**');
+    expect(gettingStartedSection?.content).toContain('same optional review');
     expect(gettingStartedSection?.content).not.toContain('Keep current units');
     expect(gettingStartedSection?.content).toContain('preserves your weight and week-start choices');
     expect(gettingStartedSection?.content).toContain('before your first activity');
@@ -2258,7 +2260,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
     expect(gettingStartedSection?.content).toContain('Turning it on affects new Garmin or COROS activities only');
     expect(gettingStartedSection?.content).toContain('use **Send past activities** in **Services** for activities already in Quantified Self');
-    expect(gettingStartedSection?.content).toContain('Advanced settings');
+    expect(gettingStartedSection?.content).toContain('**Customize individual units**');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units & formatting');
     expect(gettingStartedSection?.content).toContain('jump distances display in feet when miles are selected');
@@ -2330,7 +2332,10 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event lap tables');
-    expect(gettingStartedSection?.content).toContain('A sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain('For ordinary activities, a sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain("Comparisons retain each source's recorded whole-activity lap");
+    expect(gettingStartedSection?.content).toContain('labelled **Whole activity**');
+    expect(gettingStartedSection?.content).toContain('**No laps recorded**');
     expect(gettingStartedSection?.content).toContain('If the lap and activity totals cannot be compared reliably, the lap stays visible');
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('the last numbered row with a **Final lap** label, without a separate tab');
@@ -2519,6 +2524,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
     expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
     expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
+    expect(gettingStartedSection?.content).toContain('**Running, Walking, and Cycling also show Altitude**');
+    expect(gettingStartedSection?.content).toContain('a fourth chart alongside the existing primary charts');
+    expect(gettingStartedSection?.content).toContain('both individual activities and comparisons');
+    expect(gettingStartedSection?.content).toContain('Missing or disabled altitude does not add another chart instead');
+    expect(gettingStartedSection?.content).toContain('Saved custom chart selections still take precedence');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');

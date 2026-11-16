@@ -37,6 +37,13 @@ disconnect/queue-release recovery when entitlement returns; its location must no
 silently exclude those observations. Unrelated west3 Functions remain outside the
 log metrics. No Function is relocated or added.
 
+Expected no-op messages use INFO only for explicit account-deletion token cleanup or an active deletion tombstone:
+an absent provider token, skipped activity-sync route changes, skipped route-quota writes and a late subscription
+update. A missing user without an active tombstone still warns. Actual local cleanup failures and unconfirmed remote
+revocation keep their existing diagnostics and `[CleanupHealth]` outcomes. Monitoring coverage is **unchanged**: metrics
+use those structured outcomes, not the severity of these incidental messages. No extra reads, cleanup work, retries or
+monitoring configuration are introduced.
+
 Cloud Logging evaluates `OR` before `AND`, including implicit whitespace conjunctions.
 Keep the complete Gen 1 and Gen 2 filter branches parenthesized, and retain the
 fixture evaluator's Logging-specific precedence. Without those branch parentheses,

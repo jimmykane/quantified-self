@@ -7,7 +7,7 @@ import { automaticPushConfiguration } from './history-consent';
 import { ACTIVITY_PUSH } from './activity-policy';
 import { sendActivityNotification, type ActivityPushDependencies } from './activity-service';
 import { parseVapidKeyPair } from './vapid';
-import { notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
+import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
 
 export const sendActivitySyncNotifications = onSchedule({
   schedule: '* * * * *', timeZone: 'UTC', region: 'europe-west2', memory: '256MiB',
@@ -15,6 +15,7 @@ export const sendActivitySyncNotifications = onSchedule({
   secrets: FUNCTION_SECRET_BINDINGS.sendActivitySyncNotifications,
 }, async () => {
   let failureStage: NotificationSweepStage = 'initialization';
+  const startedAtMs = Date.now();
   try {
     const db = getFirestore(); const now = Date.now();
     failureStage = 'configuration';
@@ -56,7 +57,8 @@ export const sendActivitySyncNotifications = onSchedule({
       oldestDueAgeSeconds: remaining.empty ? 0 : Math.max(0, Math.floor((now - Number(remaining.docs[0].data().dueAt)) / 1000)) });
   } catch (error) {
     logger.error('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
-      failureStage, errorCode: notificationSweepErrorCode(error) });
+      failureStage, errorCode: notificationSweepErrorCode(error),
+      ...(failureStage === 'configuration' ? notificationConfigurationFailureDetails(error, Date.now() - startedAtMs) : {}) });
     throw new Error('Activity sync notification sweep failed.');
   }
 });

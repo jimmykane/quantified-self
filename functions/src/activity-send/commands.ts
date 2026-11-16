@@ -96,7 +96,7 @@ export async function runSendCommand(uid: string, request: ActivitySendCommand, 
       const visible = await tx.get(batchRef(uid, id));
       if (!snapshot.exists) throw new HttpsError('not-found', 'Send was not found.');
       tx.update(ref, { stopped: true, updatedAt: Date.now() });
-      if (visible.exists) tx.update(visible.ref, { stopped: true, updatedAt: Date.now() });
+      if (visible.exists) tx.update(visible.ref, { stopped: true, updatedAt: Math.max(Date.now(), Number(visible.data()?.updatedAt || 0) + 1) });
     });
     await reconcileStoppedSend(uid, id);
     return { batchId: id, revision: 0 };

@@ -1,7 +1,7 @@
 import { readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { CONNECTION_HISTORY_CAPABILITIES as importServices, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { readFileSync } from 'node:fs';
-import { defaultDayWorkoutControls } from '../../../shared/day-workout';
+import { defaultDayWorkoutControls, type DayWorkoutControls } from '../../../shared/day-workout';
 import { parseDailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 
 describe('daily workout preferences', () => {
@@ -35,9 +35,10 @@ describe('daily workout preferences', () => {
 
 import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
-import type { DayWorkoutContext } from './day-workout-context';
+import { DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DayWorkoutModelError } from './day-workout-diagnostics';
+import type { DayWorkoutDependencies } from './day-workout-callable';
 
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), enforceAppCheck: (context: { app?: unknown }) => {
   if (!context.app) throw Error('App Check required');
@@ -56,13 +57,54 @@ function dependencies() {
   const store = { replace: vi.fn(async (_uid, _preferences, _expected, controls, result) => { status = { localDate: controls.localDate, state: 'ready', controls, result }; return status; }), read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
     assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result, failureReason?) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}), ...(failureReason ? { failureReason } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
-  return { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
-    importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
+  const deps = { store, regenerate: vi.fn(async request => ({ requestId: request.requestId, observedAt: dailyNow.toISOString(), kind: 'rest' as const, rationale: 'Recovery.', draft: null, usedContext: [], missingContext: [], previousLoads: [] })), now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn<() => Promise<DayWorkoutControls>>(async () => dailyControls),
+    prepareContext: vi.fn<DailyWorkoutSuggestionDependencies['prepareContext']>(async (uid, ...[, now, useAvailable]) => {
+      const controls = await deps.selectSport();
+      return { controls, evidence: await deps.context(uid, { requestId: `daily-suggestion:${controls.localDate}`, controls }, now,
+        { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable }) };
+    }),
+    importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn<DayWorkoutDependencies['context']>(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
       usage?.({ available: true, inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }); return { kind: 'rest', rationale: 'Keep today easy.' };
-    }), log: vi.fn() } satisfies DailyWorkoutSuggestionDependencies;
+    }), log: vi.fn() };
+  return deps satisfies DailyWorkoutSuggestionDependencies;
 }
 describe('daily workout preparation', () => {
   const identity = { auth: { uid: 'owner' }, app: {} };
+  it('persists an early Training deferral without model calls, charges or failure telemetry', async () => {
+    const deps = dependencies(); deps.context.mockRejectedValueOnce(new DayWorkoutTrainingNotReadyError());
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.state).toBe('waiting-training');
+    expect(deps.store.finish).toHaveBeenCalledExactlyOnceWith('owner', dailyControls.localDate, 'lease', 'waiting-training');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.log).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'waiting-training', attempts: 0 }));
+    expect(deps.log.mock.calls[0][0]).not.toHaveProperty('failureReason');
+    const resumed = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(resumed.state).toBe('ready');
+    expect(deps.context).toHaveBeenLastCalledWith('owner', expect.any(Object), dailyNow, { allowEventAdvice: true, deferUntilTrainingReady: false });
+    expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it('waits for Training before charging, resumes once, and retains the saved result', async () => {
+    const deps = dependencies();
+    deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: false });
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-training');
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.context).toHaveBeenCalledWith('owner', expect.any(Object), dailyNow, { allowEventAdvice: true, deferUntilTrainingReady: true });
+    deps.context.mockResolvedValue({ ...evidence(), trainingMetricsReady: true });
+    const ready = await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(ready.state).toBe('ready');
+    expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(ready);
+    expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+  it('allows an explicit use-available choice after waiting for Training', async () => {
+    const deps = dependencies();
+    deps.context.mockImplementation(async () => ({ ...evidence(), trainingMetricsReady: false }));
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(result.state).toBe('ready'); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.generate.mock.calls[0][1].missingContext.join(' ')).toContain('explicitly chose to use available data');
+  });
+
   it('generates Auto for the final selected sport once and keeps the charged result after preferences change', async () => {
     const deps = dependencies(), read = deps.store.read.getMockImplementation()!;
     const automatic = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', ActivityTypes.Cycling);
@@ -266,6 +308,7 @@ describe('daily workout preparation', () => {
     const deps = dependencies(); deps.importActive.mockResolvedValue(true);
     const input = { mode: 'daily-suggestion', action: 'prepare' };
     expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-import');
+    expect(deps.prepareContext).not.toHaveBeenCalled();
     expect(deps.context).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
     deps.importActive.mockResolvedValue(false);
     expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('ready');
@@ -443,6 +486,7 @@ describe('daily workout preparation', () => {
   it('checks coverage before loading routine or recovery context for an already covered day', async () => {
     const deps = dependencies(); deps.coverage.mockResolvedValue('planned');
     expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).state).toBe('planned');
+    expect(deps.prepareContext).not.toHaveBeenCalled();
     expect(deps.selectSport).not.toHaveBeenCalled(); expect(deps.context).not.toHaveBeenCalled(); expect(deps.store.begin).not.toHaveBeenCalled();
   });
   it('prepares once after deleting a workout that blocked the initial coverage check', async () => {

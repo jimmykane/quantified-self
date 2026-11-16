@@ -206,6 +206,45 @@ snapshots retain their original cursor precision. Only the activity capability i
 requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
 requests. No existing jobs are converted, reset or replayed.
 
+An explicit custom-range Suunto/COROS/Wahoo activity import refetches successfully completed source recordings and
+verified `cross_provider_duplicate` skips once per new manual run, including live-feed jobs. Old duplicate receipts
+are rechecked by the ordinary writer: a retained workout stays single with its edits, while a deleted workout can be
+restored from the provider export. Other skip/uncertain-result categories gain no new restoration eligibility.
+This restores deleted workouts and lets the existing
+identity/edit-preserving writer apply corrected provider exports to retained recordings. It uses fresh queue revisions
+and the existing worker; it does not reparse the retained original or add a second identity. Repeated pages/task
+deliveries within that run preserve its completed children. Automatic connection imports retain completed-job
+deduplication; pending live work, owner/lifecycle guards, retained failures and explicit failed-record recovery are
+unchanged. The policy is derived privately from the server-owned `custom` range, never from a queue payload or public
+field. A manual range can therefore download already saved recordings again; coordinator admission adds no reads
+or queries, but normal provider/download/persistence work applies to those recordings. Garmin keeps its own backfill path.
+
+Older Wahoo clients retain the foreground scan/stats contract and can also restore completed recordings/copy skips.
+The existing server-generated manual lease ID supplies their queue revision, so an overlapping page cannot reopen a
+completed row from the same import. It is not persisted as a coordinator run ID. Each legacy queue write rechecks the
+same lease owner and unexpired deadline transactionally with the existing account/deletion guards, adding one metadata
+read per legacy item. An expired/replaced lease stops that request. Pending work retains its current revision/retries;
+ordinary webhooks and automatic connection imports gain no restoration permission. No new field, queue or counter is added.
+Wahoo ignores strictly older provider summaries, including their download URLs, even during manual restoration;
+same-revision URL refreshes and newer provider revisions retain their existing behavior.
+
+Monitoring is **covered/unchanged** by the reviewed #847 coordinator and #829 recorded-import source definitions and
+runbooks: the same committed child outcomes, retries, dispatch/worker failures and retained DLQ observations apply.
+Existing Help describes manual date-range imports and remains accurate; no frontend, Rules, index, MCP/Assistant or
+Training contract change is required. Deploy `processConnectionHistoryTask` and `addWahooAPIHistoryToQueue` after
+separate approval to enable coordinator and legacy Wahoo restoration respectively; rollback restores those revisions.
+The Suunto/COROS/Wahoo import workers are unchanged. Any targeted recovery remains separately authorized.
+
+Garmin manual restoration uses its asynchronous callback path. Before requesting files, the existing lease write records
+a request/range permission bound to the current provider account, connection and OAuth-root generations. Matching callbacks
+can replace completed successes or verified copy skips once per request, preserving pending retry state and other protected
+outcomes. The canonical writer preserves retained IDs/edits and restores missing workouts. Coordinator callbacks carry the
+actual run ID on restored work; legacy requests use their lease as the queue revision. New recordings keep their existing
+notification/forwarding classification. This permission does not prove callback origin or
+whole-import completion. Existing notification exclusions, provider cooldowns and **History requested** remain unchanged.
+See [Garmin history](garmin-integration.md#availability-and-history) for transaction costs, lifecycle checks and the separately
+approved five-function release order. No bulk replay or frontend release is included.
+
 For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
 dispatch spread, tracks committed child outcomes and resumes with the same shared capacity, retry, deletion and
 connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed
@@ -271,8 +310,41 @@ The on-demand identity repair requires the four admission functions (`addSuuntoA
 `addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue`, `backfillGarminAPIActivities`) once coordinator support is
 deployed. Release `requestAndSetSuuntoAPIAccessToken` before or alongside them so reconnect also updates the saved
 Suunto identity. The existing progress UI needs no behavior change; Help explains verification and reconnect requirements.
+Suunto retained accounts are an exception to the root/token equality above: the completed September migration
+preserved independent nonempty generations. Admission uses the pinned canonical account, or (when no token matches
+the current root generation and the scalar account ID is absent) exactly one retained owner-scoped token from a
+two-document bounded query. A different account generation requires the existing schema-v3, provider-authorized
+binding to match that exact owner, account and token generation in the admission transaction. No provider call,
+credential change or repeat migration is needed. Ambiguous accounts and unverified bindings still fail closed.
+New independent-generation runs privately retain `rootOAuthCredentialGeneration`; `credentialGeneration` remains
+the account-token snapshot. Coordinator requests, write guards, child workers, retry and the masked monitoring probe
+check each captured generation separately. Old runs without the optional field retain their original same-generation
+meaning; other providers still require root/token equality. Reconnect, either generation changing, disconnect and
+deletion still stop the old run. Neither generation is projected to the client.
+
+For this Suunto compatibility correction, deploy consumers `processConnectionHistoryTask`,
+`retryConnectionHistoryImport`, `recoverConnectionHistoryImports` and `processWorkoutTask` before the producer
+`addSuuntoAppHistoryToQueue`, with separate approval. The producer creates activity-only runs, so no Sleep/Route
+producer or worker change is required for this rollout. Keep compatible consumers until these runs drain; roll
+back the admission producer first. No frontend, Rules, index, secret, monitoring-resource apply or data migration is
+needed. Existing Help's connection-verification guidance remains accurate. #847/#829 monitoring is **covered/unchanged**,
+including the probe's added private field mask; MCP/Assistant and Training contracts are unchanged. Rejected requests
+never created runs and cannot be replayed without the original user-selected dates.
 To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
 retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
+
+### Suunto manual request diagnostics
+
+`addSuuntoAppHistoryToQueue` records failed handler requests as `[SuuntoHistoryImport] Request failed.` with a fixed
+`failureStage`, request `mode`, `notificationRequested` boolean, callable `errorCode`, allowlisted `reason` and elapsed
+time. This includes validation, notification consent and background admission, which run before the legacy provider-scan
+catch. Expected callable rejections are WARNING; unexpected/server failures are ERROR. Messages, request payloads,
+date ranges, identities, credential generations and notification registration data are excluded. Unknown rejection
+messages remain `unclassified`; the original callable code/message and import behavior are preserved.
+
+Monitoring coverage is **unchanged**: this diagnostic-only boundary does not change coordinator/import metrics,
+admission checks, queues, retries, authorization or terminal outcomes. Deploy only `addSuuntoAppHistoryToQueue` after
+separate approval for this history diagnostic; no frontend, Rules or index release is required.
 
 ### Existing provider operations
 

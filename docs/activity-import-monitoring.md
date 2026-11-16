@@ -144,6 +144,11 @@ committed skip. Unknown connection state still uses the existing missing-token w
 the existing skip, new-dead-letter and worker-attempt metrics already cover this classification; no metric, policy,
 threshold or dashboard change is required. See [Garmin lifecycle](garmin-integration.md#identity-and-lifecycle).
 
+Garmin manual history restoration also has **covered/unchanged** coverage: an eligible completed receipt receives a new
+queue revision and ordinary committed import/skip/retry/DLQ outcomes. Old revisionless tasks are stale acknowledgements;
+history request submission and callback acknowledgement remain distinct from committed ingestion. Existing backlog,
+failure and unknown-observation coverage applies; no metric, label, alert or scheduled probe change is needed.
+
 Owned Suunto imports after a confirmed completed disconnect use that same committed `skipped` outcome and fixed INFO
 diagnostic, not a new dead letter. Coverage is **covered/unchanged** by the existing `suunto` provider filters, skip,
 worker-attempt and new-dead-letter signals. Unknown state or another retained account remains a failure; stale or

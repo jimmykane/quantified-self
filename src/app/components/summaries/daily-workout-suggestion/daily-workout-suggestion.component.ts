@@ -35,6 +35,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly localDate = input.required<string>();
   readonly dataReady = input(false);
   readonly sleepRevision = input(0);
+  readonly trainingKey = input<string | null>(null);
   readonly sleepKey = input<string | null>(null);
   private readonly evidenceKey = computed(() => this.sleepKey() ?? String(this.sleepRevision()));
   readonly daily = inject(DailyWorkoutSuggestionService);
@@ -53,7 +54,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly preferences = computed(() => { this.localDate(); this.visible(); return this.daily.preferences(); },
     { equal: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   readonly status = signal<DailyWorkoutSuggestionStatus | null>(null);
-  readonly waitingForData = computed(() => ['waiting-sleep', 'waiting-import'].includes(this.status()?.state ?? ''));
+  readonly waitingForData = computed(() => ['waiting-sleep', 'waiting-import', 'waiting-training'].includes(this.status()?.state ?? ''));
   private readonly loading = signal(false);
   readonly actionBusy = signal(false);
   readonly actionError = signal<string | null>(null);
@@ -118,6 +119,7 @@ export class DailyWorkoutSuggestionComponent {
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
     if (value?.state === 'waiting-import') return 'Waiting for history import. Today’s AI allowance has not been used.';
+    if (value?.state === 'waiting-training') return 'Waiting for Training data. Today’s AI allowance has not been used.';
     if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
     return 'Prepared on your first visit to Today each day.';
   });
@@ -125,6 +127,7 @@ export class DailyWorkoutSuggestionComponent {
   private actionSequence = 0;
   private shown = new Set<string>();
   private checkedSleepKey: string | null = null;
+  private checkedTrainingKey: string | null = null;
   private readScope = '';
   private readRevision = -1;
   private needsCheck = false;
@@ -140,8 +143,11 @@ export class DailyWorkoutSuggestionComponent {
       const importActive = this.imports.owner()?.uid === this.ownerUid() && this.imports.dataImportActive();
       if (this.lastImportActive && !importActive && untracked(() => this.loading())) this.importFinishedDuringLoad = true;
       this.lastImportActive = importActive;
-      const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
-      if (eligible && preferences.enabled && ready) untracked(() => this.daily.observeSleep(this.ownerUid(), sleepKey));
+      const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey(), trainingKey = this.trainingKey();
+      if (eligible && preferences.enabled && ready) untracked(() => {
+        this.daily.observeSleep(this.ownerUid(), sleepKey);
+        this.daily.observeTraining(this.ownerUid(), trainingKey);
+      });
       const scope = JSON.stringify([this.ownerUid(), eligible, preferences]), revision = this.daily.cacheRevision();
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
       if (scope !== this.readScope || revision !== this.readRevision) {
@@ -152,6 +158,7 @@ export class DailyWorkoutSuggestionComponent {
         this.status.set(cached?.status ?? (previous?.state === 'ready' ? previous : null));
         this.needsCheck = !cached && previous?.state === 'ready';
         this.checkedSleepKey = cached?.sleepKey ?? null;
+        this.checkedTrainingKey = cached?.trainingKey ?? null;
         this.error.set(null); this.actionError.set(null); this.loading.set(false);
       }
       if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
@@ -179,6 +186,14 @@ export class DailyWorkoutSuggestionComponent {
       const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
       onCleanup(() => clearTimeout(timer));
     });
+    effect(onCleanup => {
+      const key = this.trainingKey();
+      // Resume only from ready dashboard snapshots, including updates received during the context read.
+      if (this.status()?.state !== 'waiting-training' || key === null || key === this.checkedTrainingKey
+        || this.busy() || !this.eligible() || !this.preferences().enabled || !this.dataReady() || !this.visible()) return;
+      const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
+      onCleanup(() => clearTimeout(timer));
+    });
     effect(() => {
       const status = this.status(), uid = this.ownerUid();
       if (!this.eligible() || !this.preferences().enabled || !this.visible() || !status
@@ -201,7 +216,7 @@ export class DailyWorkoutSuggestionComponent {
     // After an uncertain response, retrieve the receipt before considering unused work.
     const checkOnly = !!this.error() || this.status()?.state === 'preparing' || this.status()?.state === 'ready';
     const sequence = ++this.sequence;
-    this.checkedSleepKey = this.evidenceKey(); this.importFinishedDuringLoad = false;
+    this.checkedSleepKey = this.evidenceKey(); this.checkedTrainingKey = this.trainingKey(); this.importFinishedDuringLoad = false;
     this.loading.set(true); this.error.set(null); this.actionError.set(null);
     let preparing = useAvailableData || !checkOnly;
     try {
@@ -209,14 +224,14 @@ export class DailyWorkoutSuggestionComponent {
         ? await this.daily.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
         : await this.daily.request(uid, checkOnly ? 'status' : 'prepare', () => this.current(sequence, uid), undefined, refresh);
       if (!this.current(sequence, uid)) return;
-      if (!useAvailableData && checkOnly && ['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) {
+      if (!useAvailableData && checkOnly && ['waiting', 'waiting-sleep', 'waiting-import', 'waiting-training'].includes(status.state)) {
         if (this.dataReady() && this.visible()) {
           preparing = true;
           status = await this.daily.request(uid, 'prepare', () => this.current(sequence, uid));
         } else if (status.state === 'waiting-sleep') {
           // A status-only read did not check current Sleep context; resume once the start barriers settle.
           this.checkedSleepKey = null;
-        }
+        } else if (status.state === 'waiting-training') this.checkedTrainingKey = null;
       }
       if (!this.current(sequence, uid)) return;
       if (status.state === 'failed' && this.status()?.state !== 'failed') this.daily.event(uid, 'failed', 'failed');

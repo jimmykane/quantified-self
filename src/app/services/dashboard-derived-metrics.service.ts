@@ -96,6 +96,7 @@ export interface DashboardDerivedMetricsState {
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
   formUpdatedAtMs?: number | null;
+  trainingUpdatedAtMs?: number | null;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
   rampRateStatus: DashboardDerivedMetricStatus;
@@ -422,6 +423,10 @@ export class DashboardDerivedMetricsService {
           const descriptor = metricDescriptors[index];
           mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
+          if ([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate,
+            DERIVED_METRIC_KINDS.TrainingSummary].some(kind => kind === descriptor.kind)) {
+            nextState.trainingUpdatedAtMs = Math.max(nextState.trainingUpdatedAtMs ?? 0, this.toFiniteNumber(snapshot?.updatedAtMs) ?? 0);
+          }
           if (descriptor.kind === DERIVED_METRIC_KINDS.Form) nextState.formUpdatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
         });
         return nextState;

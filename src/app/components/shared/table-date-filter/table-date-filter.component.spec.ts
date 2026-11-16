@@ -79,10 +79,12 @@ describe('TableDateFilterComponent', () => {
     expect(c.trigger.textContent).toContain('2–8 Nov 2026');
     c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
     c.fixture.nativeElement.querySelector('[aria-label="Next period"]').click();
-    c.fixture.nativeElement.querySelector('.table-date-current-period').click();
+    expect(c.fixture.nativeElement.querySelector('.table-date-current-period')).toBeNull();
+    c.trigger.click(); await c.settle();
+    c.overlay.querySelector<HTMLButtonElement>('.table-date-current-period')!.click(); await c.settle();
     expect(shift.mock.calls).toEqual([[-1], [1]]);
     expect(current).toHaveBeenCalledOnce();
-    expect(c.haptics.selection).not.toHaveBeenCalled();
+    expect(c.haptics.selection).toHaveBeenCalledOnce(); // Opening the menu; the owner handles accepted range changes.
     c.fixture.componentRef.setInput('disabled', true); await c.settle();
     c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').click();
     expect(shift).toHaveBeenCalledTimes(2);
@@ -133,10 +135,23 @@ describe('TableDateFilterComponent', () => {
     const shift = vi.fn(); c.fixture.componentInstance.rangeShift.subscribe(shift);
     expect(c.fixture.nativeElement.querySelector('[aria-label="Previous period"]').disabled).toBe(true);
     expect(c.fixture.nativeElement.querySelector('[aria-label="Next period"]').disabled).toBe(true);
-    expect(c.fixture.nativeElement.querySelector('.table-date-current-period').disabled).toBe(true);
     expect(c.trigger.disabled).toBe(false);
     c.fixture.componentInstance.shiftRange(-1); expect(shift).not.toHaveBeenCalled();
     c.trigger.click(); await c.settle(); expect(c.overlay.querySelector('[role="menu"]')).toBeTruthy();
+    expect(c.overlay.querySelector<HTMLButtonElement>('.table-date-current-period')!.disabled).toBe(true);
+  });
+
+  it('keeps the Current period action in the date menu and disables it on the current window', async () => {
+    const c = await setup();
+    c.fixture.componentRef.setInput('navigation', true);
+    c.fixture.componentRef.setInput('currentPeriod', true); await c.settle();
+    const current = vi.fn(); c.fixture.componentInstance.currentPeriodRequested.subscribe(current);
+    c.trigger.click(); await c.settle();
+    const action = c.overlay.querySelector<HTMLButtonElement>('.table-date-current-period')!;
+    expect(action.textContent).toContain('Current period'); expect(action.disabled).toBe(true);
+    action.click(); c.fixture.componentInstance.showCurrentPeriod();
+    expect(current).not.toHaveBeenCalled();
+    expect(c.haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('uses the native range calendar, stages both dates until Apply and restores the date button focus', async () => {

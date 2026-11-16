@@ -14,6 +14,11 @@ vi.mock('./activity-sync/enqueue-imported-event', () => ({
 }));
 
 const mockGetServiceConnectionMeta = vi.hoisted(() => vi.fn());
+const mockRestoreCompletedGarminActivity = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock('./garmin/activity-history-restoration', async importOriginal => ({
+    ...await importOriginal<typeof import('./garmin/activity-history-restoration')>(),
+    restoreCompletedGarminActivity: mockRestoreCompletedGarminActivity,
+}));
 vi.mock('./service-connection-meta', async importOriginal => ({
     ...await importOriginal<typeof import('./service-connection-meta')>(),
     getServiceConnectionMeta: mockGetServiceConnectionMeta,
@@ -429,10 +434,13 @@ describe('queue', () => {
         vi.clearAllMocks();
         mockGetAll.mockReset();
         mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
+        mockRestoreCompletedGarminActivity.mockReset().mockResolvedValue(false);
         mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
         mockDocRef.set.mockResolvedValue(undefined);
-        mockDocRef.create.mockResolvedValue(undefined);
+        mockDocRef.create.mockImplementation(async data => {
+            mockDocRef.get.mockResolvedValue({ exists: true, data: () => data });
+        });
         mockDocRef.delete.mockResolvedValue(undefined);
         mockDocRef.get.mockResolvedValue({
             exists: true,
@@ -1037,8 +1045,11 @@ describe('queue', () => {
             const admin = await import('firebase-admin');
 
             // Mock query results
-            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-doc1', userID: 'garmin-doc1' }) };
-            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-doc2', userID: 'garmin-doc2' }) };
+            const createdAt = Date.now();
+            const first = { dateCreated: createdAt, processed: false, dispatchedToCloudTask: null, firebaseUserID: 'firebase-doc1', userID: 'garmin-doc1' };
+            const second = { dateCreated: createdAt, processed: false, dispatchedToCloudTask: null, firebaseUserID: 'firebase-doc2', userID: 'garmin-doc2' };
+            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => first })), parent: { id: 'col' }, id: 'doc1' }, data: () => first };
+            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => second })), parent: { id: 'col' }, id: 'doc2' }, data: () => second };
 
             const firestore = admin.firestore();
             const collection = firestore.collection('any');
@@ -1754,7 +1765,9 @@ describe('queue', () => {
             expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('does not advance dispatch recovery for a superseded COROS revision', async () => {
+        it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI].flatMap(serviceName =>
+            [undefined, 'revision-1'].map(queueRevision => ({ serviceName, queueRevision }))))(
+            'does not advance dispatch recovery for superseded $serviceName work ($queueRevision)', async ({ serviceName, queueRevision }) => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
             vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
@@ -1783,7 +1796,7 @@ describe('queue', () => {
                 },
                 data: () => ({
                     dateCreated: 100,
-                    queueRevision: 'revision-1',
+                    queueRevision,
                     dispatchRecoveryGeneration: 0,
                     dispatchedToCloudTask: null,
                     firebaseUserID: 'firebase-coros',
@@ -1801,14 +1814,14 @@ describe('queue', () => {
                 isEqual: vi.fn(),
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.COROSAPI);
+            await dispatchQueueItemTasks(serviceName);
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
             expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: expect.any(Number) });
             expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('does not let a legacy COROS dispatch mark a revisioned history replacement', async () => {
+        it.each([ServiceNames.COROSAPI, ServiceNames.GarminAPI])('does not let a legacy %s dispatch mark a revisioned history replacement', async serviceName => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
             vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(true);
@@ -1853,10 +1866,10 @@ describe('queue', () => {
                 isEqual: vi.fn(),
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.COROSAPI);
+            await dispatchQueueItemTasks(serviceName);
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(
-                ServiceNames.COROSAPI,
+                serviceName,
                 'legacy-coros-id',
                 100,
                 0,
@@ -2653,6 +2666,47 @@ describe('queue', () => {
             expect(mockCollection.where).toHaveBeenNthCalledWith(2, 'serviceName', '==', ServiceNames.GarminAPI);
         });
 
+        it.each([false, true])('Garmin restoration uses a fresh revision and the existing dispatch path (coordinator=%s)', async coordinator => {
+            const permission = { id: '00000000-0000-4000-8000-000000000001', startMs: 100000, endMs: 200000,
+                providerUserId: 'u1', connectionGeneration: 'connection', credentialGeneration: 'credential',
+                ...(coordinator ? { runId: '00000000-0000-4000-8000-000000000001' } : {}) };
+            mockDocRef.create.mockRejectedValueOnce(Object.assign(new Error('ALREADY_EXISTS'), { code: 6 }));
+            mockRestoreCompletedGarminActivity.mockImplementationOnce(async (_ref, payload) => {
+                mockDocRef.get.mockResolvedValue({ exists: true, data: () => payload });
+                return true;
+            });
+            await addToQueueForGarmin({ userID: 'u1', firebaseUserID: 'mock-user-id', startTimeInSeconds: 150, manual: false,
+                activityFileID: 'file123', activityFileType: 'FIT', token: 'new-token', userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback', historyRestoration: permission });
+            expect(mockRestoreCompletedGarminActivity).toHaveBeenCalledWith(mockDocRef, expect.objectContaining({
+                processed: false, retryCount: 0, queueRevision: permission.id, fromHistory: true, suppressAutomaticActivitySync: true,
+                callbackURL: 'new-callback', firebaseUserID: 'mock-user-id', expireAt: expect.anything(),
+                ...(coordinator ? { connectionHistoryRunId: permission.id } : {}),
+            }), permission);
+            const persisted = mockRestoreCompletedGarminActivity.mock.calls[0][1];
+            expect(persisted).not.toHaveProperty('historyRestoration');
+            if (!coordinator) expect(persisted).not.toHaveProperty('connectionHistoryRunId');
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+        });
+
+        it('does not relabel a new Garmin recording within the manual range as a restored history import', async () => {
+            const permission = { id: '00000000-0000-4000-8000-000000000001', startMs: 100000, endMs: 200000,
+                providerUserId: 'u1', connectionGeneration: 'connection', credentialGeneration: 'credential',
+                runId: '00000000-0000-4000-8000-000000000001' };
+            mockDocRef.create.mockImplementationOnce(async payload => {
+                mockDocRef.get.mockResolvedValue({ exists: true, data: () => payload });
+            });
+            await addToQueueForGarmin({ userID: 'u1', firebaseUserID: 'mock-user-id', startTimeInSeconds: 150, manual: false,
+                activityFileID: 'file123', activityFileType: 'FIT', token: 'new-token', userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback', historyRestoration: permission });
+            const created = mockDocRef.create.mock.calls[0][0];
+            expect(created).toMatchObject({ queueRevision: permission.id, activityNotificationOrigin: 'live' });
+            expect(created).not.toHaveProperty('fromHistory');
+            expect(created).not.toHaveProperty('connectionHistoryRunId');
+            expect(created).not.toHaveProperty('suppressAutomaticActivitySync');
+            expect(mockRestoreCompletedGarminActivity).not.toHaveBeenCalled();
+        });
+
         it('addToQueueForGarmin should skip duplicate processed items without resetting lifecycle state', async () => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
@@ -2790,6 +2844,19 @@ describe('queue', () => {
                 startTimeInSeconds: 123,
             });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('does not refresh an older Garmin callback over a restored queue revision', async () => {
+            mockDocRef.create.mockRejectedValueOnce(Object.assign(new Error('ALREADY_EXISTS'), { code: 6 }));
+            const pending = { firebaseUserID: 'mock-user-id', userID: 'u1', activityFileID: 'file123', processed: false,
+                dateCreated: 100, retryCount: 8, callbackURL: 'old-callback', dispatchedToCloudTask: null };
+            mockDocRef.get.mockResolvedValueOnce({ exists: true, data: () => pending })
+                .mockResolvedValueOnce({ exists: true, data: () => ({ ...pending, dateCreated: 200, queueRevision: 'restored' }) });
+            await addToQueueForGarmin({ userID: 'u1', firebaseUserID: 'mock-user-id', startTimeInSeconds: 150, manual: false,
+                activityFileID: 'file123', activityFileType: 'FIT', token: 'new-token', userAccessToken: 'new-access-token',
+                callbackURL: 'new-callback' });
+            expect(mockDocRef.update).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 

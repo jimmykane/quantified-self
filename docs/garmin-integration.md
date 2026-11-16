@@ -224,6 +224,48 @@ Garmin Health is available to every valid connected Garmin account while the ind
 
 Garmin activity history remains a separate user-selected flow. Its picker defaults to the latest two calendar years through today; users can expand the selection up to the available rolling five-year limit or choose a shorter range before submitting. Updated clients send `background: true` to `backfillGarminAPIActivities`. For a versioned connection, it atomically admits an activity-only coordinator run and returns its safe progress without contacting Garmin. The existing adapter submits one bounded 30-day window per step, respects a stricter provider-reported minimum and resumes a failed window using the existing retry policy. The first successful/already-requested window records the fixed 30-day cooldown anchored to run admission; activity counts never determine Garmin's cooldown. Final **History requested** confirms submission, not that callbacks or activities arrived. The exact selected dates remain in the coordinator projection. Omitted/false `background` and unversioned connections retain the legacy synchronous implementation, 89-day batching and void response.
 
+Explicit manual activity requests now store `activityHistoryRestoration` alongside the existing lease, before provider I/O.
+It binds the selected/requested windows to one request ID, provider account, current connection generation and OAuth-root
+credential generation. Coordinator windows reuse the actual run ID and accumulate their requested range; older foreground
+clients use their existing server-generated lease ID without inventing a coordinator run. A current versioned connection
+is required for this additional restoration permission. Automatic connection history grants no new permission.
+
+Activity callbacks reuse their existing metadata lookup. Matching completed successes or verified cross-provider copy skips
+can reopen once per request, using the existing queue revision and canonical writer. Retained workouts keep their activity
+IDs and edits; deleted workouts can be restored from the new export. Pending work/retries, authorization/echo/uncertain skips,
+unowned/other-owner receipts and active worker leases stay protected. The replacement transaction rechecks the exact current
+request, account, connection, OAuth root and deletion guard; failures remain retryable. Restored work is excluded from
+automatic forwarding and new-activity notifications. New callbacks within that permission carry the same revision so their
+later redelivery cannot reopen a newly completed row. Existing coordinator lifecycle guards apply to linked workers.
+New recordings keep their existing notification and forwarding classification; the request ID on their queue row only
+prevents that same manual request from reopening them after completion.
+
+This is bounded permission to refetch a selected range, not exact callback-origin detection: a delayed ordinary recording
+can match the same range. Existing conservative notification cutoffs and **History requested** semantics remain intact.
+Garmin must still deliver the file; `409`/request acceptance does not prove redelivery. No existing jobs are bulk reset or replayed.
+The marker shares the existing metadata write; manual windows add one OAuth-root read, and matching duplicate callbacks add
+bounded queue/authority transaction reads. Reopened recordings incur normal download, parsing and persistence work.
+Garmin dispatch markers and changed duplicate callback URLs now also read the exact queue revision before updating it,
+including legacy rows, so a stale dispatcher cannot strand a restored row. These checks add bounded queue-document reads.
+There is no saved-workout query, new scanner, scheduler, collection, index, secret or TTL policy. The marker stays under
+existing user cleanup, and a connection-generation change invalidates it.
+
+Restoration release order, after separate approval: deploy `processWorkoutTask` and `parseGarminAPIActivityQueue` first
+(worker and dispatcher revision fences), then `insertGarminAPIActivityFileToQueue`, then `processConnectionHistoryTask`
+and `backfillGarminAPIActivities`.
+For rollback, first restore the previous ingress revision to stop new restorations; retain worker revision fencing while
+accepted work drains. Other providers and the existing Garmin dispatch schedule are unchanged. Monitoring is
+**covered/unchanged** under #829/#847: committed outcomes and task attempts retain their existing meanings. Existing Help
+already describes asynchronous manual imports; no frontend, MCP/Assistant or Training contract change is required.
+
+After build/verification and explicit deployment approval, run from the repository root using the pinned Firebase CLI:
+
+```bash
+npm run firebase -- deploy --only functions:processWorkoutTask,functions:parseGarminAPIActivityQueue --project quantified-self-io
+npm run firebase -- deploy --only functions:insertGarminAPIActivityFileToQueue --project quantified-self-io
+npm run firebase -- deploy --only functions:processConnectionHistoryTask,functions:backfillGarminAPIActivities --project quantified-self-io
+```
+
 The activity-history dialog honors both the existing server-owned `historyImportLeaseExpiresAt` and any active coordinator projection, including automatic imports. An optimistic admission receipt survives reopening and is discarded when the connection generation changes. Background acceptance does not emit the legacy scan-result event or overwrite live cooldown metadata. **Requesting Garmin history** changes to **History requested** only after submission finishes; the form explains that Garmin sends available records separately and request acceptance does not confirm delivery. Finished failures link to the existing Connections retry controls. Closing the dialog does not cancel accepted server work. Metadata is a UI hint, and the callable transaction remains authoritative. Garmin `functions/already-exists` (or `already-exists`) is a normal wait status without a false success, error haptic or frontend Sentry report. Permission, service and unexpected failures remain logged, including after teardown; closed dialogs receive no late feedback. This status is separate from Sleep/Health history progress.
 
 Release the compatible `backfillGarminAPIActivities` backend before the frontend. No new function, queue, scheduler, secret, Rules, index or migration is required. Existing connection-history (#847) and recorded-import (#829) monitoring already covers Garmin requests, retries, terminal outcomes and downstream ingestion with fixed `garmin` labels; coverage is **covered/unchanged**. MCP/Assistant and Training contracts are unaffected. Verify concurrent admission and aborted/deleted-account transactions in the emulator, fixed cooldown with missing/zero activity counts, legacy responses, bounded-window retry and requested completion, reopened dialogs and connection changes. Rollback the frontend to stop new opt-in requests while leaving the coordinator in place to drain accepted runs. Deployment requires separate approval.

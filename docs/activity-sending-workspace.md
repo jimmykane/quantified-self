@@ -63,6 +63,29 @@ The workspace uses the shared page header and shell. Destination and the visibly
 
 Opening a created draft must succeed before local uploads or saved preview start. A cancelled navigation leaves an empty draft recoverable from Recent sends and reports an error in the current view. Changing destination, source or batch during an action permanently fences its follow-up commands and feedback, including before create replies and when navigation returns to the original values. The action's own accepted draft navigation and unrelated query changes for the same draft remain active. Existing staged rows can be resumed from their draft; confirmed backend work continues independently.
 
+### Whole-batch outcomes and recovery
+
+The workspace labels `finished/total` as **processed**, not delivered. After confirmation it reads owner-scoped
+Firestore server counts over every display row, independently of the 50-row list page: delivered, duplicate,
+needs action, stopped, and pending. Duplicate includes both already-present recordings and previously queued
+copies; it never contributes to delivered. Pending includes `retrying`, whose message explains automatic retry
+without offering another send. Accepted/ambiguous operations keep their existing status-check/review protection.
+
+Five aggregates are bracketed by server batch reads. A changed `updatedAt`, total, finished count or state, or
+non-reconciling row counts, discards the result. Outcome-group transitions advance the public batch clock
+monotonically, including terminal-to-terminal corrections; ordinary progress within pending still avoids the
+shared batch/operation write. Deploy the projection changes before the frontend. The existing batch listener requests
+totals when the outcome clock changes; unchanged active batches do not poll. Bursts coalesce to at most one automatic
+observation every 30 seconds. Hidden tabs defer new totals reads and check once on return; already-started SDK reads
+cannot be cancelled, but no later read stage starts while hidden. An explicit Refresh totals action may read sooner.
+For a small unchanged batch left open for an hour, this reduces aggregate/server reads from about 840 to seven;
+actual savings depend on outcome changes, explicit refreshes and larger aggregation sizes. The complete
+server/count/server observation has a 30-second deadline. Timeout releases Refresh while keeping the previous totals;
+late SDK replies cannot replace a newer observation. Account changes/navigation cancel the observation and its deadline.
+Errors retain the last known totals with their **Last checked** time,
+or show unavailable when none exists, rather than silently substituting zeros. No backend aggregation endpoint,
+product analytics, new client writes, queue reads or original-file reads are introduced.
+
 ## Persistence and cleanup
 
 - `users/{uid}/activitySends/{id}` and its `rows`: owner-readable display projection, server-write-only, available independently of subscription. These contain no provider IDs, file paths, digests, credentials, continuation URLs, or raw errors.

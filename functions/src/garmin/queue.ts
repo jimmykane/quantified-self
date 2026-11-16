@@ -47,6 +47,7 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import { getServiceConnectionMeta } from '../service-connection-meta';
 import { QueueItemUserGuardedUpdateResult, updateQueueItemIfUserActive } from '../queue/dispatch-marker';
 import { recordImportCompletion } from '../queue/import-monitoring';
+import { getGarminActivityHistoryRestoration, type GarminActivityHistoryRestoration } from './activity-history-restoration';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -60,6 +61,7 @@ export const GARMIN_ACTIVITY_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
 export const GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface GarminActivityQueueInput {
+  historyRestoration?: GarminActivityHistoryRestoration,
   suppressAutomaticActivitySync?: boolean,
   userID: string,
   startTimeInSeconds: number,
@@ -244,13 +246,16 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
 
   const firebaseUserIDByGarminUserID = new Map<string, string | null>();
   const activitySyncCutoffByGarminUserID = new Map<string, number>();
+  const connectionMetaByGarminUserID = new Map<string, Awaited<ReturnType<typeof getServiceConnectionMeta>>>();
   const distinctGarminUserIDs = Array.from(new Set(queueItems.map((queueItem) => queueItem.userID)));
   try {
     await mapWithConcurrency(distinctGarminUserIDs, GARMIN_CALLBACK_QUEUE_CONCURRENCY, async (garminUserID) => {
       const firebaseUserID = await resolveFirebaseUserIDForGarminUserID(garminUserID);
       firebaseUserIDByGarminUserID.set(garminUserID, firebaseUserID);
       if (firebaseUserID) {
-        const cutoffMs = (await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI))?.activitySyncCutoffMs;
+        const meta = await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI);
+        connectionMetaByGarminUserID.set(garminUserID, meta);
+        const cutoffMs = meta?.activitySyncCutoffMs;
         if (typeof cutoffMs === 'number' && Number.isFinite(cutoffMs) && cutoffMs > 0) {
           activitySyncCutoffByGarminUserID.set(garminUserID, cutoffMs);
         }
@@ -276,10 +281,14 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
     const recordingStartMs = typeof queueItem.startTimeInSeconds === 'number' ? queueItem.startTimeInSeconds * 1000 : NaN;
     const suppressAutomaticActivitySync = cutoffMs !== undefined
       && (!Number.isFinite(recordingStartMs) || recordingStartMs < cutoffMs);
+    const historyRestoration = getGarminActivityHistoryRestoration(
+      connectionMetaByGarminUserID.get(queueItem.userID), queueItem.userID, queueItem.startTimeInSeconds,
+    );
     return [{
       ...queueItem,
       firebaseUserID,
       ...(suppressAutomaticActivitySync ? { suppressAutomaticActivitySync: true } : {}),
+      ...(historyRestoration ? { historyRestoration } : {}),
     }];
   });
 

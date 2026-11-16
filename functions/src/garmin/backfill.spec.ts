@@ -308,6 +308,25 @@ describe('Garmin Backfill', () => {
         expect(metaState.activitySyncCutoffMs).toBe(startedAt);
     });
 
+    it.each(['manual', 'legacy', 'automatic'])('grants restoration only to an explicit %s history request before provider I/O', async kind => {
+        const runId = '00000000-0000-4000-8000-000000000001';
+        Object.assign(metaState, { connectionState: 'connected', providerUserId: 'garmin-user-123', connectionStateGeneration: 'connection' });
+        transactionGetMock.mockResolvedValueOnce({ exists: true, data: () => ({ ...metaState }) });
+        if (kind !== 'automatic') transactionGetMock.mockResolvedValueOnce({ exists: true, data: () => ({ activeOAuthCredentialGeneration: 'credential' }) });
+        const execution = kind === 'legacy' ? undefined : { runId, reimportCompletedActivities: kind === 'manual', inTransaction: vi.fn(), beforeRequest: vi.fn() } as unknown as HistoryExecution;
+        vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
+            if (kind === 'automatic') expect(metaState).not.toHaveProperty('activityHistoryRestoration');
+            else expect(metaState.activityHistoryRestoration).toEqual({
+                id: kind === 'manual' ? runId : expect.any(String), startMs: +new Date('2026-08-01'), endMs: +new Date('2026-08-10'),
+                providerUserId: 'garmin-user-123', connectionGeneration: 'connection', credentialGeneration: 'credential',
+                ...(kind === 'manual' ? { runId } : {}),
+            });
+            return {};
+        });
+        await processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-10'), execution);
+        expect(requestHelper.get).toHaveBeenCalledOnce();
+    });
+
     it('keeps one cutoff across coordinator windows and retries', async () => {
         const startedAt = Date.now() - 3600000;
         const execution: HistoryExecution = {

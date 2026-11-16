@@ -479,7 +479,15 @@ Account processing retains only the first rejection's safe code while awaiting t
 No raw error, stack, account/device identifier, endpoint, signing key or notification payload is added to these logs.
 Monitoring coverage is unchanged: the existing `phase: sweep`, `outcome: failed`, native 5xx and heartbeat filters
 remain authoritative. This diagnostic-only change adds no queries, retries, sends, public/MCP fields or Training planning behavior.
-For activity-sync diagnostic parity, only `sendActivitySyncNotifications` needs deployment after separate approval.
+Configuration-stage failures also include `configurationOperation=get_client_template`, bounded
+`configurationElapsedMs` and `configurationFailureKind`. For an Admin SDK non-JSON error envelope, only its numeric
+`upstreamHttpStatus` is retained; its embedded response body stays private. Resource exhaustion records
+`explicitQuotaExceeded` only when the SDK message is available, distinguishing an explicit quota-exceeded message
+from a generic exhaustion response. A false value does not rule out a quota restriction. Compare native Remote Config
+request metrics and live project quotas before attributing exhaustion to application traffic. The Admin SDK already
+retries selected network/503 failures; these diagnostics introduce no extra retry or cached configuration.
+Deploy `sendActivitySyncNotifications`, `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications`
+after separate approval to activate these configuration diagnostics. No frontend release is required.
 
 The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
 (including admission failures in existing Gen 1/Gen 2 import workers), completed-sweep heartbeat, and positive oldest-due

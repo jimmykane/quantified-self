@@ -31,3 +31,31 @@ export function notificationSweepErrorCode(error: unknown): string {
     return httpStatus === undefined ? 'unknown' : `http-${httpStatus}`;
   } catch { return 'unknown'; }
 }
+
+/** Extract fixed classifications from SDK errors without exposing their messages or response bodies. */
+export function notificationConfigurationFailureDetails(error: unknown, elapsedMs: number): Record<string, string | number | boolean> {
+  const code = notificationSweepErrorCode(error);
+  const details: Record<string, string | number | boolean> = {
+    configurationOperation: 'get_client_template',
+    configurationElapsedMs: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(120_000, Math.round(elapsedMs))) : 0,
+    configurationFailureKind: code === 'remote-config/resource-exhausted' ? 'resource_exhausted'
+      : code === 'remote-config/internal-error' ? 'upstream_internal'
+        : code.startsWith('app/network-') || ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE'].includes(code)
+          ? 'transport' : 'unknown',
+  };
+  try {
+    const message = (error as { message?: unknown } | null)?.message;
+    if (typeof message !== 'string') return details;
+    // Match the SDK's non-JSON error envelope, never copy any part of its response body.
+    const response = code === 'remote-config/unknown-error'
+      ? /^Unexpected response with status: ([45]\d{2}) and body:/.exec(message.slice(0, 80)) : null;
+    if (response) {
+      details.configurationFailureKind = 'non_json_response';
+      details.upstreamHttpStatus = Number(response[1]);
+    }
+    if (code === 'remote-config/resource-exhausted') {
+      details.explicitQuotaExceeded = message.startsWith('Quota exceeded for quota metric ');
+    }
+  } catch { /* Diagnostics must never replace the original failure. */ }
+  return details;
+}

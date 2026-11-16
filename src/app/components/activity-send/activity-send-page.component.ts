@@ -48,7 +48,7 @@ export class ActivitySendPageComponent {
   readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.busy() && !this.sends.loadingBatch() && !this.sends.loadingRows() && !this.sends.batchReadError() && !this.sends.rowReadError() && this.sends.rows().length > 0 && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
   readonly hasRetryableRows = computed(() => this.sends.rows().some(row => ['upgrade', 'reconnect', 'retry_send'].includes(row.recovery)));
   readonly recentForProvider = computed(() => this.sends.recent().filter(batch => !this.provider() || batch.provider === this.provider()));
-  readonly statusLabels = { preparing: 'Preparing', ready: 'Ready', queued: 'Queued', sending: 'Sending', processing: 'Waiting for provider', delivered: 'Delivered', duplicate: 'Already exists or queued', needs_action: 'Needs action', stopped: 'Stopped' };
+  readonly statusLabels = { preparing: 'Preparing', ready: 'Ready', queued: 'Queued', sending: 'Sending', processing: 'Waiting for provider', retrying: 'Retrying automatically', delivered: 'Delivered', duplicate: 'Already exists or queued', needs_action: 'Needs action', stopped: 'Stopped' };
   readonly providerOptions: ActivitySendProvider[] = ['suunto', 'coros', 'wahoo'];
   readonly sourceOptions = ['Garmin API', 'Suunto app', 'COROS API', 'Wahoo API', 'manualUpload'];
   readonly fileReferences = new Map<File, string>();
@@ -217,6 +217,10 @@ export class ActivitySendPageComponent {
   async enableDeliveryCategory(): Promise<void> {
     if (!this.notificationPreferences.canEdit() || this.deliveryCategoryEnabled()) return;
     await this.run(() => this.notificationPreferences.setEnabled('activity_delivery', true));
+  }
+  refreshDeliverySummary(): void {
+    if (this.sends.loadingSummary()) return;
+    this.haptics.selection(); this.sends.refreshSummary();
   }
   async rowAction(row: ActivitySendRow, action: 'remove' | 'check' | 'retry'): Promise<void> {
     this.nowMs.set(Date.now());

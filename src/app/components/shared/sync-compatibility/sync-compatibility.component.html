@@ -1,0 +1,32 @@
+<section class="compatibility" aria-label="Check what you can sync">
+  @if (!expanded()) {
+    <button mat-button (click)="toggle()" [attr.aria-expanded]="visible()" aria-controls="sync-compatibility-details">{{ visible() ? 'Hide sync compatibility' : 'Check what you can sync' }}</button>
+  }
+  <div id="sync-compatibility-details" [hidden]="!visible()">
+    <h2>Check what you can sync</h2>
+    <p>Check a direction before choosing Pro.</p>
+    <div class="direction">
+      <app-compact-select label="From" [value]="source()" [options]="providers" (selectionChange)="chooseSource($event)" />
+      <span aria-hidden="true">→</span>
+      <app-compact-select label="To" [value]="destination()" [options]="destinations()" (selectionChange)="chooseDestination($event)" />
+    </div>
+    <div aria-live="polite">
+      <p><strong>Completed activities:</strong> {{ activities() ? 'New activities can sync automatically.' : 'This direction is not supported.' }}
+        @if (destination() === garmin) { QS cannot send completed activities into Garmin Connect. }
+      </p>
+      <p><strong>Saved routes:</strong> {{ routes() ? 'Automatic route sync from Suunto to ' + destinationLabel() + '.' : 'No automatic transfer in this direction. Upload route files to QS to send them.' }}
+        @if (routes() && destination() === garmin) { Garmin requires Course Import permission. }
+      </p>
+      <p><strong>Planned workouts:</strong> {{ destination() === coros ? 'Sending QS workouts to COROS is not yet supported.' : 'Workouts you create in QS can be sent to ' + destinationLabel() + '. This does not copy training plans between providers.' }}</p>
+      <p><strong>{{ sourceLabel() }} history:</strong>
+        @if (source() === coros) { Connected activity imports cover the last three months. }
+        @else if (source() === garmin) { Request up to the last five years, once every 30 days. }
+        @else { Import the history available from your connected account. }
+      </p>
+      @if (source() === coros || source() === garmin) {
+        <p>For older history, upload exported activity files to QS. </p>
+      }
+      <p class="note">Connect your accounts and enable sync after choosing Pro. Importing history into QS and sending past activities are separate steps. Provider permissions and file compatibility apply.</p>
+    </div>
+  </div>
+</section>

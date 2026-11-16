@@ -40,7 +40,7 @@ export async function reconcileStoppedSend(uid: string, id: string): Promise<voi
       if (!data.excluded && !data.removed && parent.exists && visible.exists) {
         const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(visible.data()!.status));
         tx.update(visible.ref, projection);
-        tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Date.now() });
+        tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Math.max(Date.now(), Number(parent.data()?.updatedAt || 0) + 1) });
       }
       return canStop || failedProcessing || ['delivered', 'duplicate', 'stopped'].includes(projection.status);
     });
@@ -82,7 +82,7 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
         if (!source.excluded && !source.removed && visible.exists && parent.exists) {
           const finished = Number(parent.data()?.finished || 0) + Number(!activitySendTerminal(visible.data()!.status));
           tx.update(visible.ref, { status: 'stopped', recovery: 'none', message: 'Stopped before sending.' });
-          tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Date.now() });
+          tx.update(parent.ref, { finished, state: finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed', updatedAt: Math.max(Date.now(), Number(parent.data()?.updatedAt || 0) + 1) });
         }
         return true;
       });
@@ -109,7 +109,7 @@ export async function admitSendRows(uid: string, id: string): Promise<void> {
       const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(visible.data()!.status));
       tx.update(visible.ref, projection);
       const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
-      if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(parent.ref, { finished, updatedAt: Date.now(), state });
+      if (parent.data()?.finished !== finished || parent.data()?.state !== state || visible.data()!.status !== projection.status && activitySendTerminal(projection.status)) tx.update(parent.ref, { finished, updatedAt: Math.max(Date.now(), Number(parent.data()?.updatedAt || 0) + 1), state });
       return !ownsQueue;
     });
     if (duplicateSource) await cleanupSendSourceRow(row.ref);
@@ -140,9 +140,11 @@ export async function projectSendDelivery(queueRef: admin.firestore.DocumentRefe
     const projection = projectSendQueue(data);
     const finished = Number(parent.data()?.finished || 0) + Number(activitySendTerminal(projection.status)) - Number(activitySendTerminal(row.data()!.status));
     const projectedRow = { ...projection, attempts: Number(data.totalRetryCount || data.retryCount || 0) + Number(source.data()?.priorAttempts || 0) + Number(!!data.providerOperationStartedAt) };
-    if (Object.entries(projectedRow).some(([key, value]) => row.data()![key] !== value)) tx.update(rowRef, projectedRow);
+    const rowChanged = Object.entries(projectedRow).some(([key, value]) => row.data()![key] !== value);
+    if (rowChanged) tx.update(rowRef, projectedRow);
     const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
-    if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, updatedAt: Date.now(), state });
+    const outcomeChanged = row.data()!.status !== projection.status && (activitySendTerminal(row.data()!.status) || activitySendTerminal(projection.status));
+    if (outcomeChanged || parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, updatedAt: Math.max(Date.now(), Number(parent.data()?.updatedAt || 0) + 1), state });
     if (privateParent.exists && privateParent.data()?.finished !== finished) tx.update(operation, { finished, updatedAt: Date.now() });
   });
   const current = (await queueRef.get()).data();
@@ -175,7 +177,7 @@ export async function projectFailedSendDelivery(queueId: string, expected: Recor
     const finished = Number(parent.data()?.finished || 0) + Number(!activitySendTerminal(row.data()!.status));
     if (Object.entries(projection).some(([key, value]) => row.data()![key] !== value)) tx.update(row.ref, projection);
     const state = finished >= Number(parent.data()?.total) ? 'complete' : 'confirmed';
-    if (parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, state, updatedAt: Date.now() });
+    if (row.data()!.status !== projection.status || parent.data()?.finished !== finished || parent.data()?.state !== state) tx.update(batch, { finished, state, updatedAt: Math.max(Date.now(), Number(parent.data()?.updatedAt || 0) + 1) });
     if (privateParent.data()?.finished !== finished) tx.update(operation, { finished, updatedAt: Date.now() });
   });
 }
@@ -228,7 +230,7 @@ export async function cleanupExpiredSends(now = Date.now()): Promise<void> {
         const current = await tx.get(op.ref); const visible = await tx.get(batchRef(uid, op.id));
         if (!current.exists) return;
         tx.update(op.ref, { sourceExpired: true, stopped: true, cleanupAfter: Timestamp.fromMillis(Number(current.data()?.createdAt) + 30 * 86400_000) });
-        if (visible.exists) tx.update(visible.ref, { stopped: true, reviewed: false, updatedAt: now });
+        if (visible.exists) tx.update(visible.ref, { stopped: true, reviewed: false, updatedAt: Math.max(now, Number(visible.data()?.updatedAt || 0) + 1) });
       });
     } catch { failed++; }
   }

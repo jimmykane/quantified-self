@@ -67,3 +67,9 @@ export function recordActivityDeliverySample(destination: string, fields?: Recor
 export function recordActivitySendCleanup(outcome: 'completed' | 'failed'): void {
     emit(null, 'send_cleanup', { outcome });
 }
+
+export function recordActivityDeliveryReviewSample(destination: string, reviewKind: 'manual_reconciliation' | 'dead_letter', fields?: Record<string, number | boolean>): void {
+    if (!['suunto', 'wahoo', 'coros'].includes(destination)) return;
+    try { logger.info('[ActivityDelivery]', { telemetryVersion: 1, source: 'all', destination, mode: 'all', reviewKind,
+        event: fields ? 'review_sample' : 'review_sample_unavailable', ...fields }); } catch { /* observation only */ }
+}

@@ -1146,7 +1146,8 @@ export async function cleanupServiceConnectionForUser(
   }
 
   if (tokenQuerySnapshots.empty) {
-    logger.warn(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Cleaning up abandoned data.`);
+    const log = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion ? logger.info : logger.warn;
+    log(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Cleaning up abandoned data.`);
     if (needsDisconnectLifecycleGuard) {
       const emptyRootValidation = await validateEmptyTokenRootForDisconnectEpisode(
         userDocRef,

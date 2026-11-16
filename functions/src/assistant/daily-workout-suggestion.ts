@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { DailyWorkoutFailureReason, DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
+import { type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
@@ -13,8 +13,8 @@ import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSugges
 import { DayWorkoutModelError } from './day-workout-diagnostics';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
-import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
-import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
+import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, DayWorkoutTrainingNotReadyError, type DayWorkoutContext } from './day-workout-context';
+import { collectDailyWorkoutSuggestionContext } from './daily-workout-suggestion-context';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 import { readDailyWorkoutPlanContext } from './daily-workout-context';
 import { ASSISTANT_MODEL_NAME } from './model';
@@ -77,8 +77,7 @@ export interface DailyWorkoutSuggestionDependencies {
   now(): Date;
   legal: typeof assertAssistantLegalAccess;
   pro(uid: string): Promise<boolean>;
-  selectSport(uid: string, preferences: DailyWorkoutSuggestionPreferences, now: Date): Promise<DailyWorkoutSuggestionPreferences['controls']>;
-  context: typeof dayWorkoutDependencies.context;
+  prepareContext: typeof collectDailyWorkoutSuggestionContext;
   coverage(uid: string, controls: DayWorkoutControls): Promise<DayCoverage>;
   importActive(uid: string): Promise<boolean>;
   generate: typeof generateDayWorkoutSuggestion;
@@ -88,13 +87,13 @@ export interface DailyWorkoutSuggestionDependencies {
 const defaults: DailyWorkoutSuggestionDependencies = {
   store: createDailyWorkoutSuggestionStore(), regenerate: runGenerateDayWorkout, now: () => new Date(), legal: assertAssistantLegalAccess,
   pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
-  importActive: readDailyWorkoutHistoryImportActive, selectSport: selectDailyWorkoutSuggestionSport, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
+  importActive: readDailyWorkoutHistoryImportActive, prepareContext: collectDailyWorkoutSuggestionContext, coverage: readDailyWorkoutSuggestionCoverage, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
 };
 const coveredStates = ['planned', 'completed', 'rest-day'];
 async function currentDailyWorkoutSuggestionStatus(uid: string, dependencies: DailyWorkoutSuggestionDependencies) {
   const initial = await dependencies.store.read(uid);
-  if (!initial.preferences || !['waiting', 'waiting-sleep', 'waiting-import', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
+  if (!initial.preferences || !['waiting', 'waiting-sleep', 'waiting-import', 'waiting-training', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
   const coverage = await dependencies.coverage(uid, initial.preferences.controls);
   // Dismissal, disablement, deletion or a day/zone change during the read must supersede its result.
   const latest = await dependencies.store.read(uid);
@@ -167,11 +166,11 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     await dependencies.store.replace(uid, preferences, input.expectedRequestId as string, request.controls, result);
     return (await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status;
   }
-  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) return project(status);
+  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import', 'waiting-training'].includes(status.state)) return project(status);
   const now = dependencies.now();
   const useAvailable = input.action === 'use-available-data';
   // The explicit fallback requires a previously deferred suggestion for this local date.
-  if (useAvailable && !['waiting-sleep', 'waiting-import'].includes(status.state)) return project(status);
+  if (useAvailable && !['waiting-sleep', 'waiting-import', 'waiting-training'].includes(status.state)) return project(status);
   const token = await dependencies.store.begin(uid, preferences);
   if (!token) return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
   const date = preferences.controls.localDate;
@@ -191,9 +190,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       await dependencies.store.finish(uid, date, token, outcome);
       return { localDate: date, state: outcome };
     }
-    const controls = await dependencies.selectSport(uid, preferences, now);
+    const { controls, evidence } = await dependencies.prepareContext(uid, preferences, now, useAvailable);
     const request: GenerateDayWorkoutRequest = { requestId: `daily-suggestion:${date}`, controls };
-    const evidence = await dependencies.context(uid, request, now);
     const observedAt = dependencies.now();
     await assertActive();
     const skip = dailyWorkoutSuggestionSkip(evidence);
@@ -201,6 +199,14 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       outcome = skip;
       await dependencies.store.finish(uid, date, token, skip);
       return { localDate: date, state: skip };
+    }
+    if (evidence.trainingMetricsReady === false && !useAvailable) {
+      outcome = 'waiting-training';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
+    if (evidence.trainingMetricsReady === false) {
+      evidence.missingContext.push('Training metrics are still preparing or could not be checked. You explicitly chose to use available data; missing Training evidence is unknown, not zero.');
     }
     const awaitingSleep = dailyWorkoutSuggestionAwaitsSleep(controls, evidence, observedAt);
     if (awaitingSleep && !useAvailable) {
@@ -271,6 +277,11 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     stage = 'status';
     return project((await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status);
   } catch (error) {
+    if (stage === 'context' && !useAvailable && error instanceof DayWorkoutTrainingNotReadyError) {
+      outcome = 'waiting-training';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
     failureReason = stage === 'generation' && error instanceof DayWorkoutModelError ? 'temporary-service'
       : stage === 'generation' && (error instanceof DayWorkoutSuggestionValidationError || error instanceof z.ZodError
         || error instanceof HttpsError && error.code === 'failed-precondition') ? 'invalid-output' : 'unknown';

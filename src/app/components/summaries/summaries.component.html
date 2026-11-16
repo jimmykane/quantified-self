@@ -72,7 +72,7 @@
   <app-dashboard-today [account]="$any(user)" [owner]="isOwnerDashboard" [expanded]="todayDetailsExpanded()"
     [settings]="todaySettings" [readiness]="dashboardTodayReadiness" [trainingState]="dashboardTodayTrainingState"
     [localDate]="todayRestDate" [timelineNotes]="timelineNotes()" [sleepRevision]="dailyWorkoutSuggestionSleepRevision"
-    [sleepKey]="dailyWorkoutSuggestionSleepKey" (customize)="customizeToday()" />
+    [sleepKey]="dailyWorkoutSuggestionSleepKey" [trainingKey]="dailyWorkoutSuggestionTrainingKey" (customize)="customizeToday()" />
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }

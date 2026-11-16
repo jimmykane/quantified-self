@@ -163,7 +163,9 @@ describe('Suunto History to Queue', () => {
 
             await expect(addSuuntoAppHistoryToQueue(request as any))
                 .rejects.toMatchObject({ code: 'internal', message: 'Queue failure' });
-            expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Queue failure' }));
+            expect(logger.error).toHaveBeenCalledWith('[SuuntoHistoryImport] Request failed.', expect.objectContaining({
+                failureStage: 'legacy_import', errorCode: 'internal', reason: 'unclassified',
+            }));
         });
 
         it.each([
@@ -195,7 +197,9 @@ describe('Suunto History to Queue', () => {
             await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toMatchObject({
                 code: 'internal', httpErrorCode: { status: 500 },
             });
-            expect(logger.error).toHaveBeenCalledWith(error);
+            expect(logger.error).toHaveBeenCalledWith('[SuuntoHistoryImport] Request failed.', expect.objectContaining({
+                failureStage: 'legacy_import', errorCode: 'internal',
+            }));
             expect(logger.info).not.toHaveBeenCalled();
         });
 
@@ -275,5 +279,85 @@ describe('Suunto History to Queue', () => {
             await expect(addSuuntoAppHistoryToQueue(request as any))
                 .rejects.toThrow('History import is not allowed');
         });
+    });
+});
+
+describe('Suunto history rejection diagnostics', () => {
+    const dates = { startDate: '2026-10-01', endDate: '2026-10-02', background: true };
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(utils.hasProAccess).mockResolvedValue(true);
+        vi.mocked(history.getNextAllowedHistoryImportDate).mockResolvedValue(null);
+        vi.mocked(startManualActivityHistory).mockReset();
+    });
+
+    it.each([
+        [{ ...dates, background: 'private-invalid-background' }, 'request_validation', 'invalid_background'],
+        [{ ...dates, startDate: 'private-date-canary' }, 'request_validation', 'invalid_dates'],
+        [{ ...dates, startDate: '2026-10-03' }, 'request_validation', 'reversed_dates'],
+        [{ ...dates, notification: { private: 'private-payload-canary' } }, 'notification_consent', 'invalid_notification_target'],
+    ])('records the fixed reason for rejected request data', async (data, failureStage, reason) => {
+        const request = { ...createMockRequest({ data }), rawRequest: { get: () => 'https://quantified-self.io' } };
+        await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[SuuntoHistoryImport] Request failed.', expect.objectContaining({
+            failureStage, reason, errorCode: 'invalid-argument', elapsedMs: expect.any(Number),
+        }));
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toMatch(/private-|testUserID|2026-10/);
+    });
+
+    it.each([
+        ['Reconnect before importing history.', 'connection_unavailable'],
+        ['Import notifications are unavailable. Import without a notification or try again later.', 'notifications_unavailable'],
+        ['Enable notifications on this device again, or import without a notification.', 'notification_registration_changed'],
+        ['Account is being deleted or no longer exists.', 'account_unavailable'],
+        ['private-unrecognized-error-canary', 'unclassified'],
+        ['constructor', 'unclassified'],
+        ['__proto__', 'unclassified'],
+    ])('identifies a background admission rejection without changing the response', async (message, reason) => {
+        const error = new HttpsError('failed-precondition', message, { private: 'private-details-canary' });
+        vi.mocked(startManualActivityHistory).mockRejectedValueOnce(error);
+        await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: dates }) as never)).rejects.toBe(error);
+        expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[SuuntoHistoryImport] Request failed.', {
+            failureStage: 'background_admission', mode: 'background', notificationRequested: false,
+            errorCode: 'failed-precondition', reason, elapsedMs: expect.any(Number),
+        });
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toMatch(/private-|testUserID|2026-10/);
+    });
+
+    it.each([
+        ['app_check', 'app_check', 'unclassified'],
+        ['authentication', 'authentication', 'authentication_required'],
+        ['subscription', 'subscription', 'subscription_required'],
+        ['cooldown', 'legacy_cooldown', 'cooldown_active'],
+    ])('covers the %s guard without logging account data or dates', async (guard, failureStage, reason) => {
+        const request = createMockRequest({ data: { ...dates, background: false } });
+        if (guard === 'app_check') request.app = null as never;
+        if (guard === 'authentication') request.auth = null as never;
+        if (guard === 'subscription') vi.mocked(utils.hasProAccess).mockResolvedValueOnce(false);
+        if (guard === 'cooldown') vi.mocked(history.getNextAllowedHistoryImportDate).mockResolvedValueOnce(new Date(Date.now() + 86400000));
+        await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toBeInstanceOf(HttpsError);
+        expect(logger.warn).toHaveBeenCalledWith('[SuuntoHistoryImport] Request failed.', expect.objectContaining({ failureStage, reason }));
+        const diagnostics = vi.mocked(logger.warn).mock.calls.filter(call => call[0] === '[SuuntoHistoryImport] Request failed.');
+        expect(diagnostics).toHaveLength(1);
+        expect(JSON.stringify(diagnostics)).not.toMatch(/testUserID|2026-|https:/);
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+        expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+    });
+
+    it('records unexpected background failures safely and does not log success as a failure', async () => {
+        const error = Object.assign(new Error('private-message-canary'), { payload: 'private-payload-canary' });
+        vi.mocked(startManualActivityHistory).mockRejectedValueOnce(error);
+        await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: dates }) as never)).rejects.toBe(error);
+        expect(logger.error).toHaveBeenCalledExactlyOnceWith('[SuuntoHistoryImport] Request failed.', expect.objectContaining({
+            failureStage: 'background_admission', reason: 'unexpected_error', errorCode: 'internal',
+        }));
+        expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toMatch(/private-|testUserID/);
+        vi.clearAllMocks();
+        vi.mocked(startManualActivityHistory).mockResolvedValueOnce({ runId: 'run', active: true } as never);
+        await addSuuntoAppHistoryToQueue(createMockRequest({ data: dates }) as never);
+        expect(logger.error).not.toHaveBeenCalled(); expect(logger.warn).not.toHaveBeenCalled();
     });
 });

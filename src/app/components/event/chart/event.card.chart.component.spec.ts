@@ -1539,45 +1539,36 @@ describe('EventCardChartComponent', () => {
     ]);
   });
 
-  it('orders a first-view Running stack by sport and caps it at three eligible charts', async () => {
-    chartSettingsSignal.set({...chartSettingsSignal(), showAllData: true});
-    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
-      DataHeartRate.type,
-      DataPace.type,
-      DataPower.type,
-      DataAltitude.type,
-    ]);
-    const runningActivity = {type: ActivityTypes.Running, getID: () => 'run-1'} as any;
-    component.selectedActivities = [runningActivity];
+  it.each([
+    {activityType: ActivityTypes.Running, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type]},
+    {activityType: ActivityTypes.Walking, primaryDataTypes: [DataHeartRate.type, DataPace.type, DataCadence.type]},
+    {activityType: ActivityTypes.Cycling, primaryDataTypes: [DataHeartRate.type, DataPower.type, DataSpeed.type]},
+  ].flatMap(example => [false, true].map(isComparison => ({...example, isComparison}))))(
+    'shows primary charts and altitude for $activityType (comparison: $isComparison)', async ({activityType, primaryDataTypes, isComparison}) => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([...primaryDataTypes, DataAltitude.type]);
+    const activities = Array.from({length: isComparison ? 2 : 1}, (_, index) => ({type: activityType, getID: () => `activity-${index}`}));
+    component.selectedActivities = activities as any;
     component.event = {
-      getID: () => 'event-running',
-      getActivities: () => [runningActivity],
+      hasBenchmark: isComparison,
+      getID: () => 'event-altitude-defaults',
+      getActivities: () => activities,
       isMultiSport: () => false,
     } as any;
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       chartPanel(DataTemperature.type),
       chartPanel(DataAltitude.type),
-      chartPanel(DataPower.type),
-      chartPanel(DataPace.type),
-      chartPanel(DataHeartRate.type),
+      ...[...primaryDataTypes].reverse().map(chartPanel),
     ] as any);
 
     fixture.detectChanges();
     await fixture.whenStable();
 
     expect(component.visibilityMode).toBe('automatic');
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
-      DataHeartRate.type,
-      DataPace.type,
-      DataPower.type,
-    ]);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([...primaryDataTypes, DataAltitude.type]);
     expect(component.recommendedDataTypeLegendItems.map((item) => item.dataType)).toEqual([
-      DataHeartRate.type,
-      DataPace.type,
-      DataPower.type,
-      DataAltitude.type,
-      DataTemperature.type,
+      ...primaryDataTypes, DataAltitude.type, DataTemperature.type,
     ]);
+    expect(component.allRecordedMetricsForced).toBe(isComparison);
     expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
 
@@ -1680,17 +1671,20 @@ describe('EventCardChartComponent', () => {
   });
 
   it('resets only custom visibility for the current sport signature', async () => {
-    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
+    const dataTypes = [DataHeartRate.type, DataPower.type, DataSpeed.type, DataAltitude.type];
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue(dataTypes);
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [DataPower.type, DataSpeed.type],
+    });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
-      chartPanel(DataPower.type),
-      chartPanel(DataSpeed.type),
+      ...dataTypes.map(chartPanel),
     ] as any);
 
     fixture.detectChanges();
     await fixture.whenStable();
-    component.onDataTypeLegendSelectionChange(DataSpeed.type, true);
     expect(component.visibilityMode).toBe('custom');
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
+    expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
 
     component.onResetToSportDefaults();
 
@@ -1699,7 +1693,7 @@ describe('EventCardChartComponent', () => {
       component.sportProfile.signature,
     );
     expect(component.visibilityMode).toBe('automatic');
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(dataTypes);
     expect(component.visibilityAnnouncement()).toContain('Reset to Cycling defaults');
   });
 

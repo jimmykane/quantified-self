@@ -30,6 +30,21 @@ import {
 } from './event-chart-sport-profile.helper';
 
 describe('event chart sport profiles', () => {
+  const altitudeProfileCases = [
+    {
+      activityTypes: [ActivityTypes.Running, 'Road Running'],
+      primaryDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type],
+    },
+    {
+      activityTypes: [ActivityTypes.Walking, 'Nordic Walking', 'Speed Walking'],
+      primaryDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type],
+    },
+    {
+      activityTypes: ['Cycling', 'Road Cycling', 'Gravel Cycling', 'Track Cycling', 'Cyclocross', 'E-Biking', 'Hand Cycle', 'Velomobile', 'Wheel Chair'],
+      primaryDataTypes: [DataHeartRate.type, DataPower.type, DataSpeed.type],
+    },
+  ].flatMap(({activityTypes, primaryDataTypes}) => activityTypes.map(activityType => ({activityType, primaryDataTypes})));
+
   it('covers every canonical Sports Lib activity type with an explicit or group profile', () => {
     expect(ActivityTypesHelper.getActivityTypesAsUniqueArray().length).toBeGreaterThan(100);
     expect(getUnclassifiedEventChartActivityTypes()).toEqual([]);
@@ -288,7 +303,98 @@ describe('event chart sport profiles', () => {
     ]);
   });
 
-  it('selects up to three available and globally allowed families without padding', () => {
+  it.each(altitudeProfileCases)('keeps primary charts and recorded altitude for $activityType', ({activityType, primaryDataTypes}) => {
+    const dataTypes = [...primaryDataTypes, DataAltitude.type, DataCadence.type, DataTemperature.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).toEqual([...primaryDataTypes, DataAltitude.type]);
+  });
+
+  it('keeps walking cadence when no power is recorded and adds altitude', () => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataCadence.type, DataAltitude.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.Walking]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).toEqual(dataTypes);
+  });
+
+  it('includes running altitude with a non-default pace unit and a shared running profile', () => {
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([ActivityTypes.Running, 'Road Running']),
+      panels: [DataHeartRate.type, DataPaceMinutesPerMile.type, DataPower.type, DataAltitude.type].map(panel),
+      globallyAllowedDataTypes: [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type],
+    });
+
+    expect(result.automaticDataTypes).toEqual([
+      DataHeartRate.type, DataPaceMinutesPerMile.type, DataPower.type, DataAltitude.type,
+    ]);
+  });
+
+  it('includes cycling altitude with a non-default speed unit', () => {
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile(['Road Cycling', 'Gravel Cycling']),
+      panels: [DataHeartRate.type, DataPower.type, DataSpeedKnots.type, DataAltitude.type].map(panel),
+      globallyAllowedDataTypes: [DataHeartRate.type, DataPower.type, DataSpeed.type, DataAltitude.type],
+    });
+
+    expect(result.automaticDataTypes).toEqual([
+      DataHeartRate.type, DataPower.type, DataSpeedKnots.type, DataAltitude.type,
+    ]);
+  });
+
+  it.each(altitudeProfileCases.filter(({activityType}) => ['Running', 'Walking', 'Cycling'].includes(activityType))
+    .flatMap(example => ['missing', 'globally disabled', 'excluded'].map(availability => ({...example, availability}))))(
+    'preserves three $activityType defaults when altitude is $availability', ({activityType, primaryDataTypes, availability}) => {
+    const dataTypes = [...primaryDataTypes, DataAltitude.type, DataCadence.type, DataTemperature.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.filter(type => availability !== 'missing' || type !== DataAltitude.type).map(panel),
+      globallyAllowedDataTypes: dataTypes.filter(type => availability !== 'globally disabled' || type !== DataAltitude.type),
+      automaticExcludedDataTypes: availability === 'excluded' ? [DataAltitude.type] : [],
+    });
+
+    expect(result.automaticDataTypes).toEqual(primaryDataTypes);
+  });
+
+  it.each([
+    [ActivityTypes.TrailRunning, [DataPace.type, DataPower.type, DataAltitude.type]],
+    [ActivityTypes.Hiking, [DataHeartRate.type, DataAltitude.type, DataSpeed.type]],
+    [ActivityTypes.MountainBiking, [DataHeartRate.type, DataSpeed.type, DataAltitude.type]],
+    [ActivityTypes.CrosscountrySkiing, [DataAltitude.type, DataHeartRate.type, DataPower.type]],
+  ])('preserves existing altitude priorities for %s', (activityType, expected) => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type, DataSpeed.type, DataCadence.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).toEqual(expected);
+  });
+
+  it.each([
+    'Track and Field', 'Inline Skating', 'Treadmill', 'Indoor Walking', 'Indoor Cycling',
+    'Swimming', 'Open Water Swimming', 'Scuba Diving', 'Rowing', 'Strength Training', 'Soccer',
+  ])('keeps altitude optional for %s', activityType => {
+    const dataTypes = [DataHeartRate.type, DataPace.type, DataPower.type, DataAltitude.type, DataSpeed.type, DataTemperature.type];
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.automaticDataTypes).not.toContain(DataAltitude.type);
+    expect(result.otherDataTypes).toContain(DataAltitude.type);
+  });
+
+  it('selects available and globally allowed families without padding', () => {
     const profile = resolveEventChartSportProfile([ActivityTypes.Running]);
     const result = resolveEventChartRecommendations({
       profile,
@@ -331,12 +437,6 @@ describe('event chart sport profiles', () => {
       ActivityTypes.Motorsports,
       [DataSpeed.type, DataAltitude.type, DataHeartRate.type, DataTemperature.type],
       [DataSpeed.type, DataAltitude.type, DataHeartRate.type],
-    ],
-    [
-      'Adaptive Mobility',
-      ActivityTypes.Wheelchair,
-      [DataHeartRate.type, DataPower.type, DataSpeed.type, DataAltitude.type],
-      [DataHeartRate.type, DataPower.type, DataSpeed.type],
     ],
   ])('selects the top three available automatic charts for %s', (label, activityType, dataTypes, automaticDataTypes) => {
     const result = resolveEventChartRecommendations({

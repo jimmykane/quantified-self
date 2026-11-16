@@ -5,15 +5,15 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
 import { Firestore } from 'app/firebase/firestore';
-import { ActivitySendService } from './activity-send.service';
+import { ActivitySendService, ACTIVITY_SEND_SUMMARY_TIMEOUT_MS } from './activity-send.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppProcessingService } from './app.processing.service';
 import { ACTIVITY_SEND_LIMITS } from '@shared/activity-send';
 
-const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn() }));
-vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data }));
+const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn(), count: vi.fn(), doc: vi.fn() }));
+vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data, getCountFromServer: streams.count, getDocFromServer: streams.doc }));
 
 class FakeXHR {
   static latest: FakeXHR;
@@ -41,14 +41,121 @@ describe('ActivitySendService owner and upload boundaries', () => {
   const appCheck = { getToken: vi.fn(async () => 'synthetic-app-check') };
   const processing = { addJob: vi.fn(() => 'job'), updateJob: vi.fn(), removeJob: vi.fn() };
   beforeEach(() => {
-    vi.clearAllMocks(); streams.reads = []; FakeXHR.latest = undefined!;
+    vi.clearAllMocks(); streams.count.mockReset(); streams.doc.mockReset(); streams.reads = []; FakeXHR.latest = undefined!;
     streams.data.mockImplementation(() => { const subject = new Subject<unknown>(); streams.reads.push(subject); return subject; });
     auth.currentUser.uid = 'owner'; user.user.set({ uid: 'owner' });
     vi.stubGlobal('XMLHttpRequest', FakeXHR);
     TestBed.configureTestingModule({ providers: [ActivitySendService, { provide: Auth, useValue: auth }, { provide: FirebaseApp, useValue: { options: { projectId: 'demo-send' } } }, { provide: Firestore, useValue: {} }, { provide: AppUserService, useValue: user }, { provide: AppFunctionsService, useValue: functions }, { provide: AppCheckReadinessService, useValue: appCheck }, { provide: AppProcessingService, useValue: processing }] });
     service = TestBed.inject(ActivitySendService); TestBed.flushEffects();
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => { TestBed.resetTestingModule(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  function summaryBatch() {
+    const batch = { id: 'batch', state: 'complete', total: 100, finished: 100, updatedAt: 10 };
+    streams.doc.mockResolvedValue({ data: () => batch });
+    [95, 3, 2, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    service.watchBatch('batch'); streams.reads[2].next(batch); streams.reads[3].next([{ id: 'visible-only' }]);
+    return batch;
+  }
+  it('reads full-batch server counts independently of pagination and fences a stable batch version', async () => {
+    vi.useFakeTimers(); summaryBatch(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toMatchObject({ delivered: 95, duplicate: 3, needs_action: 2, pending: 0 });
+    expect(streams.count).toHaveBeenCalledTimes(5); expect(streams.doc).toHaveBeenCalledTimes(2);
+    service.loadMoreRows(); expect(streams.count).toHaveBeenCalledTimes(5);
+  });
+  it('does not poll unchanged active batches and coalesces outcome changes into one totals read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    batch.state = 'confirmed'; batch.finished = 99;
+    streams.count.mockReset();
+    [95, 3, 1, 0, 1].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    const checkedAt = service.summary()!.checkedAt;
+    streams.reads[2].next({ ...batch });
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(streams.count).toHaveBeenCalledTimes(5); expect(streams.doc).toHaveBeenCalledTimes(2);
+    expect(service.summary()!.checkedAt).toBe(checkedAt);
+    for (const updatedAt of [11, 12, 13]) { batch.updatedAt = updatedAt; streams.reads[2].next({ ...batch }); }
+    [95, 3, 1, 0, 1].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.updatedAt).toBe(13); expect(streams.count).toHaveBeenCalledTimes(10);
+    batch.updatedAt = 14; batch.finished = 100; batch.state = 'complete'; streams.reads[2].next({ ...batch });
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    await vi.advanceTimersByTimeAsync(29_999); expect(streams.count).toHaveBeenCalledTimes(10);
+    await vi.advanceTimersByTimeAsync(1); expect(service.summary()).toMatchObject({ delivered: 96, pending: 0, updatedAt: 14 });
+    await vi.advanceTimersByTimeAsync(3_600_000); expect(streams.count).toHaveBeenCalledTimes(15);
+  });
+  it('defers initial and changed totals while hidden and refreshes once when the tab returns', async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const batch = summaryBatch(); await vi.advanceTimersByTimeAsync(60_000);
+    expect(streams.doc).not.toHaveBeenCalled(); expect(streams.count).not.toHaveBeenCalled();
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(streams.count).toHaveBeenCalledTimes(5);
+    batch.updatedAt = 11; streams.reads[2].next({ ...batch });
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(60_000); expect(streams.count).toHaveBeenCalledTimes(5);
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(service.summary()).toMatchObject({ delivered: 96, updatedAt: 11 });
+    expect(streams.count).toHaveBeenCalledTimes(10);
+    service.closeBatch(); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(60_000); expect(streams.count).toHaveBeenCalledTimes(10);
+  });
+  it('does not start aggregate reads if the tab becomes hidden during the first server read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let resolve!: (value: unknown) => void;
+    streams.doc.mockImplementationOnce(() => new Promise(res => { resolve = res; }));
+    await vi.advanceTimersByTimeAsync(0);
+    visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange'));
+    resolve({ data: () => batch }); await vi.advanceTimersByTimeAsync(60_000);
+    expect(streams.count).not.toHaveBeenCalled(); expect(service.loadingSummary()).toBe(false);
+    visibility.mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0); expect(service.summary()?.delivered).toBe(95);
+  });
+  it('rejects counts if delivery changes while the aggregates are read', async () => {
+    vi.useFakeTimers(); const batch = summaryBatch();
+    streams.doc.mockResolvedValueOnce({ data: () => batch }).mockResolvedValueOnce({ data: () => ({ ...batch, updatedAt: 11 }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.summaryError()).toContain('updating');
+    await vi.advanceTimersByTimeAsync(29_000); expect(streams.count).toHaveBeenCalledTimes(5);
+  });
+  it('does not turn an unavailable count into a successful zero', async () => {
+    vi.useFakeTimers(); summaryBatch(); streams.count.mockReset().mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.summaryError()).toContain('unavailable');
+  });
+  it('releases a stalled totals read, preserves the last result and ignores late replies after refresh', async () => {
+    vi.useFakeTimers(); summaryBatch(); await vi.advanceTimersByTimeAsync(0);
+    const previous = service.summary();
+    const late: Array<(value: unknown) => void> = [];
+    streams.count.mockReset().mockImplementation(() => new Promise(resolve => { late.push(resolve); }));
+    service.refreshSummary(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.loadingSummary()).toBe(true);
+    await vi.advanceTimersByTimeAsync(ACTIVITY_SEND_SUMMARY_TIMEOUT_MS);
+    expect(service.loadingSummary()).toBe(false); expect(service.summary()).toEqual(previous);
+    expect(service.summaryError()).toContain('unavailable');
+    streams.count.mockReset();
+    [96, 3, 1, 0, 0].forEach(count => streams.count.mockResolvedValueOnce({ data: () => ({ count }) }));
+    service.refreshSummary(); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.delivered).toBe(96);
+    late.forEach(resolve => resolve({ data: () => ({ count: 0 }) }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()?.delivered).toBe(96); expect(streams.doc).toHaveBeenCalledTimes(5);
+    expect(service.summaryError()).toBeNull(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('does not keep polling a send that disappeared or returned to a draft', async () => {
+    vi.useFakeTimers(); summaryBatch(); streams.doc.mockResolvedValue({ data: () => undefined });
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(streams.doc).toHaveBeenCalledTimes(1); expect(streams.count).not.toHaveBeenCalled();
+    expect(service.summaryError()).toContain('not available'); expect(service.loadingSummary()).toBe(false);
+  });
+  it('discards an in-flight summary after navigation or an account change', async () => {
+    vi.useFakeTimers(); summaryBatch(); const resolvers: Array<(value: unknown) => void> = [];
+    streams.count.mockReset().mockImplementation(() => new Promise(res => { resolvers.push(res); }));
+    await vi.advanceTimersByTimeAsync(0); service.closeBatch(); auth.currentUser.uid = 'another';
+    resolvers.forEach(resolve => resolve({ data: () => ({ count: 0 }) })); await vi.advanceTimersByTimeAsync(0);
+    expect(service.summary()).toBeNull(); expect(service.loadingSummary()).toBe(false);
+  });
   it('reconciles global jobs from active batches separately from recent history', () => {
     streams.reads[1].next([{ id: 'batch', provider: 'suunto', state: 'confirmed', total: 2, finished: 1 }]);
     expect(processing.updateJob).toHaveBeenCalledWith('job', expect.objectContaining({ progress: undefined }));

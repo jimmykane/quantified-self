@@ -283,7 +283,10 @@ describe('onSubscriptionUpdated', () => {
 
             await onSubscriptionUpdated(event);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                `[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`
+            );
+            expect(mockLogger.warn).not.toHaveBeenCalledWith(
                 `[onSubscriptionUpdated] User ${uid} is marked for deletion. Skipping subscription processing.`
             );
             expect(mockReconcileClaims).not.toHaveBeenCalled();

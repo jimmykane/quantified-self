@@ -2,7 +2,7 @@ import { DAY_WORKOUT_SPORTS, dayWorkoutSupportsGarminPowerAveraging, dayWorkoutD
 import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
 import type { DailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 import { buildDayWorkoutRoutine } from './day-workout-routine';
-import { createAssistantMcpSession } from './mcp-session';
+import type { AssistantMcpSession } from './mcp-session';
 
 /** Exact recorded weekday sport, only with two distinct days and an unambiguous winner. Saved sport is the fallback. */
 export function dailyWorkoutSuggestionRoutineSport(preferences: DailyWorkoutSuggestionPreferences, now: Date, activities: unknown[]) {
@@ -20,10 +20,11 @@ export function dailyWorkoutSuggestionRoutineSport(preferences: DailyWorkoutSugg
   return unique.length && (!unique[1] || unique[0].recordedDayCount > unique[1].recordedDayCount)
     ? DAY_WORKOUT_SPORTS.find(sport => sport === unique[0].sport)! : preferences.controls.sport;
 }
-export async function selectDailyWorkoutSuggestionSport(uid: string, preferences: DailyWorkoutSuggestionPreferences, now: Date) {
+/** The caller owns the session so preparation, routine and recovery reads share one lifecycle. */
+export async function selectDailyWorkoutSuggestionSport(preferences: DailyWorkoutSuggestionPreferences, now: Date,
+  session: Pick<AssistantMcpSession, 'callTool'>) {
   const saved = preferences.controls;
   if (!preferences.followRoutine || saved.routineContext === false || saved.activityContext === false) return saved;
-  const session = await createAssistantMcpSession(uid, 'https://quantified-self.io', undefined, 'coordinate_free', false, false);
   try {
     const today = dayWorkoutLocalDate(now, saved.timeZone);
     const activities: unknown[] = []; let cursor: string | undefined;
@@ -45,6 +46,5 @@ export async function selectDailyWorkoutSuggestionSport(uid: string, preferences
       cursor = result.nextCursor;
     }
   } catch { /* A partial/failed scan never establishes a habit. */ }
-  finally { await session.close(); }
   return saved;
 }

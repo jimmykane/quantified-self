@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "resultStatus", "order": "ASCENDING" }, { "fieldPath": "dateCreated", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "failed_jobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "originalCollection", "order": "ASCENDING" }, { "fieldPath": "failedAt", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "endTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
     },

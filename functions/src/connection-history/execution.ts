@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from '../token-refresh-coordinator';
-import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, historyRootCredentialGeneration, isConnectionHistoryRunId, type ConnectionHistoryRun } from './model';
 import { withHistoryExecution } from './context';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
 import type { QueueResult } from '../queue-utils';
@@ -14,6 +14,8 @@ export interface HistoryExecution {
   serviceName: ConnectionHistoryRun['serviceName'];
   runId: string;
   cooldownStartedAtMs: number;
+  /** Explicit manual range imports may fetch completed recordings again, once per run. */
+  reimportCompletedActivities?: boolean;
   garminHealthSummaryTypes?: ConnectionHistoryRun['garminHealthSummaryTypes'];
   garminHealthBackfillCutoffs?: ConnectionHistoryRun['garminHealthBackfillCutoffs'];
   // In-memory only: overlapping history pages must not replay failures without owner action.
@@ -36,13 +38,15 @@ export class HistoryImportAdmissionError extends HttpsError {
 }
 export async function assertHistoryConnectionCurrent(run: ConnectionHistoryRun, transaction: admin.firestore.Transaction): Promise<void> {
   const db = admin.firestore();
+  const rootGeneration = historyRootCredentialGeneration(run);
   const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, run.userID);
   const [root, token, meta] = await Promise.all([
     transaction.get(db.doc(run.rootPath)), transaction.get(db.doc(run.tokenPath)),
     transaction.get(db.doc(`users/${run.userID}/meta/${run.serviceName}`)),
   ]);
   if (deletion.shouldSkip || !root.exists || !token.exists || !meta.exists
-    || root.data()?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] !== run.credentialGeneration
+    || typeof rootGeneration !== 'string' || !rootGeneration.trim()
+    || root.data()?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] !== rootGeneration
     || token.data()?.tokenCredentialGeneration !== run.credentialGeneration
     || root.data()?.disconnectOperationGeneration || root.data()?.disconnectGeneration
     || meta.data()?.connectionState !== 'connected'
@@ -59,11 +63,12 @@ export function historyExecution(run: ConnectionHistoryRun, paths: string[], lea
     }
   };
   return { userID: run.userID, serviceName: run.serviceName, runId: run.id, cooldownStartedAtMs: run.dateCreated,
+    reimportCompletedActivities: run.rangePreset === 'custom',
     garminHealthSummaryTypes: run.garminHealthSummaryTypes,
     garminHealthBackfillCutoffs: run.processed ? undefined : run.garminHealthBackfillCutoffs,
     retainedFailedChildPaths: new Set(run.steps.flatMap(step => step.failedChildPaths ?? [])),
     requiredDocumentFieldValues: [
-      { documentRef: admin.firestore().doc(run.rootPath), expectedFields: { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: run.credentialGeneration } },
+      { documentRef: admin.firestore().doc(run.rootPath), expectedFields: { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: historyRootCredentialGeneration(run) } },
       { documentRef: admin.firestore().doc(run.tokenPath), expectedFields: { tokenCredentialGeneration: run.credentialGeneration } },
       { documentRef: admin.firestore().doc(`users/${run.userID}/meta/${run.serviceName}`), expectedFields: { connectionState: 'connected', connectionStateGeneration: run.connectionGeneration } },
     ], tokenPath: run.tokenPath, providerUserId: run.providerUserId,

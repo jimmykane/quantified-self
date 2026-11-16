@@ -23,6 +23,9 @@
   }
 
   }
+  @if (currentRole !== 'pro') {
+    <app-sync-compatibility [expanded]="syncSetup()" />
+  }
   @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
     <mat-card class="product-card subscription-card qs-glass-card-panel" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">

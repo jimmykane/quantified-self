@@ -8,7 +8,7 @@
     [class.is-open]="menuOpen()" [attr.aria-label]="accessibleLabel()"
     [matTooltip]="rangeLabel()" [matTooltipDisabled]="!rangeLabel() || label() === rangeLabel()"
     (menuOpened)="onMenuOpened()" (menuClosed)="onMenuClosed()">
-    <span class="table-filter-button-content"><mat-icon aria-hidden="true">calendar_today</mat-icon><span>{{ label() }}</span>
+    <span class="table-filter-button-content"><mat-icon class="table-date-filter-icon" aria-hidden="true">calendar_today</mat-icon><span>{{ label() }}</span>
       <mat-icon class="table-filter-chevron" aria-hidden="true">{{ menuOpen() ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</mat-icon></span>
   </button>
   @if (customSelected()) {
@@ -18,7 +18,6 @@
   </div>
   @if (navigation()) {
     <button mat-icon-button type="button" class="table-date-period-step" aria-label="Next period" [disabled]="disabled() || !navigationEnabled() || currentPeriod() || !nextPeriodEnabled()" (click)="shiftRange(1)"><mat-icon>chevron_right</mat-icon></button>
-    <button mat-button type="button" class="table-date-current-period" [disabled]="disabled() || !navigationEnabled() || currentPeriod()" (click)="showCurrentPeriod()">Current period</button>
   }
 
 </div>
@@ -36,6 +35,13 @@
         </span>
         @if (option.value === value()) { <mat-icon class="table-date-menu-check" aria-hidden="true">check</mat-icon> }
       </span>
+    </button>
+  }
+  @if (navigation()) {
+    <mat-divider></mat-divider>
+    <button mat-menu-item type="button" class="table-date-current-period"
+      [disabled]="disabled() || !navigationEnabled() || currentPeriod()" (click)="showCurrentPeriod()">
+      <mat-icon aria-hidden="true">today</mat-icon>Current period
     </button>
   }
 </mat-menu>

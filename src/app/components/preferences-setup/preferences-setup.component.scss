@@ -1,0 +1,21 @@
+:host { display: block; }
+/* The shell invitation shares the workspace gutter; the following route owns the gap below it. */
+.preferences-shell { padding-bottom: 0; }
+.preferences-shell .preferences-invitation { margin: 0; }
+.preferences-invitation { margin: 16px 0; }
+.preferences-invitation mat-card-content { display: flex; align-items: center; gap: 24px; position: relative; padding: 24px 52px 24px 20px; flex-wrap: wrap; }
+.preferences-copy { display: flex; align-items: flex-start; gap: 14px; flex: 1 1 360px; min-width: 0; }
+.preferences-icon { color: var(--mat-sys-primary); flex-shrink: 0; }
+h2 { font: var(--mat-sys-title-medium); margin: 0 0 8px; color: var(--mat-sys-on-surface); }
+p { margin: 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); overflow-wrap: anywhere; }
+.preferences-current { margin-top: 10px; font: var(--mat-sys-body-small); }
+.preferences-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.preferences-dismiss { position: absolute; right: 4px; top: 4px; }
+.preferences-error { color: var(--mat-sys-error); flex-basis: 100%; }
+.preferences-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 20px; }
+.preferences-button-content mat-spinner { flex: 0 0 18px; width: 18px; height: 18px; }
+@media (max-width: 599px) {
+  .preferences-invitation mat-card-content { padding: 20px; gap: 18px; }
+  .preferences-copy { flex-basis: 100%; padding-right: 20px; }
+  .preferences-actions { justify-content: flex-end; width: 100%; }
+}

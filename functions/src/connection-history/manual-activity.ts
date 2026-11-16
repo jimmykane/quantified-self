@@ -7,6 +7,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { activityHistoryNextAllowedAt } from '../../../shared/history-import.constants';
 import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
+import { doesSuuntoHealthWebhookBindingMatch, getSuuntoHealthWebhookAccountBindingRef, parseSuuntoHealthWebhookAccountBinding } from '../suunto/health-webhook-binding';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
@@ -45,7 +46,7 @@ export async function startManualActivityHistory(
   const rootRef = db.collection(TOKEN_COLLECTIONS[serviceName]).doc(userID);
   const runId = randomUUID();
   // A Firestore retry must not silently migrate this request onto a replacement connection.
-  let recoveredIdentity: string | undefined;
+  let admittedIdentity: string | undefined;
   return db.runTransaction(async tx => {
     const deletion = await getUserDeletionGuardStateInTransaction(db, tx, userID);
     if (deletion.shouldSkip) throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
@@ -69,7 +70,8 @@ export async function startManualActivityHistory(
     if (nextAllowed > nowMs) {
       throw new HttpsError('permission-denied', `History import is not allowed until ${new Date(nextAllowed).toISOString()}`);
     }
-    const credentialGeneration = root?.activeOAuthCredentialGeneration;
+    const rootGeneration = root?.activeOAuthCredentialGeneration;
+    let credentialGeneration = rootGeneration;
     const connectionGeneration = meta?.connectionStateGeneration;
     let providerUserId = meta?.providerUserId;
     if (typeof credentialGeneration !== 'string' || typeof connectionGeneration !== 'string'
@@ -79,8 +81,13 @@ export async function startManualActivityHistory(
     const missingProviderId = providerUserId === undefined || providerUserId === null || providerUserId === '';
     if (missingProviderId) {
       const identityField = PROVIDER_ID_FIELDS[serviceName];
-      const candidates = await tx.get(rootRef.collection('tokens')
+      let candidates = await tx.get(rootRef.collection('tokens')
         .where('tokenCredentialGeneration', '==', credentialGeneration).select(identityField).limit(2));
+      // Completed Suunto migration preserved independent root/account generations.
+      // Without a pinned account, accept only one retained candidate, verified below.
+      if (candidates.empty && serviceName === ServiceNames.SuuntoApp) {
+        candidates = await tx.get(rootRef.collection('tokens').select(identityField).limit(2));
+      }
       if (candidates.size !== 1 || candidates.docs[0].data()[identityField] !== candidates.docs[0].id) {
         throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
       }
@@ -89,15 +96,33 @@ export async function startManualActivityHistory(
     if (typeof providerUserId !== 'string' || providerUserId.includes('/') || !providerUserId.trim()) {
       throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
     }
-    const identity = JSON.stringify([credentialGeneration, connectionGeneration, providerUserId]);
-    if (recoveredIdentity !== undefined && recoveredIdentity !== identity) {
+    const tokenRef = rootRef.collection('tokens').doc(providerUserId);
+    if (serviceName === ServiceNames.SuuntoApp) {
+      const token = (await tx.get(tokenRef)).data();
+      credentialGeneration = token?.tokenCredentialGeneration;
+      // Match Suunto's existing lifecycle validation; never normalize an authority snapshot.
+      if (token?.userName !== providerUserId
+        || [rootGeneration, credentialGeneration, connectionGeneration].some(generation =>
+          typeof generation !== 'string' || !generation || generation !== generation.trim() || generation.length > 128)) {
+        throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
+      }
+      if (credentialGeneration !== rootGeneration) {
+        const binding = await tx.get(getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID));
+        if (!doesSuuntoHealthWebhookBindingMatch(parseSuuntoHealthWebhookAccountBinding(binding.data()), userID, providerUserId, credentialGeneration)) {
+          throw new HttpsError('failed-precondition', 'Reconnect before importing history.');
+        }
+      }
+    }
+    const identity = JSON.stringify([rootGeneration, credentialGeneration, connectionGeneration, providerUserId]);
+    if (admittedIdentity !== undefined && admittedIdentity !== identity) {
       throw new HttpsError('failed-precondition', 'Connection changed. Please retry the history request.');
     }
-    if (missingProviderId) recoveredIdentity = identity;
+    admittedIdentity = identity;
     const run = createHistoryRun(userID, serviceName, {
       requested: true, rangePreset: '30_days', runId, providerUserId, credentialGeneration,
-      rootPath: rootRef.path, tokenPath: rootRef.collection('tokens').doc(providerUserId).path,
+      rootPath: rootRef.path, tokenPath: tokenRef.path,
     }, connectionGeneration, nowMs);
+    if (credentialGeneration !== rootGeneration) run.rootOAuthCredentialGeneration = rootGeneration;
     run.rangePreset = 'custom'; run.startMs = startMs; run.endMs = endMs;
     run.steps = run.steps.filter(step => step.id === 'activities').map(step => ({ ...step, nextStartMs: startMs }));
     // Re-check the exact token and lifecycle in the same admission transaction.

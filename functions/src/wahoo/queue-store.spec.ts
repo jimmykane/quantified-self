@@ -226,6 +226,79 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
+  it.each(['success', 'cross_provider_duplicate'])('refetches completed %s recordings once per explicit manual run without persisting execution policy', async outcome => {
+    const execution = { reimportCompletedActivities: true } as HistoryExecution;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processed: true,
+      ...(outcome === 'cross_provider_duplicate' ? { resultStatus: 'skipped', skippedReason: outcome, duplicateEventID: 'saved-event' }
+        : { connectionHistoryRunId: 'old-run' }) }) });
+    const incoming = { ...input, connectionHistoryRunId: 'new-run', fromHistory: true };
+    await expect(withHistoryExecution(execution, () => upsertWahooWorkoutQueueItem(incoming, 'deferred'))).resolves.toMatchObject({ queued: true });
+    const written = mocks.transactionSet.mock.calls[0][1];
+    expect(written).toMatchObject({ processed: false, retryCount: 0, fromHistory: true, connectionHistoryRunId: 'new-run', queueRevision: expect.any(String) });
+    expect(written).not.toHaveProperty('reimportCompletedActivities');
+    for (const field of ['skippedReason', 'duplicateEventID', 'resultStatus']) expect(written).not.toHaveProperty(field);
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...written, processed: true }) });
+    mocks.transactionSet.mockClear();
+    await expect(withHistoryExecution(execution, () => upsertWahooWorkoutQueueItem(incoming, 'deferred'))).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it.each(['success', 'cross_provider_duplicate'])('refetches completed %s work once per legacy manual import using its lease as the existing queue revision', async outcome => {
+    const incoming = { ...input, fromHistory: true };
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processed: true,
+      ...(outcome === 'cross_provider_duplicate' ? { resultStatus: 'skipped', skippedReason: outcome } : {}) }) });
+    await expect(upsertWahooWorkoutQueueItem(incoming, 'deferred', undefined, 'manual-lease')).resolves.toMatchObject({ queued: true });
+    const written = mocks.transactionSet.mock.calls[0][1];
+    expect(written).toMatchObject({ processed: false, retryCount: 0, fromHistory: true, queueRevision: 'manual-lease' });
+    expect(written).not.toHaveProperty('connectionHistoryRunId');
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...written, processed: true }) });
+    mocks.transactionSet.mockClear();
+    await expect(upsertWahooWorkoutQueueItem(incoming, 'deferred', undefined, 'manual-lease')).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+    await expect(upsertWahooWorkoutQueueItem(incoming, 'deferred', undefined, 'next-manual-lease')).resolves.toMatchObject({ queued: true });
+    expect(mocks.transactionSet.mock.calls[0][1].queueRevision).toBe('next-manual-lease');
+  });
+
+  it.each([
+    { processed: false, retryCount: 7, processingOwner: 'active', processingLeaseExpiresAt: Date.now() + 60000 },
+    { processed: true, resultStatus: 'skipped', skippedReason: 'provider_auth_required' },
+    { processed: true, resultStatus: 'skipped', skippedReason: 'outbound_provider_echo' },
+    { processed: true, resultStatus: 'manual_reconciliation_required' },
+    { processed: true, firebaseUserID: undefined },
+  ])('preserves protected legacy manual work: %j', current => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, ...current }) });
+    return expect(upsertWahooWorkoutQueueItem({ ...input, fromHistory: true }, 'deferred', undefined, 'manual-lease')).resolves.toMatchObject({ queued: false });
+  });
+
+  it('does not let a legacy history revision opt a webhook into restoration', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processed: true }) });
+    await expect(upsertWahooWorkoutQueueItem(input, 'immediate', undefined, 'manual-lease')).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
+  });
+
+  it('does not let a legacy history revision opt automatic connection history into restoration', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processed: true }) });
+    await expect(withHistoryExecution({ reimportCompletedActivities: false } as HistoryExecution, () =>
+      upsertWahooWorkoutQueueItem({ ...input, fromHistory: true }, 'deferred', undefined, 'manual-lease'))).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it.each(['coordinator', 'legacy'].flatMap(path => [false, true].map(processed => ({ path, processed }))))(
+    'preserves a newer provider summary during $path restoration (processed=$processed)', async ({ path, processed }) => {
+      const current = { ...input, summaryUpdatedAt: '2026-07-19T10:00:00.000Z', workoutSummaryID: 'new-summary',
+        FITFileURI: 'https://cdn.wahooligan.com/new.fit', queueRevision: 'new-revision',
+        connectionHistoryRunId: 'earlier-run', processed, retryCount: 7 };
+      mocks.transactionGet.mockResolvedValue({ exists: true, data: () => current });
+      const incoming = { ...input, fromHistory: true, ...(path === 'coordinator' ? { connectionHistoryRunId: 'manual-run' } : {}) };
+      const restore = () => upsertWahooWorkoutQueueItem(incoming, 'deferred', undefined, path === 'legacy' ? 'legacy-lease' : undefined);
+      const operation = path === 'coordinator'
+        ? withHistoryExecution({ reimportCompletedActivities: true } as HistoryExecution, restore) : restore();
+      await expect(operation).resolves.toMatchObject({ queued: false });
+      expect(mocks.transactionSet).not.toHaveBeenCalled();
+      expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+    });
+
   it('retries an ownership-transfer collision without overwriting the previous owner', async () => {
     mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: 'another-owner', connectionHistoryRunId: 'old-run', processed: false }) });
     await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
@@ -324,7 +397,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
   });
 
-  it('does not requeue an older duplicate but refreshes its pending signed URL', async () => {
+  it('does not requeue a same-revision duplicate but refreshes its pending signed URL', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({

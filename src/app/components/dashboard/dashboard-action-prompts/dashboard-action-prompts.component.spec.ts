@@ -5,7 +5,6 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { MaterialModule } from '../../../modules/material.module';
 import { DashboardActionPromptViewModel } from '../../../helpers/dashboard-action-prompt.helper';
-import { UNIT_SETUP_PRESET_OPTIONS } from '../../../helpers/unit-setup-preset.helper';
 import { DashboardActionPromptComponent } from '../dashboard-action-prompt/dashboard-action-prompt.component';
 import { DashboardActionPromptsComponent } from './dashboard-action-prompts.component';
 
@@ -52,13 +51,6 @@ describe('DashboardActionPromptsComponent', () => {
     primaryAction: { id: 'upgradeToPro', label: 'Upgrade to Pro' },
     secondaryAction: { id: 'dismissFirstActivityUpload', label: 'Not now' },
   }, {
-    id: 'unitSetup',
-    icon: 'straighten',
-    title: 'Default units',
-    description: 'Choose units.',
-    primaryAction: { id: 'applyUnitSetup', label: 'Apply' },
-    menuActions: [{ id: 'openUnitSettings', label: 'Advanced settings', icon: 'tune' }],
-  }, {
     id: 'enableRouteDeliveryAutoSync',
     icon: 'sync_alt',
     title: 'Sync Suunto routes to Garmin courses',
@@ -77,20 +69,17 @@ describe('DashboardActionPromptsComponent', () => {
     component = fixture.componentInstance;
     component.prompts = prompts;
     component.user = { uid: 'u1' } as any;
-    component.unitSetupOptions = UNIT_SETUP_PRESET_OPTIONS;
-    component.selectedUnitSetupPreset = 'kilometers';
     fixture.detectChanges();
   });
 
-  it('renders prompts in deterministic order with unit setup first', () => {
+  it('renders activity prompts without old unit setup controls', () => {
     const cards = fixture.nativeElement.querySelectorAll('app-dashboard-action-prompt');
 
-    expect(cards.length).toBe(5);
-    expect(cards[0].textContent).toContain('Default units');
-    expect(cards[1].textContent).toContain('Upload your first activities');
-    expect(cards[2].textContent).toContain('Connect a service');
-    expect(cards[3].textContent).toContain('Send new activities to Suunto');
-    expect(cards[4].textContent).toContain('Sync Suunto routes to Garmin courses');
+    expect(cards.length).toBe(4);
+    expect(cards[0].textContent).toContain('Upload your first activities');
+    expect(cards[1].textContent).toContain('Connect a service');
+    expect(cards[2].textContent).toContain('Send new activities to Suunto');
+    expect(cards[3].textContent).toContain('Sync Suunto routes to Garmin courses');
   });
 
   it('uses compact prompts within one shared dashboard frame', () => {
@@ -98,18 +87,6 @@ describe('DashboardActionPromptsComponent', () => {
     expect(rows.every(row => row.componentInstance.compact)).toBe(true);
     expect(fixture.nativeElement.querySelector('.dashboard-action-prompts.qs-glass-card-panel')).not.toBeNull();
     expect(fixture.nativeElement.querySelectorAll('mat-card.qs-glass-card-panel')).toHaveLength(0);
-  });
-
-  it('renders unit setup controls through the shared prompt projection slot', () => {
-    const toggleGroup = fixture.nativeElement.querySelector('.dashboard-action-prompts__unit-toggle');
-
-    expect(toggleGroup).toBeTruthy();
-    expect(toggleGroup.textContent).toContain('Kilometers');
-    expect(toggleGroup.textContent).toContain('Miles');
-    const unitCard = fixture.nativeElement.querySelector('app-dashboard-action-prompt');
-    expect([...unitCard.querySelectorAll('.dashboard-action-prompt__actions button')].map(button => button.textContent.trim())).toEqual([
-      'tuneAdvanced settings', 'Apply',
-    ]);
   });
 
   it('emits standard prompt events', () => {
@@ -120,15 +97,15 @@ describe('DashboardActionPromptsComponent', () => {
 
     const promptComponents = fixture.debugElement.queryAll(By.directive(DashboardActionPromptComponent));
     promptComponents[0].componentInstance.primary.emit({
-      promptId: 'unitSetup',
-      action: { id: 'applyUnitSetup', label: 'Apply' },
+      promptId: 'firstActivityUpload',
+      action: { id: 'upgradeToPro', label: 'Upgrade to Pro' },
     });
-    promptComponents[2].componentInstance.secondary.emit({
+    promptComponents[1].componentInstance.secondary.emit({
       promptId: 'connectActivityService',
       action: { id: 'dismissConnectActivityService', label: 'Not now' },
     });
 
-    expect(primarySpy).toHaveBeenCalledWith(expect.objectContaining({ promptId: 'unitSetup' }));
+    expect(primarySpy).toHaveBeenCalledWith(expect.objectContaining({ promptId: 'firstActivityUpload' }));
     expect(secondarySpy).toHaveBeenCalledWith(expect.objectContaining({ promptId: 'connectActivityService' }));
   });
 
@@ -159,11 +136,11 @@ describe('DashboardActionPromptsComponent', () => {
     const controlSpy = vi.fn();
     component.controlChange.subscribe(controlSpy);
 
-    component.onControlChange('unitSetup', 'miles');
+    component.onControlChange('firstActivityUpload', 'activityUploaded');
 
     expect(controlSpy).toHaveBeenCalledWith({
-      promptId: 'unitSetup',
-      value: 'miles',
+      promptId: 'firstActivityUpload',
+      value: 'activityUploaded',
     });
   });
 });

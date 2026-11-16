@@ -1,4 +1,4 @@
-@if (availableLapTypes.length > 0 || hasSwimIntervals) {
+@if (availableLapTypes.length > 0 || hasSwimIntervals || comparisonActivitiesWithoutLaps.length > 0) {
 <mat-divider></mat-divider>
 <app-event-section-header icon="linear_scale" [title]="hasSwimIntervals && !showOriginalLaps() ? 'Intervals' : 'Laps'">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
@@ -177,6 +177,14 @@
   }
 </mat-tab-group>
 }
+@for (activity of comparisonActivitiesWithoutLaps; track activity) {
+<section class="lap-source-empty-state">
+  <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
+    [activity]="activity" [selectedActivities]="selectedActivities">
+  </app-activity-toggle>
+  <p class="mat-body-small">No laps recorded.</p>
+</section>
+}
 }
 
 <ng-template #lapTableGroupTables let-lapTableGroup>
@@ -189,6 +197,9 @@
     }
     @if (selectedActivities.length > 1) {
     <mat-divider [inset]="true"></mat-divider>
+    }
+    @if (lapTable.isWholeActivity) {
+    <p class="mat-body-small lap-whole-activity-label">Whole activity</p>
     }
     <ng-container *ngTemplateOutlet="lapRowsTable; context: { $implicit: lapTable, rows: lapTable.dataSource, nested: false }"></ng-container>
   </section>

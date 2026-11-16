@@ -10,7 +10,7 @@ import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provide
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import { CONNECTION_HISTORY_COLLECTION, MAX_HISTORY_ADMISSION_CHILDREN, MAX_OUTSTANDING_HISTORY_CHILDREN,
-  MAX_ISOLATED_HISTORY_FAILURES, allowsPendingActivityHistory, historyOperationKey, type ConnectionHistoryRun } from './model';
+  MAX_ISOLATED_HISTORY_FAILURES, allowsPendingActivityHistory, historyOperationKey, historyRootCredentialGeneration, type ConnectionHistoryRun } from './model';
 import { retainedFailureCount } from './advance';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
 import { emitHistoryMonitoring, historyMonitoringProvider, HISTORY_PROVIDERS } from './monitoring';
@@ -21,7 +21,7 @@ const ROOTS: Record<ServiceNames, string> = {
   [ServiceNames.GarminAPI]: GARMIN_API_TOKENS_COLLECTION_NAME, [ServiceNames.SuuntoApp]: SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME,
   [ServiceNames.COROSAPI]: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, [ServiceNames.WahooAPI]: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
 };
-const RUN_FIELDS = ['userID', 'serviceName', 'providerUserId', 'rootPath', 'tokenPath', 'credentialGeneration', 'connectionGeneration',
+const RUN_FIELDS = ['userID', 'serviceName', 'providerUserId', 'rootPath', 'tokenPath', 'credentialGeneration', 'rootOAuthCredentialGeneration', 'connectionGeneration',
   'revision', 'processed', 'nextAttemptAt', 'leaseExpiresAt', 'dateCreated', 'updatedAtMs', 'endMs', 'steps', 'lastOperation.key'];
 const STATE_FIELDS = [...RUN_FIELDS, 'expireAt', 'activeOAuthCredentialGeneration', 'tokenCredentialGeneration', 'permissions',
   'disconnectOperationGeneration', 'disconnectGeneration', 'connectionState', 'connectionStateGeneration',
@@ -72,7 +72,7 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
       if (!group) { groups.forEach(group => group.unknownSample++); continue; }
       const candidate = historyProbeCandidate(run, now);
       if (candidate === 'excluded') continue;
-      if (candidate === 'unknown' || !id(run.userID) || !id(run.credentialGeneration) || !id(run.connectionGeneration)
+      if (candidate === 'unknown' || !id(run.userID) || !id(run.credentialGeneration) || !id(historyRootCredentialGeneration(run)) || !id(run.connectionGeneration)
         || run.rootPath !== `${ROOTS[run.serviceName]}/${run.userID}`
         || !run.tokenPath?.startsWith(`${run.rootPath}/tokens/`) || run.tokenPath.split('/').length !== 4) {
         group.unknownSample++; continue;
@@ -85,7 +85,7 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
         if (stopped || !current.exists || !owner.exists || isUserDeletionTombstoneActive(tombstone.data(), now)) return 'excluded';
         if (!current.updateTime?.isEqual(doc.updateTime!)) return 'unknown';
         if (!root.exists || !token.exists || !meta.exists
-          || root.get('activeOAuthCredentialGeneration') !== run.credentialGeneration
+          || root.get('activeOAuthCredentialGeneration') !== historyRootCredentialGeneration(run)
           || token.get('tokenCredentialGeneration') !== run.credentialGeneration
           || root.get('disconnectOperationGeneration') || root.get('disconnectGeneration')
           || meta.get('connectionState') !== 'connected' || meta.get('connectionStateGeneration') !== run.connectionGeneration) return 'excluded';

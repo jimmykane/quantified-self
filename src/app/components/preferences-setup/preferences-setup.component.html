@@ -1,0 +1,25 @@
+@if (visible()) {
+<section [class.qs-workspace-page]="shellPlacement()" [class.preferences-shell]="shellPlacement()" aria-label="Preferences setup">
+  <mat-card appearance="outlined" class="preferences-invitation">
+    <mat-card-content>
+      <div class="preferences-copy">
+        <mat-icon class="preferences-icon" aria-hidden="true">tune</mat-icon>
+        <div><h2>Your units and preferences</h2>
+          <p>Choose how QS displays distances, pace, weight, and your training week.</p>
+          <p class="preferences-current">Current: {{ summary() }}</p>
+        </div>
+      </div>
+      <div class="preferences-actions">
+        <button mat-flat-button type="button" class="qs-mat-primary" [disabled]="locked()" [attr.aria-busy]="opening()" (click)="review()">
+          <span class="preferences-button-content">@if (opening()) { <mat-spinner diameter="18" /> }<span>{{ opening() ? 'Opening…' : 'Review preferences' }}</span></span>
+        </button>
+        <button mat-button type="button" [disabled]="locked()" [attr.aria-busy]="state.busy()" (click)="keepDefaults()">
+          <span class="preferences-button-content">@if (state.busy() && !dialogOpen()) { <mat-spinner diameter="18" /> }<span>{{ state.busy() && !dialogOpen() ? 'Saving…' : 'Keep defaults' }}</span></span>
+        </button>
+      </div>
+      <button mat-icon-button type="button" class="preferences-dismiss" aria-label="Dismiss preferences setup and keep current defaults" [disabled]="locked()" (click)="keepDefaults()"><mat-icon>close</mat-icon></button>
+      @if (state.error() && !dialogOpen()) { <p role="alert" class="preferences-error">{{ state.error() }}</p> }
+    </mat-card-content>
+  </mat-card>
+</section>
+}

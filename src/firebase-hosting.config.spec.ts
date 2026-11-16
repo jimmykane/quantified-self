@@ -377,7 +377,8 @@ describe('Firebase Hosting configuration', () => {
     // Workout generation help explains Auto duration, bounded history fallback and preserving saved limits/cache (2026-11-11).
     // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-14');
+    // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -515,7 +516,8 @@ describe('Firebase Hosting configuration', () => {
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-14');
+    // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
@@ -603,7 +605,8 @@ describe('Firebase Hosting configuration', () => {
     // FTP suggestions require explicit Use and Save and disclose carried settings (2026-11-05).
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-14');
+    // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
     // Inactive Free account notice and retention policy (2026-11-13).

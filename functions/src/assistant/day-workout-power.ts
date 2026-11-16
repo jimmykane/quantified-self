@@ -16,7 +16,7 @@ export async function withWorkoutPowerContext(uid: string, controls: DayWorkoutC
   const result = { ...context, evidence, references };
   delete evidence.powerReference;
   delete result.powerReference;
-  if (!['auto', 'power'].includes(controls.target) || !WORKOUT_POWER_SPORTS.includes(controls.sport as WorkoutPowerProfileV1['sport'])) return result;
+  if (context.adviceOnly || !['auto', 'power'].includes(controls.target) || !WORKOUT_POWER_SPORTS.includes(controls.sport as WorkoutPowerProfileV1['sport'])) return result;
   let profile: WorkoutPowerReferenceV1 | undefined;
   let missing = controls.activityContext === false
     ? 'Power targets: no verified shared FTP or explicit override for this sport. Imported FTP is turned off with Recent activities.'

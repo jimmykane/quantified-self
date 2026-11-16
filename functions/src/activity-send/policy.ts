@@ -63,6 +63,7 @@ export function projectSendQueue(data: Record<string, unknown>): { status: Activ
   }
   if (data.destinationUploadID && data.processed) return { status: 'needs_action', recovery: 'check_status', message: 'Check the existing provider operation.' };
   if (data.processed) return { status: 'needs_action', recovery: 'choose_file', message: 'This activity could not be sent. Review its original file.' };
+  if (Number(data.retryCount) > 0 && !data.providerOperationStartedAt && !data.destinationUploadID) return { status: 'retrying', recovery: 'none', message: 'Retrying automatically. You can leave this page; no need to send another copy.' };
   if (data.destinationUploadID) return { status: 'processing', recovery: 'check_status', message: 'Waiting for provider processing.' };
   if (data.providerOperationStartedAt) return { status: 'sending', recovery: 'none', message: 'Sending to the provider.' };
   return { status: 'queued', recovery: 'none', message: 'Queued for background delivery.' };

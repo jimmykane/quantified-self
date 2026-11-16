@@ -1,15 +1,18 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
-import { Firestore, collection, collectionData, doc, docData, limit, orderBy, query, where } from 'app/firebase/firestore';
-import { Subscription } from 'rxjs';
-import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow } from '@shared/activity-send';
+import { Firestore, collection, collectionData, doc, docData, getCountFromServer, getDocFromServer, limit, orderBy, query, where } from 'app/firebase/firestore';
+import { Subscription, Subject, firstValueFrom, from, fromEvent, takeUntil, timeout } from 'rxjs';
+import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow, ActivitySendSummary } from '@shared/activity-send';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppProcessingService } from './app.processing.service';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { environment } from '../../environments/environment';
+
+export const ACTIVITY_SEND_SUMMARY_TIMEOUT_MS = 30_000;
 
 @Injectable({ providedIn: 'root' })
 export class ActivitySendService {
@@ -20,6 +23,7 @@ export class ActivitySendService {
   private readonly functions = inject(AppFunctionsService);
   private readonly appCheck = inject(AppCheckReadinessService);
   private readonly processing = inject(AppProcessingService);
+  private readonly document = inject(DOCUMENT);
   readonly recent = signal<ActivitySendBatch[]>([]);
   readonly batch = signal<ActivitySendBatch | null>(null);
   readonly rows = signal<ActivitySendRow[]>([]);
@@ -31,6 +35,14 @@ export class ActivitySendService {
   private readonly historyReadError = signal<string | null>(null);
   readonly readError = computed(() => this.batchReadError() || this.rowReadError() || this.historyReadError());
   readonly selection = signal<string[]>([]);
+  readonly summary = signal<ActivitySendSummary | null>(null);
+  readonly loadingSummary = signal(false);
+  readonly summaryError = signal<string | null>(null);
+  private summaryEpoch = 0;
+  private readonly summaryCancelled$ = new Subject<void>();
+  private summaryTimer?: ReturnType<typeof setTimeout>;
+  private summaryInFlight = false;
+  private summaryNextReadAt = 0;
   private readonly jobs = new Map<string, string>();
   private activeSubscription?: Subscription;
   private recentSubscription?: Subscription;
@@ -41,6 +53,12 @@ export class ActivitySendService {
   private rowLimit = 50;
 
   constructor() {
+    const visibility = fromEvent(this.document, 'visibilitychange').subscribe(() => {
+      if (this.document.visibilityState === 'hidden') {
+        clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
+      } else this.scheduleSummary(true);
+    });
+    inject(DestroyRef).onDestroy(() => { visibility.unsubscribe(); this.closeBatch(); this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); });
     effect(() => {
       const uid = this.user.user()?.uid || null;
       if (this.uid === uid) return;
@@ -67,6 +85,7 @@ export class ActivitySendService {
       next: record => { if (this.isCurrentOwner(uid) && this.selectedId === id) {
         this.batch.set(record ? record as unknown as ActivitySendBatch : null); this.loadingBatch.set(false);
         this.batchReadError.set(record ? null : 'This send is unavailable. Check your connection or start a new send.');
+        if (record && record['state'] !== 'draft') this.scheduleSummary();
       } },
       error: () => { if (this.isCurrentOwner(uid) && this.selectedId === id) { this.loadingBatch.set(false); this.batchReadError.set('This send is unavailable.'); } } });
     this.watchRows();
@@ -76,8 +95,72 @@ export class ActivitySendService {
     this.rowLimit += 50; this.watchRows();
   }
   closeBatch(): void {
+    this.summaryEpoch++; this.summaryCancelled$.next(); clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
+    this.summaryInFlight = false; this.summaryNextReadAt = 0;
+    this.summary.set(null); this.loadingSummary.set(false); this.summaryError.set(null);
     this.batchSubscription?.unsubscribe(); this.rowSubscription?.unsubscribe();
     this.selectedId = null; this.requestedBatchId.set(null); this.batch.set(null); this.rows.set([]); this.loadingBatch.set(false); this.loadingRows.set(false); this.batchReadError.set(null); this.rowReadError.set(null);
+  }
+  refreshSummary(): void {
+    if (this.summaryInFlight || !this.selectedId) return;
+    clearTimeout(this.summaryTimer); this.summaryTimer = undefined; this.summaryNextReadAt = 0;
+    this.scheduleSummary(true);
+  }
+  private scheduleSummary(force = false): void {
+    if (this.summaryInFlight || this.summaryTimer || !this.selectedId || !this.batch() || this.batch()?.state === 'draft'
+      || this.document.visibilityState === 'hidden') return;
+    // Every outcome-group change advances the existing batch clock. An unchanged
+    // batch needs no aggregate polling, even while provider processing continues.
+    if (!force && this.summary() && Number(this.batch()?.updatedAt) <= this.summary()!.updatedAt) return;
+    this.summaryTimer = setTimeout(() => { this.summaryTimer = undefined; void this.readSummary(); }, Math.max(0, this.summaryNextReadAt - Date.now()));
+  }
+  private async readSummary(): Promise<void> {
+    const uid = this.uid, id = this.selectedId, epoch = this.summaryEpoch;
+    const hidden = () => this.document.visibilityState === 'hidden';
+    if (!uid || !id || !this.isCurrentOwner(uid) || hidden()) return;
+    const current = () => this.summaryEpoch === epoch && this.selectedId === id && this.isCurrentOwner(uid);
+    this.summaryInFlight = true; this.loadingSummary.set(true); this.summaryError.set(null);
+    let retry = false;
+    const deadline = Date.now() + ACTIVITY_SEND_SUMMARY_TIMEOUT_MS;
+    // A late SDK reply must not keep Refresh disabled or overwrite a newer observation.
+    const read = <T>(promise: Promise<T>) => firstValueFrom(from(promise).pipe(
+      timeout(Math.max(1, deadline - Date.now())), takeUntil(this.summaryCancelled$),
+    ));
+    try {
+      const ref = doc(this.firestore, `users/${uid}/activitySends/${id}`);
+      const before = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
+      if (!current() || hidden()) return;
+      if (!before || before.state === 'draft') {
+        this.summary.set(null); this.summaryError.set('Delivery totals are not available for this send.'); return;
+      }
+      // Counts cover every row, independently of the 50-row display page. No file/queue reads.
+      const groups = {
+        delivered: ['delivered'], duplicate: ['duplicate'], needs_action: ['needs_action'], stopped: ['stopped'],
+        pending: ['preparing', 'ready', 'queued', 'sending', 'processing', 'retrying'],
+      };
+      const values = await read(Promise.all(Object.values(groups).map(statuses => getCountFromServer(query(
+        collection(this.firestore, `users/${uid}/activitySends/${id}/rows`), where('status', 'in', statuses),
+      )).then(result => result.data().count))));
+      if (!current() || hidden()) return;
+      const after = (await read(getDocFromServer(ref))).data() as ActivitySendBatch | undefined;
+      if (!current()) return;
+      const [delivered, duplicate, needs_action, stopped, pending] = values;
+      // Every change between outcome groups advances the batch clock. Reject mixed snapshots and unknown states.
+      if (!after || before.updatedAt !== after.updatedAt || before.total !== after.total || before.finished !== after.finished
+        || before.state !== after.state || !values.every(value => Number.isSafeInteger(value) && value >= 0)
+        || values.reduce((sum, value) => sum + value, 0) !== after.total
+        || delivered + duplicate + needs_action + stopped !== after.finished) {
+        retry = true; this.summaryError.set('Activities are updating. Totals will refresh shortly.'); return;
+      }
+      this.summary.set({ delivered, duplicate, needs_action, stopped, pending, checkedAt: Date.now(), updatedAt: after.updatedAt });
+    } catch {
+      if (current()) this.summaryError.set('Delivery totals are unavailable. Refresh totals to try again.');
+    } finally {
+      if (current()) {
+        this.summaryInFlight = false; this.loadingSummary.set(false); this.summaryNextReadAt = Date.now() + 30_000;
+        if (retry || Number(this.batch()?.updatedAt) > Number(this.summary()?.updatedAt || 0) && !this.summaryError()) this.scheduleSummary(retry);
+      }
+    }
   }
   private watchRows(): void {
     this.rowSubscription?.unsubscribe();
@@ -154,7 +237,7 @@ export class ActivitySendService {
       let id = this.jobs.get(batch.id);
       if (active) {
         if (!id) { id = this.processing.addJob('upload', `Sending activities to ${batch.provider}`); this.jobs.set(batch.id, id); }
-        this.processing.updateJob(id, { status: 'processing', progress: undefined, details: `${batch.finished}/${batch.total} finished. Open Send activities for results.` });
+        this.processing.updateJob(id, { status: 'processing', progress: undefined, details: `${batch.finished}/${batch.total} processed. Open Send activities for results.` });
       } else if (id) { this.processing.removeJob(id); this.jobs.delete(batch.id); }
     }
   }

@@ -1,3 +1,4 @@
+import { SyncCompatibilityComponent } from '../shared/sync-compatibility/sync-compatibility.component';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { safeOnboardingResumeUrl } from '../../helpers/onboarding-navigation.helper';
 import { AppWindowService } from '../../services/app.window.service';
@@ -53,6 +54,7 @@ interface SubscriptionSummary {
     standalone: true,
     imports: [
         CommonModule,
+        SyncCompatibilityComponent,
         MatCardModule,
         MatButtonModule,
         RouterLink,
