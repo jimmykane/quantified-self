@@ -87,7 +87,10 @@ checks the requested duration against the current policy and live Stripe history
 operation reservation/replacement transaction, closing the read-to-reservation race. That reservation is the acceptance
 boundary: retries of an accepted operation retain frozen Stripe parameters and idempotency keys, including when an
 admin later disables trials. Already-issued Checkout URLs keep their accepted terms until their normal expiry.
-A new stale selection cannot expire that earlier offer, and a changed offer never silently becomes a paid checkout.
+A durably recorded reuse of an existing Checkout follows the same recovery rule: a lost public-result commit
+does not re-evaluate its accepted offer against a later trial policy. Customer ownership, deletion and lease checks
+still apply, and completed/expired sessions remain closed. A new stale selection cannot expire an earlier offer,
+and a changed offer never silently becomes a paid checkout.
 
 Public prerendered HTML deliberately omits exact introductory offers; the browser loads current terms after hydration.
 Recurring prices/amounts remain prerendered. See [public pricing rendering](public-pricing-prerender.md). A policy read

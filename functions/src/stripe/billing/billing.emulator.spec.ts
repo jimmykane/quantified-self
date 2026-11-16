@@ -321,13 +321,13 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
     expect((await db.doc(`failed_jobs/stripe_billing_${id}`).get()).exists).toBe(false);
   });
-  it('does not commit a closed reused checkout after losing the customer lease during retrieval', async () => {
+  it.each(['open', 'complete'])('does not commit a %s reused checkout after losing the customer lease during retrieval', async status => {
     const f = await fixture('payment'); await f.run((await f.admit())!);
     const reused = await nextRequest(f);
     const lease = await acquireBillingLease(db, `customer:${f.uid}`);
     try { await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, f.request); }
     finally { await releaseBillingLease(db, lease); }
-    [...f.sessions.values()][0].status = 'complete';
+    [...f.sessions.values()][0].status = status;
     const retrieve = f.stripe.checkout.sessions.retrieve.getMockImplementation()!;
     const lock = db.doc(`stripeBillingLocks/${billingId(`customer:${f.uid}`)}`);
     f.stripe.checkout.sessions.retrieve.mockImplementationOnce(async id => {
@@ -341,8 +341,10 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await reused.ref.get()).get('error')).toBeUndefined();
     await lock.update({ until: Timestamp.fromMillis(0) }); await f.readyRetry(reused.id);
     await f.run(reused.id, job.get('generation'));
-    expect((await reused.ref.get()).get('error.code')).toBe('checkout_completed');
-    expect((await db.doc(`${BILLING_JOBS}/${reused.id}`).get()).get('state')).toBe('skipped');
+    const result = await reused.ref.get();
+    expect(result.get('error')).toEqual(status === 'complete' ? expect.objectContaining({ code: 'checkout_completed' }) : null);
+    if (status === 'open') expect(result.get('sessionId')).toBe((await f.ref.get()).get('sessionId'));
+    expect((await db.doc(`${BILLING_JOBS}/${reused.id}`).get()).get('state')).toBe(status === 'complete' ? 'skipped' : 'done');
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
   });
   it('does not revive an older queued selection after Stripe rejects its replacement', async () => {
@@ -584,6 +586,37 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
         expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
         expect(f.stripe.subscriptions.list).toHaveBeenCalledTimes(1);
       } finally { await releaseBillingLease(db, lease); }
+    });
+    it.each(['open', 'expired', 'complete'])('recovers an accepted reused offer after trials are disabled (checkout %s)', async status => {
+      const f = await fixture();
+      const data = { ...f.request, trial_period_days: 7 };
+      await f.ref.set(data);
+      await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+      const originalRef = db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`);
+      const original = (await originalRef.get()).data()!;
+      const reused = await nextRequest(f, data);
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try {
+        // Reuse was accepted, but the worker stopped before publishing its URL.
+        await createBillingCheckout(f.ctx, lease, f.uid, reused.requestId, data);
+      } finally { await releaseBillingLease(db, lease); }
+      expect((await originalRef.get()).get('selection.requestId')).toBe(reused.requestId);
+      expect((await reused.ref.get()).get('url')).toBeUndefined();
+      await policy(0, 0);
+      const session = [...f.sessions.values()][0]; session.status = status;
+      if (status !== 'open') session.url = null;
+      await f.run(reused.id);
+      const result = await reused.ref.get();
+      if (status === 'open') {
+        expect(result.get('error')).toBeNull();
+        expect(result.get('sessionId')).toBe(original.result.id);
+        expect(result.get('url')).toBe(session.url);
+      } else expect(result.get('error.code')).toBe(status === 'expired' ? 'checkout_expired' : 'checkout_completed');
+      expect((await originalRef.get()).get('params')).toEqual(original.params);
+      expect((await originalRef.get()).get('key')).toBe(original.key);
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+      expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+      expect(f.stripe.subscriptions.list).toHaveBeenCalledTimes(2);
     });
     it('rejects stale selections without expiring an existing issued offer', async () => {
       const f = await fixture(); await f.run((await f.admit())!);

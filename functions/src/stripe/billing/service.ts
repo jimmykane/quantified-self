@@ -351,9 +351,9 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       // An older selection may reuse an identical open offer, but must never
       // create a new session after the latest selection expired or completed.
       if (session.status !== 'open') checkoutSelection(source, previousSource, previous);
-      // Reuse was already journaled for this request. A lost public-result
-      // commit is not permission to open another checkout after it closes.
-      if (session.status !== 'open' && previous.selection?.requestId === requestId) return checkoutResult(session, customer);
+      // Reuse was already accepted for this exact request. Recover its frozen
+      // offer even after a policy change; closed sessions must never be recreated.
+      if (previous.selection?.requestId === requestId) return checkoutResult(session, customer);
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         // A different browser request must still be eligible for the current
