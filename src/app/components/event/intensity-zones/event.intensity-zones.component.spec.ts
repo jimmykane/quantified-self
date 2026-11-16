@@ -11,6 +11,9 @@ import { LoggerService } from '../../../services/logger.service';
 import { convertIntensityZonesStatsToEchartsData } from '../../../helpers/intensity-zones-chart-data-helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 vi.mock('../../../helpers/intensity-zones-chart-data-helper', () => ({
   convertIntensityZonesStatsToEchartsData: vi.fn(),
@@ -31,6 +34,8 @@ describe('EventIntensityZonesComponent', () => {
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
   let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
+  let chartSettings: { getHiddenIntensityZoneMetrics: ReturnType<typeof vi.fn>; setHiddenIntensityZoneMetrics: ReturnType<typeof vi.fn> };
+  let haptics: { selection: ReturnType<typeof vi.fn> };
 
   let mockLoader: {
     init: ReturnType<typeof vi.fn>;
@@ -71,6 +76,8 @@ describe('EventIntensityZonesComponent', () => {
   };
 
   beforeEach(async () => {
+    chartSettings = { getHiddenIntensityZoneMetrics: vi.fn().mockReturnValue([]), setHiddenIntensityZoneMetrics: vi.fn() };
+    haptics = { selection: vi.fn() };
     breakpointSubject = new Subject<{ matches: boolean }>();
     resizeObserverRecords = [];
     originalResizeObserver = globalThis.ResizeObserver;
@@ -128,7 +135,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     await TestBed.configureTestingModule({
-      imports: [EventIntensityZonesComponent],
+      imports: [EventIntensityZonesComponent, NoopAnimationsModule],
       providers: [
         {
           provide: BreakpointObserver,
@@ -139,6 +146,8 @@ describe('EventIntensityZonesComponent', () => {
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: AppEventColorService, useValue: mockColorService },
         { provide: LoggerService, useValue: mockLogger },
+        { provide: AppChartSettingsLocalStorageService, useValue: chartSettings },
+        { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
 
@@ -147,6 +156,81 @@ describe('EventIntensityZonesComponent', () => {
     component.activities = [];
     component.darkTheme = false;
     component.useAnimations = false;
+  });
+
+  it('changes only selected series, retaining zone values and tooltips without aggregating again', async () => {
+    const heartRate = { type: 'Heart Rate', values: [100, 200], percentages: [33.3333, 66.6666] };
+    const power = { type: 'Power', values: [250, 50], percentages: [83.3333, 16.6666] };
+    mockedConvert.mockReturnValue({ zones: ['Zone 1', 'Zone 2'], series: [heartRate, power] });
+    component.allowMetricSelection = true;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(chartSettings.setHiddenIntensityZoneMetrics).not.toHaveBeenCalled();
+    const conversions = mockedConvert.mock.calls.length;
+
+    component.toggleMetric('Heart Rate');
+    fixture.detectChanges();
+    expect(getLastOption().series).toHaveLength(1);
+    expect(getLastOption().series[0].data).toEqual(power.values);
+    expect(getLastOption().tooltip.formatter({ dataIndex: 0, seriesIndex: 0, marker: '' })).toContain('Power:');
+    expect(getLastOption().tooltip.formatter({ dataIndex: 0, seriesIndex: 0, marker: '' })).toContain('83%');
+    expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenLastCalledWith(['Heart Rate']);
+    expect(mockedConvert).toHaveBeenCalledTimes(conversions);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+
+    component.toggleMetric('not recorded');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.toggleMetric('Power');
+    fixture.detectChanges();
+    expect(getLastOption().series).toEqual([]);
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Choose a metric');
+    component.toggleMetric('Power');
+    expect(getLastOption().series).toHaveLength(1);
+  });
+
+  it('restores choices when reopened and preserves hidden metrics absent from this activity', async () => {
+    chartSettings.getHiddenIntensityZoneMetrics.mockReturnValue(['Heart Rate', 'Speed']);
+    fixture.destroy();
+    fixture = TestBed.createComponent(EventIntensityZonesComponent);
+    component = fixture.componentInstance;
+    component.allowMetricSelection = true;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    expect(component.selectedMetricCount).toBe(0);
+    expect(getLastOption().series).toEqual([]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.toggleMetric('Heart Rate');
+    expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenLastCalledWith(['Speed']);
+    expect(getLastOption().series[0].data).toEqual([100, 200]);
+  });
+
+  it('provides a checkmarked metric menu that stays open for multiple choices', async () => {
+    component.allowMetricSelection = true;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.intensity-metrics-trigger') as HTMLButtonElement;
+    trigger.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const choice = document.querySelector('button[role="menuitemcheckbox"]') as HTMLButtonElement;
+    expect(choice.getAttribute('aria-checked')).toBe('true');
+    choice.click();
+    fixture.detectChanges();
+    expect(choice.isConnected).toBe(true);
+    expect(choice.getAttribute('aria-checked')).toBe('false');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves existing non-selectable chart surfaces unchanged', async () => {
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    expect(fixture.nativeElement.querySelector('.intensity-metrics-trigger')).toBeNull();
+    component.toggleMetric('Heart Rate');
+    expect(getLastOption().series).toHaveLength(1);
+    expect(chartSettings.setHiddenIntensityZoneMetrics).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

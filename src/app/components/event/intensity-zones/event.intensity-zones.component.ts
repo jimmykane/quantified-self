@@ -3,9 +3,11 @@ import { NgTemplateOutlet } from '@angular/common';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   Input,
+  Injector,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -42,6 +44,11 @@ import {
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -51,7 +58,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
   styleUrls: ['./event.intensity-zones.component.css', '../performance-charts/performance-chart-header.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule],
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: StatsClassInterface[] = [];
@@ -59,6 +66,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   @Input() useAnimations = false;
   @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
   @Input() showHeader = true;
+  @Input() allowMetricSelection = false;
   @Input() headerActions: TemplateRef<unknown> | null = null;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
@@ -67,12 +75,20 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   private chartHost: EChartsHostController;
   private isMobile = false;
   private breakpointSubscription: Subscription;
+  private chartData: IntensityZonesEChartsData = { zones: [], series: [] };
+  private hiddenMetricTypes = new Set<string>();
+  private chartSettings: AppChartSettingsLocalStorageService | null = null;
+  metricOptions: { type: string; label: string; color: string; selected: boolean }[] = [];
+  selectedMetricCount = 0;
 
   constructor(
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private injector: Injector,
+    private haptics: AppHapticsService,
+    private changeDetector: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -103,7 +119,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     if (!this.chartDiv?.nativeElement) {
       return;
     }
-    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.orientation) {
+    if (changes.activities || changes.darkTheme || changes.useAnimations || changes.orientation || changes.allowMetricSelection) {
       void this.refreshChart();
     }
   }
@@ -116,6 +132,14 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private async refreshChart(): Promise<void> {
+    // Homepage and dashboard previews retain their existing data and need no preference store.
+    if (this.allowMetricSelection && !this.chartSettings) {
+      this.chartSettings = this.injector.get(AppChartSettingsLocalStorageService);
+      this.hiddenMetricTypes = new Set(this.chartSettings.getHiddenIntensityZoneMetrics());
+    }
+    const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
+    this.chartData = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
+    this.updateMetricOptions();
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme)
@@ -124,11 +148,42 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
-    const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
-    const option = this.buildChartOption(data);
-    this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.updateChart();
     this.chartHost.scheduleResize();
+  }
+
+  metricsMenuOpened(): void {
+    this.haptics.selection();
+  }
+
+  toggleMetric(type: string): void {
+    if (!this.allowMetricSelection || !this.chartSettings || !this.metricOptions.some(metric => metric.type === type)) return;
+    const hidden = new Set(this.hiddenMetricTypes);
+    if (hidden.has(type)) hidden.delete(type);
+    else hidden.add(type);
+    this.chartSettings.setHiddenIntensityZoneMetrics([...hidden]);
+    this.hiddenMetricTypes = hidden;
+    this.updateMetricOptions();
+    this.updateChart();
+    this.haptics.selection();
+  }
+
+  private updateMetricOptions(): void {
+    this.metricOptions = this.chartData.series.map(series => ({
+      type: series.type,
+      label: series.type === DataHeartRate.type ? 'Heart rate' : series.type,
+      color: this.getSeriesColor(series.type),
+      selected: !this.hiddenMetricTypes.has(series.type),
+    }));
+    this.selectedMetricCount = this.metricOptions.filter(metric => metric.selected).length;
+    this.changeDetector.markForCheck();
+  }
+
+  private updateChart(): void {
+    const data = this.allowMetricSelection
+      ? { ...this.chartData, series: this.chartData.series.filter(series => !this.hiddenMetricTypes.has(series.type)) }
+      : this.chartData;
+    this.chartHost.setOption(this.buildChartOption(data), ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {

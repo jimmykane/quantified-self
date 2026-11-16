@@ -35,6 +35,26 @@ describe('AppChartSettingsLocalStorageService', () => {
     storage.clear();
   });
 
+  it('remembers intensity metric visibility independently from event chart visibility', () => {
+    const event = mockEvent('intensity');
+    service.setEventChartCustomVisibilityPreference(event, 'Running', [DataPower.type]);
+    service.setHiddenIntensityZoneMetrics(['Heart Rate', 'Speed', 'Heart Rate']);
+    expect(new AppChartSettingsLocalStorageService(storage).getHiddenIntensityZoneMetrics()).toEqual(['Heart Rate', 'Speed']);
+    expect(service.getEventChartVisibilityPreference(event, 'Running').selectionKeys).toEqual([DataPower.type]);
+    service.setHiddenIntensityZoneMetrics([]);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it.each(['{invalid', 'null', '{}', '"Power"'])('ignores malformed intensity preferences: %s', value => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', value);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it('ignores invalid stored metric entries', () => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', '["Power",null,42,"Power","Speed"]');
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual(['Power', 'Speed']);
+  });
+
   it('persists custom visibility independently for each activity-type signature', () => {
     const event = mockEvent('event-v2-custom');
 
