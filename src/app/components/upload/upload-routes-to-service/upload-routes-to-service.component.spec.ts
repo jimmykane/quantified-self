@@ -275,6 +275,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToSuuntoApp', {
             file: 'AQID',
             filename: 'route.fit',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
     });
 
@@ -297,6 +298,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToGarminAPI', {
             file: 'PGdweC8+',
             filename: 'route.gpx',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
     });
 
@@ -319,6 +321,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToCOROSAPI', {
             file: 'PGdweC8+',
             filename: 'route.gpx',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
         expect(component.fileAccept).toBe('.fit,.gpx');
     });
@@ -342,6 +345,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToCOROSAPI', {
             file: 'PGdweC8+',
             filename: 'route.gpx',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
     });
 
@@ -365,6 +369,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToWahooAPI', {
             file: 'AQID',
             filename: 'route.fit',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
         expect(mockAnalytics.logEvent).toHaveBeenCalledWith('upload_route_to_service', {
             service: ServiceNames.WahooAPI,
@@ -390,6 +395,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToWahooAPI', {
             file: 'PGdweC8+',
             filename: 'route.gpx',
+            notification: expect.objectContaining({ requestId: expect.any(String), totalRoutes: 1, chunkIndex: 0 }),
         });
     });
 
@@ -421,6 +427,22 @@ describe('UploadRoutesToServiceComponent', () => {
             'OK',
             { duration: 10000 },
         );
+    });
+
+    it('uses one request ID for a multi-file action and a new ID for a subsequent retry', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        mockFunctionsService.call.mockResolvedValue({ data: { status: 'success' } });
+        const file = (name: string) => Object.assign(new File(['FIT'], name, { type: 'application/vnd.fit' }), {
+            arrayBuffer: () => Promise.resolve(Uint8Array.from([1, 2, 3]).buffer),
+        });
+        const event = (files: File[]) => ({ stopPropagation: vi.fn(), preventDefault: vi.fn(), target: { files, value: '' } });
+        await component.getFiles(event([file('one.fit'), file('two.fit')]));
+        const first = mockFunctionsService.call.mock.calls[0][1].notification;
+        const second = mockFunctionsService.call.mock.calls[1][1].notification;
+        expect(first).toEqual({ requestId: expect.any(String), createdAtMs: expect.any(Number), totalRoutes: 2, chunkIndex: 0 });
+        expect(second).toEqual({ ...first, chunkIndex: 1 });
+        await component.getFiles(event([file('one.fit')]));
+        expect(mockFunctionsService.call.mock.calls[2][1].notification.requestId).not.toBe(first.requestId);
     });
 
     it('opens the Wahoo reconnect dialog instead of a duplicate upload error when route access is missing', async () => {

@@ -6,6 +6,7 @@ export const EMULATOR_SUITES = {
   delivery: [
     'src/web-push/training.emulator.spec.ts',
     'src/web-push/training-send.emulator.spec.ts',
+    'src/web-push/route-delivery.emulator.spec.ts',
     'src/web-push/delivery.emulator.spec.ts',
     'src/activity-sync/wahoo-cooldown.emulator.spec.ts',
     'src/activity-send/activity-send.emulator.spec.ts',

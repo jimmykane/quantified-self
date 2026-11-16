@@ -51,6 +51,7 @@ describe('AppRouteSendService', () => {
 
     expect(functionsServiceMock.call).toHaveBeenCalledWith('sendRoutesToService', {
       routeIds: ['route-1'],
+      notification: { requestId: expect.any(String), createdAtMs: expect.any(Number), totalRoutes: 1, chunkIndex: 0 },
       destinationServiceName: ServiceNames.SuuntoApp,
     });
     expect(result.status).toBe('success');
@@ -74,6 +75,7 @@ describe('AppRouteSendService', () => {
 
     expect(functionsServiceMock.call).toHaveBeenCalledWith('sendRoutesToService', {
       routeIds: ['route-1'],
+      notification: { requestId: expect.any(String), createdAtMs: expect.any(Number), totalRoutes: 1, chunkIndex: 0 },
       destinationServiceName: ServiceNames.SuuntoApp,
       forceCopy: true,
     });
@@ -118,6 +120,11 @@ describe('AppRouteSendService', () => {
     const result = await service.sendRoutesToService(routeIds, ServiceNames.SuuntoApp, { onProgress: progressSpy });
 
     expect(functionsServiceMock.call).toHaveBeenCalledTimes(2);
+    const firstRequest = functionsServiceMock.call.mock.calls[0][1].notification;
+    const secondRequest = functionsServiceMock.call.mock.calls[1][1].notification;
+    expect(firstRequest).toEqual({ requestId: expect.any(String), createdAtMs: expect.any(Number),
+      totalRoutes: routeIds.length, chunkIndex: 0 });
+    expect(secondRequest).toEqual({ ...firstRequest, chunkIndex: 1 });
     expect(result.status).toBe('partial_success');
     expect(result.routeCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1);
     expect(result.successCount).toBe(SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS);

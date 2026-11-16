@@ -10,6 +10,7 @@ import { isWahooRouteAccessReconnectRequired } from '../../../helpers/wahoo-rout
 import { markUploadErrorUserActionHandled } from '../../../services/upload-error';
 import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
+import { createRouteSendNotificationRequest, type RouteSendNotificationRequest } from '@shared/saved-route-send';
 
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -28,6 +29,14 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
 
   private functionsService = inject(AppFunctionsService);
   private wahooRouteAccessReconnectDialogRef: MatDialogRef<WahooRouteAccessReconnectDialogComponent> | null = null;
+  private readonly routeNotifications = new WeakMap<FileInterface, RouteSendNotificationRequest | undefined>();
+
+  protected override onUploadBatchStarted(files: readonly FileInterface[]): void {
+    files.forEach(file => this.routeNotifications.set(file, undefined));
+    const eligible = files.filter(file => ['fit', 'gpx'].includes(file.extension.toLowerCase()) && file.file.size <= MAX_ROUTE_UPLOAD_BYTES);
+    const request = eligible.length <= 400 ? createRouteSendNotificationRequest(eligible.length) : undefined;
+    if (request) eligible.forEach((file, chunkIndex) => this.routeNotifications.set(file, { ...request, chunkIndex }));
+  }
 
   public data: any = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadRoutesToServiceComponent>, { optional: true });
@@ -116,15 +125,21 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     }
 
     const fileName = file.name || `${file.filename}.${file.extension}`;
+    const request = this.routeNotifications.has(file) ? this.routeNotifications.get(file) : (() => {
+      const standalone = createRouteSendNotificationRequest(1);
+      return standalone ? { ...standalone, chunkIndex: 0 } : undefined;
+    })();
     try {
       await this.functionsService.call<{
         file: string;
         filename: string;
+        notification?: RouteSendNotificationRequest;
       }, { status: string }>(
         functionName,
         {
           file: this.arrayBufferToBase64(fileBuffer),
           filename: fileName,
+          ...(request ? { notification: request } : {}),
         },
       );
     } catch (error) {

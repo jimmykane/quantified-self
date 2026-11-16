@@ -54,6 +54,8 @@ export abstract class UploadAbstractDirective implements OnInit {
 
   protected onUploadBatchFinished(_summary: UploadBatchSummary): void {
   }
+  protected onUploadBatchStarted(_files: readonly FileInterface[]): void {
+  }
 
   protected getDuplicateUploadMessage(): string {
     return 'Activity already exists';
@@ -132,6 +134,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     if (filesToProcess.length > 0) {
       this.hapticsService.selection();
     }
+    this.onUploadBatchStarted(filesToProcess);
     this.isUploading = true;
     let successfulUploads = 0;
     let failedUploads = 0;

@@ -230,7 +230,7 @@ describe('Firestore Security Rules', () => {
         });
     });
 
-    describe.each(['history_import', 'activity_sync', 'activity_delivery', 'training_sync', 'training_send', 'sleep_sync', 'connection_attention'])('Notification category preferences: %s', category => {
+    describe.each(['history_import', 'activity_sync', 'activity_delivery', 'route_delivery', 'training_sync', 'training_send', 'sleep_sync', 'connection_attention'])('Notification category preferences: %s', category => {
         const path = `users/category-owner/notificationPreferences/${category}`;
         const base = { schemaVersion: 1, enabled: false, revision: 1 };
         beforeEach(async () => {

@@ -7,6 +7,7 @@ import { sendActivityNotification } from './activity-service';
 import { sendSleepNotification } from './sleep-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
+import { sendRouteDeliveryNotification } from './route-delivery-service';
 import { automaticPushConfiguration } from './history-consent';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), limit: vi.fn(), select: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGroup: () => ({ where: () => ({ orderBy: () => ({
@@ -18,17 +19,46 @@ vi.mock('./activity-service', () => ({ sendActivityNotification: vi.fn() }));
 vi.mock('./sleep-service', () => ({ sendSleepNotification: vi.fn() }));
 vi.mock('./connection-service', () => ({ sendConnectionNotification: vi.fn() }));
 vi.mock('./training-send-service', () => ({ sendTrainingSendResult: vi.fn() }));
+vi.mock('./route-delivery-service', () => ({ sendRouteDeliveryNotification: vi.fn() }));
 vi.mock('web-push', async original => ({ default: { ...(await original<{ default: typeof webpush }>()).default, sendNotification: vi.fn().mockResolvedValue({}) } }));
 beforeEach(() => {
   vi.clearAllMocks(); vi.mocked(sendActivityNotification).mockResolvedValue();
   vi.mocked(sendSleepNotification).mockResolvedValue();
   vi.mocked(sendConnectionNotification).mockResolvedValue();
   vi.mocked(sendTrainingSendResult).mockResolvedValue();
+  vi.mocked(sendRouteDeliveryNotification).mockResolvedValue();
   mocks.get.mockResolvedValue({ empty: true, docs: [] }); vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: false, publicKey: '' });
 });
 afterEach(() => vi.restoreAllMocks());
 const run = () => sendActivitySyncNotifications.run({} as never);
 describe('bounded activity notification scheduler', () => {
+  it('dispatches route results on the existing queries using the delivery switch without a transport topic', async () => {
+    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
+    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_activity_delivery_enabled', publicKey: pair.publicKey }));
+    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/routeDelivery` } })) });
+    vi.mocked(sendRouteDeliveryNotification).mockImplementation(async (_uid, deps) => {
+      expect((await deps.configuration()).enabled).toBe(true);
+      await deps.send({ endpoint: 'https://web.push.apple.com/route' } as never, 'payload');
+    });
+    await run(); expect(sendRouteDeliveryNotification).toHaveBeenCalledTimes(2);
+    expect(automaticPushConfiguration).toHaveBeenCalledTimes(2); expect(mocks.limit.mock.calls).toEqual([[25], [1]]);
+    expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), 'payload', {
+      vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair }, TTL: 600, timeout: 5000, urgency: 'low',
+    });
+  });
+  it('does not read signing material for disabled route work', async () => {
+    const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value');
+    mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/routeDelivery' } }] });
+    vi.mocked(sendRouteDeliveryNotification).mockImplementation(async (_uid, deps) => { expect((await deps.configuration()).enabled).toBe(false); });
+    await run(); expect(secret).not.toHaveBeenCalled();
+  });
+  it('reports route preparation errors while still processing other categories', async () => {
+    mocks.get.mockResolvedValueOnce({ docs: ['routeDelivery', 'activitySync'].map(name => ({ ref: { path: `users/owner/pushState/${name}` } })) });
+    vi.mocked(sendRouteDeliveryNotification).mockRejectedValue(new Error('private-canary'));
+    await expect(run()).rejects.toThrow('Activity sync notification sweep failed.'); expect(sendActivityNotification).toHaveBeenCalledOnce();
+    expect(mocks.log).toHaveBeenCalledWith('[RouteDeliveryPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
+  });
   it('dispatches explicit Training results lazily on the shared sweep, without coalescing different requests in transport', async () => {
     const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
     vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_training_sync_enabled', publicKey: pair.publicKey }));

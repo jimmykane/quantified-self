@@ -23,6 +23,7 @@ import {
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { isProviderOperationError } from '../shared/provider-operation-error';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { withManualRouteUploadNotification } from '../web-push/route-delivery-admission';
 
 async function assertGarminManualRouteUploadAllowed(userID: string): Promise<void> {
   let deletionGuard;
@@ -60,11 +61,14 @@ export const importRouteToGarminAPI = onCall({
     await assertGarminManualRouteUploadAllowed(userID);
     const payload = request.data as ManualRouteUploadRequest;
     const inputFormat = getManualRouteInputFormat(payload?.filename, 'Garmin');
-    const routeFile = await parseManualRouteUpload(decodeManualRouteUpload(payload?.file), inputFormat);
-    const result = await uploadManualRouteToGarminConnect(userID, routeFile, {
-      beforeProviderRequest: () => assertGarminManualRouteUploadAllowed(userID),
+    return await withManualRouteUploadNotification({ uid: userID, service: ServiceNames.GarminAPI, data: request.data,
+      origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy }, async () => {
+      const routeFile = await parseManualRouteUpload(decodeManualRouteUpload(payload?.file), inputFormat);
+      const result = await uploadManualRouteToGarminConnect(userID, routeFile, {
+        beforeProviderRequest: () => assertGarminManualRouteUploadAllowed(userID),
+      });
+      return { status: 'success' as const, providerRouteId: result.providerRouteId };
     });
-    return { status: 'success' as const, providerRouteId: result.providerRouteId };
   } catch (error) {
     if (error instanceof HttpsError) {
       if (error.code === 'invalid-argument') {

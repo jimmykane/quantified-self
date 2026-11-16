@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Route delivery reports explicit saved-route sends and GPX/FIT uploads, grouped per user action. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -103,7 +103,7 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `route_delivery` (Route delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -664,3 +664,61 @@ Rollback: restore the prior backend code, or turn the existing `web_push_trainin
 **both** explicit Training results and grouped Training attention alerts. The next shared sweep discards ready results;
 new commands do not capture requests. Provider sending continues. Already accepted notifications cannot be recalled.
 Never clear claims or replay requests.
+
+## Manual route delivery results
+
+The separate default-on `route_delivery` user category reports **one result per explicit manual action**:
+Send/copy/retry from the Routes list or route detail, including bulk selections, and direct GPX/FIT route-file uploads
+to Garmin, Suunto, COROS and Wahoo. Automatic route forwarding and history imports never enter admission. No new
+provider polling or provider requests are introduced. Success confirms provider acceptance, not receipt on a device.
+Already-accepted no-op routes are excluded; failures, skipped routes and uncertain outcomes use generic
+“needs attention” wording rather than claiming a definite provider failure.
+
+A browser-generated UUID correlates the user's action across the existing 25-route callable chunks or individual
+uploaded files. The server binds its owner, destination, force-copy choice, first-chunk time, category revision and
+current registered devices; each chunk gets a server content hash and counts only server-produced outcomes.
+Invalid/missing notification metadata, unsupported origins and impersonation skip notifications without altering
+route sending. Notification configuration and persistence failures never retry, fail or undo provider uploads.
+A new explicit retry uses a new action UUID; replaying the same chunk or result cannot add another notification.
+
+The private flat leaf `users/{uid}/pushState/routeDelivery` stores at most eight outstanding actions and 512 retained
+receipt IDs, with 24-hour retention. It retains hashes and counts, never route names, source files, geometry, provider
+route IDs or raw errors. Notification capture is bounded to 10,000 saved routes per selection or 400 uploaded files;
+larger selections still send normally without notifications. Storage bounds can skip notification admission; there
+is no later replay or notification backlog for skipped actions. Client clock skew beyond five minutes also skips
+new admission. All eight registered category preferences remain independent and follow existing default-on rules.
+
+Known completion or a terminal saved-route auth/permission/metadata failure makes one combined summary due on the
+existing minute sweep. Saved-route bulk sends remain client-coordinated: notifications do not continue unsubmitted
+chunks after the browser closes. If an action stalls, a 70-minute inactivity wait exceeds the callable's existing
+one-hour timeout, then a single result can describe confirmed successes and remaining routes needing attention.
+An action expires after 24 hours; a ready result expires after ten minutes. The indexed `dueAt` query and existing
+`sendActivitySyncNotifications` worker process one action per account/sweep, claim before transport, and never replay
+ambiguous sends. No new Function, scheduler, index or TTL policy is required.
+
+Claim and per-device preparation recheck account deletion, category revision, destination account/connection and
+disconnect epoch, reconnect time, exact registration generation/site and VAPID key. Legacy connections can lack a
+metadata pin/generation; explicit manual outcomes remain eligible while the existing disconnect epoch still cancels
+revoked consent. No credential documents are read. A fresh terminal authorization failure can still
+produce the requested failure result; deliberate disconnects and subsequent reconnects cancel stale summaries.
+Expired registration cleanup cannot remove a replacement generation. Aliased endpoints are deduplicated; enabled
+beta and production devices both receive their own site URL. The standard/declarative payload opens `/routes`.
+
+### Manual route result rollout
+
+The existing unconditional `web_push_enabled` and `web_push_activity_delivery_enabled` switches control this sender.
+There is **no new internal flag**. The Route delivery user category is independent of Activity delivery and Training.
+If the existing switches are on, result capture begins when clients send the new optional metadata after deployment.
+
+1. Deploy Rules permitting the `route_delivery` preference; no index deployment is needed.
+2. Deploy `sendRoutesToService`, `importRouteToGarminAPI`, `importRouteToSuuntoApp`, `importRouteToCOROSAPI`,
+   `importRouteToWahooAPI` and `sendActivitySyncNotifications`, then the frontend.
+3. Apply and read back the updated Web Push monitoring bundle using the existing alert channel. The fixed
+   `[RouteDeliveryPush]` metric/policy/chart owns notification admission/send failures; shared sweep health and the
+   existing Routes monitoring retain their responsibilities. No per-user telemetry labels are added.
+4. Test one route, a selection larger than 25 routes, a multi-file upload, partial failure, a manual retry, category
+   independence, beta/production devices and silent automatic route forwarding/history processing.
+
+Rollback producers/frontend while retaining the new sweep to drain/discard pending route results, or turn the
+existing activity-delivery operational switch off to silence both route and activity delivery notifications. Provider work continues. Already accepted notifications cannot be recalled;
+never clear receipts or blindly repeat uploads. Local implementation does not change live flags or deploy anything.

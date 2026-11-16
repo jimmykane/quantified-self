@@ -11,6 +11,11 @@ import {
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
 } from '../../../shared/saved-route-send';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
+import { beginManualRouteSendNotification, finishManualRouteSendNotification } from '../web-push/route-delivery-admission';
+vi.mock('../web-push/route-delivery-admission', () => ({
+  beginManualRouteSendNotification: vi.fn(), finishManualRouteSendNotification: vi.fn(),
+  withManualRouteUploadNotification: async (_input: unknown, send: () => Promise<unknown>) => send(),
+}));
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
 const storagePayloads = new Map<string, Buffer>();
@@ -236,6 +241,8 @@ function createRouteFile(routeNames: Array<string | null> = ['Original segment']
 describe('sendRoutesToService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(beginManualRouteSendNotification).mockResolvedValue(undefined);
+    vi.mocked(finishManualRouteSendNotification).mockResolvedValue();
     routeDocuments.clear();
     storagePayloads.clear();
     storageErrors.clear();
@@ -453,6 +460,9 @@ describe('sendRoutesToService', () => {
   });
 
   it('sends saved routes to Wahoo through the shared route-send adapter', async () => {
+    const notification = { requestId: '00000000-0000-4000-8000-000000000001', createdAtMs: Date.now(), chunkIndex: 0, totalRoutes: 1 };
+    const ticket = { uid: 'user-1', id: notification.requestId, index: 0, hash: 'hash' };
+    vi.mocked(beginManualRouteSendNotification).mockResolvedValue(ticket);
     routeDocuments.set('users/user-1/routes/route-1', {
       id: 'route-1',
       userID: 'user-1',
@@ -466,6 +476,7 @@ describe('sendRoutesToService', () => {
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
       destinationServiceName: ServiceNames.WahooAPI,
+      notification,
     }) as any);
 
     expect(wahooRouteMocks.createWahooRouteSendContext).toHaveBeenCalledWith('user-1');
@@ -479,6 +490,8 @@ describe('sendRoutesToService', () => {
       status: 'success',
       successCount: 1,
     });
+    expect(beginManualRouteSendNotification).toHaveBeenCalledWith('user-1', expect.objectContaining({ notification }), undefined, undefined);
+    expect(finishManualRouteSendNotification).toHaveBeenCalledWith(ticket, result, 1);
   });
 
   it('sends saved routes to the pinned COROS account and persists its deterministic route id', async () => {

@@ -51,6 +51,7 @@ describe('notification Settings', () => {
     expect(fixture.nativeElement.textContent).toContain('Connection issues');
     expect(fixture.nativeElement.textContent).toContain('New activities synced');
     expect(fixture.nativeElement.textContent).toContain('Activity delivery');
+    expect(fixture.nativeElement.textContent).toContain('Route delivery');
     expect(fixture.nativeElement.textContent).toContain('History imports are excluded');
     expect(fixture.nativeElement.textContent).toContain('New categories are on by default');
     let reject!: (error: Error) => void;

@@ -182,5 +182,21 @@ export function buildWebPushMonitoring(project, channel) {
     xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: trainingSendFilter,
       aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  const routeName = 'qs_route_delivery_push_outcomes_v1';
+  const routeFilter = `metric.type="logging.googleapis.com/user/${routeName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  bundle.metrics.push({ name: routeName, description: `[${OWNER}] Manual route delivery notification admission and send outcomes. Acceptance is not device receipt or display.`,
+    filter: `${sleepBase} jsonPayload.message:"[RouteDeliveryPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Route delivery result failures', userLabels: { managed_by: OWNER, policy_id: 'route-delivery' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated route notification failures', `${routeFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Route delivery result failures',
+      content: `Manual saved-route sends and GPX/FIT uploads only. Automatic delivery and history stay silent. Verify the route_delivery category, web_push_activity_delivery_enabled, web_push_enabled and key pairing. This shares sendActivitySyncNotifications and its dueAt backlog, heartbeat and native runtime monitoring. Notification failures must never retry route uploads. Claims are never replayed. Existing route monitoring owns provider work. Never expose route names, geometry, identifiers, endpoints, credentials or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 64, width: 12, height: 4, widget: { title: 'Manual route delivery results — attempts, not display',
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: routeFilter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   return bundle;
 }
