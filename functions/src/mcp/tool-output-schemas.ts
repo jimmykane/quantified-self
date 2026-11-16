@@ -2,7 +2,7 @@ import { activityStreamSeriesSchema } from './activity-stream.schema';
 import { GOAL_TOOLS, GOAL_OUTPUTS } from './training-goals.schemas';
 import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_OUTPUTS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
-import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
+import { calculateReadinessScore as calculateCurrentReadinessScore, READINESS_FORMULA_VERSION as CURRENT_READINESS_FORMULA_VERSION, resolveReadinessConfidence } from '../../../shared/readiness';
 import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
 import { MCP_ACTIVITY_SAMPLES_SCHEMA, MCP_ACTIVITY_SAMPLES_V2_SCHEMA } from './activity-samples.schema';
@@ -1077,7 +1077,7 @@ function createTodayReadinessOutputSchema() {
 
 function createCurrentReadinessOutputSchema() {
   return z.strictObject({ ...createTodayReadinessOutputSchema().shape,
-    formulaVersion: z.literal(4),
+    formulaVersion: z.literal(CURRENT_READINESS_FORMULA_VERSION),
     drivers: z.strictObject({ load: todayReadinessLoadDriver, sleep: todayReadinessSleepDriver,
       overnightHeartRate: todayReadinessOvernightHeartRateDriver,
       hrv: z.strictObject({ weightPercent: z.literal(20), baselineWindowDays: z.literal(60), currentWindowDays: z.literal(7),

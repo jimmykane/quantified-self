@@ -54,13 +54,20 @@ export type PersonalMetricRangeResult = PersonalMetricRangeResultBase & (
     normalRange: null;
   }
   | {
-    tone: Exclude<PersonalMetricRangeTone, 'neutral'>;
+    tone: PersonalMetricRangeTone;
     reason: 'within_range' | 'outside_range' | 'far_outside_range';
     baselineAverage: number;
     currentAverage: number;
     normalRange: { min: number; max: number };
   }
 );
+
+/** HRV above its usual range is information, not evidence of poor recovery on its own. */
+export function resolveHrvPersonalRangeTone(
+  value: number | null, range: { min: number; max: number } | null, tone: PersonalMetricRangeTone,
+): PersonalMetricRangeTone {
+  return value !== null && range !== null && value > range.max ? 'neutral' : tone;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

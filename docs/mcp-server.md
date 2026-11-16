@@ -1581,7 +1581,7 @@ The analytics and map entries follow the
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `get_today_readiness` | `metrics:read` + `sleep:read` | Registered legacy formula-3 readiness; retained for compatibility |
-| `get_current_readiness` | `metrics:read` + `sleep:read` | Current app formula-4 readiness with the shared seven-day HRV average and 60-day range |
+| `get_current_readiness` | `metrics:read` + `sleep:read` | Current app formula-5 readiness with the shared seven-day HRV average and 60-day range |
 | `get_readiness_history` | `metrics:read` + `sleep:read` + `health:read` | Ready current-formula 14-day UTC history with identity-free HRV range evidence |
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
@@ -2628,7 +2628,7 @@ instruction update has a digest-bound pending developer refresh/rescan; the froz
 Separately approved Functions/frontend release is still required.
 
 `get_current_readiness` is the preferred live readiness tool. It requires `metrics:read` plus `sleep:read` and an explicit
-IANA timezone. Like Dashboard Today and Training, it uses current UTC-day Form/ramp and the shared formula-4 evaluator
+IANA timezone. Like Dashboard Today and Training, it uses current UTC-day Form/ramp and the shared formula-5 evaluator
 in `shared/readiness.ts`. A bounded 60-day projection reads at most 257 Sleep documents to enforce a 256-session limit.
 Load, Sleep and Overnight HR selection and weights are unchanged from the legacy contract described below.
 
@@ -2652,7 +2652,7 @@ version; internal readiness evidence version 3 invalidates prior persisted histo
 `get_readiness_history` has no inputs and requires `metrics:read`, `sleep:read` and `health:read`. Persisted history can
 contain absolute HRV values enriched from Health; it cannot safely reconstruct a Sleep-only alternative. Registration,
 HTTP prechecks and the data service enforce all three grants before reading. It reads one ready `training_readiness` snapshot
-and returns only validated formula-4 history: 14 contiguous UTC days, evaluation timestamps and identity-free signals,
+and returns only validated formula-5 history: 14 contiguous UTC days, evaluation timestamps and identity-free signals,
 including each day's HRV range. `hrvRatio` here means seven-day average divided by the 60-day mean, not last-night HRV.
 Missing, old or inconsistent history returns `metric_not_ready`; this read-only tool never queues a rebuild. Internal
 `evidenceVersion` and `legacyPoints` are stripped. The response has the existing daily-report 16-KiB bound.
@@ -2717,6 +2717,13 @@ fragment recorded it, preventing a partial sum from looking complete. Raw sample
 source metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights
 within the last 30 days and requires at least three before returning an average or delta.
 
+Current formula 5 keeps HRV within or above its personal range at the neutral component score of 50; only below-range
+values reduce it. Above-range evidence retains its numeric range classification but has a neutral tone. MCP instructions,
+the built-in Assistant and daily/manual workout generation share the same interpretation: elevated HRV alone does not
+establish stress, poor recovery or a reason to prescribe rest. There is no automatic bonus either. The current tools are
+still additive to the registered baseline; update the digest-bound pending record and rescan after an approved release.
+Legacy formula-3 tools keep their frozen evaluator and projection. No new grants, reads or mutation permissions are added.
+
 The nested readiness object is the exact strict `get_current_readiness` result, including safe driver values, baselines,
 ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual
 equivalent 28-day projection. Server instructions tell clients to lead with sleep and recorded HRV/heart-rate values,
@@ -2726,8 +2733,8 @@ asks about change over time, SpO₂, or respiration.
 
 The daily-report tool is still additive to the registered baseline, so its nested current shape evolves in the same
 digest-bound pending change. Registered `get_training_metric(training_readiness)` and the compact briefing continue to
-project formula-3 `legacyPoints` when the internal snapshot is formula 4. The shared legacy validator rejects missing
-or inconsistent legacy evidence; never relabel formula-4 scores as formula 3. Internal formula-3 snapshots still use
+project formula-3 `legacyPoints` when the internal snapshot is formula 5. The shared legacy validator rejects missing
+or inconsistent legacy evidence; never relabel formula-5 scores as formula 3. Internal formula-3 snapshots still use
 their original projection. No public legacy schema or annotation changes.
 
 ### Compact briefing

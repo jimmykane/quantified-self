@@ -89,7 +89,8 @@ export function buildDashboardGlanceSignals(
       state: hrvState,
       statusText: view.warningText ? 'HRV unavailable' : view.loading ? 'Loading HRV' : hrv?.statusText || 'Not enough comparable HRV evidence',
       detailText: view.warningText || (view.loading ? 'Waiting for current HRV evidence.' : hrv?.detailText || 'No current personal-range assessment.'),
-      summaryText: hrvState === 'outside-range' ? 'Your 7-day HRV average is outside your usual range'
+      summaryText: hrvState === 'above-range' ? 'Your 7-day HRV average is above your usual range'
+        : hrvState === 'outside-range' ? 'Your 7-day HRV average is outside your usual range'
         : hrvState === 'within-range' ? 'Your 7-day HRV average is within your usual range'
         : hrvState === 'unavailable' ? 'HRV is unavailable' : hrvState === 'loading' ? 'HRV is still loading'
         : 'HRV needs more comparable readings' },

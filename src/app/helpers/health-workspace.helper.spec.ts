@@ -868,8 +868,8 @@ describe('Health workspace helpers', () => {
       ...Array.from({ length: 15 }, (_, index) => ({ daysAgo: index + 5, value: 50 })),
       ...Array.from({ length: 5 }, (_, daysAgo) => ({ daysAgo, value: 100 })),
     ]), endTimeMs);
-    expect(caution.tone).toBe('caution');
-    expect(caution.label).toBe('Outside personal range');
+    expect(caution.tone).toBe('neutral');
+    expect(caution.label).toBe('Above personal range');
 
     const negative = buildHealthHrvPersonalRangeStatus(hrvSeries([
       ...Array.from({ length: 17 }, (_, index) => ({ daysAgo: index + 7, value: 50 })),
@@ -877,8 +877,15 @@ describe('Health workspace helpers', () => {
       { daysAgo: 2, value: 100 },
       { daysAgo: 4, value: 100 },
     ]), endTimeMs);
-    expect(negative.tone).toBe('negative');
-    expect(negative.label).toBe('Far outside personal range');
+    expect(negative.tone).toBe('neutral');
+    expect(negative.label).toBe('Above personal range');
+    const below = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 17 }, (_, index) => ({ daysAgo: index + 7, value: 50 })),
+      ...[0, 2, 4].map(daysAgo => ({ daysAgo, value: 10 })),
+    ]), endTimeMs);
+    expect(below.tone).toBe('negative');
+    expect(below.label).toBe('Far outside personal range');
+
   });
 
   it('grades each HRV chart date against the personal range at that date', () => {
@@ -903,10 +910,10 @@ describe('Health workspace helpers', () => {
 
     expect(status?.pointStatuses).toEqual([
       { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range', normalRange: expect.any(Object) },
-      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range', normalRange: expect.any(Object) },
+      { timestampMs: latestTimestamp, tone: 'neutral', label: 'Above personal range', normalRange: expect.any(Object) },
     ]);
     expect(status?.pointStatuses[0].normalRange).not.toEqual(status?.pointStatuses[1].normalRange);
-    expect(status?.tone).toBe('caution');
+    expect(status?.tone).toBe('neutral');
   });
 
   it.each(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS)('retains historical ranges without future leakage for %s', semanticVariant => {

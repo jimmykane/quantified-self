@@ -6819,9 +6819,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
   `training_readiness.payload.evidenceVersion = 3` lets the frontend and backend freshness gate rebuild old readiness
-  inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
+  inputs independently from the formula version. Readiness formula 4 added the shared HRV range; formula 5 removes the above-range penalty. Recovery version 4 withholds HRV comparison across incompatible sources.
   MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
-  version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
+  version-3 formulas and wire shapes; additive current-readiness tools expose formula 5. Rebuilds use the ordinary
   targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
@@ -7025,7 +7025,7 @@ seed and the bounded sleep envelope; it does not trigger an event or activity hi
 when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
 indefinitely on Preparing.
 
-The readiness payload also carries `formulaVersion: 4`. This is intentionally independent of the global derived schema:
+The readiness payload also carries `formulaVersion: 5`. This is intentionally independent of the global derived schema:
 changing the current/historical readiness formula or its persisted input projection invalidates only
 `training_readiness`, preserving compatible snapshots for every unrelated kind.
 
@@ -7353,20 +7353,33 @@ days in the last seven days for the current average. Every historical date uses 
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
 sleep-session-average sources remain separate; spot, workout and manual HRV are not readiness inputs.
 
-Formula 4 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within the range.
-Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
-earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
+Formula 5 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within or above the range.
+Only below-range values lower its component: `max(0, 50 - 100 × max(0, lowerBound - weeklyAverage) / baselineMean)`.
+Above-range HRV is informational and earns neither a penalty nor a bonus. Its recorded range, direction and distance
+remain visible, with a neutral tone even far above the range; below-range classifications remain unchanged. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
 range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
 When the latest eligible night has no single authoritative HRV value, the current HRV driver shows **No current HRV**
 and exposes no previous numeric reading as current evidence.
 
+The shared HRV interpretation guidance is included in manual/daily workout generation, event-day guidance, the
+internal Assistant and MCP instructions. Above-range HRV alone cannot justify lower intensity, rest, higher stress or
+poor recovery; independent recorded evidence still can. The daily report uses this exact live shared score and neutral
+HRV tone. Existing daily receipts remain cached: code release does not rewrite an already generated explanation or
+reset the daily allowance. The existing explicit Regenerate flow obtains fresh context and uses the Assistant allowance;
+no silent regeneration, saved-workout replacement, provider send or receipt deletion is introduced.
+
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
 the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
-is needed. Deploy the verified Functions update before the frontend rollout so formula-4 history can be generated.
+is needed. Deploy the verified Functions update before the frontend rollout so formula-5 history can be generated.
 The builder also stores identity-free `legacyPoints` calculated by the frozen `shared/readiness-legacy.ts` evaluator.
 Only registered legacy MCP projections consume those points; the current frontend and new tools strip them. Old scores
-are never relabelled as formula 4, and new scores are never relabelled as formula 3. The current history validator requires
+are never relabelled as formula 5, and new scores are never relabelled as formula 3. MCP current-readiness/daily-report/history tools remain unregistered additions: their pending contract now advertises
+formula 5; frozen formula-3 projections remain unchanged. Deploy `generateDayWorkout`, `assistantChat`, `mcpApi`,
+`processDerivedMetricsTask` and `ensureDerivedMetrics` before the matching frontend so current history can rebuild.
+This changes no queue lifecycle, dispatch, retries, resources, Rules or indexes. Monitoring coverage is unchanged;
+existing rebuild and committed-failure metrics cover the ordinary formula-version refresh.
+The current history validator requires
 the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
 must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
 
@@ -7383,7 +7396,7 @@ It spans at most 93 provider dates in single-day queries, 512 chunks, 550,000 po
 reads have at most four windows in flight. Only dates adjoining missing nights are read, and browser HRV/sample
 listeners update independently without resubscribing to the other source. Native Sleep and HRV remain usable on optional app-read failure. Existing
 history needs no migration or reimport. Internal readiness evidence version 4 invalidates only readiness history for
-the normal ensure/build lifecycle; formula 4 and weights are unchanged. Frozen legacy history omits the new
+the normal ensure/build lifecycle; that evidence enrichment does not change formula weights. Frozen legacy history omits the new
 Health-derived HR values. Creates/deletes and changed content digests for sampled Garmin Daily HR invalidate only
 `training_readiness` through the existing Health ingress; watermark-only updates do not.
 

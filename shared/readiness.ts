@@ -9,7 +9,7 @@ import {
   type ReadinessSleepEvidencePoint, type ReadinessScoreContext,
 } from './readiness-legacy';
 import {
-  calculatePersonalMetricRange, collapsePersonalMetricObservationsByCalendarDate,
+  calculatePersonalMetricRange, collapsePersonalMetricObservationsByCalendarDate, resolveHrvPersonalRangeTone,
   HRV_PERSONAL_RANGE_OPTIONS, type PersonalMetricRangeObservation, type PersonalMetricRangeResult,
 } from './personal-metric-range';
 
@@ -20,7 +20,8 @@ export {
   type ReadinessSleepEvidencePoint, type ReadinessScoreContext,
 } from './readiness-legacy';
 
-export const READINESS_FORMULA_VERSION = 4 as const;
+export const READINESS_FORMULA_VERSION = 5 as const;
+export const HRV_INTERPRETATION_GUIDANCE = 'Above-range HRV is informational: it does not lower the shared readiness score and is not, by itself, evidence of stress, poor recovery or overtraining. Do not reduce workout intensity or recommend rest solely because HRV is higher than its personal range. Consider independent evidence such as sleep, training load, overnight heart rate, recorded fatigue and performance. Higher HRV also earns no automatic readiness bonus.';
 export const READINESS_EVIDENCE_VERSION = 4 as const;
 export const READINESS_SLEEP_LOOKBACK_MS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000;
 const READINESS_HRV_TREND_MINIMUM_DAYS = 4;
@@ -106,8 +107,12 @@ export function buildReadinessHrvPersonalRange(
   const observations = readinessHrvObservationSeries(points, nowMs);
   const latest = observations[observations.length - 1];
   if (!latest) return null;
+  const range = calculatePersonalMetricRange(observations, nowMs, HRV_PERSONAL_RANGE_OPTIONS);
+  if (range.reason !== 'building_baseline' && range.reason !== 'insufficient_current') {
+    range.tone = resolveHrvPersonalRangeTone(range.currentAverage, range.normalRange, range.tone);
+  }
   return {
-    ...calculatePersonalMetricRange(observations, nowMs, HRV_PERSONAL_RANGE_OPTIONS),
+    ...range,
     latestMs: latest.value,
     latestAtMs: latest.timestampMs,
   };
@@ -187,13 +192,12 @@ function average(values: readonly number[]): number {
 
 /**
  * HRV retains its neutral score (50) and 20% weight inside the personal range.
- * Outside either bound, deduct the percentage distance from that bound relative
- * to the baseline mean. Unusually high HRV cannot earn an automatic bonus.
+ * Only below-range HRV deducts the percentage distance from the lower bound
+ * relative to the baseline mean. Above-range HRV earns no penalty or bonus.
  */
 export function resolveReadinessHrvScore(range: ReadinessHrvPersonalRange | null | undefined): number | null {
   if (!range?.normalRange || range.currentAverage === null || !range.baselineAverage) return null;
-  const distance = Math.max(0, range.normalRange.min - range.currentAverage,
-    range.currentAverage - range.normalRange.max);
+  const distance = Math.max(0, range.normalRange.min - range.currentAverage);
   return Math.max(0, 50 - distance / range.baselineAverage * 100);
 }
 

@@ -1,3 +1,4 @@
+import { HRV_INTERPRETATION_GUIDANCE } from '../../../shared/readiness';
 import { GOAL_INPUTS, GOAL_READ_TOOLS, GOAL_TOOLS } from './training-goals.schemas';
 import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_INPUTS } from './training-thresholds.schemas';
 import { MCP_ACTIVITY_CHART_METRICS, resolveMetric } from './activity-stream.service';
@@ -913,6 +914,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     instructions.push(
+      HRV_INTERPRETATION_GUIDANCE,
       'Use list_training_metrics to discover Training-derived kinds. Call prepare_training_metrics for the selected kinds before get_training_metric; if preparation is still pending, retry preparation later, then read the ready snapshots. Use list_metrics and query_metric for activity and other numeric event metrics; use query_metrics to compare up to four over one bounded range. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot.',
     );
   }
@@ -926,8 +928,8 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      isBuiltInAssistant ? 'get_current_readiness calculates the live formula-4 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. These tools are not workout plans or medical advice.'
-        : 'get_current_readiness calculates the live formula-4 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
+      isBuiltInAssistant ? 'get_current_readiness calculates the live formula-5 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. These tools are not workout plans or medical advice.'
+        : 'get_current_readiness calculates the live formula-5 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
       'With both Health and Sleep access, current readiness and the daily report may include QS-calculated sleep-window heart rate from recorded Garmin 15-second samples. The average is weighted by the covered time; the minimum is the lowest representative sample. Never claim these are Garmin-reported sleep aggregates or a reproduction of Garmin Connect. Ordinary Sleep tools and legacy readiness do not add this calculation.',
     );
   }
@@ -1911,7 +1913,7 @@ export function createMcpServer(
   ) {
     registerMcpTool(server, 'get_current_readiness', {
       title: 'Get current readiness',
-      description: 'Get the current formula-4 Dashboard Today readiness. HRV compares a rolling 7-day average with the same source-specific 60-day personal range used by Health, requiring 14 baseline and 3 recent observation days. Returns latest nightly HRV separately, explicit missing evidence, Load, Sleep and Overnight HR. All HRV values are milliseconds. No provider identity, raw samples, diagnosis or workout prescription.',
+      description: 'Get the current formula-5 Dashboard Today readiness. HRV compares a rolling 7-day average with the same source-specific 60-day personal range used by Health, requiring 14 baseline and 3 recent observation days. Returns latest nightly HRV separately, explicit missing evidence, Load, Sleep and Overnight HR. All HRV values are milliseconds. No provider identity, raw samples, diagnosis or workout prescription.',
       inputSchema: z.object({ timeZone: z.string().min(1).max(80).describe('IANA timezone for local-day context; scoring retains its UTC day boundary.') }),
       outputSchema: outputSchemas.get_current_readiness,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
@@ -1919,7 +1921,7 @@ export function createMcpServer(
 
     if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) registerMcpTool(server, 'get_readiness_history', {
       title: 'Get current readiness history',
-      description: 'Read the ready formula-4 14-day readiness snapshot. Requires Training metrics, Sleep and Health access because stored HRV can include overnight Health evidence. Each UTC day uses its own trailing 60-day HRV range and 7-day average without future evidence. HRV values are milliseconds. Returns explicit gaps and evidence counts without provider identity or raw samples. Use get_current_readiness for the live score.',
+      description: 'Read the ready formula-5 14-day readiness snapshot. Requires Training metrics, Sleep and Health access because stored HRV can include overnight Health evidence. Each UTC day uses its own trailing 60-day HRV range and 7-day average without future evidence. HRV values are milliseconds. Returns explicit gaps and evidence counts without provider identity or raw samples. Use get_current_readiness for the live score.',
       inputSchema: z.object({}), outputSchema: outputSchemas.get_readiness_history,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, () => runReadOnlyTool('get_readiness_history', () => dataService.getReadinessHistory({ uid: auth.uid, scopes: auth.scopes })));

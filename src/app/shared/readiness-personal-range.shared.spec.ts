@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildReadinessSignals, buildReadinessHrvPersonalRange, readinessHrvObservations,
-  READINESS_EVIDENCE_VERSION,
+  READINESS_EVIDENCE_VERSION, READINESS_FORMULA_VERSION,
   resolveReadinessHrvRecentTrend, resolveReadinessHrvScore,
   type ReadinessSleepEvidencePoint } from '@shared/readiness';
 import { calculatePersonalMetricRange, HRV_PERSONAL_RANGE_OPTIONS } from '@shared/personal-metric-range';
@@ -122,12 +122,24 @@ describe('readiness shared HRV personal range', () => {
     expect(result?.minimumHeartRateRatio).toBe(1);
   });
 
-  it('does not reward unusually high HRV or turn absent evidence into a zero score', () => {
+  it('neither penalizes nor rewards above-range HRV, preserving below-range and missing evidence', () => {
     const low = buildReadinessHrvPersonalRange(history(), now)!;
     const high = buildReadinessHrvPersonalRange(nights([...Array(53).fill(30), ...Array(7).fill(70)]), now)!;
     const usual = buildReadinessHrvPersonalRange(nights(Array(60).fill(40)), now)!;
     expect(resolveReadinessHrvScore(low)).toBeLessThan(50);
-    expect(resolveReadinessHrvScore(high)).toBeLessThan(50);
+    expect(resolveReadinessHrvScore(high)).toBe(50);
+    expect(high.tone).toBe('neutral');
+    expect(buildReadinessHrvDisplay(high, null, 'rising')).toMatchObject({
+      tone: 'neutral', statusText: 'Above range · rising',
+    });
+
+    expect(high.reason).toBe('far_outside_range');
+    expect(normalizeReadinessHrvPersonalRange(high)).toEqual(high);
+    expect(normalizeReadinessHrvPersonalRange({ ...high, tone: 'negative' })).toBeNull();
+    const current = buildReadinessSignals({ form: 10, sleepPoints: nights([...Array(53).fill(30), ...Array(7).fill(70)]), nowMs: now });
+    const baseline = buildReadinessSignals({ form: 10, sleepPoints: nights(Array(60).fill(40)), nowMs: now });
+    expect(current?.score).toBe(baseline?.score);
+    expect(current?.label).toBe(baseline?.label);
     expect(resolveReadinessHrvScore(usual)).toBe(50);
     expect(resolveReadinessHrvScore(null)).toBeNull();
   });
@@ -181,10 +193,10 @@ describe('readiness shared HRV personal range', () => {
       const cutoff = index === 13 ? now : dayMs + day - 1;
       return { dayMs, ...buildReadinessSignals({ form: 10, sleepPoints: history(), nowMs: cutoff })! };
     });
-    const payload = { formulaVersion: 4, evidenceVersion: READINESS_EVIDENCE_VERSION, dayBoundary: 'UTC', asOfDayMs,
+    const payload = { formulaVersion: READINESS_FORMULA_VERSION, evidenceVersion: READINESS_EVIDENCE_VERSION, dayBoundary: 'UTC', asOfDayMs,
       generatedAtMs: now, historyDays: 14, points };
     expect(normalizeDerivedTrainingReadinessMetricPayload(payload)).toEqual(payload);
-    expect(normalizeDerivedTrainingReadinessMetricPayload({ ...payload, formulaVersion: 3 })).toBeNull();
+    expect(normalizeDerivedTrainingReadinessMetricPayload({ ...payload, formulaVersion: 4 })).toBeNull();
     for (const change of [{ score: 99 }, { hrvPersonalRange: undefined }, { hrvRatio: 1.5 },
       { hrvPersonalRange: { ...points.at(-1)!.hrvPersonalRange, latestAtMs: now + 1 } },
       { hrvPersonalRange: { ...points.at(-1)!.hrvPersonalRange, latestAtMs: now - 8 * day } }]) {

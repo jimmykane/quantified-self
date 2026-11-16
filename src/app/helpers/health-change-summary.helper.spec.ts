@@ -62,6 +62,12 @@ describe('Health change summary', () => {
   it('uses the existing personal-range tone, including caution, and refuses incomplete numeric ranges', () => {
     const range = { currentAverage: 40, normalRange: { min: 35, max: 45 }, tone: 'positive' as const };
     expect(personalRangeChangeState(range)).toBe('within-range');
+    const above = personalRangeChangeState({ ...range, currentAverage: 80, tone: 'neutral' });
+    expect(above).toBe('above-range');
+    const informational = buildHealthChangeSummary([signal(above, 'hrv')]);
+    expect(informational.changes).toEqual([]);
+    expect(informational.headline).toContain('this alone does not indicate poor recovery');
+
     expect(personalRangeChangeState({ ...range, tone: 'caution' })).toBe('outside-range');
     expect(personalRangeChangeState({ ...range, tone: 'negative' })).toBe('outside-range');
     expect(personalRangeChangeState({ ...range, tone: 'neutral' })).toBe('insufficient');

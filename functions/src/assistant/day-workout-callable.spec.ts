@@ -340,6 +340,14 @@ describe('generateDayWorkout callable', () => {
       expect(deps.generate).toHaveBeenCalledOnce();
     } finally { info.mockRestore(); }
   });
+  it.each([false, true])('passes neutral HRV guidance to the actual model request (event advice=%s)', async adviceOnly => {
+    vi.mocked(assistantGenkit.generate).mockResolvedValueOnce({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
+    const context = await dependencies().context('owner', request, new Date());
+    await generateDayWorkoutSuggestion(request, { ...context, adviceOnly });
+    const options = vi.mocked(assistantGenkit.generate).mock.calls.at(-1)![0] as { system: string };
+    expect(options.system).toContain('Above-range HRV is informational');
+    expect(options.system).toContain('Do not reduce workout intensity or recommend rest solely because HRV is higher');
+  });
   it('instructs generation to use automatic recovery evidence without treating missing or future signals as known', () => {
     for (const signal of ['freshness (Form)', 'ramp rate', 'sleep duration/quality', 'HRV personalRange',
       'overnightHeartRate', 'readiness score/confidence', 'activities already completed today']) {
@@ -347,6 +355,8 @@ describe('generateDayWorkout callable', () => {
     }
     expect(DAY_WORKOUT_SYSTEM).toContain('even when optional Training-plan or Timeline context is off');
     expect(DAY_WORKOUT_SYSTEM).toContain('never assume higher is always better');
+    expect(DAY_WORKOUT_SYSTEM).toContain('Above-range HRV is informational');
+    expect(DAY_WORKOUT_SYSTEM).toContain('Do not reduce workout intensity or recommend rest solely because HRV is higher');
     expect(DAY_WORKOUT_SYSTEM).toContain('time budget, not a requirement to fill it');
     expect(DAY_WORKOUT_SYSTEM).toContain('conditional on rechecking recovery');
     expect(DAY_WORKOUT_SYSTEM).toContain('do not claim an unavailable signal');

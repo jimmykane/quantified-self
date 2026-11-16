@@ -867,7 +867,7 @@ describe('TrainingWorkspaceComponent', () => {
       rampRate: { rampRate: 1 } as any,
       trainingReadinessStatus: 'ready',
       trainingReadiness: {
-        formulaVersion: 4,
+        formulaVersion: 5,
         dayBoundary: 'UTC',
         asOfDayMs: Date.UTC(2026, 6, 16),
         generatedAtMs: nowMs - 1000,

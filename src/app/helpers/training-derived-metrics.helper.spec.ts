@@ -96,7 +96,7 @@ describe('training derived metric normalizers', () => {
       overnightHeartRateRatio: index === 0 ? null : 0.98,
     }));
     const payload = {
-      formulaVersion: 4,
+      formulaVersion: 5,
       evidenceVersion: 4,
       dayBoundary: 'UTC',
       asOfDayMs,

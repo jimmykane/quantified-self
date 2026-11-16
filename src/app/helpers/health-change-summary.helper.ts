@@ -4,7 +4,7 @@ import type { HealthPriorityCardView } from '../components/health/health-priorit
 import { selectDefaultHealthSourceKey } from './health-source-selection.helper';
 import { getDateTimeFormatter } from './date-time-format.helper';
 
-export type HealthChangeState = 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable'
+export type HealthChangeState = 'above-range' | 'outside-range' | 'within-range' | 'insufficient' | 'recorded' | 'loading' | 'unavailable'
   | 'attention' | 'available';
 
 /** Presentation of existing evidence only. This is not an anomaly detector or a score. */
@@ -29,6 +29,7 @@ export function personalRangeChangeState(range: PersonalRangeSummary | null | un
   if (!range || range.currentAverage === null || !Number.isFinite(range.currentAverage)
     || !range.normalRange || !Number.isFinite(range.normalRange.min) || !Number.isFinite(range.normalRange.max)
     || range.normalRange.min > range.normalRange.max) return 'insufficient';
+  if (range.tone === 'neutral' && range.currentAverage > range.normalRange.max) return 'above-range';
   if (range.tone === 'positive') return 'within-range';
   if (range.tone === 'caution' || range.tone === 'negative') return 'outside-range';
   return 'insufficient';
@@ -49,6 +50,7 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
   const changes = signals.filter(signal => signal.state === 'outside-range');
   const count = (state: HealthChangeState) => signals.filter(signal => signal.state === state).length;
   const within = count('within-range');
+  const above = count('above-range');
   const loading = count('loading');
   const unavailable = count('unavailable');
   const insufficient = count('insufficient');
@@ -56,6 +58,7 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
   const parts = [
     changes.length ? `${changes.length} outside usual range` : '',
     within ? `${within} within usual range` : '',
+    above ? `${above} above usual range · informational` : '',
     insufficient ? `${insufficient} ${insufficient === 1 ? 'needs' : 'need'} more readings` : '',
     recorded ? `${recorded} ${recorded === 1 ? 'reading' : 'readings'} shown without comparison` : '',
     loading ? `${loading} loading` : '',
@@ -65,6 +68,7 @@ export function buildHealthChangeSummary(signals: readonly HealthChangeSignal[])
     ? changes.length === 1 ? 'One reading is outside your usual range.' : `${changes.length} readings are outside your usual range.`
     : loading ? 'We’re still loading some of your readings.'
     : unavailable ? 'We couldn’t load some of your readings.'
+    : above ? 'HRV is above your usual range; this alone does not indicate poor recovery.'
     : within ? 'The readings we can compare are within your usual range.'
     : insufficient ? 'More readings are needed to find your usual range.'
     : recorded ? 'Your latest readings are shown below.'
@@ -77,7 +81,7 @@ export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal
   if (signals.some(signal => signal.id === 'readiness')) return buildDashboardAssessmentSummary(signals);
   const attentionSignals = signals.filter(signal => signal.state === 'outside-range'
     || signal.state === 'unavailable' || signal.state === 'insufficient');
-  const priority: readonly HealthChangeState[] = ['outside-range', 'unavailable', 'loading', 'insufficient', 'within-range', 'recorded'];
+  const priority: readonly HealthChangeState[] = ['outside-range', 'unavailable', 'loading', 'insufficient', 'above-range', 'within-range', 'recorded'];
   const state = priority.find(state => signals.some(signal => signal.state === state));
   const selected = signals.filter(signal => signal.state === state);
   const labels = selected.map(signal => signal.id === 'hrv' ? 'Your 7-day HRV average' : signal.label);
@@ -89,6 +93,7 @@ export function buildDashboardGlanceSummary(signals: readonly HealthChangeSignal
     case 'unavailable': headline = `${names} ${verb} unavailable right now.`; break;
     case 'loading': headline = `${names} ${verb} still loading.`; break;
     case 'insufficient': headline = `${names} ${verb} not ready to compare yet.`; break;
+    case 'above-range': headline = `${names} ${verb} above your usual range; this alone does not indicate poor recovery.`; break;
     case 'within-range': headline = `${names} ${verb} within your usual range.`; break;
     case 'recorded': headline = selected.length === 1 && selected[0].id === 'sleep'
       ? 'Your latest sleep reading is available.' : `${names} readings are available.`; break;

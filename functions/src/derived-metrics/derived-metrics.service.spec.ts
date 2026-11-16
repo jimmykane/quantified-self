@@ -1010,7 +1010,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
 
         expect(result.payload).toMatchObject({
-            formulaVersion: 4,
+            formulaVersion: 5,
             evidenceVersion: 4,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),

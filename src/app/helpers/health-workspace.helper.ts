@@ -78,6 +78,7 @@ import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
 import type { HealthWorkspaceSleepSession } from './health-sleep-account.helper';
 import {
+  resolveHrvPersonalRangeTone,
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
   calculatePersonalMetricRangeTimeline,
@@ -883,9 +884,9 @@ export function selectTodayHeartRateHighlightSeries(
  * Builds a source-specific HRV status inspired by Suunto's personal-range UI.
  * The provider's proprietary range calculation is not public, so Health uses a
  * deterministic 60-day mean and population standard deviation. One standard
- * deviation is the personal range; one-to-two is cautionary and beyond two is
- * far outside. Daily medians prevent dense intraday samples from outweighing
- * daily measurements.
+ * deviation is the personal range. Below-range values retain caution/negative
+ * grades; above-range values are informational. Daily medians prevent dense
+ * intraday samples from outweighing daily measurements.
  */
 export function buildHealthHrvPersonalRangeStatus(
   series: HealthWorkspaceSeries,
@@ -939,8 +940,9 @@ export function buildHealthHrvPersonalRangeStatus(
       );
       return {
         timestampMs,
-        tone: pointStatus.tone,
-        label: healthHrvPersonalRangeLabel(pointStatus.reason),
+        tone: resolveHrvPersonalRangeTone(pointStatus.pointValue, pointStatus.normalRange, pointStatus.tone),
+        label: pointStatus.normalRange && pointStatus.pointValue !== null && pointStatus.pointValue > pointStatus.normalRange.max
+          ? 'Above personal range' : healthHrvPersonalRangeLabel(pointStatus.reason),
         normalRange: pointStatus.normalRange
           ? { min: Math.max(0, pointStatus.normalRange.min), max: pointStatus.normalRange.max }
           : null,
@@ -978,9 +980,9 @@ export function buildHealthHrvPersonalRangeStatus(
     min: Math.max(0, status.normalRange.min),
     max: status.normalRange.max,
   };
-  const label = healthHrvPersonalRangeLabel(status.reason);
+  const label = currentAverage > normalRange.max ? 'Above personal range' : healthHrvPersonalRangeLabel(status.reason);
   return {
-    tone: status.tone,
+    tone: resolveHrvPersonalRangeTone(currentAverage, normalRange, status.tone),
     label,
     detailText: `7-day average ${formatHealthValue(
       series.metricId,
