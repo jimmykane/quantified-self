@@ -103,7 +103,7 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -605,4 +605,57 @@ History, activity-sync and activity-delivery sender coverage is **covered in sou
 
 ## MCP and Training impact
 
-No MCP tool, scope, response, consent or Training planning contract changes. The canonical parent-creation result adds no event fields and changes no Training source reservations, calculations, completion or delivery behavior. Notifications contain no metrics or health data. Automatic Training notifications and their required MCP impact review remain outside this foundation.
+No MCP tool, scope, response, consent or Training planning contract changes. Explicit Training send results reuse existing confirmed delivery commands; previews remain silent. Training attention uses the existing status projections. Private notification preferences and receipts remain excluded from MCP responses. Notifications add no event fields and change no Training source reservations, calculations, completion or provider delivery behavior. Payloads contain no workout titles, metrics or health data.
+
+## Explicit Training send results
+
+The default-on `training_send` category gives one combined result **per explicit provider operation**: standalone
+**Send**, **Add & send** (one result per selected service), initial **Enable sync**, or manual **Retry**. A plan with
+20 workouts produces one summary, even when its provider sends several batches. Success confirms provider
+acceptance of the captured workout versions, never arrival on a watch. Partial/all failures ask the user to review
+Training sync. Already-current, completed, suppressed, past and outside-horizon workouts are excluded. An empty or
+no-op send is silent. Resume, settings reconfiguration, routine horizon sync, edits and automatic retries never create
+new result requests. Background attention notifications retain the separate `training_sync` policy.
+
+Admission is inside the existing confirmation transaction and uses its mutation receipt. MCP-confirmed operations
+use the same path; there is no new wire field, permission or tool. Only the workouts currently eligible in the provider
+window are captured, up to the existing 400-workout bound. Existing status writes feed the request. Captured failures
+belong to the combined result instead of also producing individual Training attention pushes; successful recovery
+still closes old attention receipts. Account-wide connection alerts remain independent.
+
+Each scope/service has one private `users/{uid}/pushState/trainingSend_{settingsId}` leaf with captured versions,
+category revision, destination/epoch, device generations and incremental counters. A newer explicit request for that
+scope/service supersedes an unsent older result. Mutation receipt replay cannot recreate it. The existing
+`queueTrainingSyncNotification` observer performs at most two masked request lookups per changed terminal/cancellation status; pending/retrying writes add no reads. Only a
+matching request causes transactional source reads and a counter update. There are no per-workout notification
+documents, extra provider requests, AI work, new Functions, idle queries or indexes. The existing indexed `dueAt`
+minute sweep (`sendActivitySyncNotifications`) claims a completed result before transport, with bounded device
+fan-out and endpoint deduplication across beta and production. There is no daily cap on explicitly requested results.
+
+The sender rechecks source versions, active plan, consent/settings, scope generation, deletion/restore locks,
+connection destination/epoch/reconnect time, completion leaves, category revision and exact registration/key. It
+rechecks authority and the schedule revision before each device send. Changed sources cancel the result rather than
+claiming success for newer content. Requests expire after 24 hours; a ready result expires after ten minutes. Claims
+are never replayed after crashes or ambiguous transport failures. Payloads contain only generic counts and service
+names, use request-specific tags without a shared transport topic, and open the relevant plan or Training sync
+history using standard/declarative navigation. Recursive account cleanup owns private leaves.
+
+### Training send result rollout
+
+Keep the **new** unconditional `web_push_training_send_enabled=false` (missing/conditional also means off).
+Shared `web_push_enabled=true`, matching VAPID keys, an enabled category and registered devices remain required.
+This local change does not enable any remote flags.
+
+1. Deploy Firestore Rules for the new category. No new index is needed.
+2. Deploy `mutateTrainingProviderDelivery`, `mutateTrainingSchedule` (Add & send), `mcpApi` (confirmed MCP sends),
+   `queueTrainingSyncNotification` and `sendActivitySyncNotifications`, then the frontend. Provider delivery workers
+   and their schedules are unchanged.
+3. Apply the updated `tools/web-push-monitoring/` bundle using the existing alert channel and verify readback.
+   The new fixed `[TrainingSendPush]` outcome metric/policy/chart covers admission, preparation and transport
+   failures. Existing shared sweep backlog/heartbeat/native runtime monitoring and Training provider monitoring remain.
+4. After verification, enable `web_push_training_send_enabled` and exercise an explicit small send on beta, a
+   multi-workout result, manual Retry, category off and a routine background sync. Beta and production use the same
+   backend flag and preferences; enabled registrations on both sites can receive results.
+
+Rollback: turn the new flag off. The next shared sweep discards ready results; new commands do not capture requests.
+Provider sending continues. Already accepted notifications cannot be recalled. Never clear claims or replay requests.

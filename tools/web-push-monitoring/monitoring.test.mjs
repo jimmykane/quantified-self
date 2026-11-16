@@ -15,6 +15,7 @@ test('outcome filters accept real Firebase info messages and wrapped error messa
     ['qs_training_sync_push_outcomes_v1', '[TrainingSyncPush]'],
     ['qs_sleep_sync_push_outcomes_v1', '[SleepSyncPush]'],
     ['qs_connection_attention_push_outcomes_v1', '[ConnectionAttentionPush]'],
+    ['qs_training_send_push_outcomes_v1', '[TrainingSendPush]'],
   ];
   const fixture = spawnSync(process.execPath, ['-e', `
     const logger = require('firebase-functions/logger');
@@ -52,7 +53,7 @@ test('Monitoring alert and chart filters reject Logging-only grouped comparison 
 });
 test('scope, low-cardinality outcomes and sustained idle-safe failure policy', () => {
   const b = buildWebPushMonitoring(project, channel);
-  assert.equal(b.metrics.length, 13); assert.equal(b.policies.length, 7);
+  assert.equal(b.metrics.length, 14); assert.equal(b.policies.length, 8);
   assert.match(b.metrics[0].filter, /service_name="sendtestpushnotification"/);
   assert.match(b.metrics[0].filter, /jsonPayload.outcome=\("accepted" OR "expired" OR "failed"\)/);
   assert.deepEqual(b.metrics[0].metricDescriptor.labels.map(x => x.key), ['outcome']);
@@ -92,7 +93,7 @@ test('history monitoring isolates its function and fixed outcomes with idle-safe
     assert.doesNotMatch(c.conditionThreshold.filter, /cancelled|limited|expired|accepted/);
   }
   assert.match(b.policies[1].conditions[1].conditionThreshold.filter, /response_code_class="5xx"/);
-  assert.equal(b.dashboard.mosaicLayout.tiles.length, 15);
+  assert.equal(b.dashboard.mosaicLayout.tiles.length, 16);
 });
 test('upgrades the existing owned dashboard and reapplication preserves unrelated resources without duplicates', async () => {
   const bundle = buildWebPushMonitoring(project, channel);
@@ -118,8 +119,8 @@ test('upgrades the existing owned dashboard and reapplication preserves unrelate
     return saved;
   };
   await applyWebPushMonitoring(bundle, request); await applyWebPushMonitoring(bundle, request);
-  assert.equal(dashboards.length, 2); assert.equal(policies.length, 8); assert.equal(metrics.length, 14);
-  assert.equal(writes.filter(x => x.method === 'POST').length, 6);
+  assert.equal(dashboards.length, 2); assert.equal(policies.length, 9); assert.equal(metrics.length, 15);
+  assert.equal(writes.filter(x => x.method === 'POST').length, 7);
   assert.ok(writes.every(x => !/other|unrelated/.test(x.url)));
   assert.equal(dashboards[1].displayName, 'Unrelated'); assert.equal(policies[1].displayName, 'Unrelated');
 });
@@ -188,4 +189,19 @@ test('connection monitoring covers shared and legacy runtimes on the existing ch
   assert.match(policy.conditions[0].conditionThreshold.filter, /cloud_run_revision/);
   assert.match(policy.conditions[1].conditionThreshold.filter, /cloud_function/);
   assert.match(policy.documentation.content, /episode receipts/);
+});
+
+test('explicit Training result monitoring uses the existing channel and shared worker health without personal labels', () => {
+  const bundle = buildWebPushMonitoring(project, channel);
+  const metric = bundle.metrics.find(value => value.name === 'qs_training_send_push_outcomes_v1');
+  assert.match(metric.filter, /\[TrainingSendPush\]/);
+  assert.deepEqual(metric.metricDescriptor.labels.map(label => label.key), ['outcome', 'phase']);
+  assert.doesNotMatch(JSON.stringify(metric), /requestId|workoutId|endpoint|uid/);
+  const policy = bundle.policies.find(value => value.userLabels.policy_id === 'training-send');
+  assert.deepEqual(policy.notificationChannels, [channel]); assert.equal(policy.conditions.length, 1);
+  const threshold = policy.conditions[0].conditionThreshold;
+  assert.match(threshold.filter, /outcome="failed"/); assert.equal(threshold.thresholdValue, 2);
+  assert.equal(threshold.evaluationMissingData, 'EVALUATION_MISSING_DATA_INACTIVE');
+  assert.match(policy.documentation.content, /Background successes stay silent/);
+  assert.match(policy.documentation.content, /sendActivitySyncNotifications/);
 });

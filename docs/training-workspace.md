@@ -3153,6 +3153,28 @@ MCP impact: **no wire change**. Recipes, sync projections, scopes, proposal/appl
 private notification preferences/receipts stay excluded. Extended read tests retain the four existing attention outcomes
 and reject private receipt fields. No plugin rebuild or registered schema change is needed.
 
+#### Explicit Training send result notifications
+
+The independent default-on `training_send` category reports one combined result per explicit provider operation:
+Send, Add & send, initial Enable sync and manual Retry. A multi-workout plan waits for all captured, eligible workouts;
+partial failures become one summary. Already-current/completed/suppressed/past/outside-horizon workouts and no-op
+requests are silent. Provider acceptance is not watch receipt. Background horizon sync, configuration edits, Resume
+and automatic retries do not create result requests. Existing Training attention alerts remain independent, while
+failures captured by an explicit result do not also create per-workout attention pushes. Recovery still closes old
+issue receipts. Connection issue alerts keep their existing account-wide policy.
+
+The existing confirmation receipt binds the request; private bounded counters/members live in one pushState leaf
+per scope/service. The existing status observer and indexed dueAt minute sweep own delivery; no extra Function,
+provider request, scheduler or index is introduced. Newer explicit requests supersede an unsent request for the same
+scope/service. Current sources, consent, category/device generations, completion and deletion/restore fences are
+rechecked before claim; device preparation also rechecks authority and the schedule revision. Private state is excluded
+from public statuses and MCP reads. MCP confirmed delivery uses the same internal admission without a wire change.
+
+Monitoring is **covered in source** by the Web Push bundle using the existing channel, with fixed
+`[TrainingSendPush]` admission/send/sweep outcomes and the shared sweep health signals. Keep
+`web_push_training_send_enabled=false` until deployment verification. See the [result runbook and deployment
+list](web-push-notifications.md#explicit-training-send-results) for bounds, cancellation, rollout and rollback.
+
 #### Reconciliation database work
 
 Each reconciliation transaction attempt owns one `ReconciliationReads` instance for its exact owner and page.

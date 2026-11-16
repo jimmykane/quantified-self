@@ -166,5 +166,21 @@ export function buildWebPushMonitoring(project, channel) {
     xyChart: { dataSets: [connectionFilter, legacyConnectionFilter].map(filter => ({ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter,
       aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } })),
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  const trainingSendName = 'qs_training_send_push_outcomes_v1';
+  const trainingSendFilter = `metric.type="logging.googleapis.com/user/${trainingSendName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  bundle.metrics.push({ name: trainingSendName, description: `[${OWNER}] Explicit Training send result admission and send outcomes. Provider acceptance is not watch receipt or notification display.`,
+    filter: `${sleepBase} jsonPayload.message:"[TrainingSendPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Training send result failures', userLabels: { managed_by: OWNER, policy_id: 'training-send' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated Training send result failures', `${trainingSendFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Training send result failures',
+      content: `Explicit sends, initial Enable sync and manual retries only. Background successes stay silent. Check web_push_training_send_enabled, web_push_enabled and key pairing. This shares sendActivitySyncNotifications and its dueAt, backlog, heartbeat and native runtime monitoring; there is no new schedule. Existing Training delivery monitoring owns provider retries and backlog. Disabled preferences, edits, superseded requests, no-op sends and expired devices are expected. Claims are never replayed. Never expose workout names, identifiers, endpoints, credentials or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 60, width: 12, height: 4, widget: { title: 'Training send results — attempts, not display',
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: trainingSendFilter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   return bundle;
 }

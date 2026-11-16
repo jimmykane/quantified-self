@@ -8,6 +8,7 @@ import { ACTIVITY_PUSH } from './activity-policy';
 import { sendActivityNotification, type ActivityPushDependencies } from './activity-service';
 import { sendSleepNotification } from './sleep-service';
 import { sendConnectionNotification } from './connection-service';
+import { sendTrainingSendResult } from './training-send-service';
 import { parseVapidKeyPair } from './vapid';
 import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
 
@@ -76,6 +77,25 @@ export const sendActivitySyncNotifications = onSchedule({
       }),
       outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'send', outcome }),
     };
+    let trainingSendConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
+    let trainingSendPair: ReturnType<typeof parseVapidKeyPair> | undefined;
+    const trainingSendDeps: ActivityPushDependencies = { ...deps,
+      configuration: () => trainingSendConfig ??= (async () => {
+        const setting = await automaticPushConfiguration('web_push_training_send_enabled');
+        if (setting.enabled) {
+          trainingSendPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
+          if (trainingSendPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
+        }
+        return setting;
+      })(),
+      send: (registration, payload) => webpush.sendNotification(registration, payload, {
+        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...trainingSendPair! }, TTL: 600, timeout: 5000,
+        urgency: 'low',
+        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
+          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
+      }),
+      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[TrainingSendPush]', { telemetryVersion: 1, phase: 'send', outcome }),
+    };
     failureStage = 'account_processing';
     let failed = false; let preparationError: unknown;
     for (let offset = 0; offset < due.docs.length; offset += 5) {
@@ -88,9 +108,14 @@ export const sendActivitySyncNotifications = onSchedule({
           throw new Error('Sleep notification processing failed.');
         });
         const connection = /^users\/([^/]+)\/pushState\/connectionAttention$/.exec(doc.ref.path);
-        return connection ? sendConnectionNotification(connection[1], connectionDeps).catch(() => {
+        if (connection) return sendConnectionNotification(connection[1], connectionDeps).catch(() => {
           logger.error('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
           throw new Error('Connection notification processing failed.');
+        });
+        const training = /^users\/([^/]+)\/pushState\/(trainingSend_[a-zA-Z0-9_-]+)$/.exec(doc.ref.path);
+        return training ? sendTrainingSendResult(training[1], training[2], trainingSendDeps).catch(() => {
+          logger.error('[TrainingSendPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+          throw new Error('Training send notification processing failed.');
         }) : Promise.resolve();
       }));
       for (const result of results) {

@@ -170,6 +170,8 @@ describe('account notification categories', () => {
     listeners[4].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
     expect(service.status()).toBe('loading');
     listeners[5].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
+    expect(service.status()).toBe('loading');
+    listeners[6].next({ data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } });
     expect(service.isEnabled('training_sync')).toBe(true);
     expect(service.isEnabled('activity_delivery')).toBe(true);
     expect(service.isEnabled('history_import')).toBe(true); expect(service.isEnabled('activity_sync')).toBe(false);
