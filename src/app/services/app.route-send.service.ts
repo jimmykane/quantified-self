@@ -3,8 +3,6 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   getRouteDeliveryMetadataAbortMessage,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
-  createRouteSendNotificationRequest,
-  TERMINAL_IN_BAND_ROUTE_SEND_REASONS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
   SendRoutesToServiceRequest,
@@ -40,6 +38,14 @@ const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'NO_ORIGINAL_FILES',
   'PROVIDER_ERROR',
   'UNSUPPORTED_DESTINATION',
+];
+
+const TERMINAL_IN_BAND_ROUTE_SEND_REASONS: readonly SendRouteToServiceFailureReason[] = [
+  'ACCOUNT_DELETION_IN_PROGRESS',
+  'ACCOUNT_STATE_UNAVAILABLE',
+  'DESTINATION_AUTH_REQUIRED',
+  'DESTINATION_PERMISSION_REQUIRED',
+  'DELIVERY_METADATA_PERSIST_FAILED',
 ];
 
 const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
@@ -140,8 +146,6 @@ export class AppRouteSendService {
     }
 
     const chunks = this.chunkRouteIds(uniqueRouteIds);
-    // One correlation ID for the user's whole action, independent of the callable's 25-route transport chunks.
-    const notification = createRouteSendNotificationRequest(uniqueRouteIds.length);
     const responses: SendRoutesToServiceResponse[] = [];
     let processedRouteCount = 0;
 
@@ -154,7 +158,6 @@ export class AppRouteSendService {
             routeIds: chunk,
             destinationServiceName,
             ...(options.forceCopy === true ? { forceCopy: true } : {}),
-            ...(notification ? { notification: { ...notification, chunkIndex: index } } : {}),
           },
         );
         responses.push(response.data);

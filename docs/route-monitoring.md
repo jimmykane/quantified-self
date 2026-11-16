@@ -354,12 +354,3 @@ Help was reviewed: operational instrumentation does not change the saved-route o
 connection UI, so no Help change is required. **No MCP wire impact:** no tools, schemas,
 responses, scopes, consent, Assistant actions or bundled skills change. These events
 are internal observations, not athlete data or provider actions exposed through MCP.
-
-### Manual route result notifications
-
-Notification monitoring is **covered in source** by `tools/web-push-monitoring/` using the existing alert channel:
-fixed `[RouteDeliveryPush]` admission/send/sweep outcomes, idle-safe failures and the shared activity sweep's
-heartbeat/backlog/native runtime coverage. Route ingestion/delivery metrics above retain provider-operation ownership.
-Manual result bookkeeping never changes provider retry or acceptance behavior. Automatic forwarding and history
-imports remain silent. See the [notification runbook](web-push-notifications.md#manual-route-delivery-results) for
-category independence, request grouping, bounds, rollout and rollback. No live monitoring apply is part of local work.

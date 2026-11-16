@@ -5,7 +5,6 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
-  isRouteSendNotificationRequest,
   SendRouteToServiceItemResult,
   SendRoutesToServiceRequest,
   SendRoutesToServiceResponse,
@@ -30,7 +29,6 @@ import {
   sendPreparedRouteToDestination,
 } from './route-send-core';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { beginManualRouteSendNotification, finishManualRouteSendNotification } from '../web-push/route-delivery-admission';
 
 export const sendRoutesToService = onCall({
   region: FUNCTIONS_MANIFEST.sendRoutesToService.region,
@@ -58,15 +56,7 @@ export const sendRoutesToService = onCall({
 
   try {
     await assertRouteSendUserActive(userID, 'before_destination_context');
-    const notification = await beginManualRouteSendNotification(userID, payload,
-      request.rawRequest?.headers?.origin, request.auth.token?.impersonatedBy);
     const results: SendRouteToServiceItemResult[] = [];
-    let newlySent = 0;
-    const complete = async (items: SendRouteToServiceItemResult[]) => {
-      const response = buildSendRoutesResponse(adapter.destinationServiceName, items);
-      await finishManualRouteSendNotification(notification, response, newlySent);
-      return response;
-    };
     let context: unknown;
     try {
       context = await adapter.createContext(userID);
@@ -77,7 +67,10 @@ export const sendRoutesToService = onCall({
         affectedRouteCount: payload.routeIds.length,
         error,
       });
-      return await complete(buildTerminalRouteSendResults(payload.routeIds, adapter.destinationServiceName, error));
+      return buildSendRoutesResponse(
+        adapter.destinationServiceName,
+        buildTerminalRouteSendResults(payload.routeIds, adapter.destinationServiceName, error),
+      );
     }
 
     for (let index = 0; index < payload.routeIds.length; index++) {
@@ -115,7 +108,6 @@ export const sendRoutesToService = onCall({
         if (!providerResult.alreadyAccepted && !acceptancePersistedDuringSend) {
           await persistAcceptedDelivery(providerResult);
         }
-        if (!providerResult.alreadyAccepted) newlySent++;
         results.push({
           routeId,
           destinationServiceName: adapter.destinationServiceName,
@@ -168,7 +160,7 @@ export const sendRoutesToService = onCall({
       }
     }
 
-    return await complete(results);
+    return buildSendRoutesResponse(adapter.destinationServiceName, results);
   } catch (error) {
     if (error instanceof HttpsError) {
       throw error;
@@ -245,6 +237,5 @@ function normalizeSendRoutesRequest(payload: Partial<SendRoutesToServiceRequest>
     destinationServiceName,
     routeIds,
     forceCopy: payload?.forceCopy === true,
-    ...(isRouteSendNotificationRequest(payload?.notification, routeIds.length) ? { notification: payload!.notification } : {}),
   };
 }

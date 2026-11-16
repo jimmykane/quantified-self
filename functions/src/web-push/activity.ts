@@ -9,7 +9,6 @@ import { sendActivityNotification, type ActivityPushDependencies } from './activ
 import { sendSleepNotification } from './sleep-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
-import { sendRouteDeliveryNotification } from './route-delivery-service';
 import { parseVapidKeyPair } from './vapid';
 import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
 
@@ -97,24 +96,6 @@ export const sendActivitySyncNotifications = onSchedule({
       }),
       outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[TrainingSendPush]', { telemetryVersion: 1, phase: 'send', outcome }),
     };
-    let routeConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
-    let routePair: ReturnType<typeof parseVapidKeyPair> | undefined;
-    const routeDeps: ActivityPushDependencies = { ...deps,
-      configuration: () => routeConfig ??= (async () => {
-        const setting = await automaticPushConfiguration('web_push_activity_delivery_enabled');
-        if (setting.enabled) {
-          routePair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
-          if (routePair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
-        }
-        return setting;
-      })(),
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...routePair! }, TTL: 600, timeout: 5000, urgency: 'low',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[RouteDeliveryPush]', { telemetryVersion: 1, phase: 'send', outcome }),
-    };
     failureStage = 'account_processing';
     let failed = false; let preparationError: unknown;
     for (let offset = 0; offset < due.docs.length; offset += 5) {
@@ -132,14 +113,9 @@ export const sendActivitySyncNotifications = onSchedule({
           throw new Error('Connection notification processing failed.');
         });
         const training = /^users\/([^/]+)\/pushState\/(trainingSend_[a-zA-Z0-9_-]+)$/.exec(doc.ref.path);
-        if (training) return sendTrainingSendResult(training[1], training[2], trainingSendDeps).catch(() => {
+        return training ? sendTrainingSendResult(training[1], training[2], trainingSendDeps).catch(() => {
           logger.error('[TrainingSendPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
           throw new Error('Training send notification processing failed.');
-        });
-        const route = /^users\/([^/]+)\/pushState\/routeDelivery$/.exec(doc.ref.path);
-        return route ? sendRouteDeliveryNotification(route[1], routeDeps).catch(() => {
-          logger.error('[RouteDeliveryPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
-          throw new Error('Route notification processing failed.');
         }) : Promise.resolve();
       }));
       for (const result of results) {

@@ -9,9 +9,6 @@ export const NOTIFICATION_CATEGORIES = [{
   id: 'activity_delivery', label: 'Activity delivery',
   description: 'Results of sends you ask about, and grouped automatic sending failures that need attention.',
 }, {
-  id: 'route_delivery', label: 'Route delivery',
-  description: 'One result for each manual send of routes, including partial failures. Automatic forwarding stays silent.',
-}, {
   id: 'sleep_sync', label: 'Sleep synced',
   description: 'When your latest main sleep becomes available. History imports, naps and updates are excluded.',
 }, {

@@ -1,5 +1,4 @@
 'use strict';
-import { withManualRouteUploadNotification } from '../web-push/route-delivery-admission';
 
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
@@ -558,11 +557,11 @@ export const importRouteToCOROSAPI = onCall({
   try {
     assertCOROSRouteUploadRolloutAccess(request.auth.uid);
     const payload = request.data as COROSRouteUploadRequest;
-    return await withManualRouteUploadNotification({ uid: request.auth.uid, service: ServiceNames.COROSAPI, data: request.data,
-      origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy }, async () => {
-      const fileBuffer = decodeManualRouteUpload(payload?.file);
-      return uploadRouteToCOROS(request.auth!.uid, fileBuffer, payload?.filename);
-    });
+    return await uploadRouteToCOROS(
+      request.auth.uid,
+      decodeManualRouteUpload(payload?.file),
+      payload?.filename,
+    );
   } catch (error) {
     return toCallableError(error);
   }

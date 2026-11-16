@@ -1,5 +1,4 @@
 'use strict';
-import { withManualRouteUploadNotification } from '../web-push/route-delivery-admission';
 
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -875,12 +874,9 @@ export const importRouteToSuuntoApp = onCall({
 
   try {
     await assertSuuntoRouteUploadUserActive(userID, 'before_manual_route_parsing');
-    return await withManualRouteUploadNotification({ uid: userID, service: ServiceNames.SuuntoApp, data: request.data,
-      origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy }, async () => {
-      const gpxContent = await getSuuntoManualRouteGPXContent(request.data as SuuntoRouteUploadRequest);
-      await uploadGPXRouteToSuuntoApp(userID, gpxContent);
-      return { status: 'success' };
-    });
+    const gpxContent = await getSuuntoManualRouteGPXContent(request.data as SuuntoRouteUploadRequest);
+    await uploadGPXRouteToSuuntoApp(userID, gpxContent);
+    return { status: 'success' };
   } catch (error) {
     if (error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError') {
       throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');

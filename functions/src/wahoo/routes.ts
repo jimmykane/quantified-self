@@ -1,5 +1,4 @@
 'use strict';
-import { withManualRouteUploadNotification } from '../web-push/route-delivery-admission';
 
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
@@ -647,9 +646,6 @@ export const importRouteToWahooAPI = onCall({
 }, async (request): Promise<WahooRouteUploadResult> => {
   const userID = await requireWahooRouteUploadAccess(request);
   const payload = request.data as WahooRouteUploadRequest;
-  return withManualRouteUploadNotification({ uid: userID, service: ServiceNames.WahooAPI, data: request.data,
-    origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth?.token?.impersonatedBy }, async () => {
-    const fileBuffer = decodeManualRouteUpload(payload?.file);
-    return uploadRouteToWahoo(userID, fileBuffer, payload?.filename);
-  });
+  const fileBuffer = decodeManualRouteUpload(payload?.file);
+  return uploadRouteToWahoo(userID, fileBuffer, payload?.filename);
 });
