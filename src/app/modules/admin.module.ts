@@ -1,3 +1,4 @@
+import { AdminBillingPolicyComponent } from '../components/admin/admin-billing-policy/admin-billing-policy.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AdminDashboardComponent } from '../components/admin/admin-dashboard/admin-dashboard.component';
@@ -20,6 +21,10 @@ export const adminRoutes: Routes = [
         path: 'marketing',
         component: AdminMarketingComponent,
         canActivate: [adminGuard]
+    },
+    {
+        path: 'billing', component: AdminBillingPolicyComponent, canActivate: [adminGuard],
+        data: { title: 'Billing policy', robots: 'noindex, nofollow' },
     },
     {
         path: 'inactive-accounts', component: AdminInactiveAccountsComponent, canActivate: [adminGuard],
@@ -118,6 +123,7 @@ export const adminRoutes: Routes = [
         RouterModule.forChild(adminRoutes),
         AdminDashboardComponent,
         AdminInactiveAccountsComponent,
+        AdminBillingPolicyComponent,
         AdminMarketingComponent,
         AdminMaintenanceComponent,
         AdminUserWorkspaceComponent,

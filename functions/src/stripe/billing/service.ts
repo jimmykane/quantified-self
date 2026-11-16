@@ -1,3 +1,4 @@
+import { BILLING_TRIAL_POLICY_PATH, parseBillingTrialPolicy, resolveBillingTrialDays } from '../../../../shared/billing-trial-policy';
 import { randomUUID } from 'node:crypto';
 import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 import { guardedBillingStripe } from './guarded-client';
@@ -69,10 +70,18 @@ function validateCustomer(customer: Stripe.Customer | Stripe.DeletedCustomer, ui
 }
 interface Operation { key: string; startedAt: Timestamp; params: DocumentData; result?: { id: string; url?: string | null }; rejected?: boolean;
   replacement?: { operation: string; sessionId: string }; replacedBy?: string; completed?: boolean;
+  reusedOperation?: string;
   selection?: { requestId: string; createdAt: Timestamp } }
 
+/** The reservation is the offer acceptance boundary. Later retries retain its frozen terms. */
+async function assertTrialPolicyRevision(tx: Transaction, db: Firestore, request: CheckoutRequest): Promise<void> {
+  if (request.mode !== 'subscription') return;
+  const policy = parseBillingTrialPolicy((await tx.get(db.doc(BILLING_TRIAL_POLICY_PATH))).data());
+  if ((request.trial_policy_revision ?? 0) !== policy.revision) throw new BillingError('trial_policy_changed');
+}
+
 async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, uid: string, name: string, params: DocumentData,
-  checkout?: { customer: string; expectedActive: string | undefined }): Promise<Operation> {
+  checkout?: { customer: string; expectedActive: string | undefined; request: CheckoutRequest }): Promise<Operation> {
   return ctx.db.runTransaction(async tx => {
     await checkLease(tx, lease, now(ctx));
     const guard = await getUserDeletionGuardStateInTransaction(ctx.db, tx, uid);
@@ -85,6 +94,9 @@ async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, u
       const [binding, source] = await tx.getAll(ctx.db.doc(`customers/${uid}`),
         ctx.db.doc(`customers/${uid}/checkout_sessions/${name.slice('checkout_'.length)}`));
       if (!source.exists) throw new BillingError('account_unavailable');
+      // Owners can delete/recreate the source. Validate the request used to
+      // prepare these parameters, not a newer document at the same path.
+      await assertTrialPolicyRevision(tx, ctx.db, checkout.request);
       if (binding.get('stripeId') !== checkout.customer) throw new BillingError('customer_conflict');
       if (account.get('activeCheckout') !== checkout.expectedActive) throw new BillingError('operation_uncertain');
     }
@@ -180,7 +192,9 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
     const history = await ctx.stripe.subscriptions.list({ customer, status: 'all', limit: 100 });
     if (history.has_more) throw new BillingError('customer_conflict');
     if (history.data.some(s => !['canceled', 'incomplete_expired'].includes(s.status))) throw new BillingError('subscription_exists');
-    const offeredDays = Number(price.metadata.trial_days);
+    const policy = parseBillingTrialPolicy((await ctx.db.doc(BILLING_TRIAL_POLICY_PATH).get()).data());
+    if ((request.trial_policy_revision ?? 0) !== policy.revision) throw new BillingError('trial_policy_changed');
+    const offeredDays = resolveBillingTrialDays(policy, product.metadata.firebaseRole ?? product.metadata.role, price.metadata.trial_days);
     if (request.trial_period_days !== undefined) {
       if (history.data.length || !Number.isInteger(offeredDays) || offeredDays !== request.trial_period_days) throw new BillingError('trial_ineligible');
       trialDays = offeredDays;
@@ -227,7 +241,7 @@ function checkoutSelection(request: DocumentSnapshot, previousRequest: DocumentS
  * remain intact; a delayed retry cannot undo a later selection of the same offer. */
 async function selectOpenCheckout(ctx: BillingDependencies, lease: BillingLease, uid: string,
   customer: string, name: string, previousName: string, previous: Operation,
-  params: Stripe.Checkout.SessionCreateParams, replace: boolean): Promise<Operation> {
+  params: Stripe.Checkout.SessionCreateParams, replace: boolean, preparedRequest: CheckoutRequest): Promise<Operation> {
   return ctx.db.runTransaction(async tx => {
     await checkLease(tx, lease, now(ctx));
     const guard = await getUserDeletionGuardStateInTransaction(ctx.db, tx, uid);
@@ -242,8 +256,13 @@ async function selectOpenCheckout(ctx: BillingDependencies, lease: BillingLease,
     if (binding.get('stripeId') !== customer) throw new BillingError('customer_conflict');
     if (existing.exists || account.get('activeCheckout') !== previousName || original.get('key') !== previous.key
       || original.get('result.id') !== previous.result?.id || original.get('replacedBy')) throw new BillingError('operation_uncertain');
+    await assertTrialPolicyRevision(tx, ctx.db, preparedRequest);
     const selection = checkoutSelection(request, previousRequest, original.data() as Operation, !replace);
     if (!replace) {
+      // Selection orders tabs; a separate receipt preserves each accepted reuse
+      // if another tab later becomes the latest selection before recovery.
+      tx.create(ref, { reusedOperation: previousName, key: previous.key, startedAt: previous.startedAt,
+        params: previous.params, result: previous.result });
       tx.update(previousRef, { selection });
       return previous;
     }
@@ -316,6 +335,19 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
   if (saved?.replacedBy) throw new BillingError('checkout_replaced');
   if (saved?.completed) throw new BillingError('checkout_completed');
   const active = (await root.get()).get('activeCheckout') as string | undefined;
+  if (saved?.reusedOperation) {
+    const original = (await operationRef(ctx.db, uid, saved.reusedOperation).get()).data() as Operation | undefined;
+    if (original?.replacedBy) throw new BillingError('checkout_replaced');
+    if (original?.completed) throw new BillingError('checkout_completed');
+    if (active !== saved.reusedOperation || !original?.result || original.key !== saved.key
+      || original.result.id !== saved.result?.id) throw new BillingError('operation_uncertain');
+    if (original.params.customer !== customer || saved.params.customer !== customer) throw new BillingError('customer_conflict');
+    await assertBillingAuthority(ctx, lease, uid, customer);
+    const session = await ctx.stripe.checkout.sessions.retrieve(original.result.id);
+    await assertBillingAuthority(ctx, lease, uid, customer);
+    if (stripeId(session.customer) !== customer) throw new BillingError('customer_conflict');
+    return checkoutResult(session, customer);
+  }
   if (active && active !== name) {
     // Recovery belongs to this operation's original Stripe identity. It must
     // neither return a newer session nor replace that operation's reservation.
@@ -339,9 +371,9 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
       // An older selection may reuse an identical open offer, but must never
       // create a new session after the latest selection expired or completed.
       if (session.status !== 'open') checkoutSelection(source, previousSource, previous);
-      // Reuse was already journaled for this request. A lost public-result
-      // commit is not permission to open another checkout after it closes.
-      if (session.status !== 'open' && previous.selection?.requestId === requestId) return checkoutResult(session, customer);
+      // Reuse was already accepted for this exact request. Recover its frozen
+      // offer even after a policy change; closed sessions must never be recreated.
+      if (previous.selection?.requestId === requestId) return checkoutResult(session, customer);
       if (session.status === 'open') {
         const lineItems = previous.params.line_items as { price: string }[];
         // A different browser request must still be eligible for the current
@@ -353,10 +385,10 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
           && previous.params.payment_method_collection === current.payment_method_collection;
         if (sameOffer) {
           if (!session.url) throw new BillingError('operation_uncertain');
-          await selectOpenCheckout(ctx, lease, uid, customer, name, active, previous, current, false);
+          await selectOpenCheckout(ctx, lease, uid, customer, name, active, previous, current, false, request);
           return checkoutResult(session, customer);
         }
-        saved = await selectOpenCheckout(ctx, lease, uid, customer, name, active, previous, current, true);
+        saved = await selectOpenCheckout(ctx, lease, uid, customer, name, active, previous, current, true, request);
       } else if (session.status === 'complete' && previous.params.mode === 'subscription' && request.mode === 'subscription') {
         // Do not depend on webhook timing, but allow a returning member whose
         // former subscription really ended to start a new checkout.
@@ -371,7 +403,7 @@ export async function createBillingCheckout(ctx: BillingDependencies, lease: Bil
     }
   }
   const params = saved?.params ?? await checkoutParameters(ctx, lease, uid, customer, request);
-  const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params, { customer, expectedActive: active });
+  const operation = saved ?? await reserveOperation(ctx, lease, uid, name, params, { customer, expectedActive: active, request });
   if (operation.params.customer !== customer) throw new BillingError('customer_conflict');
   if (operation.rejected) throw new BillingError('checkout_rejected');
   if (operation.replacement && !operation.result) {

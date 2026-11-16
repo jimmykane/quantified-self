@@ -1343,7 +1343,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Ready to send Garmin workouts to Suunto?',
-    closingCopy: 'Choose Pro for connected services, then set up automatic Garmin imports or preview a one-time send of saved workouts. Review the current price and trial terms before continuing to checkout.',
+    closingCopy: 'Choose Pro for connected services, then set up automatic Garmin imports or preview a one-time send of saved workouts. Review the current price and billing terms before continuing to checkout.',
     closingActions: [
       routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin'),

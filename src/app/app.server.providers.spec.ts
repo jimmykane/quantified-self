@@ -7,6 +7,7 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { AppUserService } from './services/app.user.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { PUBLIC_RELEASES_TRANSFER_STATE_KEY } from './services/public-releases-snapshot';
+import { PUBLIC_PRICING_TRANSFER_STATE_KEY } from './services/public-pricing-snapshot';
 import { PublicPricingCatalogService } from './services/public-pricing-catalog.service';
 
 const { readSnapshot } = vi.hoisted(() => ({ readSnapshot: vi.fn() }));
@@ -67,6 +68,17 @@ describe('SERVER_APP_PROVIDERS', () => {
       expect(() => service.getChangelogsOnceLoaded()).toThrow(/required public release notes snapshot/);
       expect(TestBed.inject(TransferState).hasKey(PUBLIC_RELEASES_TRANSFER_STATE_KEY)).toBe(false);
     }
+  });
+
+  it('prerenders amounts without baking a trial offer into HTML or hydration state', async () => {
+    readSnapshot.mockReturnValue(JSON.stringify({ version: 1, generatedAt: '2026-11-16T12:00:00Z', products: [{
+      id: 'pro', active: true, name: 'Pro', role: 'pro', description: null, images: [], metadata: { firebaseRole: 'pro' },
+      prices: [{ id: 'price_pro', active: true, currency: 'eur', unit_amount: 299, description: null, type: 'recurring',
+        interval: 'month', interval_count: 1, trial_period_days: 30, metadata: { trial_days: '30' } }],
+    }] }));
+    const products = await firstValueFrom(TestBed.inject(PublicPricingCatalogService).getProducts());
+    expect(products[0].prices[0]).toMatchObject({ unit_amount: 299, trial_period_days: null, metadata: { trial_days: '0' } });
+    expect(TestBed.inject(TransferState).get(PUBLIC_PRICING_TRANSFER_STATE_KEY, [])).toEqual(products);
   });
 
   it('keeps the pricing build fail-closed when its required catalog is missing', () => {
