@@ -5,6 +5,10 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatIconModule } from '@angular/material/icon';
+import { CommonModule } from '@angular/common';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -34,6 +38,10 @@ import { TrainingLoadDialogComponent } from '../training-load/training-load-dial
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import { SummaryPrimaryInfoComponent } from '../shared/summary-primary-info/summary-primary-info.component';
+import { HeroMetricsComponent } from '../shared/hero-metrics/hero-metrics.component';
+import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 @Component({
     standalone: false,
@@ -90,10 +98,12 @@ describe('EventSummaryComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            imports: [MatButtonModule, MatChipsModule],
+            imports: [CommonModule, NoopAnimationsModule, MatButtonModule, MatChipsModule, MatTooltipModule, MatIconModule, ActivityTypeIconComponent],
             declarations: [
                 EventSummaryComponent,
                 SummaryProjectionHost,
+                SummaryPrimaryInfoComponent,
+                HeroMetricsComponent,
             ],
             providers: [
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -103,6 +113,9 @@ describe('EventSummaryComponent', () => {
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: EventTagService, useValue: mockEventTagService },
                 { provide: AppHapticsService, useValue: mockHaptics },
+                { provide: AppEventColorService, useValue: {
+                    getActivityColor: () => '#2196f3', getColorForActivityTypeByActivityTypeGroup: () => '#2196f3',
+                } },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -117,6 +130,45 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it.each([
+        {classification: {isMerge: true}, settings: {}},
+        {classification: {isMerge: false, mergeType: 'benchmark'}, settings: {distanceUnits: DistanceUnits.Miles}},
+    ])('labels full-comparison totals independently of source selection: $classification', ({classification, settings}) => {
+        const activities = [{type: ActivityTypes.Running}, {type: ActivityTypes.Running}];
+        const total = new DataDistance(10_000);
+        fixture.componentRef.setInput('event', {...mockEvent, ...classification, getActivities: () => activities,
+            getStat: (type: string) => type === DataDistance.type ? total : null});
+        fixture.componentRef.setInput('selectedActivities', activities);
+        fixture.componentRef.setInput('unitSettings', settings);
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.metrics-context-heading').textContent).toContain('Combined totals · 2 recordings');
+        expect(fixture.nativeElement.querySelector('.metrics-context-description').textContent).toContain('summed across all recordings, including overlapping recordings');
+        expect(fixture.nativeElement.querySelector('.metrics-context-description').textContent).toContain('Selecting a recording below changes the comparison view, not these totals');
+        const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 10_000, settings);
+        expect(fixture.nativeElement.querySelector('.metrics-context app-hero-metrics').textContent.replace(/\s+/g, ' ')).toContain(distance.text);
+        const before = component.heroSummaryMetrics;
+
+        fixture.componentRef.setInput('selectedActivities', [activities[0]]);
+        fixture.detectChanges();
+        expect(component.comparisonTotalsHeading).toBe('Combined totals · 2 recordings');
+        expect(component.heroSummaryMetrics).toEqual(before);
+        expect(total.getValue()).toBe(10_000);
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        {classification: {}, count: 2},
+        {classification: {isMerge: true, mergeType: 'multi'}, count: 2},
+        {classification: {isMerge: true}, count: 1},
+    ])('retains the ordinary summary layout for $classification with $count recordings', ({classification, count}) => {
+        fixture.componentRef.setInput('event', {...mockEvent, ...classification,
+            getActivities: () => Array.from({length: count}, () => ({type: ActivityTypes.Running}))});
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-hero-metrics')).not.toBeNull();
     });
     it.each([
         { value: 0, settings: {} },

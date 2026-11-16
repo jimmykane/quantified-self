@@ -7,7 +7,9 @@
     [startDate]="event.startDate"
     [iconTooltip]="'Event is ' + event.privacy"
     [iconClickable]="false"
-    [metrics]="heroSummaryMetrics">
+    [metrics]="heroSummaryMetrics"
+    [metricsHeading]="comparisonTotalsHeading"
+    [metricsDescription]="comparisonTotalsDescription">
     <div summary-icon-badge class="privacy-mini-wrapper">
       <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
     </div>

@@ -28,7 +28,17 @@
   </div>
 
   <div class="metrics-divider" aria-hidden="true"></div>
+  @if (metricsHeading) {
+  <div class="metrics-context">
+    <span class="metrics-context-heading">{{ metricsHeading }}</span>
+    <app-hero-metrics [metrics]="metrics"></app-hero-metrics>
+    @if (metricsDescription) {
+    <p class="metrics-context-description">{{ metricsDescription }}</p>
+    }
+  </div>
+  } @else {
   <app-hero-metrics [metrics]="metrics"></app-hero-metrics>
+  }
 
   <div class="summary-actions">
     <ng-content select="[summary-actions]"></ng-content>

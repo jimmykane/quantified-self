@@ -21,6 +21,8 @@ export class SummaryPrimaryInfoComponent {
   @Input() startDate: number | Date | null | undefined = null;
   @Input() fallbackTopMetaText = 'Activity start';
   @Input() metrics: SummaryPrimaryInfoMetric[] = [];
+  @Input() metricsHeading = '';
+  @Input() metricsDescription = '';
   @Input() iconTooltip = '';
   @Input() iconClickable = false;
 

@@ -954,6 +954,15 @@ The shared summary's `--summary-primary-info-padding-inline` and section header'
 hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
 At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the
 identity and place the hero metrics below them, rather than creating a third header row.
+Saved benchmark comparisons with multiple activity recordings label the hero **Combined totals · N recordings**.
+The shared primary summary's optional `metricsHeading`/`metricsDescription` context groups this label, the existing
+canonical hero metrics, and always-visible explanatory text. Time and distance retain the persisted event totals
+across every recording, including overlapping recordings; source selection only changes the comparison views below.
+The count therefore follows all event activities, not the selected subset. Individual source time/distance values
+remain in the existing selectors. Ordinary activities, single-source records, and explicit sequential (`multi`) merges
+retain the original header layout. The context follows existing tablet/mobile metric ordering and wraps in both
+themes without an extra card, tooltip-only explanation, horizontal scrolling, or metric recalculation. No Training,
+storage, provider, or MCP contract changes.
 The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to
 desktop width when the viewport narrows. The shared chart host then resizes to the available content width.
 
