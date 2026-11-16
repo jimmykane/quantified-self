@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; live-activity and delivery alerts use separate bounded private pending batches and minute schedulers. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -103,7 +103,7 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), and `training_sync` (Training sync). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -136,6 +136,108 @@ notification lifecycle failure and provides recovery; it does not repair the bro
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
 consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
 default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
+
+## Connection issues
+
+`connection_attention` is a default-on account category. Sending additionally requires unconditional defaults
+`web_push_enabled=true` and `web_push_connection_attention_enabled=true`; keep the new switch false/missing until
+rollout verification. No browser permission is requested automatically.
+
+The shared `markServiceReconnectRequired` lifecycle captures a stable `reconnectNotificationId` and
+`reconnectNotificationStartedAtMs` only for a new reconnect-required episode. Routine auth failures may rotate the
+existing lifecycle generation but retain this notification identity. Existing unresolved legacy connections do not
+receive catch-up alerts. Deliberate pending disconnects do not start an episode. A successful reconnect clears the
+marker, and a later genuine failure can start a new episode. Notification admission follows the existing Health/route
+lifecycle work and is best effort: notification failures never change the authentication cleanup outcome.
+The admission's Remote Config read has a five-second deadline so an unavailable configuration service cannot stall
+auth cleanup. Only the read is raced; a late response cannot resume admission or create delayed notification writes.
+
+Admission rechecks the current episode/account, deletion guards, category revision and enabled devices. One bounded
+leaf, `users/{uid}/pushState/connectionAttention`, stores at most four latest provider receipts, a pending group, and
+two rolling-day attempt timestamps. Groups wait two minutes; sending allows at most two groups per rolling 24 hours
+and at least one hour between groups. Capped or cancelled episodes do not become catch-up alerts. Ten combined beta
+and production device registrations can receive a group, each with its own origin and captured generation. Only
+provider labels appear in the generic payload: one provider opens its Connections view; several open Connections.
+
+Training connection warnings and this category transactionally reserve the same per-provider episode receipt.
+Whichever admits first owns the warning, including concurrent admissions; both senders recheck ownership before
+transport. Training uses the stable episode instead of auth-retry generations for connection issue deduplication.
+Ordinary workout errors remain separate. Existing activity-delivery validation already excludes work predating a
+disconnect/reconnect; explicitly requested manual send results and uncertain-upload reconciliation retain their
+existing meaning and are not replaced by this generic connection warning.
+
+The shared `sendActivitySyncNotifications` dueAt query handles connection, activity and sleep leaves with no new
+scheduled Function, idle query, secret, index or historical scan. Connection configuration loads once per active
+sweep, only when a connection leaf is due. The sender claims before transport, never replays an ambiguous send, and
+cancels reconnected/disconnected accounts, changed preferences/devices, or groups more than ten minutes overdue.
+
+Rollout requires Rules and frontend category changes, the shared notification worker, `queueTrainingSyncNotification`
+and `sendTrainingSyncNotifications`, and the Functions that bundle the shared provider auth/lifecycle code. Deploy
+those together through the existing Functions release workflow; deploying only the notification sender cannot enable
+new episode admission in old auth workers. No new Function export or infrastructure resource is needed. Apply the
+updated monitoring bundle using the existing alert channel, then verify shared-worker heartbeat/backlog and fixed
+`[ConnectionAttentionPush]` outcomes before enabling the new switch. Existing sender switches, including the new sleep
+switch, remain independent. Verify a fresh simulated reconnect episode in an emulator/test account, duplicate
+Training admission, reconnection cancellation and both origin destinations; never break a real user's connection just
+to produce a test. The explicit self-test does not exercise connection episode admission.
+
+The new episode fields are server-owned metadata, and shared receipts are denied to all clients. There is no change
+to public connection-state meanings, provider credentials/consent, account deletion ownership or MCP surfaces.
+
+## Sleep synced
+
+`sleep_sync` defaults on as an account preference. Sending additionally requires the unconditional Remote Config
+defaults `web_push_enabled=true` and `web_push_sleep_sync_enabled=true`. A missing, conditional or false sleep switch
+disables this sender. Keep `web_push_sleep_sync_enabled=false` while preparing rollout; this feature does not change
+the existing sender switches.
+
+Routine Suunto/COROS polling and authenticated Garmin/Suunto sleep webhook producers explicitly mark new queue rows
+with `sleepNotificationOrigin: 'live'`. Queue admission strips that marker for history/backfill work. Administrative
+recovery jobs, legacy rows and manual/history producers do not acquire it just because they share a polling type.
+The canonical Sleep writer reports only newly created, usable main sessions that ended within the last 24 hours.
+Updates, corrections, duplicate saves, naps and old sleeps do not qualify. The queue invokes best-effort notification
+admission after persistence; notification failure never changes successful provider ingestion or its retry outcome.
+
+Admission rechecks queue ownership/revision, the canonical session's metadata, the current connected provider account
+and lifecycle generation, deletion guards, category preference and registered devices. Sleeps starting before a new
+connection/reconnection and active connection-history imports are suppressed. Existing legacy connections without
+an activity-notification connection-time marker retain eligibility; newly connected accounts receive that marker
+through the shared connection lifecycle. No backfill or replay is run when a user enables notifications.
+The existing provider Sleep state's `lastBackfillEndMs` also suppresses sessions starting inside a requested backfill
+range. This is essential for direct Garmin backfills whose results arrive through ordinary live webhooks; the cutoff
+is claimed before requesting provider data and is rechecked before each device send.
+
+One bounded leaf, `users/{uid}/pushState/sleepReady`, stores the latest admitted sleep date/end time, admission time,
+and at most one pending alert. Dates/end times advance monotonically across providers, with at least 20 hours between
+admissions. This prevents duplicate nights across Garmin/Suunto/COROS, midnight boundaries and recreated documents.
+Overlapping sleep intervals are suppressed even if a delayed provider report uses a different calendar date and
+arrives after the cooldown. Disabled categories and existing receipts stop admission before device/session reads.
+Cancelled/failed alerts retain the receipt. The existing `sendActivitySyncNotifications` dueAt query processes this
+leaf alongside activity batches: there is no new Function, scheduler, idle query, collection-group index, secret or
+per-user polling loop. Sleep configuration is loaded only when a sleep leaf is due, once per sweep.
+
+The sender clears pending work and claims before transport, then rechecks consent, account/session/connection state
+and each captured device generation. Claims are deliberately not replayed after ambiguous transport failure or a
+crash. Pending alerts expire after ten minutes; device fan-out is capped at ten across production and beta. Both sites
+receive alerts on their own origins. Expired registrations are removed only if their generation still matches.
+The generic payload contains no scores, sleep times or other health metrics. It opens `/health?metric=sleep` using
+the same declarative and service-worker `openWindow` destinations as other alerts.
+
+Rollout after merge:
+
+1. Keep the new sleep switch false/missing. Deploy Firestore Rules before serving the frontend category.
+2. Deploy `receiveGarminAPIHealthData`, `receiveSuunto247Data`, `scheduleSuuntoSleepSync`, `scheduleCOROSSleepSync`,
+   `processSleepSyncTask`, and `sendActivitySyncNotifications`. Build and deploy frontend releases through the usual
+   beta/production workflow. No index changes or migration are needed.
+3. Apply the updated Web Push monitoring bundle using the existing alert channel. `[SleepSyncPush]` adds fixed
+   admission/send/sweep outcomes; shared worker backlog, heartbeat and runtime coverage remain in place.
+4. Enable `web_push_sleep_sync_enabled` for the shared backend after verification. Test with a genuinely new main sleep
+   on an already connected test account; histories, replayed queues and the existing self-test do not exercise admission.
+   Verify each registered origin's click destination and category/device cancellation.
+
+Disable the sleep switch to stop future sends. Category off/on, expired pending work, suppressed histories and old
+receipts never become catch-up notifications. Costs scale with eligible new saves and devices rather than all users
+or all historical sessions; admission adds bounded metadata/preference/registration reads and one small pending write.
 
 ## Training sync attention
 

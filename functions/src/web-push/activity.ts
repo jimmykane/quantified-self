@@ -6,6 +6,8 @@ import { FUNCTION_SECRET_BINDINGS, SECRET_PARAMS } from '../secrets';
 import { automaticPushConfiguration } from './history-consent';
 import { ACTIVITY_PUSH } from './activity-policy';
 import { sendActivityNotification, type ActivityPushDependencies } from './activity-service';
+import { sendSleepNotification } from './sleep-service';
+import { sendConnectionNotification } from './connection-service';
 import { parseVapidKeyPair } from './vapid';
 import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
 
@@ -35,12 +37,61 @@ export const sendActivitySyncNotifications = onSchedule({
       }),
       outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'send', outcome }),
     };
+    // Sleep shares the existing dueAt index and sweep. No new idle queries, schedules or credentials.
+    let sleepConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
+    let sleepPair: ReturnType<typeof parseVapidKeyPair> | undefined;
+    const sleepDeps: ActivityPushDependencies = { ...deps,
+      configuration: () => sleepConfig ??= (async () => {
+        const setting = await automaticPushConfiguration('web_push_sleep_sync_enabled');
+        if (setting.enabled) {
+          sleepPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
+          if (sleepPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
+        }
+        return setting;
+      })(),
+      send: (registration, payload) => webpush.sendNotification(registration, payload, {
+        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...sleepPair! }, TTL: 600, timeout: 5000,
+        urgency: 'low', topic: 'qs-sleep-sync',
+        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
+          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
+      }),
+      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[SleepSyncPush]', { telemetryVersion: 1, phase: 'send', outcome }),
+    };
+    let connectionConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
+    let connectionPair: ReturnType<typeof parseVapidKeyPair> | undefined;
+    const connectionDeps: ActivityPushDependencies = { ...deps,
+      configuration: () => connectionConfig ??= (async () => {
+        const setting = await automaticPushConfiguration('web_push_connection_attention_enabled');
+        if (setting.enabled) {
+          connectionPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
+          if (connectionPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
+        }
+        return setting;
+      })(),
+      send: (registration, payload) => webpush.sendNotification(registration, payload, {
+        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...connectionPair! }, TTL: 600, timeout: 5000,
+        urgency: 'low', topic: 'qs-connection-attention',
+        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
+          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
+      }),
+      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'send', outcome }),
+    };
     failureStage = 'account_processing';
     let failed = false; let preparationError: unknown;
     for (let offset = 0; offset < due.docs.length; offset += 5) {
       const results = await Promise.allSettled(due.docs.slice(offset, offset + 5).map(doc => {
         const match = /^users\/([^/]+)\/pushState\/activitySync$/.exec(doc.ref.path);
-        return match ? sendActivityNotification(match[1], deps) : Promise.resolve();
+        if (match) return sendActivityNotification(match[1], deps);
+        const sleep = /^users\/([^/]+)\/pushState\/sleepReady$/.exec(doc.ref.path);
+        if (sleep) return sendSleepNotification(sleep[1], sleepDeps).catch(() => {
+          logger.error('[SleepSyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+          throw new Error('Sleep notification processing failed.');
+        });
+        const connection = /^users\/([^/]+)\/pushState\/connectionAttention$/.exec(doc.ref.path);
+        return connection ? sendConnectionNotification(connection[1], connectionDeps).catch(() => {
+          logger.error('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+          throw new Error('Connection notification processing failed.');
+        }) : Promise.resolve();
       }));
       for (const result of results) {
         if (result.status === 'rejected') {

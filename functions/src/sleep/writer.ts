@@ -1,4 +1,5 @@
 import { assertHistoryWrite } from '../connection-history/context';
+import { sleepPushCandidate } from '../web-push/sleep-policy';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -390,6 +391,7 @@ export async function upsertSleepSession(
     id: string;
     session: SleepSession;
     written: boolean;
+    created?: true;
     lifecycleGuardSkipped?: true;
 }> {
     validateSleepLifecycleWriterDependencies(dependencies);
@@ -466,7 +468,7 @@ export async function upsertSleepSession(
         };
         transaction.set(docRef, sleepSessionFirestoreWritePayload(session), { merge: true });
         logger.info(`[SleepSync] Upserted ${provider} sleep session ${id} for ${userID}`);
-        return { id, session, written: true };
+        return { id, session, written: true, ...(!existing.exists ? { created: true as const } : {}) };
     });
 }
 
@@ -475,7 +477,7 @@ export async function upsertSleepSessions(
     mapperResults: readonly SleepMapperResult[],
     nowMs = Date.now(),
     dependencies: SleepLifecycleWriterDependencies = {},
-): Promise<{ written: number; skipped: number; lifecycleGuardSkipped?: true }> {
+): Promise<{ written: number; skipped: number; lifecycleGuardSkipped?: true; createdSessions?: SleepSession[] }> {
     validateSleepLifecycleWriterDependencies(dependencies);
     const provider = mapperResults.find((mapperResult) => mapperResult?.session?.source?.provider)?.session.source.provider;
     if (provider && await shouldSkipSleepUserWrite(userID, provider, 'session')) {
@@ -487,6 +489,7 @@ export async function upsertSleepSessions(
 
     let written = 0;
     let skipped = 0;
+    const createdSessions: SleepSession[] = [];
     for (let index = 0; index < mapperResults.length; index += 1) {
         const mapperResult = mapperResults[index];
         if (!mapperResult?.sourceSessionKey) {
@@ -503,11 +506,12 @@ export async function upsertSleepSessions(
         }
         if (result.written) {
             written += 1;
+            if (result.created && sleepPushCandidate(result.session, nowMs)) createdSessions.push(result.session);
         } else {
             skipped += 1;
         }
     }
-    return { written, skipped };
+    return { written, skipped, ...(createdSessions.length ? { createdSessions } : {}) };
 }
 
 export async function updateSleepSyncState(

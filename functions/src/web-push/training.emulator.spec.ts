@@ -5,6 +5,8 @@ vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { TRAINING_PUSH, type TrainingCandidate } from './training-policy';
 import { observeTrainingNotification, sendTrainingNotification, type TrainingPushDependencies } from './training-service';
+import { admitConnectionNotification, sendConnectionNotification } from './connection-service';
+import { connectionStatePath, type ConnectionIncident } from './connection-policy';
 
 const now = Date.UTC(2026, 10, 6, 12), key = 'B' + 'A'.repeat(86), origin = 'https://quantified-self.io';
 const device = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
@@ -58,6 +60,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
   }, 30000);
   it('notifies standalone workouts too', async () => {
     const h = await setup(); await h.observe(await h.seed('standalone', 'failed', null)); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it.each(['connection first', 'Training first', 'concurrent'])('shares exactly one reconnect warning across categories: %s', async order => {
+    const h = await setup(), incident: ConnectionIncident = { service: ServiceNames.GarminAPI,
+      id: randomUUID(), observedAt: now, providerUserId: 'account' };
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionState: 'reconnect_required',
+      reconnectNotificationId: incident.id, reconnectNotificationStartedAtMs: now });
+    const candidate = await h.seed('workout', 'reconnect_required');
+    const admit = () => admitConnectionNotification('owner', incident, h.deps);
+    if (order === 'connection first') { await admit(); await h.observe(candidate); }
+    else if (order === 'Training first') {
+      await h.observe(candidate); await h.observe(await h.seed('another-workout', 'reconnect_required')); await admit();
+    }
+    else await Promise.all([admit(), h.observe(candidate)]);
+    // Routine auth retries rotate lifecycle generations, not the unresolved notification episode.
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionStateGeneration: randomUUID() });
+    h.advance(); await Promise.all([h.send(), sendConnectionNotification('owner', h.deps)]);
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    const shared = (await db.doc(connectionStatePath('owner')).get()).data();
+    expect(shared?.incidents[ServiceNames.GarminAPI].id).toBe(incident.id);
+  }, 30000);
+  it('does not rewrite a reserved connection receipt for each affected workout or sender claim', async () => {
+    const h = await setup(), incidentId = randomUUID();
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionState: 'reconnect_required',
+      reconnectNotificationId: incidentId, reconnectNotificationStartedAtMs: now });
+    const writes: string[] = [], original = db.runTransaction.bind(db);
+    vi.spyOn(db, 'runTransaction').mockImplementation(callback => original(async tx => {
+      const set = vi.spyOn(tx, 'set');
+      const result = await callback(tx);
+      writes.push(...set.mock.calls.map(([ref]) => ref.path).filter(path => path === connectionStatePath('owner')));
+      return result;
+    }));
+    await h.observe(await h.seed('first', 'reconnect_required'));
+    expect(writes).toHaveLength(1); writes.length = 0;
+    await h.observe(await h.seed('second', 'reconnect_required'));
+    await h.observe(await h.seed('first', 'reconnect_required'));
+    h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(writes).toEqual([]);
   });
   it('keeps a current sync problem eligible after an unrelated plan title edit', async () => {
     const h = await setup(), candidate = await h.seed(); await h.observe(candidate);

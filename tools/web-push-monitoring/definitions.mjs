@@ -131,5 +131,40 @@ export function buildWebPushMonitoring(project, channel) {
     xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter, aggregation: { ...aggregate, groupByFields: groups } }, unitOverride: '1' } }],
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   appendTrainingPushMonitoring(bundle, project, channel, OWNER, runbook);
+  const sleepName = 'qs_sleep_sync_push_outcomes_v1';
+  const sleepBase = `resource.type="cloud_run_revision" resource.labels.project_id="${project}" resource.labels.location="europe-west2"`;
+  const sleepFilter = `metric.type="logging.googleapis.com/user/${sleepName}" ${sleepBase}`;
+  bundle.metrics.push({ name: sleepName, description: `[${OWNER}] Sleep notification admission and send outcomes. Acceptance is not device display.`,
+    filter: `${sleepBase} jsonPayload.message:"[SleepSyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Sleep sender failures', userLabels: { managed_by: OWNER, policy_id: 'sleep-sender' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated sleep notification admission or send failures', `${sleepFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Sleep sender failures',
+      content: `Sleep shares sendActivitySyncNotifications and its existing dueAt backlog, heartbeat and runtime monitoring. There is no extra scheduler. Check web_push_sleep_sync_enabled, web_push_enabled and key pairing. Naps, history, initial backfills, duplicate nights, cooldown, cancellation and expired subscriptions are expected. Sleep ingestion retains its existing Health/Sleep monitoring. Claims are never replayed after ambiguous sends. Never clear receipts or expose sleep data, identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 52, width: 12, height: 4, widget: { title: 'Sleep notification outcomes — attempts, not display',
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: sleepFilter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  const connectionName = 'qs_connection_attention_push_outcomes_v1';
+  const connectionFilter = `metric.type="logging.googleapis.com/user/${connectionName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  const legacyConnectionFilter = connectionFilter.replace('resource.type="cloud_run_revision"', 'resource.type="cloud_function"');
+  bundle.metrics.push({ name: connectionName, description: `[${OWNER}] Connection attention notification admission and send outcomes. Acceptance is not display.`,
+    filter: `${activityBase} jsonPayload.message:"[ConnectionAttentionPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Connection sender failures', userLabels: { managed_by: OWNER, policy_id: 'connection-sender' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated connection notification failures', `${connectionFilter} metric.labels.outcome="failed"`),
+      failureCondition('Repeated connection notification failures in legacy auth workers', `${legacyConnectionFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Connection sender failures',
+      content: `Connection alerts share sendActivitySyncNotifications and its dueAt backlog, heartbeat and runtime monitoring. Check web_push_connection_attention_enabled, web_push_enabled and key pairing. Training and connection alerts share episode receipts. Auth recovery must not fail because notification admission failed. Reconnected accounts, disabled preferences, caps, cancelled alerts and expired subscriptions are expected. Claims are never replayed. Never expose identifiers, credentials, endpoints or raw provider errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 56, width: 12, height: 4, widget: { title: 'Connection attention outcomes — attempts, not display',
+    xyChart: { dataSets: [connectionFilter, legacyConnectionFilter].map(filter => ({ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } })),
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   return bundle;
 }

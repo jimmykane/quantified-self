@@ -425,6 +425,7 @@ async function enqueueProviderPolls(
             try {
                 await addSleepSyncQueueItem({
                     type: 'suunto_poll',
+                    sleepNotificationOrigin: 'live',
                     provider,
                     userID,
                     providerUserId,

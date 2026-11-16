@@ -5,6 +5,8 @@ import * as logger from 'firebase-functions/logger';
 import { DeferredQueueReleaseIncompleteError } from './queue/pending-disconnect-release';
 import { RouteRestoreQueueReleaseIncompleteError } from './queue/sync-route-eligibility';
 import { ServiceRecoveryDeferredError } from './shared/service-recovery-deferral';
+import { notifyConnectionAfterTransition } from './web-push/connection-admission';
+vi.mock('./web-push/connection-admission', () => ({ notifyConnectionAfterTransition: vi.fn().mockResolvedValue(undefined) }));
 
 const hoisted = vi.hoisted(() => ({
   historyCreate: vi.fn(),
@@ -235,6 +237,22 @@ describe('service-connection-meta', () => {
       }),
     );
   });
+  it('notifies a new committed reconnect episode and preserves its identity through repeated auth failures', async () => {
+    hoisted.metaData = { connectionState: 'connected', providerUserId: 'account' };
+    await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'private-canary', Date.now());
+    expect(notifyConnectionAfterTransition).toHaveBeenCalledOnce();
+    const [, incident] = vi.mocked(notifyConnectionAfterTransition).mock.calls[0];
+    expect(incident).toMatchObject({ service: ServiceNames.SuuntoApp, providerUserId: 'account', id: expect.any(String) });
+    const marker = hoisted.metaData.reconnectNotificationId;
+    await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'private-canary', Date.now());
+    expect(hoisted.metaData.reconnectNotificationId).toBe(marker);
+    expect(notifyConnectionAfterTransition).toHaveBeenCalledOnce();
+  });
+  it.each(['reconnect_required', 'disconnect_pending'])('does not send catch-up or deliberate disconnect alerts from %s', async connectionState => {
+    hoisted.metaData = { connectionState, providerUserId: 'account' };
+    await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect', Date.now());
+    expect(notifyConnectionAfterTransition).not.toHaveBeenCalled();
+  });
 
   it('mirrors COROS terminal auth and reconnect transitions to Health state', async () => {
     await expect(markServiceReconnectRequired(
@@ -283,6 +301,8 @@ describe('service-connection-meta', () => {
     expect(connectedGeneration).not.toBe(reconnectGeneration);
     expect(hoisted.metaData.activityNotificationConnectedAtMs).toBeGreaterThan(0);
     expect(hoisted.metaData.activityNotificationConnectedAtMs).toBeLessThanOrEqual(Date.now());
+    expect(hoisted.metaData.reconnectNotificationId).toBeUndefined();
+    expect(hoisted.metaData.reconnectNotificationStartedAtMs).toBeUndefined();
 
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
       'user-1',

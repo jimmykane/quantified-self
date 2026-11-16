@@ -6,12 +6,17 @@ import { buildHistoryNotificationPayload } from '../../../shared/history-import-
 import { deliveryNotificationPayload } from '../../../shared/activity-delivery-notifications';
 import { trainingSyncNotificationPayload } from '../../../shared/training-sync-notifications';
 import { activityNotificationPayload, type ActivityPushEntry } from './activity-policy';
+import { sleepNotificationPayload } from './sleep-policy';
+import { connectionNotificationPayload } from './connection-policy';
 
 const activity: ActivityPushEntry = {
   eventID: 'event/id ?&', service: ServiceNames.GarminAPI, queueId: 'queue', queueRevision: null,
   queueCreatedAt: 1, startMs: 1, endMs: 2, connectedAtMs: 0, connectionGeneration: 'connection',
 };
 const cases = [
+  { name: 'connection attention', path: `/services?serviceName=${encodeURIComponent(ServiceNames.GarminAPI)}`, build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI]) },
+  { name: 'grouped connection attention', path: '/services', build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI, ServiceNames.SuuntoApp]) },
+  { name: 'sleep ready', path: '/health?metric=sleep', build: sleepNotificationPayload },
   { name: 'self-test', path: '/settings?section=notifications', build: buildPushTestPayload },
   { name: 'Suunto history completion', path: `/services?serviceName=${encodeURIComponent(ServiceNames.SuuntoApp)}&tool=history`,
     build: (origin: string) => buildHistoryNotificationPayload(origin, ServiceNames.SuuntoApp, 'finished') },

@@ -135,7 +135,7 @@ export async function enqueueCOROSDailyPoll(userID: string, providerUserId: stri
     });
     if (!reserved) return false;
     await addSleepSyncQueueItem({
-        type: 'coros_poll', provider: SLEEP_PROVIDERS.COROSAPI, userID, providerUserId,
+        type: 'coros_poll', provider: SLEEP_PROVIDERS.COROSAPI, userID, providerUserId, sleepNotificationOrigin: 'live',
         rangeStartMs: reserved.pending.startMs, rangeEndMs: reserved.pending.endMs,
         ...reserved.fences,
         dedupeKey: reserved.pending.dedupeKey, dispatchImmediately: true, preserveExisting: true,

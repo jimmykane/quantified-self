@@ -3114,10 +3114,19 @@ the provider ledger acknowledges workout/settings changes, not the plan title's 
 an indexed `trainingDueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
 production share preferences, receipts and limits. Capped/overflowed problems are suppressed, never a later backlog.
 Private `issues/{issueId}` descendants retain unresolved workout episodes through retries until a confirmed healthy
-delivery closes them. Connection problems share one receipt per provider/destination/connection generation, including
+delivery closes them. Connection problems share one receipt per provider/destination/reconnect episode, including
 new workouts affected by the same problem. Alternative affected workouts may join the original pending batch, so
 cancelling its first workout need not hide the connection issue. Recursive account cleanup owns these descendants;
 clients cannot read, list or reset them.
+
+New reconnect transitions have a stable server notification episode that survives routine auth-generation changes.
+Training and the **Connection issues** category claim a shared bounded receipt in
+`users/{uid}/pushState/connectionAttention`: whichever admits the same incident first owns its notification, including
+when admissions race. Both senders recheck that ownership before transport; capped or cancelled incidents do not
+become duplicate alerts through the other category. Older metadata without an episode retains the legacy Training
+path. Once Training owns the shared receipt, repeated affected-workout observations and sender claims reuse it
+without rewriting it. This changes notification deduplication only; MCP plan/workout reads, public statuses, provider consent,
+prescriptions, retries and delivery mutations are unchanged. See [Connection issues](web-push-notifications.md#connection-issues).
 
 `sendTrainingSyncNotifications` runs each minute with a bounded masked due-state query, claims before network I/O,
 rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best

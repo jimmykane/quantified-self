@@ -51,6 +51,8 @@ import {
   type ServiceDisconnectLifecycleGuard,
 } from './service-disconnect-pending-state';
 import { updateHealthSyncState } from './health/writer';
+import { connectionIncident } from './web-push/connection-policy';
+import { notifyConnectionAfterTransition } from './web-push/connection-admission';
 
 interface HealthLifecycleProjectionClaim {
   connectionStateGeneration: string | null;
@@ -877,8 +879,21 @@ export async function markServiceReconnectRequired(
       return false;
     }
 
+    const previousState = metaSnapshot.data()?.connectionState;
+    const newNotificationEpisode = previousState !== SERVICE_CONNECTION_STATES.ReconnectRequired
+      && previousState !== SERVICE_CONNECTION_STATES.DisconnectPending;
+    const notificationFields = newNotificationEpisode ? {
+      reconnectNotificationId: connectionStateGeneration, reconnectNotificationStartedAtMs: nowMs,
+    } : previousState === SERVICE_CONNECTION_STATES.DisconnectPending ? {
+      reconnectNotificationId: FieldValue.delete(), reconnectNotificationStartedAtMs: FieldValue.delete(),
+    } : {};
+    const notification = newNotificationEpisode ? connectionIncident(serviceName, {
+      ...metaSnapshot.data(), ...notificationFields, connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
+      providerUserId: providerUserId || currentProviderUserId,
+    }) : null;
     transaction.set(ref, {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
+      ...notificationFields,
       connectionStateGeneration,
       ...(healthProvider
         ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
@@ -893,12 +908,11 @@ export async function markServiceReconnectRequired(
       lastDisconnectedAt: nowMs,
       ...(providerUserId ? { providerUserId } : {}),
     }, { merge: true });
-    return true;
+    return { notification };
   });
   if (!didWrite) {
     return false;
   }
-
   if (healthProvider) {
     await updateHealthLifecycleState(
       userID,
@@ -924,6 +938,7 @@ export async function markServiceReconnectRequired(
       error,
     );
   }
+  if (didWrite.notification) await notifyConnectionAfterTransition(userID, didWrite.notification);
   return true;
 }
 
@@ -1078,6 +1093,8 @@ export async function markServiceConnectedLifecycle(
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     connectionStateGeneration,
+    reconnectNotificationId: FieldValue.delete(),
+    reconnectNotificationStartedAtMs: FieldValue.delete(),
     activityNotificationConnectedAtMs: nowMs,
     connectionHistoryReservation: FieldValue.delete(),
     connectionHistoryReservationExpiresAt: FieldValue.delete(),
@@ -1317,6 +1334,8 @@ export async function clearServiceConnectionStateLifecycle(
     transaction.set(ref, {
       connectionState: FieldValue.delete(),
       connectionStateGeneration,
+      reconnectNotificationId: FieldValue.delete(),
+      reconnectNotificationStartedAtMs: FieldValue.delete(),
       disconnectGeneration: FieldValue.delete(),
       ...healthLifecycleProjectionDeletes(),
       ...(options.restorePendingDisconnectActivitySyncRoutes ? {

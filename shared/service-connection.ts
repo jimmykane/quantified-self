@@ -100,6 +100,9 @@ export interface ServiceConnectionMetaFields {
   lastDisconnectedAt?: number | null;
   /** Server-owned generation for the latest connection-state transition. */
   connectionStateGeneration?: string | null;
+  /** Stable notification episode; authentication retries may rotate the lifecycle generation. */
+  reconnectNotificationId?: string;
+  reconnectNotificationStartedAtMs?: number;
   /** Server-owned generation for the active pending-disconnect episode. */
   disconnectGeneration?: string | null;
   /** Durable provider-neutral repair marker for route restoration. */

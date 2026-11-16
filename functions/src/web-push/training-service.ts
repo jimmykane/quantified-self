@@ -4,6 +4,7 @@ import { notificationPreferencePath, readNotificationCategoryPreference } from '
 import { isPushId, isPushRegistration, isAutomaticPushOrigin, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
 import { trainingSyncNotificationPayload } from '../../../shared/training-sync-notifications';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { reserveTrainingConnectionIncident } from './connection-policy';
 import { TRAINING_PUSH, trainingAttention, trainingRecovered, trainingIssuePath, currentTrainingEntry,
   type TrainingCandidate, type TrainingEntry } from './training-policy';
 
@@ -63,6 +64,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
     const issueRef = db.doc(trainingIssuePath(uid, entry.issueId)), issue = await tx.get(issueRef);
     const state = readState(stateDoc.data() as State | undefined);
     if (issue.data()?.open) {
+      reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
       // One connection incident can affect many workouts, including newly scheduled ones.
       // Retain alternatives only inside its original pending batch; never start a new batch for that incident.
       const pending = state.pending;
@@ -80,6 +82,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
         ? [{ id: doc.id, generation: registration.generation, origin: registration.origin }] : [];
     });
     if (!targets.length) return;
+    reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
     const episode = randomUUID();
     if (state.pending && (state.pending.categoryRevision !== preference.revision || now > state.pending.dueAt + TRAINING_PUSH.batchExpiryMs)) {
       delete state.pending; delete state.trainingDueAt;
@@ -101,7 +104,7 @@ export async function sendTrainingNotification(uid: string, deps: TrainingPushDe
   const config = await deps.configuration(), { db } = deps, ref = db.doc(statePath(uid));
   const current = async (tx: FirebaseFirestore.Transaction, entry: TrainingEntry, now: number) => {
     const [issue, source] = await Promise.all([tx.get(db.doc(trainingIssuePath(uid, entry.issueId))), currentTrainingEntry(db, tx, uid, entry, now)]);
-    return issue.data()?.open && issue.data()?.episode === entry.episode && source ? entry : null;
+    return issue.data()?.open && issue.data()?.episode === entry.episode && source ? { ...source, episode: entry.episode } : null;
   };
   const claim = await db.runTransaction(async tx => {
     const now = deps.now();
@@ -117,6 +120,11 @@ export async function sendTrainingNotification(uid: string, deps: TrainingPushDe
     const outcome = !entries.length ? 'cancelled' as const : !budget(state, now) ? 'limited' as const : null;
     delete state.pending; delete state.trainingDueAt;
     if (!outcome) { state.attempts.push(now); state.lastClaimId = batch.id; }
+    if (!outcome) {
+      const incidents = new Map(entries.flatMap(entry => entry.connectionIncident
+        ? [[entry.connectionIncident.service, entry.connectionIncident] as const] : []));
+      for (const incident of incidents.values()) reserveTrainingConnectionIncident(db, tx, uid, incident);
+    }
     tx.set(ref, state);
     return { batch: { ...batch, entries }, outcome };
   });
