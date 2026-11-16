@@ -252,6 +252,9 @@ describe('serverRoutes', () => {
     const inactive = adminRoutes.find(route => route.path === 'inactive-accounts');
     expect(inactive?.canActivate).toContain(adminGuard);
     expect(inactive?.data?.robots).toBe('noindex, nofollow');
+    const billing = adminRoutes.find(route => route.path === 'billing');
+    expect(billing?.canActivate).toContain(adminGuard);
+    expect(billing?.data?.robots).toBe('noindex, nofollow');
     const expectedAdminRoutes = fullAdminRoutePaths();
     const serverAdminRoutes = CLIENT_RENDERED_APP_ROUTES
       .filter(path => path === 'admin' || path.startsWith('admin/'));

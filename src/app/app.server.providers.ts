@@ -17,7 +17,7 @@ import {
   PUBLIC_PRICING_SNAPSHOT_FILE_PATH,
   PUBLIC_PRICING_TRANSFER_STATE_KEY,
 } from './services/public-pricing-snapshot';
-import { transformProductsForPricing } from './services/pricing-product-catalog';
+import { transformProductsForPricing, withoutIntroductoryTrialOffers } from './services/pricing-product-catalog';
 import { PublicPricingCatalogService } from './services/public-pricing-catalog.service';
 import {
   parsePublicReleasesSnapshot,
@@ -184,7 +184,7 @@ class ServerPaymentService {
 @Injectable()
 class ServerPublicPricingCatalogService {
   private readonly transferState = inject(TransferState);
-  private readonly products = transformProductsForPricing(loadPublicPricingProducts());
+  private readonly products = withoutIntroductoryTrialOffers(transformProductsForPricing(loadPublicPricingProducts()));
 
   getProducts(): Observable<StripeProduct[]> {
     this.transferState.set(PUBLIC_PRICING_TRANSFER_STATE_KEY, this.products);

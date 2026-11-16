@@ -1325,7 +1325,7 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 - The public pricing page shows Pro first. Use **Monthly** or **Yearly** to choose billing, and **Compare all features** to expand the full plan details. Yearly prices show the full yearly total.
 
 - Choosing a paid plan on the public pricing page keeps that plan and billing option through sign-in and account setup. It is shown first with **Your selection** on the subscription page.
-- Review the current price and trial terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
+- Review the current price and billing terms, then choose the plan to start checkout. Opening the page never starts checkout automatically. If the selected option is no longer available, choose a current option instead.
 - After checkout, the membership screen checks your access for up to 20 seconds. When Pro is ready, **Connect your devices** opens [Connections](/services), where you choose a provider and review its permissions. Opening Connections does not connect an account automatically.
 - A **Membership still syncing** message means paid-plan access has not been confirmed. Use **View membership** to check your status, or **Get help** if it remains unchanged; do not start another checkout while the result is unconfirmed.
 - Paid plans renew automatically until you cancel.
@@ -1334,8 +1334,8 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 - If you return from an unfinished checkout, you can choose a different plan or billing interval. **Updating your checkout…** means the old payment link is being closed before the new one opens. Choosing the same offer resumes its existing checkout. If a checkout expires, choose the offer again to start a new checkout.
 - If checkout completed in another tab, refresh Membership to see your access. If a payment result is still being confirmed, wait for confirmation before trying another payment; contact support if it stays unresolved.
 - Cancellation takes effect at the end of the current billing period.
-- When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
-- Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
+- When a paid plan has a trial available, the public pricing page shows the exact trial length as an offer for eligible new members after loading the current offers. Membership confirms the terms before checkout.
+- Trials may differ by plan or be unavailable. With no trial, paid billing starts at checkout. Trial eligibility is confirmed after sign-in; accounts with any previous subscription are not eligible for a new introductory trial.
 - New Pro trials require a payment method in Stripe Checkout. There is no subscription charge during the free trial. Review the selected price, billing interval, any applicable tax, and first payment date in Checkout before confirming.
 - After the trial, the selected subscription renews automatically until you cancel. Cancel from **Membership → Manage subscription** before the trial ends to avoid the first payment. Existing trials keep the terms you originally accepted; complimentary extensions are unchanged.
 - Starter stays free and does not require a payment method.
@@ -1343,6 +1343,10 @@ If you are already signed in, use the usual billing button in [Membership](/subs
 - Yearly paid plans appear automatically when active yearly Stripe prices are available.
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.
+
+## Admin trial settings
+
+Administrators can use **Admin → Billing policy** to set Basic and Pro introductory trials independently: **Off**, **7**, **14**, or **30 days**. **Use price settings** keeps each price’s existing offer. The setting covers monthly and yearly billing. Review the proposed terms before applying them; a change record keeps the administrator and time. Changes affect new checkouts. Existing subscriptions, accepted checkout terms, complimentary extensions and grace periods keep their current terms.
 
 ## Complimentary extensions
 
@@ -1475,7 +1479,7 @@ If Suunto cannot complete sign-in, start the connection again using your Suunto 
 
 The **Connections** page is available to every signed-in account. Starter and Basic accounts open on the free **MCP** tab by default and can select every provider tab to review its capabilities. Provider tabs are marked **PRO**, while MCP is marked **FREE**. Connecting a provider, importing history, uploading to a provider, and automatic sync still require Pro.
 
-On phones, the provider tabs keep their full labels. Use the tab arrows or keyboard to reach the other providers. A disconnected provider can show a Pro benefit preview. **Try Pro free for N days** appears only when an active Pro price has that trial configured and your account has no paid subscription history; otherwise the action is **Get Pro**. Both open Membership to review the selected price and current terms, without starting checkout or connecting a provider automatically. **Keep using Starter** returns to Dashboard; paid accounts keep their current plan. Manual file uploads and analysis stay available with Starter. Existing disconnect, reconnect and recovery controls remain available after Pro access ends.
+On phones, the provider tabs keep their full labels. Use the tab arrows or keyboard to reach the other providers. A disconnected provider can show a Pro benefit preview. **Try Pro free for N days** appears only when the current Pro offer includes a trial and your account has no paid subscription history; otherwise the action is **Get Pro**. Both open Membership to review the selected price and current terms, without starting checkout or connecting a provider automatically. **Keep using Starter** returns to Dashboard; paid accounts keep their current plan. Manual file uploads and analysis stay available with Starter. Existing disconnect, reconnect and recovery controls remain available after Pro access ends.
 
 Services opens each provider on a compact connection overview. Use the single **Import history** card and choose **Choose dates & data** to select the available activity, Sleep and Health history in the shared form. The card shows the latest known import status when available, even after its notification expires or is dismissed; detailed results and cooldowns remain in the history tools. Healthy connected Pro providers explain automatic activity imports beside their connection status. Other cards have specific actions for route uploads and automatic sending. Activity sending actions open the dedicated workspace, including for non-Pro accounts who can review the feature and their retained results. Other tools open the Pro subscription page for non-Pro accounts. For Pro accounts, these other actions open the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.
 

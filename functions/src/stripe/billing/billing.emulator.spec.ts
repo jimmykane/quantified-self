@@ -1,5 +1,6 @@
+import { BILLING_TRIAL_POLICY_PATH } from '../../../../shared/billing-trial-policy';
 import { replayBillingJob } from './replay';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -28,6 +29,7 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     admin.initializeApp({ projectId: 'demo-stripe-billing-tests' }); db = admin.firestore();
     await db.doc(BILLING_CONTROL).set({ owner: 'native', requestsEnabled: true, webhooksEnabled: true, nativeSince: Timestamp.fromMillis(1) });
   });
+  beforeEach(async () => { await db.doc(BILLING_TRIAL_POLICY_PATH).delete(); });
   afterAll(async () => { await admin.app().delete(); });
 
   async function fixture(mode: 'subscription' | 'payment' = 'subscription') {
@@ -515,6 +517,87 @@ describe.skipIf(!enabled)('native Stripe billing transactions', { timeout: 30_00
     expect((await a.ref.get()).get('sessionId')).toBe((await b.ref.get()).get('sessionId'));
     expect(f.stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
     expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+  });
+  describe('admin introductory trial policy', () => {
+    const policy = (basicTrialDays: number | null, proTrialDays: number | null, revision = 1) =>
+      db.doc(BILLING_TRIAL_POLICY_PATH).set({ revision, basicTrialDays, proTrialDays });
+    it.each([0, 7, 14, 30])('enforces the configured %i-day offer over Stripe metadata', async days => {
+      await policy(0, days);
+      const f = await fixture(); f.product.metadata.firebaseRole = 'pro';
+      const data = { ...f.request, trial_policy_revision: 1, checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION,
+        ...(days ? { trial_period_days: days } : {}) };
+      await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+      const params = f.stripe.checkout.sessions.create.mock.calls[0][0];
+      expect(params.subscription_data.trial_period_days).toBe(days || undefined);
+      expect(params.payment_method_collection).toBe(days ? 'always' : 'if_required');
+    });
+    it.each([undefined, 0])('rejects stale clients with revision %s even for paid checkout', async revision => {
+      await policy(0, 0);
+      const f = await fixture();
+      const data = { ...f.request, ...(revision === undefined ? {} : { trial_policy_revision: revision }) };
+      await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+      expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+      expect((await f.ref.get()).get('error.code')).toBe('trial_policy_changed');
+    });
+    it('does not accept a forged duration or give returning members another trial', async () => {
+      await policy(14, 0);
+      for (const history of [false, true]) {
+        const f = await fixture();
+        if (history) f.stripe.subscriptions.list.mockResolvedValue({ data: [{ status: 'canceled' }], has_more: false });
+        const data = { ...f.request, trial_policy_revision: 1, trial_period_days: history ? 14 : 30 };
+        await f.ref.set(data); await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+        expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+        expect((await f.ref.get()).get('error.code')).toBe('trial_ineligible');
+      }
+    });
+    it('rejects a policy change between preparation and the acceptance transaction', async () => {
+      const f = await fixture();
+      const data = { ...f.request, trial_period_days: 7 };
+      await f.ref.set(data);
+      const policyRef = db.doc(BILLING_TRIAL_POLICY_PATH);
+      const readPolicy = policyRef.get.bind(policyRef);
+      vi.spyOn(policyRef, 'get').mockImplementationOnce(async () => {
+        const previous = await readPolicy();
+        await policyRef.set({ revision: 1, basicTrialDays: 0, proTrialDays: 0 });
+        return previous;
+      });
+      const document = db.doc.bind(db);
+      const resolve = vi.spyOn(db, 'doc').mockImplementation(path => path === BILLING_TRIAL_POLICY_PATH ? policyRef : document(path));
+      try {
+        await f.run((await admitBillingCheckout(db, f.uid, f.requestId, data, Timestamp.now()))!);
+        expect((await f.ref.get()).get('error.code')).toBe('trial_policy_changed');
+        expect(f.stripe.checkout.sessions.create).not.toHaveBeenCalled();
+        expect((await db.doc(`${BILLING_ACCOUNTS}/${f.uid}/operations/checkout_${f.requestId}`).get()).exists).toBe(false);
+      } finally { resolve.mockRestore(); }
+    });
+    it('preserves an accepted operation across policy changes and recovery', async () => {
+      const f = await fixture();
+      const data = { ...f.request, trial_period_days: 7 };
+      await f.ref.set(data);
+      const lease = await acquireBillingLease(db, `customer:${f.uid}`);
+      try {
+        const result = await createBillingCheckout(f.ctx, lease, f.uid, f.requestId, data);
+        await policy(0, 0);
+        expect(await createBillingCheckout(f.ctx, lease, f.uid, f.requestId, data)).toEqual(result);
+        expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+        expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+        expect(f.stripe.subscriptions.list).toHaveBeenCalledTimes(1);
+      } finally { await releaseBillingLease(db, lease); }
+    });
+    it('rejects stale selections without expiring an existing issued offer', async () => {
+      const f = await fixture(); await f.run((await f.admit())!);
+      await policy(0, 0);
+      const next = await nextRequest(f); await f.run(next.id);
+      expect((await next.ref.get()).get('error.code')).toBe('trial_policy_changed');
+      expect(f.stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    });
+    it('keeps one-time purchases independent of the introductory trial policy', async () => {
+      await policy(0, 0);
+      const f = await fixture('payment'); await f.run((await f.admit())!);
+      expect(f.stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    });
   });
   it('creates one durable customer and checkout, retaining automatic tax, promotions and trial policy', async () => {
     const f = await fixture();

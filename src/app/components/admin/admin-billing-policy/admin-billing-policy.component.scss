@@ -1,0 +1,14 @@
+section { max-width: 850px; padding: 24px 0; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h2 { margin: 0; }
+p { line-height: 1.5; }
+.secondary { color: var(--mat-sys-on-surface-variant); }
+.choices { display: flex; flex-wrap: wrap; gap: 24px; margin: 24px 0; }
+.audit { overflow-wrap: anywhere; font: var(--mat-sys-body-small); }
+.error { color: var(--mat-sys-error); }
+.button-content, .button-icon { display: flex; align-items: center; justify-content: center; }
+.button-content { gap: 8px; }
+.button-icon, .button-icon mat-icon { width: 18px; height: 18px; }
+.button-icon { flex: 0 0 18px; }
+.button-icon mat-icon { font-size: 18px; }
+@media (max-width: 480px) { .choices { flex-direction: column; align-items: flex-start; gap: 16px; } }

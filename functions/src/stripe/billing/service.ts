@@ -1,3 +1,4 @@
+import { BILLING_TRIAL_POLICY_PATH, parseBillingTrialPolicy, resolveBillingTrialDays } from '../../../../shared/billing-trial-policy';
 import { randomUUID } from 'node:crypto';
 import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 import { guardedBillingStripe } from './guarded-client';
@@ -71,6 +72,13 @@ interface Operation { key: string; startedAt: Timestamp; params: DocumentData; r
   replacement?: { operation: string; sessionId: string }; replacedBy?: string; completed?: boolean;
   selection?: { requestId: string; createdAt: Timestamp } }
 
+/** The reservation is the offer acceptance boundary. Later retries retain its frozen terms. */
+async function assertTrialPolicyRevision(tx: Transaction, db: Firestore, request: CheckoutRequest): Promise<void> {
+  if (request.mode !== 'subscription') return;
+  const policy = parseBillingTrialPolicy((await tx.get(db.doc(BILLING_TRIAL_POLICY_PATH))).data());
+  if ((request.trial_policy_revision ?? 0) !== policy.revision) throw new BillingError('trial_policy_changed');
+}
+
 async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, uid: string, name: string, params: DocumentData,
   checkout?: { customer: string; expectedActive: string | undefined }): Promise<Operation> {
   return ctx.db.runTransaction(async tx => {
@@ -85,6 +93,7 @@ async function reserveOperation(ctx: BillingDependencies, lease: BillingLease, u
       const [binding, source] = await tx.getAll(ctx.db.doc(`customers/${uid}`),
         ctx.db.doc(`customers/${uid}/checkout_sessions/${name.slice('checkout_'.length)}`));
       if (!source.exists) throw new BillingError('account_unavailable');
+      await assertTrialPolicyRevision(tx, ctx.db, source.data() as CheckoutRequest);
       if (binding.get('stripeId') !== checkout.customer) throw new BillingError('customer_conflict');
       if (account.get('activeCheckout') !== checkout.expectedActive) throw new BillingError('operation_uncertain');
     }
@@ -180,7 +189,9 @@ async function checkoutParameters(ctx: BillingDependencies, lease: BillingLease,
     const history = await ctx.stripe.subscriptions.list({ customer, status: 'all', limit: 100 });
     if (history.has_more) throw new BillingError('customer_conflict');
     if (history.data.some(s => !['canceled', 'incomplete_expired'].includes(s.status))) throw new BillingError('subscription_exists');
-    const offeredDays = Number(price.metadata.trial_days);
+    const policy = parseBillingTrialPolicy((await ctx.db.doc(BILLING_TRIAL_POLICY_PATH).get()).data());
+    if ((request.trial_policy_revision ?? 0) !== policy.revision) throw new BillingError('trial_policy_changed');
+    const offeredDays = resolveBillingTrialDays(policy, product.metadata.firebaseRole ?? product.metadata.role, price.metadata.trial_days);
     if (request.trial_period_days !== undefined) {
       if (history.data.length || !Number.isInteger(offeredDays) || offeredDays !== request.trial_period_days) throw new BillingError('trial_ineligible');
       trialDays = offeredDays;
@@ -242,6 +253,7 @@ async function selectOpenCheckout(ctx: BillingDependencies, lease: BillingLease,
     if (binding.get('stripeId') !== customer) throw new BillingError('customer_conflict');
     if (existing.exists || account.get('activeCheckout') !== previousName || original.get('key') !== previous.key
       || original.get('result.id') !== previous.result?.id || original.get('replacedBy')) throw new BillingError('operation_uncertain');
+    await assertTrialPolicyRevision(tx, ctx.db, request.data() as CheckoutRequest);
     const selection = checkoutSelection(request, previousRequest, original.data() as Operation, !replace);
     if (!replace) {
       tx.update(previousRef, { selection });

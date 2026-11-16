@@ -33,6 +33,50 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Admin introductory trial policy', () => {
+        const path = 'configuration/billingTrials';
+        const initial = { revision: 0, basicTrialDays: null, proTrialDays: null };
+        const admin = () => testEnv.authenticatedContext('admin', { admin: true }).firestore();
+        async function save(db = admin(), patch = {}, previous = initial, actor = 'admin') {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const data = { revision: previous.revision + 1, basicTrialDays: 7, proTrialDays: 0, updatedAt: serverTimestamp(), ...patch };
+            const batch = db.batch();
+            batch.set(db.doc(path), data);
+            batch.set(db.doc(`${path}/history/${data.revision}`), { ...data, updatedBy: actor, previous });
+            return batch.commit();
+        }
+        it('requires atomic audited admin changes and preserves immutable history', async () => {
+            await assertSucceeds(save());
+            await assertSucceeds(save(admin(), { basicTrialDays: 14, proTrialDays: 30 }, { revision: 1, basicTrialDays: 7, proTrialDays: 0 }));
+            await assertFails(save());
+            const db = admin();
+            await assertSucceeds(db.doc(`${path}/history/1`).get());
+            await assertFails(db.doc(`${path}/history/1`).update({ updatedBy: 'forged' }));
+            await assertFails(db.doc(`${path}/history/1`).delete());
+            await assertFails(db.doc(path).delete());
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(db.doc(path).set({ revision: 3, basicTrialDays: 0, proTrialDays: 0, updatedAt: serverTimestamp() }));
+        });
+        it('publishes only offer terms and denies unauthenticated, ordinary and impersonated writes', async () => {
+            await assertSucceeds(save());
+            for (const context of [testEnv.unauthenticatedContext(), testEnv.authenticatedContext('member'),
+                testEnv.authenticatedContext('admin', { admin: true, impersonatedBy: 'operator' })]) {
+                const db = context.firestore();
+                await assertSucceeds(db.doc(path).get());
+                await assertFails(db.doc(`${path}/history/1`).get());
+                await assertFails(save(db));
+            }
+        });
+        it.each([{ basicTrialDays: 31 }, { proTrialDays: '7' }, { basicTrialDays: -1 }, { proTrialDays: 1.5 },
+            { revision: 2 }, { updatedAt: new Date(0) }, { gracePeriodDays: 0 }])('rejects invalid or unrelated settings %j', async patch => {
+            await assertFails(save(admin(), patch));
+        });
+        it('rejects forged actor and fabricated previous terms', async () => {
+            await assertFails(save(admin(), {}, initial, 'someone-else'));
+            await assertFails(save(admin(), {}, { ...initial, basicTrialDays: 30 }));
+        });
+    });
+
     describe('Server-owned inactivity retention', () => {
         it('keeps episodes and raw runtime control private, and rejects incomplete activation writes', async () => {
             const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one', 'configuration/inactiveAccounts'];
@@ -1033,6 +1077,18 @@ describe('Firestore Security Rules', () => {
             { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' }
         ])('rejects forged checkout fields %j', async patch => {
             await assertFails(testEnv.authenticatedContext(uid).firestore().doc(path).set({ ...payload, ...patch }));
+        });
+        it.each([0, 7, 14, 30])('uses the audited policy for %i-day trial admission', async days => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('configuration/billingTrials').set({ revision: 1, basicTrialDays: 0, proTrialDays: days });
+                await context.firestore().doc('products/prod_existing').set({ active: true, metadata: { firebaseRole: 'pro' } });
+            });
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertFails(ref.set(payload)); // stale app, even if duration happens to match
+            const { trial_period_days, ...paid } = payload;
+            await assertFails(ref.set(paid)); // no silent conversion of a stale trial to paid
+            await assertFails(ref.set({ ...payload, trial_policy_revision: 1, trial_period_days: 730 }));
+            await assertSucceeds(ref.set({ ...paid, trial_policy_revision: 1, ...(days ? { trial_period_days: days } : {}) }));
         });
         it('accepts the current offer acknowledgement while leaving billing policy server-owned', async () => {
             const ref = testEnv.authenticatedContext(uid).firestore().doc(path);

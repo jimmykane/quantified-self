@@ -25,7 +25,7 @@ The browser continues creating `customers/{uid}/checkout_sessions/{id}` and wait
 
 Customer IDs remain at `customers/{uid}.stripeId`. Existing trusted bindings and the verified-email linking callable are reused. Webhook metadata and browser-supplied customer IDs never establish ownership. More than one UID bound to the same customer fails closed. Creation is on demand, matching the former extension configuration.
 
-Catalog stays at `products/{productId}/prices/{priceId}` and tax rates at `products/tax_rates/tax_rates/{id}`. `stripeBillingPrices/{id}` is a server-written, public Rules index: active, product, mode and trialDays. Freeze catalog changes during initial seeding/cutover. Trial days come from trusted price metadata `trial_days`; histories with any subscription cannot claim a new trial. Trials, promotions and automatic tax remain supported; promotion entry is enabled in Checkout. Subscription checkout blocks existing nonterminal subscriptions.
+Catalog stays at `products/{productId}/prices/{priceId}` and tax rates at `products/tax_rates/tax_rates/{id}`. `stripeBillingPrices/{id}` is a server-written, public Rules index: active, product, mode and trialDays. Freeze catalog changes during initial seeding/cutover. Trial days use the admin introductory policy below, falling back to trusted price metadata `trial_days`; histories with any subscription cannot claim a new trial. Trials, promotions and automatic tax remain supported; promotion entry is enabled in Checkout. Subscription checkout blocks existing nonterminal subscriptions.
 
 Subscriptions remain at `customers/{uid}/subscriptions/{id}`. The projection includes product/price DocumentReferences, items, role, status, metadata, trial/cancellation dates and Timestamp period boundaries. New API item periods are translated into top-level minimum start / maximum end, consistent with renewal and gift calculations. App-owned fields are preserved. Product metadata supplies the extension-compatible role; the existing claim reconciler retains the same product-role authority. Invoice locations remain `subscriptions/{id}/invoices/{id}`; payment locations remain `customers/{uid}/payments/{id}` with amounts, status, metadata, receipt/refund information and Checkout prices/items. Subscription invoices use the newer `parent.subscription_details.subscription` relation. No mobile PaymentSheet or Eventarc event publishing is introduced.
 
@@ -58,6 +58,58 @@ All native billing handlers, both portal names, customer linking, admin billing/
 Renewal and stale-customer callables use the same lightweight CORS/App Check policy as linking and claim restoration. Subscription updates and enforcement retain their existing provider lifecycle dependencies. Account cleanup retains its provider dependencies, OAuth grant revocation and marketing-recipient removal; the import check permits only the three required MCP/marketing implementation modules. Its existing 1 GiB allocation remains unchanged. Isolation removes full-backend discovery from these runtime imports; it does not make every owner module equally small or change handler execution.
 
 Entrypoint verification compares each isolated handler's endpoint and trigger metadata with fresh full discovery, pins its runtime settings and secret names, and checks discovery and secret validation with inherited targets. The existing unit/emulator suites cover claims, grace periods, mail, provider enforcement and recursive account cleanup. Monitoring coverage is **unchanged**: this is import routing only, with no schedule, queue, retry, credential, claim-writer or deletion-policy changes. The app Help workflow is unchanged. These loaders take effect in production only after a separately authorized deployment of the affected targets.
+
+## Admin introductory trial policy
+
+**Admin → Billing policy** (`/admin/billing`) controls new Basic and Pro introductory offers independently.
+Each plan supports **Off**, **7**, **14**, or **30 days**, across monthly and yearly billing.
+**Use price settings** preserves each active price's existing `trial_days` metadata; the initial absent policy
+uses that behavior for both plans. Shipping this feature does not turn trials off or alter Stripe products.
+
+The public `configuration/billingTrials` document contains only `basicTrialDays`, `proTrialDays`, `revision`
+and `updatedAt`. Null means use price settings; zero disables introductory trials. A single client Firestore
+transaction updates it and creates the immutable `history/{revision}` entry with previous terms, actor UID
+and server time. Rules enforce admin authorization (excluding impersonation), exact field/value allowlists,
+revision increments, matching atomic history and immutable history. Ordinary accounts can get only the public
+policy, never its audit history. This uses the existing admin CRUD boundary without a new callable, Stripe
+credential, listener, schedule, queue or backend analytics event. Admins review the proposed terms before saving;
+conflicting or unconfirmed saves require a refresh.
+
+The same pure policy helper normalizes offers for Membership, Connections and live public pricing, and validates
+checkout in the native worker. Stripe product metadata remains the plan-role authority, including when a price
+has conflicting role metadata. No existing subscription, trial end, gift/complimentary extension, grace period,
+price, promotion or tax setting is updated. Any subscription history still makes an introductory trial ineligible.
+Pro trials continue to require a payment method; no-trial checkout omits `subscription_data.trial_period_days`.
+
+Recurring requests include the displayed `trial_policy_revision`. Missing revisions mean zero for cached clients
+before the first policy save. Rules, browser preflight and the worker reject stale revisions; the worker independently
+checks the requested duration against the current policy and live Stripe history. It rechecks revision inside the
+operation reservation/replacement transaction, closing the read-to-reservation race. That reservation is the acceptance
+boundary: retries of an accepted operation retain frozen Stripe parameters and idempotency keys, including when an
+admin later disables trials. Already-issued Checkout URLs keep their accepted terms until their normal expiry.
+A new stale selection cannot expire that earlier offer, and a changed offer never silently becomes a paid checkout.
+
+Public prerendered HTML deliberately omits exact introductory offers; the browser loads current terms after hydration.
+Recurring prices/amounts remain prerendered. See [public pricing rendering](public-pricing-prerender.md). A policy read
+failure cannot fall back to an old advertised trial or initiate payment. One public policy read is added per catalog
+load and one per checkout preflight; the native worker reads it when preparing/reserving a new subscription offer.
+There is no polling or change to recurring billing processing.
+
+### Deployment and verification
+
+This is code preparation, not approval to deploy or save a live policy. Deploy the updated checkout admission and
+worker (`createStripeCheckoutSession`, `processStripeBillingTask`) before enabling the new Rules and frontend. Publish
+Rules plus the updated app to the intended Hosting targets before using the Admin control. Leave the policy absent
+until that rollout is complete; the defaults preserve existing offers. No Stripe metadata migration, secret, index,
+claim change or new Function deployment is required. Public amount changes still require a Hosting rebuild, whereas
+trial-policy changes take effect for new checkouts without another build. Existing open pages may show their previously
+loaded terms until refresh; revision checks require review rather than charging under changed terms.
+
+Local coverage exercises policy validation/defaults, independent durations, disabled and returning-member trials,
+forged/stale Rules writes, atomic private audit, accepted-operation recovery, unchanged one-time checkout,
+prerender hydration, confirmation and account-change races. The Stripe SDK/API remain pinned to the repository's
+existing integration; automatic tax and its existing registrations are unaffected. Synthetic mocked Stripe responses
+in the demo emulators verify outgoing parameters and durable behavior, not live Stripe payment processing.
 
 ## Payment methods for new Pro trials
 
