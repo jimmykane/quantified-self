@@ -4,16 +4,17 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemeService } from '../../../services/app.theme.service';
 import {
-  ONBOARDING_TERRAIN_LOADER,
-  OnboardingTerrainComponent
-} from './onboarding-terrain.component';
-import type { TerrainOptions } from './onboarding-terrain.types';
+  TERRAIN_RENDERER_LOADER,
+  TerrainComponent
+} from './terrain.component';
+import type { TerrainOptions } from './terrain.types';
 
-describe('OnboardingTerrainComponent', () => {
+describe('TerrainComponent', () => {
   const theme = signal(AppThemes.Normal);
   const controller = {
     setTheme: vi.fn(),
     setReducedMotion: vi.fn(),
+    setPaused: vi.fn(),
     replayEntry: vi.fn(),
     dispose: vi.fn()
   };
@@ -45,10 +46,10 @@ describe('OnboardingTerrainComponent', () => {
       }))
     );
     TestBed.configureTestingModule({
-      imports: [OnboardingTerrainComponent],
+      imports: [TerrainComponent],
       providers: [
         { provide: AppThemeService, useValue: { appTheme: theme } },
-        { provide: ONBOARDING_TERRAIN_LOADER, useValue: loader }
+        { provide: TERRAIN_RENDERER_LOADER, useValue: loader }
       ]
     });
   });
@@ -58,7 +59,7 @@ describe('OnboardingTerrainComponent', () => {
   });
 
   async function render() {
-    const fixture = TestBed.createComponent(OnboardingTerrainComponent);
+    const fixture = TestBed.createComponent(TerrainComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     return fixture;
@@ -135,10 +136,25 @@ describe('OnboardingTerrainComponent', () => {
     );
     const fixture = await render();
     theme.set(AppThemes.Dark);
+    fixture.componentRef.setInput('motionPaused', true);
     fixture.detectChanges();
     resolve!({ createTerrainRenderer });
     await Promise.resolve();
     expect(options.dark).toBe(true);
+    expect(controller.setPaused).toHaveBeenLastCalledWith(true);
+  });
+
+  it('pauses from the host without overriding the reduced-motion preference', async () => {
+    const fixture = await render();
+    expect(controller.setPaused).toHaveBeenLastCalledWith(false);
+    fixture.componentRef.setInput('motionPaused', true);
+    fixture.detectChanges();
+    expect(controller.setPaused).toHaveBeenLastCalledWith(true);
+    change({ matches: true } as MediaQueryListEvent);
+    fixture.componentRef.setInput('motionPaused', false);
+    fixture.detectChanges();
+    expect(controller.setPaused).toHaveBeenLastCalledWith(false);
+    expect(controller.setReducedMotion).toHaveBeenLastCalledWith(true);
   });
 
   it('does not create a renderer after its host has been destroyed', async () => {

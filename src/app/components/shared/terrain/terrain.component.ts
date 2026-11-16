@@ -16,26 +16,26 @@ import {
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
-import type { TerrainController } from './onboarding-terrain.types';
+import type { TerrainController } from './terrain.types';
 
-export const ONBOARDING_TERRAIN_LOADER = new InjectionToken(
-  'onboarding terrain loader',
+export const TERRAIN_RENDERER_LOADER = new InjectionToken(
+  'shared terrain loader',
   {
     providedIn: 'root',
-    factory: () => () => import('./onboarding-terrain.renderer')
+    factory: () => () => import('./terrain.renderer')
   }
 );
 
 @Component({
-  selector: 'app-onboarding-terrain',
+  selector: 'app-terrain',
   standalone: true,
-  templateUrl: './onboarding-terrain.component.html',
-  styleUrl: './onboarding-terrain.component.scss',
+  templateUrl: './terrain.component.html',
+  styleUrl: './terrain.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class OnboardingTerrainComponent {
+export class TerrainComponent {
   private readonly theme = inject(AppThemeService);
-  private readonly load = inject(ONBOARDING_TERRAIN_LOADER);
+  private readonly load = inject(TERRAIN_RENDERER_LOADER);
   private readonly zone = inject(NgZone);
   private readonly destroyRef = inject(DestroyRef);
   private readonly canvas =
@@ -45,10 +45,11 @@ export class OnboardingTerrainComponent {
   private media?: MediaQueryList;
   private reducedMotion = false;
   readonly introVisible = input(false);
+  readonly motionPaused = input(false);
   readonly ready = signal(false);
   readonly dark = computed(() => this.theme.appTheme() === AppThemes.Dark);
   readonly fallback = computed(
-    () => `assets/onboarding/terrain-${this.dark() ? 'dark' : 'light'}.png`
+    () => `assets/terrain/terrain-${this.dark() ? 'dark' : 'light'}.png`
   );
 
   constructor() {
@@ -60,6 +61,10 @@ export class OnboardingTerrainComponent {
     effect(() => {
       const dark = this.dark();
       this.zone.runOutsideAngular(() => this.controller?.setTheme(dark));
+    });
+    effect(() => {
+      const paused = this.motionPaused();
+      this.zone.runOutsideAngular(() => this.controller?.setPaused(paused));
     });
     afterNextRender(() => {
       this.media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -87,6 +92,7 @@ export class OnboardingTerrainComponent {
                   })
               }
             );
+            this.controller.setPaused(this.motionPaused());
           })
           .catch(() => {
             if (!this.destroyRef.destroyed)

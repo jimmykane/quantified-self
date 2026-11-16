@@ -1,5 +1,6 @@
 import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { Location } from '@angular/common';
@@ -16,6 +17,8 @@ import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HomeComponent } from './home.component';
+import { AppThemeService } from '../../services/app.theme.service';
+import { TerrainComponent, TERRAIN_RENDERER_LOADER } from '../shared/terrain/terrain.component';
 
 @Component({ standalone: true, template: '<p>Destination</p>' })
 class HomeDestinationStub {}
@@ -36,6 +39,8 @@ describe('HomeComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: userSubject.asObservable() } },
         { provide: AppHapticsService, useValue: { selection } },
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: TERRAIN_RENDERER_LOADER, useValue: () => Promise.reject(new Error('Static terrain in home tests')) },
         { provide: EChartsLoaderService, useValue: {
           load: vi.fn().mockResolvedValue(undefined),
           init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(), getWidth: () => 320 }),
@@ -70,6 +75,10 @@ describe('HomeComponent', () => {
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
     expect(hero.querySelector('h1')?.textContent).toBe('All your training data. Across your devices. Under your control.');
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
+    const terrain = fixture.debugElement.query(By.directive(TerrainComponent));
+    expect(terrain).toBeTruthy();
+    expect(terrain.nativeElement.closest('.hero-content')).toBeTruthy();
+    expect(terrain.nativeElement.parentElement.getAttribute('aria-hidden')).toBe('true');
     expect(hero.querySelector('app-public-feature-preview')).toBeTruthy();
     expect(hero.textContent).toContain('Sample data');
     expect(hero.querySelector('#hero-preview-title')?.textContent).toBe('Training load and recovery');
@@ -155,17 +164,21 @@ describe('HomeComponent', () => {
     renderHome();
     const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
     const toggle = visual.querySelector('.hero-motion-toggle') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(toggle.getAttribute('aria-label')).toBe('Pause hero animation');
+    const terrain = fixture.debugElement.query(By.directive(TerrainComponent)).componentInstance as TerrainComponent;
+    expect(terrain.motionPaused()).toBe(false);
     expect(selection).not.toHaveBeenCalled();
     toggle.click();
     fixture.detectChanges();
     expect(visual.classList.contains('hero-motion-paused')).toBe(true);
-    expect(toggle.getAttribute('aria-label')).toBe('Play connection animation');
+    expect(toggle.getAttribute('aria-label')).toBe('Play hero animation');
+    expect(terrain.motionPaused()).toBe(true);
     expect(selection).toHaveBeenCalledTimes(1);
     toggle.click();
     fixture.detectChanges();
     expect(visual.classList.contains('hero-motion-paused')).toBe(false);
-    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(toggle.getAttribute('aria-label')).toBe('Pause hero animation');
+    expect(terrain.motionPaused()).toBe(false);
     expect(selection).toHaveBeenCalledTimes(2);
   });
 
@@ -200,7 +213,7 @@ describe('HomeComponent', () => {
       intersect(true);
       expect(visual.classList.contains('hero-motion-suspended')).toBe(false);
       expect(visual.classList.contains('hero-motion-paused')).toBe(true);
-      expect(toggle.getAttribute('aria-label')).toBe('Play connection animation');
+      expect(toggle.getAttribute('aria-label')).toBe('Play hero animation');
       visibility.mockReturnValue('hidden');
       document.dispatchEvent(new Event('visibilitychange'));
       fixture.detectChanges();

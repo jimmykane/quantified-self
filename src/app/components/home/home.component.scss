@@ -170,7 +170,37 @@
 .landing-page { max-width: 1440px; }
 .landing-page > :not(.hero-section) { width: min(100%, 1104px); margin-inline: auto; }
 .hero-section { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); align-items: center; gap: 2rem 1.5rem; padding-block: 3rem 1.5rem; text-align: left; }
-.hero-content { width: 100%; margin: 0; }
+.hero-content { position: relative; isolation: isolate; width: 100%; margin: 0; }
+.hero-copy { position: relative; z-index: 1; }
+.hero-terrain {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: calc(-1 * clamp(1rem, 4vw, 3rem));
+  z-index: 0;
+  overflow: clip;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 82%, transparent);
+}
+.hero-terrain app-terrain {
+  inset: 2% -34% -2%;
+  opacity: .62;
+  --terrain-top-fade-start: 4%;
+  --terrain-top-fade-end: 28%;
+  --terrain-bottom-fade: 14%;
+}
+.hero-terrain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    var(--mat-sys-surface) 0%,
+    color-mix(in srgb, var(--mat-sys-surface) 68%, transparent) 18%,
+    color-mix(in srgb, var(--mat-sys-surface) 17%, transparent) 40%,
+    color-mix(in srgb, var(--mat-sys-surface) 34%, transparent) 61%,
+    color-mix(in srgb, var(--mat-sys-surface) 86%, transparent) 83%,
+    var(--mat-sys-surface) 100%);
+}
+.hero-actions a[mat-stroked-button] { background: var(--mat-sys-surface); }
 .brand-badge, .hero-actions, .trust-indicators { justify-content: flex-start; }
 .brand-logo { width: 32px; height: 32px; }
 .brand-name { font: var(--mat-sys-title-medium); }
