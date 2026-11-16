@@ -1,15 +1,17 @@
 import {
-  collection,
+  collection, doc, getDocFromServer,
   getDocsFromServer,
   query,
   where,
   type FirebaseFirestoreType,
 } from 'app/firebase/firestore';
 import type { StripePrice, StripeProduct } from './app.payment.service';
-import { transformProductsForPricing } from './pricing-product-catalog';
+import { BILLING_TRIAL_POLICY_PATH, parseBillingTrialPolicy } from '@shared/billing-trial-policy';
+import { applyBillingTrialPolicy, transformProductsForPricing } from './pricing-product-catalog';
 
 /** Fetches the signed-out-readable Stripe catalog and normalizes it into plans. */
 export async function getPublicPricingProductsFromFirestore(firestore: FirebaseFirestoreType): Promise<StripeProduct[]> {
+  const policy = await getBillingTrialPolicyFromFirestore(firestore);
   const productsRef = collection(firestore, 'products');
   const activeProductsQuery = query(productsRef, where('active', '==', true));
   const productsSnapshot = await getDocsFromServer(activeProductsQuery);
@@ -30,5 +32,9 @@ export async function getPublicPricingProductsFromFirestore(firestore: FirebaseF
     return { ...product, prices };
   }));
 
-  return transformProductsForPricing(productsWithPrices);
+  return transformProductsForPricing(applyBillingTrialPolicy(productsWithPrices, policy));
+}
+
+export async function getBillingTrialPolicyFromFirestore(firestore: FirebaseFirestoreType) {
+  return parseBillingTrialPolicy((await getDocFromServer(doc(firestore, BILLING_TRIAL_POLICY_PATH))).data());
 }

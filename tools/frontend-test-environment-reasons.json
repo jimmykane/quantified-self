@@ -11,6 +11,10 @@
     "environment": "angular",
     "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
   },
+  "src/app/components/admin/admin-billing-policy/admin-billing-policy.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the Material trial settings page with TestBed to verify choice bindings, confirmation, loading states, feedback and account-safe teardown."
+  },
   "src/app/components/admin/admin-inactive-accounts/admin-inactive-accounts.component.spec.ts": {
     "environment": "angular",
     "reason": "Renders the standalone Admin route with TestBed and Material controls to verify settings bindings, explicit enforcement confirmation, pagination, haptics and account-safe teardown."
@@ -186,6 +190,10 @@
   "src/app/services/activity-send.service.spec.ts": {
     "environment": "angular",
     "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
+  },
+  "src/app/services/admin-billing-trial-policy.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection with mocked Auth and Firestore transactions to verify atomic policy/audit writes, revisions and account changes."
   },
   "src/app/services/admin-inactivity.service.spec.ts": {
     "environment": "angular",

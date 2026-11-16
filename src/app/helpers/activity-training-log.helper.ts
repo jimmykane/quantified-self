@@ -33,13 +33,13 @@ export function resolveTrainingLogWeek(anchor: string | null, now: Date, startOf
 }
 
 export interface TrainingLogTotalMetric { value: string; coverage: string }
-export interface TrainingLogSportTotal {
-  sport: string;
+export interface TrainingLogTotal {
   count: number;
   duration: TrainingLogTotalMetric;
   distance: TrainingLogTotalMetric;
   ascent: TrainingLogTotalMetric;
 }
+export interface TrainingLogSportTotal extends TrainingLogTotal { sport: string }
 
 /** All matching summary rows, never a paginator page or hydrated child activities. */
 export function buildTrainingLogSportTotals(
@@ -48,10 +48,19 @@ export function buildTrainingLogSportTotals(
   summariesSettings?: SummaryStatsSettingsLike | null,
   locale = getAppLocale(),
 ): TrainingLogSportTotal[] {
+  return buildTrainingLogTotals(events, unitSettings, summariesSettings, locale).sports;
+}
+
+export function buildTrainingLogTotals(
+  events: readonly EventRead[],
+  unitSettings?: UserUnitSettingsInterface | null,
+  summariesSettings?: SummaryStatsSettingsLike | null,
+  locale = getAppLocale(),
+): { overall: TrainingLogTotal | null; sports: TrainingLogSportTotal[] } {
   const metricTypes = { duration: DataDuration.type, distance: DataDistance.type, ascent: DataAscent.type };
   const createMetric = () => ({ value: 0, recorded: 0, eligible: 0 });
-  const sports = new Map<string, { count: number; duration: ReturnType<typeof createMetric>;
-    distance: ReturnType<typeof createMetric>; ascent: ReturnType<typeof createMetric> }>();
+  const createGroup = () => ({ count: 0, duration: createMetric(), distance: createMetric(), ascent: createMetric() });
+  const sports = new Map<string, ReturnType<typeof createGroup>>();
   const excludedAscent = new Set((summariesSettings?.removeAscentForEventTypes || [])
     .map(type => ActivityTypesHelper.resolveActivityType(type)).filter(Boolean));
   for (const event of events) {
@@ -59,7 +68,7 @@ export function buildTrainingLogSportTotals(
     const types = [...new Set(event.getActivityTypesAsArray().map(type => ActivityTypesHelper.resolveActivityType(type) || ActivityTypes.unknown))];
     if (!types.length) types.push(ActivityTypes.unknown);
     const sport = types.length > 1 ? ActivityTypes.Multisport : types[0];
-    const group = sports.get(sport) || { count: 0, duration: createMetric(), distance: createMetric(), ascent: createMetric() };
+    const group = sports.get(sport) || createGroup();
     group.count++;
     for (const key of ['duration', 'distance', 'ascent'] as const) {
       // Match Calendar's sport/user elevation exclusions without reading unused metrics.
@@ -77,7 +86,7 @@ export function buildTrainingLogSportTotals(
     sports.set(sport, group);
   }
   const number = new Intl.NumberFormat(locale);
-  return [...sports].sort(([left], [right]) => left.localeCompare(right, locale)).map(([sport, group]) => {
+  const formatTotal = (group: ReturnType<typeof createGroup>): TrainingLogTotal => {
     const metric = (key: keyof typeof metricTypes): TrainingLogTotalMetric => {
       const { value, recorded, eligible } = group[key];
       return {
@@ -86,6 +95,20 @@ export function buildTrainingLogSportTotals(
         coverage: recorded > 0 && recorded < eligible ? `${number.format(recorded)}/${number.format(eligible)} activities` : '',
       };
     };
-    return { sport, count: group.count, duration: metric('duration'), distance: metric('distance'), ascent: metric('ascent') };
-  });
+    return { count: group.count, duration: metric('duration'), distance: metric('distance'), ascent: metric('ascent') };
+  };
+  const overall = createGroup();
+  for (const group of sports.values()) {
+    overall.count += group.count;
+    for (const key of ['duration', 'distance', 'ascent'] as const) {
+      overall[key].value += group[key].value;
+      overall[key].recorded += group[key].recorded;
+      overall[key].eligible += group[key].eligible;
+    }
+  }
+  return {
+    overall: overall.count ? formatTotal(overall) : null,
+    sports: [...sports].sort(([left], [right]) => left.localeCompare(right, locale))
+      .map(([sport, group]) => ({ sport, ...formatTotal(group) })),
+  };
 }

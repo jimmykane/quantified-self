@@ -6,7 +6,7 @@ import {
   DataSpeed,
   EventInterface,
 } from '@sports-alliance/sports-lib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_STORAGE } from './app.storage.token';
 import { MemoryStorage } from './memory.storage';
 import { AppChartSettingsLocalStorageService } from './app.chart.settings.local.storage.service';
@@ -33,6 +33,31 @@ describe('AppChartSettingsLocalStorageService', () => {
 
   afterEach(() => {
     storage.clear();
+  });
+
+  it('remembers intensity metric visibility independently from event chart visibility', () => {
+    const event = mockEvent('intensity');
+    service.setEventChartCustomVisibilityPreference(event, 'Running', [DataPower.type]);
+    service.setHiddenIntensityZoneMetrics(['Heart Rate', 'Speed', 'Heart Rate']);
+    expect(new AppChartSettingsLocalStorageService(storage).getHiddenIntensityZoneMetrics()).toEqual(['Heart Rate', 'Speed']);
+    expect(service.getEventChartVisibilityPreference(event, 'Running').selectionKeys).toEqual([DataPower.type]);
+    service.setHiddenIntensityZoneMetrics([]);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it.each(['{invalid', 'null', '{}', '"Power"'])('ignores malformed intensity preferences: %s', value => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', value);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it('ignores invalid stored metric entries', () => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', '["Power",null,42,"Power","Speed"]');
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual(['Power', 'Speed']);
+  });
+
+  it('uses default intensity visibility when browser storage cannot be read', () => {
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new DOMException('Storage is unavailable', 'SecurityError'); });
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
   });
 
   it('persists custom visibility independently for each activity-type signature', () => {

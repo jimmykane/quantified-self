@@ -13,7 +13,8 @@ import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
-import { getPublicPricingProductsFromFirestore } from './public-pricing-catalog.store';
+import { BILLING_OFFER_CHANGED_MESSAGE } from '@shared/billing-trial-policy';
+import { getBillingTrialPolicyFromFirestore, getPublicPricingProductsFromFirestore } from './public-pricing-catalog.store';
 import { STRIPE_CHECKOUT_TERMS_VERSION } from '@shared/stripe-checkout-terms';
 
 export interface StripeProduct {
@@ -28,6 +29,7 @@ export interface StripeProduct {
 }
 
 export interface StripePrice {
+    trialPolicyRevision?: number;
     id: string;
     active: boolean;
     currency: string;
@@ -79,6 +81,7 @@ interface CheckoutSessionPayload {
     checkout_terms_version: typeof STRIPE_CHECKOUT_TERMS_VERSION;
     payment_method_collection?: 'if_required';
     trial_period_days?: number;
+    trial_policy_revision?: number;
     promotion_code?: string;
 }
 
@@ -152,6 +155,12 @@ export class AppPaymentService {
         this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
         const offeredTrialPeriodDays = this.resolveOfferedTrialPeriodDays(price);
+        const offerRevision = typeof price === 'string' ? 0 : price.trialPolicyRevision ?? 0;
+        if (checkoutInput.mode === 'subscription') {
+            const policy = await getBillingTrialPolicyFromFirestore(this.firestore);
+            this.assertCheckoutUserStillCurrent(userId);
+            if (offerRevision !== policy.revision) throw new CheckoutStartError(BILLING_OFFER_CHANGED_MESSAGE);
+        }
 
         await this.runPreCheckoutLinkCheck(user, userId);
         this.assertCheckoutUserStillCurrent(userId);
@@ -171,6 +180,7 @@ export class AppPaymentService {
         this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
         const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, trialPeriodDays);
+        if (checkoutInput.mode === 'subscription') sessionPayload.trial_policy_revision = offerRevision;
         const sessionDoc = doc(checkoutSessionsRef);
         const checkoutSessionDocId = sessionDoc.id;
 
@@ -179,6 +189,9 @@ export class AppPaymentService {
             this.logger.log('Checkout session created with ID:', checkoutSessionDocId);
         } catch (error) {
             this.logger.error('Error creating checkout doc:', error);
+            if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'permission-denied') {
+                throw new CheckoutStartError('Checkout could not start. Refresh Membership to review the current offers and try again.');
+            }
             throw error;
         }
 

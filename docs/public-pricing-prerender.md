@@ -102,10 +102,17 @@ merely to test this access without separate deployment approval.
 ## Server rendering and browser behavior
 
 The pricing server provider transforms the snapshot with the same catalog
-helper used by the browser. Its visible plans and Offer JSON-LD use the same
-catalog. The browser consumes the transferred catalog once and shares it within
-that app session. Client navigation without transferred data reads the live
-catalog. Direct loads of static pricing use the deployment's catalog snapshot.
+helper used by the browser. Its visible amounts and Offer JSON-LD use the same
+catalog. It strips introductory trial offers from prerendered HTML and TransferState:
+build-time offers must not outlive an admin trial-policy change. The browser first
+uses that matching neutral catalog for hydration, then reads the current public
+policy and live catalog once after rendering. Client navigation without transferred
+data reads current offers directly, without waiting for a render to resolve the route.
+The result is shared for that app session; checkout separately checks the displayed
+policy revision and asks stale clients to refresh and review the current terms.
+If a live read fails, paid offers become unavailable rather than falling back to an
+old trial. Existing app App Check protection is retained. There is no polling.
+See [admin trial policy](stripe-billing.md#admin-introductory-trial-policy).
 
 The release-note server provider reads its snapshot only when the release route
 requests it. It does not put release content into unrelated pages or mark posts
@@ -114,7 +121,7 @@ continues the existing published Firestore subscription. Live updates can appear
 between deployments, and existing admin draft reads and unread behavior remain
 separate from the public snapshot.
 
-Public price or release-note changes require a normal rebuild and an explicitly
+Public price amounts or release-note changes require a normal rebuild and an explicitly
 authorized Hosting deployment to update static HTML. No server runtime is added.
 `QS_REQUIRE_PUBLIC_PRICING_SNAPSHOT=true` and
 `QS_REQUIRE_PUBLIC_RELEASES_SNAPSHOT=true` prevent release builds from silently

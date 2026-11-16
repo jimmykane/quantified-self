@@ -281,6 +281,12 @@ describe('help.content', () => {
       'first payment date', 'before the trial ends to avoid the first payment', 'Existing trials keep the terms',
       'Starter stays free', 'safely replaces an earlier unfinished checkout']) expect(copy).toContain(phrase);
   });
+  it('explains optional trial offers and admin controls without changing existing terms', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    for (const phrase of ['With no trial, paid billing starts at checkout', '**Admin → Billing policy**',
+      '**Off**, **7**, **14**, or **30 days**', '**Use price settings**', 'Changes affect new checkouts',
+      'grace periods keep their current terms']) expect(copy).toContain(phrase);
+  });
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     expect(copy).toContain('checks your access for up to 20 seconds');

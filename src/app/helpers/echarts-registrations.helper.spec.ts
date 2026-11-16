@@ -6,10 +6,11 @@ import {
   MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
+import { LabelLayout } from 'echarts/features';
 import { registerEChartsModules } from './echarts-registrations.helper';
 
 describe('lazy ECharts named registrations', () => {
-  it('retains the exact existing chart, component and renderer registrations without a DOM', () => {
+  it('registers charts, components, the renderer and label layout without a DOM', () => {
     const use = vi.fn();
     expect(typeof document).toBe('undefined');
     registerEChartsModules({ use });
@@ -17,7 +18,7 @@ describe('lazy ECharts named registrations', () => {
       BarChart, PictorialBarChart, CustomChart, PieChart, LineChart, ScatterChart,
       GraphicComponent, GridComponent, TooltipComponent, LegendComponent, TitleComponent, AxisPointerComponent,
       MarkLineComponent, MarkPointComponent, MarkAreaComponent, VisualMapComponent, ToolboxComponent, DataZoomComponent, BrushComponent,
-      CanvasRenderer,
+      CanvasRenderer, LabelLayout,
     ]);
   });
   it('propagates registration errors so the loader can retry instead of caching a partial result', () => {
@@ -30,9 +31,9 @@ describe('lazy ECharts named registrations', () => {
     const loader = readFileSync(new URL('../services/echarts-loader.service.ts', import.meta.url), 'utf8');
     const registrations = readFileSync(new URL('./echarts-registrations.helper.ts', import.meta.url), 'utf8');
     expect(loader).toContain("import('../helpers/echarts-registrations.helper')");
-    const wholeFeatureNamespace = /\bimport\s*\(\s*['"]echarts\/(?:charts|components|renderers)['"]\s*\)/;
+    const wholeFeatureNamespace = /\bimport\s*\(\s*['"]echarts\/(?:charts|components|renderers|features)['"]\s*\)/;
     expect(loader).not.toMatch(wholeFeatureNamespace);
     expect(registrations).not.toMatch(wholeFeatureNamespace);
-    expect(registrations).not.toMatch(/\bimport\s+\*\s+as\s+\w+\s+from\s+['"]echarts\/(?:charts|components|renderers)['"]/);
+    expect(registrations).not.toMatch(/\bimport\s+\*\s+as\s+\w+\s+from\s+['"]echarts\/(?:charts|components|renderers|features)['"]/);
   });
 });

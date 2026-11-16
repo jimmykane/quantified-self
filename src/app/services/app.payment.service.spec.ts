@@ -118,11 +118,32 @@ describe('AppPaymentService', () => {
         expect(mockFunctionsService.call).not.toHaveBeenCalled();
     });
 
+    it('sends the displayed revision with an immediate paid checkout', async () => {
+        mockBillingControl.mockImplementation(ref => Promise.resolve({ data: () => ref.path === 'configuration/billingTrials'
+            ? { revision: 2, basicTrialDays: 0, proTrialDays: 0 } : { requestsEnabled: true } }));
+        await service.appendCheckoutSession({ id: 'price_test', type: 'recurring', trialPolicyRevision: 2, metadata: { trial_days: '0' } } as StripePrice);
+        expect(mockSetDoc.mock.calls[0][1]).toMatchObject({ trial_policy_revision: 2 });
+        expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBeUndefined();
+    });
+    it('does not start checkout when the current policy cannot be verified', async () => {
+        mockBillingControl.mockImplementation(ref => ref.path === 'configuration/billingTrials' ? Promise.reject(new Error('Policy unavailable'))
+            : Promise.resolve({ data: () => ({ requestsEnabled: true }) }));
+        await expect(service.appendCheckoutSession('price_test')).rejects.toThrow('Policy unavailable');
+        expect(mockSetDoc).not.toHaveBeenCalled();
+    });
+
+    it('rejects stale displayed terms before writing a paid checkout', async () => {
+        mockBillingControl.mockImplementation(ref => Promise.resolve({ data: () => ref.path === 'configuration/billingTrials'
+            ? { revision: 1, basicTrialDays: 0, proTrialDays: 0 } : { requestsEnabled: true } }));
+        await expect(service.appendCheckoutSession('price_test')).rejects.toThrow('Trial offers have changed');
+        expect(mockSetDoc).not.toHaveBeenCalled();
+    });
+
     beforeEach(() => {
         vi.clearAllMocks(); // Reset spies
         generatedCheckoutDocSequence = 0;
         mockWindowService.currentDomain = 'http://localhost:4200';
-        mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: true }) });
+        mockBillingControl.mockImplementation(ref => Promise.resolve({ data: () => ref.path === 'configuration/billingTrials' ? undefined : { requestsEnabled: true } }));
 
         mockAuth.currentUser = {
             uid: 'test_user_uid',

@@ -32,6 +32,7 @@ const echartsModulesMock = vi.hoisted(() => ({
   dataZoomComponent: { component: 'dataZoom' },
   brushComponent: { component: 'brush' },
   canvasRenderer: { renderer: 'canvas' },
+  labelLayout: { feature: 'labelLayout' },
 }));
 
 vi.mock('echarts/core', () => ({
@@ -68,6 +69,10 @@ vi.mock('echarts/components', () => ({
 
 vi.mock('echarts/renderers', () => ({
   CanvasRenderer: echartsModulesMock.canvasRenderer,
+}));
+
+vi.mock('echarts/features', () => ({
+  LabelLayout: echartsModulesMock.labelLayout,
 }));
 
 describe('EChartsLoaderService', () => {
@@ -185,6 +190,7 @@ describe('EChartsLoaderService', () => {
       echartsModulesMock.dataZoomComponent,
       echartsModulesMock.brushComponent,
       echartsModulesMock.canvasRenderer,
+      echartsModulesMock.labelLayout,
     ]);
   });
 

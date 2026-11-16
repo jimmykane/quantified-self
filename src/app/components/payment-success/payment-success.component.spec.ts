@@ -84,7 +84,7 @@ describe('PaymentSuccessComponent', () => {
         expect(fixture.componentInstance.assignedRole).toBe('pro');
         expect(fixture.nativeElement.textContent).toContain('Welcome to Pro!');
         expect(fixture.nativeElement.textContent).toContain('review its permissions in Connections');
-        expect(fixture.nativeElement.textContent).toContain('trial dates, renewal terms, and invoices');
+        expect(fixture.nativeElement.textContent).toContain('next payment date, renewal terms, and invoices');
         expect(fixture.nativeElement.querySelector('.checkmark')).toBeTruthy();
         const buttons = fixture.nativeElement.querySelectorAll('mat-card-actions button');
         expect(buttons[0].textContent).toContain('Open Connections');
