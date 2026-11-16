@@ -1085,7 +1085,8 @@ describe('Firestore Security Rules', () => {
             });
             const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
             await assertFails(ref.set(payload)); // stale app, even if duration happens to match
-            const { trial_period_days, ...paid } = payload;
+            const paid = { ...payload };
+            delete paid.trial_period_days;
             await assertFails(ref.set(paid)); // no silent conversion of a stale trial to paid
             await assertFails(ref.set({ ...payload, trial_policy_revision: 1, trial_period_days: 730 }));
             await assertSucceeds(ref.set({ ...paid, trial_policy_revision: 1, ...(days ? { trial_period_days: days } : {}) }));

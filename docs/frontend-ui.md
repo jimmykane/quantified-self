@@ -2267,9 +2267,9 @@ CompactSelect with the shared overlay/scrollbar theme and one haptic owner per a
 
 ### Admin introductory trial controls (2026-11-16)
 
-The isolated `49ba2191c` develop baseline, built with the same dependencies, measured 15.11 MB of total scripts,
-13.57 kB above the existing 15.10 MB cap. The billing-policy feature measures 15.13 MB, 26.84 kB above that cap:
+The isolated `37eee959b` develop baseline, built with the same dependencies, measured 15.13 MB of total scripts,
+32.97 kB above the existing 15.10 MB cap. The billing-policy feature measures 15.15 MB, 46.24 kB above that cap:
 a 13.27 kB addition for the lazy Admin controls and shared offer validation/rendering. Beta and production now
-share a narrow 15.14 MB total-script cap. Initial-load and warning caps are unchanged; the initial bundle stays
-1.42 MB (337.77 kB estimated transfer, versus 337.81 kB for the baseline). These are compiled bundle measurements,
+share a narrow 15.16 MB total-script cap. Initial-load and warning caps are unchanged; the initial bundle stays
+1.42 MB (337.78 kB estimated transfer, versus 337.80 kB for the baseline). These are compiled bundle measurements,
 not claims about runtime latency. Public trial policy uses one-time reads, without polling or a new listener.
