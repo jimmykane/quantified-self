@@ -60,9 +60,9 @@ export const importRouteToGarminAPI = onCall({
   try {
     await assertGarminManualRouteUploadAllowed(userID);
     const payload = request.data as ManualRouteUploadRequest;
-    const inputFormat = getManualRouteInputFormat(payload?.filename, 'Garmin');
     return await withManualRouteUploadNotification({ uid: userID, service: ServiceNames.GarminAPI, data: request.data,
       origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy }, async () => {
+      const inputFormat = getManualRouteInputFormat(payload?.filename, 'Garmin');
       const routeFile = await parseManualRouteUpload(decodeManualRouteUpload(payload?.file), inputFormat);
       const result = await uploadManualRouteToGarminConnect(userID, routeFile, {
         beforeProviderRequest: () => assertGarminManualRouteUploadAllowed(userID),

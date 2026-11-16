@@ -558,10 +558,11 @@ export const importRouteToCOROSAPI = onCall({
   try {
     assertCOROSRouteUploadRolloutAccess(request.auth.uid);
     const payload = request.data as COROSRouteUploadRequest;
-    const fileBuffer = decodeManualRouteUpload(payload?.file);
     return await withManualRouteUploadNotification({ uid: request.auth.uid, service: ServiceNames.COROSAPI, data: request.data,
-      origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy },
-    () => uploadRouteToCOROS(request.auth!.uid, fileBuffer, payload?.filename));
+      origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth.token?.impersonatedBy }, async () => {
+      const fileBuffer = decodeManualRouteUpload(payload?.file);
+      return uploadRouteToCOROS(request.auth!.uid, fileBuffer, payload?.filename);
+    });
   } catch (error) {
     return toCallableError(error);
   }

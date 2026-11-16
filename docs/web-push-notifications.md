@@ -687,11 +687,15 @@ route IDs or raw errors. Notification capture is bounded to 10,000 saved routes 
 larger selections still send normally without notifications. Storage bounds can skip notification admission; there
 is no later replay or notification backlog for skipped actions. Client clock skew beyond five minutes also skips
 new admission. All eight registered category preferences remain independent and follow existing default-on rules.
+Admission retires expired actions/results and actions cancelled by a category revision change before checking pending
+capacity. Retained receipts prevent late chunks or completions from reviving them under renewed consent.
 
 Known completion or a terminal saved-route auth/permission/metadata failure makes one combined summary due on the
 existing minute sweep. Saved-route bulk sends remain client-coordinated: notifications do not continue unsubmitted
 chunks after the browser closes. If an action stalls, a 70-minute inactivity wait exceeds the callable's existing
 one-hour timeout, then a single result can describe confirmed successes and remaining routes needing attention.
+File-format and decoding rejections are counted inside an admitted upload batch, including a rejected first file;
+the upload still returns its original error and later files retain the same grouped result.
 An action expires after 24 hours; a ready result expires after ten minutes. The indexed `dueAt` query and existing
 `sendActivitySyncNotifications` worker process one action per account/sweep, claim before transport, and never replay
 ambiguous sends. No new Function, scheduler, index or TTL policy is required.

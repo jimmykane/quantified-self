@@ -66,6 +66,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual route delivery not
     expect(deps.send).toHaveBeenCalledOnce();
     expect(JSON.parse(vi.mocked(deps.send).mock.calls[0][1]).notification.body).toBe('20 routes sent to Garmin.');
   });
+  it('combines a rejected first file and later accepted files into one partial result', async () => {
+    await finish(await start(2, 0, ServiceNames.GarminAPI, true), 1, 0);
+    await flush(); expect(deps.send).not.toHaveBeenCalled();
+    await finish(await start(2, 1, ServiceNames.GarminAPI, true));
+    await flush(); await flush(); expect(deps.send).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(deps.send).mock.calls[0][1]).notification.body).toBe('1 route sent to Garmin. 1 needs attention.');
+  });
   it('cannot reserve more routes than the declared action across overlapping upload/send chunks', async () => {
     const first = await start(26); const last = await start(26, 1, ServiceNames.GarminAPI, true);
     expect(await start(26, 2, ServiceNames.GarminAPI, true)).toBeUndefined();
@@ -100,6 +107,50 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual route delivery not
     expect(await start()).toBeUndefined(); expect((await state().get()).get('pending')).toHaveLength(ROUTE_PUSH.pendingLimit);
     await finish(tickets[0]); await flush(); expect(await start()).toBeDefined();
     expect((await state().get()).get('pending')).toHaveLength(ROUTE_PUSH.pendingLimit);
+  });
+  it('frees cancelled consent slots for new actions without reviving old chunks or completions', async () => {
+    const old: { metadata: RouteSendNotificationRequest; ticket: RouteSendTicket }[] = [];
+    for (let i = 0; i < ROUTE_PUSH.pendingLimit; i++) {
+      notification = { ...notification, requestId: randomUUID() };
+      old.push({ metadata: { ...notification }, ticket: (await start())! });
+    }
+    await db.doc(`${root}/notificationPreferences/route_delivery`).set({ schemaVersion: 1, enabled: true, revision: 2 });
+    notification = { ...notification, requestId: randomUUID() };
+    const fresh = await start(); expect(fresh).toBeDefined();
+    expect((await state().get()).get('pending')).toHaveLength(1);
+    expect((await state().get()).get('seen')).toHaveLength(ROUTE_PUSH.pendingLimit);
+    for (const entry of old) {
+      notification = entry.metadata;
+      expect(await start()).toBeUndefined();
+      await finish(entry.ticket);
+    }
+    await finish(fresh); await flush(); await flush();
+    expect(deps.send).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(deps.send).mock.calls[0][1]).notification.body).toBe('1 route sent to Garmin.');
+  });
+  it.each(['result', 'action'])('frees expired %s slots before admitting a fresh action', async expiry => {
+    for (let i = 0; i < ROUTE_PUSH.pendingLimit; i++) {
+      notification = { ...notification, requestId: randomUUID() };
+      const ticket = await start();
+      if (expiry === 'result') await finish(ticket);
+    }
+    now += (expiry === 'result' ? ROUTE_PUSH.expiryMs : ROUTE_PUSH.lifetimeMs) + 1;
+    notification = { ...notification, requestId: randomUUID(), createdAtMs: now };
+    const fresh = await start(); expect(fresh).toBeDefined();
+    expect((await state().get()).get('pending')).toHaveLength(1);
+    await finish(fresh); await flush(); expect(deps.send).toHaveBeenCalledOnce();
+  });
+  it('persists retirement even when a new action cannot capture any device', async () => {
+    const ticket = await start();
+    await db.doc(`${root}/notificationPreferences/route_delivery`).set({ schemaVersion: 1, enabled: true, revision: 2 });
+    await db.doc(`${root}/pushSubscriptions/${device}`).delete();
+    notification = { ...notification, requestId: randomUUID() };
+    expect(await start()).toBeUndefined();
+    const snapshot = await state().get();
+    expect(snapshot.get('pending')).toEqual([]);
+    expect(snapshot.get('seen')).toEqual([{ id: ticket!.id, expiresAt: now + ROUTE_PUSH.lifetimeMs }]);
+    expect(snapshot.get('dueAt')).toBeUndefined();
+    await finish(ticket); await flush(); expect(deps.send).not.toHaveBeenCalled();
   });
   it('does not depend on the Activity delivery or Training categories', async () => {
     for (const category of ['activity_delivery', 'training_sync', 'training_send']) {

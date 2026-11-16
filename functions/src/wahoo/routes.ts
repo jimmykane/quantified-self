@@ -647,8 +647,9 @@ export const importRouteToWahooAPI = onCall({
 }, async (request): Promise<WahooRouteUploadResult> => {
   const userID = await requireWahooRouteUploadAccess(request);
   const payload = request.data as WahooRouteUploadRequest;
-  const fileBuffer = decodeManualRouteUpload(payload?.file);
   return withManualRouteUploadNotification({ uid: userID, service: ServiceNames.WahooAPI, data: request.data,
-    origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth?.token?.impersonatedBy },
-  () => uploadRouteToWahoo(userID, fileBuffer, payload?.filename));
+    origin: request.rawRequest?.headers?.origin, impersonatedBy: request.auth?.token?.impersonatedBy }, async () => {
+    const fileBuffer = decodeManualRouteUpload(payload?.file);
+    return uploadRouteToWahoo(userID, fileBuffer, payload?.filename);
+  });
 });

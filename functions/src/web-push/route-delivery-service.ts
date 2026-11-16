@@ -52,13 +52,26 @@ export async function beginRouteDeliveryNotification(uid: string, service: strin
     const ref = db.doc(routeSendStatePath(uid));
     const state = readState((await tx.get(ref)).data() as State | undefined, now);
     if (state.seen.some(row => row.id === notification.requestId)) return;
-    let request = state.pending.find(row => row.id === notification.requestId);
     const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'route_delivery')))).data());
-    if (!preference?.enabled) return;
+    // Cancelled/expired actions must not occupy slots until the minute sweep catches up.
+    // Keep their receipts so late chunks cannot inherit renewed category consent.
+    const active = state.pending.filter(row => {
+      const keep = preference?.enabled && row.categoryRevision === preference.revision
+        && now <= row.createdAt + ROUTE_PUSH.lifetimeMs && (row.readyAt === undefined || now <= row.readyAt + ROUTE_PUSH.expiryMs);
+      if (!keep) state.seen.push({ id: row.id, expiresAt: now + ROUTE_PUSH.lifetimeMs });
+      return keep;
+    });
+    const retired = active.length !== state.pending.length;
+    state.pending = active;
+    // Defer cleanup writes until after all admission reads, including early exits.
+    const skip = () => { if (retired) writeState(db, tx, uid, state); return undefined; };
+    if (!preference?.enabled || state.seen.some(row => row.id === notification.requestId)) return skip();
+    const existing = state.pending.find(row => row.id === notification.requestId);
+    let request = existing;
     if (!request) {
       // Only the first chunk can establish consent. Old network replays cannot become new notifications after receipt expiry.
       if (notification.chunkIndex !== 0 || Math.abs(now - notification.createdAtMs) > ROUTE_PUSH.clockSkewMs
-        || state.pending.length >= ROUTE_PUSH.pendingLimit || state.seen.length + state.pending.length >= ROUTE_PUSH.seenLimit) return;
+        || state.pending.length >= ROUTE_PUSH.pendingLimit || state.seen.length + state.pending.length >= ROUTE_PUSH.seenLimit) return skip();
       const [metaDoc, devices, epochDoc] = await Promise.all([
         tx.get(db.doc(`users/${uid}/meta/${service}`)),
         tx.get(db.collection(`users/${uid}/pushSubscriptions`).where('origin', 'in', [...WEB_PUSH_ORIGINS]).limit(ROUTE_PUSH.deviceLimit)),
@@ -68,24 +81,24 @@ export async function beginRouteDeliveryNotification(uid: string, service: strin
       if (!['connected', 'reconnect_required', undefined, null].includes(meta.connectionState)
         || meta.providerUserId != null && typeof meta.providerUserId !== 'string'
         || meta.connectionStateGeneration != null && typeof meta.connectionStateGeneration !== 'string'
-        || !Number.isSafeInteger(meta.activityNotificationConnectedAtMs ?? 0) || !Number.isSafeInteger(epoch) || epoch < 0) return;
+        || !Number.isSafeInteger(meta.activityNotificationConnectedAtMs ?? 0) || !Number.isSafeInteger(epoch) || epoch < 0) return skip();
       const targets = devices.docs.flatMap(doc => {
         const registration = doc.data();
         return isPushId(doc.id) && isPushRegistration(registration) && isAutomaticPushOrigin(registration.origin)
           && registration.vapidPublicKey === config.publicKey
           ? [{ id: doc.id, generation: registration.generation, origin: registration.origin }] : [];
       });
-      if (!targets.length) return;
+      if (!targets.length) return skip();
       request = { id: notification.requestId, clientCreatedAt: notification.createdAtMs, createdAt: now, touchedAt: now,
         total: notification.totalRoutes, service, forceCopy, categoryRevision: preference.revision, account: meta.providerUserId || null,
         connectedAt: meta.activityNotificationConnectedAtMs ?? 0, generation: meta.connectionStateGeneration || null, epoch,
         ...(isPushId(meta.reconnectNotificationId) ? { episode: meta.reconnectNotificationId } : {}), targets, chunks: {} };
-      state.pending.push(request);
     }
     if (!sameRouteSend(request, notification, service, forceCopy) || request.closed || request.readyAt !== undefined
       || request.categoryRevision !== preference.revision || now > request.createdAt + ROUTE_PUSH.lifetimeMs
       || request.chunks[notification.chunkIndex]
-      || Object.values(request.chunks).reduce((total, chunk) => total + chunk.count, 0) + routeIds.length > request.total) return;
+      || Object.values(request.chunks).reduce((total, chunk) => total + chunk.count, 0) + routeIds.length > request.total) return skip();
+    if (!existing) state.pending.push(request);
     request.chunks[notification.chunkIndex] = { hash, count: routeIds.length, finished: false, sent: 0, attention: 0 };
     request.touchedAt = now; writeState(db, tx, uid, state);
     return { uid, id: request.id, index: notification.chunkIndex, hash };
