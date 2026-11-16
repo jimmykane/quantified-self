@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -103,7 +103,7 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
 without a migration or an initialization write. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
@@ -609,14 +609,14 @@ No MCP tool, scope, response, consent or Training planning contract changes. Exp
 
 ## Explicit Training send results
 
-The existing default-on `training_sync` category also gives one combined result **per explicit provider operation**: standalone
+The default-on `training_send` category gives one combined result **per explicit provider operation**: standalone
 **Send**, **Add & send** (one result per selected service), initial **Enable sync**, or manual **Retry**. A plan with
 20 workouts produces one summary, even when its provider sends several batches. Success confirms provider
 acceptance of the captured workout versions, never arrival on a watch. Partial/all failures ask the user to review
 Training sync. Already-current, completed, suppressed, past and outside-horizon workouts are excluded. An empty or
 no-op send is silent. Resume, settings reconfiguration, routine horizon sync, edits and automatic retries never create
-new result requests. The same category controls grouped Training attention alerts and explicit send results; their
-request grouping and notification budgets stay separate. No new category or setting is added.
+new result requests. The separate `training_sync` category controls grouped Training attention alerts. Users can
+enable results and attention alerts independently; their grouping and notification budgets also stay separate.
 
 Admission is inside the existing confirmation transaction and uses its mutation receipt. MCP-confirmed operations
 use the same path; there is no new wire field, permission or tool. Only the workouts currently eligible in the provider
@@ -644,19 +644,20 @@ history using standard/declarative navigation. Recursive account cleanup owns pr
 ### Training send result rollout
 
 This sender uses the existing unconditional `web_push_training_sync_enabled` flag together with
-`web_push_enabled`, matching VAPID keys, the existing Training sync category and registered devices. There is no new
+`web_push_enabled`, matching VAPID keys, the separate Training send results category and registered devices. The
+internal rollout switch is shared with Training attention; the two user settings are independent. There is no new
 rollout flag. If both existing switches are enabled, explicit result capture starts when these backends deploy.
 This local change does not modify any remote configuration.
 
-1. Existing Firestore Rules and indexes cover this feature; neither needs deployment.
+1. Deploy Firestore Rules for the new `training_send` preference. Existing indexes cover the feature.
 2. Deploy `mutateTrainingProviderDelivery`, `mutateTrainingSchedule` (Add & send), `mcpApi` (confirmed MCP sends),
    `queueTrainingSyncNotification` and `sendActivitySyncNotifications`, then the frontend. Provider delivery workers
    and their schedules are unchanged.
 3. Apply the updated `tools/web-push-monitoring/` bundle using the existing alert channel and verify readback.
    The new fixed `[TrainingSendPush]` outcome metric/policy/chart covers admission, preparation and transport
    failures. Existing shared sweep backlog/heartbeat/native runtime monitoring and Training provider monitoring remain.
-4. Exercise an explicit small send on beta, a multi-workout result, manual Retry, the existing Training sync category
-   off and a routine background sync. Beta and production use the same backend flags and preferences; enabled
+4. Exercise an explicit small send on beta, a multi-workout result, manual Retry and a routine background sync.
+   Verify both independent choices: Training sync off/results on, and Training sync on/results off. Beta and production use the same backend flags and preferences; enabled
    registrations on both sites can receive results.
 
 Rollback: restore the prior backend code, or turn the existing `web_push_training_sync_enabled` flag off to silence

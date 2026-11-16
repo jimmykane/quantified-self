@@ -100,7 +100,7 @@ export async function observeTrainingSend(uid: string, raw: unknown, deps: { db:
       if (!valid(state) || state.requestId !== candidate.get('requestId')) return false;
       const member = state.members?.[status.id]; if (!member) return false;
       if (state.finished) return status.updatedAtMs <= member.observedAt;
-      const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_sync')))).data());
+      const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_send')))).data());
       const live = preference?.enabled && preference.revision === state.categoryRevision && deps.now() - state.createdAt <= TRAINING_SEND.lifetimeMs
         ? await authority(db, tx, uid, state) : null;
       const next = live ? await memberResult(db, tx, uid, state, status.id, member) : { result: 'cancelled' as const, observedAt: 0 };
@@ -125,7 +125,7 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
     const snapshot = await tx.get(ref), state = snapshot.data() as TrainingSendState | undefined;
     if (!valid(state)) { if (snapshot.exists) tx.update(ref, { finished: true, dueAt: FieldValue.delete() }); return null; }
     if (state.finished || state.remaining !== 0 || state.dueAt === undefined || state.dueAt > deps.now()) return null;
-    const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_sync')))).data());
+    const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_send')))).data());
     const targetsValid = Array.isArray(state.targets) && state.targets.length > 0 && state.targets.length <= TRAINING_SEND.deviceLimit
       && state.targets.every(target => target && isPushId(target.id) && isPushId(target.generation) && isAutomaticPushOrigin(target.origin));
     const live = config.enabled && targetsValid && preference?.enabled && preference.revision === state.categoryRevision
@@ -153,7 +153,7 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
       const deviceRef = db.doc(`users/${uid}/pushSubscriptions/${target.id}`);
       const ready = await db.runTransaction(async tx => {
         if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return null;
-        const [snapshot, pref, device] = await Promise.all([tx.get(ref), tx.get(db.doc(notificationPreferencePath(uid, 'training_sync'))), tx.get(deviceRef)]);
+        const [snapshot, pref, device] = await Promise.all([tx.get(ref), tx.get(db.doc(notificationPreferencePath(uid, 'training_send'))), tx.get(deviceRef)]);
         const preference = readNotificationCategoryPreference(pref.data()), registration = device.data();
         if (snapshot.get('claimId') !== claim.claimId || snapshot.get('requestId') !== claim.state.requestId
           || !preference?.enabled || preference.revision !== claim.state.categoryRevision || deps.now() - claim.state.createdAt > TRAINING_SEND.lifetimeMs

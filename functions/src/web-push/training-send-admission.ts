@@ -37,7 +37,7 @@ export async function prepareTrainingSend(runtime: DeliveryRuntime, tx: Transact
   const eligible = workouts.flatMap((workout, index) => workout.lifecycle === 'planned' && workout.localDate >= today
     && (Date.parse(workout.localDate) - Date.parse(today)) / 86400000 <= transport.horizonDays ? [{ workout, strength: strengths[index] }] : []);
   if (!eligible.length) return null;
-  const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_sync')))).data());
+  const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_send')))).data());
   if (!preference?.enabled) return null;
   const devices = await tx.get(user.collection('pushSubscriptions').where('origin', 'in', [...WEB_PUSH_ORIGINS]).limit(TRAINING_SEND.deviceLimit));
   const targets = devices.docs.flatMap(doc => {

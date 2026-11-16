@@ -3155,11 +3155,12 @@ and reject private receipt fields. No plugin rebuild or registered schema change
 
 #### Explicit Training send result notifications
 
-The existing default-on `training_sync` category also reports one combined result per explicit provider operation:
+The separate default-on `training_send` category reports one combined result per explicit provider operation:
 Send, Add & send, initial Enable sync and manual Retry. A multi-workout plan waits for all captured, eligible workouts;
 partial failures become one summary. Already-current/completed/suppressed/past/outside-horizon workouts and no-op
 requests are silent. Provider acceptance is not watch receipt. Background horizon sync, configuration edits, Resume
-and automatic retries do not create result requests. The same category controls Training attention alerts, while
+and automatic retries do not create result requests. Users can enable results independently of `training_sync`
+attention alerts, while
 failures captured by an explicit result do not also create per-workout attention pushes. Recovery still closes old
 issue receipts. Connection issue alerts keep their existing account-wide policy.
 
@@ -3172,7 +3173,8 @@ from public statuses and MCP reads. MCP confirmed delivery uses the same interna
 
 Monitoring is **covered in source** by the Web Push bundle using the existing channel, with fixed
 `[TrainingSendPush]` admission/send/sweep outcomes and the shared sweep health signals. The existing
-`web_push_training_sync_enabled` flag controls both attention alerts and these results; no new flag is added.
+`web_push_training_sync_enabled` internal flag controls both senders; their user category settings remain independent.
+No new internal flag is added.
 If existing switches are on, result capture starts with deployment. See the [result runbook and deployment list](web-push-notifications.md#explicit-training-send-results) for bounds, cancellation, rollout and rollback.
 
 #### Reconciliation database work
