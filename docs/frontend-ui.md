@@ -1265,12 +1265,20 @@ dependency and verify that the installed tree has a single WebChannel instance b
 regression. Retain the HTTP guard and account/cache recovery paths when upgrading; passing the guarded tests alone
 does not establish that upstream handles malformed HTTP responses without it. Material/CDK remain on 20.2.14.
 After integrating develop's Sports Lib 23.12.0 and dated Training calibration changes, the upgraded production output
-measures 15.05 MB of total scripts, above develop's 14.88 MB cap. Beta and production share a 15.10 MB total-script
-error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
+measured 15.05 MB of total scripts, above develop's 14.88 MB cap. That integration established a matching 15.10 MB
+beta/production total-script error cap; the 1474 kB startup cap and 13000 kB warning stayed unchanged.
 The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
-Production Home plus its deferred signal preview measures 3104.5 KiB, so its combined static-graph cap is 3120 KiB
-(previously 3050 KiB). The preview itself adds 181.4 KiB and retains its separate 192 KiB limit. All public dependency
+That build's production Home plus its deferred signal preview measured 3104.5 KiB, setting its combined static-graph
+cap to 3120 KiB (previously 3050 KiB). The preview itself added 181.4 KiB and retained its separate 192 KiB limit. All public dependency
 exclusions remain in force; these are dependency-update size allowances, not runtime performance measurements.
+
+Later feature merges exceeded the 15.10 MB total-script cap. At develop `37eee959b`, fresh beta and production builds
+measure 15.13 MB, so both release configurations now use a 15.20 MB total-script error cap. The initial bundle measures
+1.42 MB; its 1474 kB cap and all warning thresholds remain unchanged. Production Home plus its deferred signal preview
+measures 3118.9 KiB within the existing 3120 KiB combined limit; the preview adds 177.7 KiB within its existing 192 KiB
+limit. Both builds verify 601 service-worker assets, and production verifies all 41 prerendered pages and public
+dependency exclusions. These are compiled-output measurements, not runtime performance claims.
+
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
