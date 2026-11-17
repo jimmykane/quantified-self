@@ -42,6 +42,7 @@ import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImpor
 import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
+const NON_ACTIVITY_FIT_UPLOAD_ERROR_MESSAGE = 'This FIT file is not a recorded workout. Please select an activity FIT file instead of monitoring, settings or segment data.';
 const ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE = 'Account deletion is in progress. Please sign in again.';
 const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroutesfromgpx.*routes/i;
 const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
@@ -461,6 +462,15 @@ export const uploadActivity = onRequest({
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
+      }
+      if (getBaseExtension(resolvedExtension) === 'fit' && isObjectRecord(error)
+        && error.code === 'PARSING_LIB_ERROR' && error.message === 'FIT file is not an activity file') {
+        logger.info('[uploadActivity] Rejected non-activity FIT file', {
+          ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
+          resolvedExtension,
+          reason: 'fit_not_activity',
+        });
+        throw new HttpStatusError(400, NON_ACTIVITY_FIT_UPLOAD_ERROR_MESSAGE, 'fit_not_activity');
       }
       if (isRouteOnlyParserError(error)) {
         logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {

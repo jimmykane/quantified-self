@@ -2050,6 +2050,13 @@ failures preserve the parser's existing HTTP 400; they do not create events, ret
 existing bucket and helper without changing bucket access. The Send activities temporary-source lifecycle is separate
 and is not covered by this manual archive-upload branch.
 
+Manual FIT uploads rejected by sports-lib with the exact `PARSING_LIB_ERROR` message
+`FIT file is not an activity file` are expected input rejections. The endpoint returns HTTP 400 with
+`code: fit_not_activity` and explains that monitoring, settings and segment data are not recorded workouts.
+`[uploadActivity] Rejected non-activity FIT file` logs at INFO with fixed `reason: fit_not_activity` and the existing
+account/digest/envelope context, without filenames or file contents. These known rejections do not create new debug
+copies; unexpected parser failures retain their existing warnings and captures. Existing debug copies expire normally.
+
 Send activities file-validation rejections are not captured in debug storage. Their existing
 `[ActivitySendUpload] Request rejected.` warning includes `receivedBytes` (the raw HTTP body size) and a fixed
 `validationReason` for empty/oversized bodies, unsupported extensions, gzip failures, or the shared FIT-envelope
