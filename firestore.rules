@@ -271,6 +271,7 @@ service cloud.firestore {
 
       // Inactivity warnings and deletion authorization are exclusively server-owned.
       match /inactivityRetention/{document=**} { allow read, write: if false; }
+      match /inactivityDryRunMatches/{document=**} { allow read, write: if false; }
 
       // System Status (Admin Only)
       match /system/status {

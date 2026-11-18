@@ -10,6 +10,7 @@ import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { formatEmailDateTime, TRANSACTIONAL_EMAIL_FROM, TRANSACTIONAL_EMAIL_REPLY_TO } from '../email/config';
 import { TTL_CONFIG } from '../shared/ttl-config';
 import { deleteAuthAccountAndNotify, pendingAccountDeletionMarker } from './initiate-deletion';
+import { dryRunDraft, recordDryRunPage } from './inactivity-dry-run';
 import { readInactivityBilling, stripeAllowsInactivity, type InactivityBilling } from './inactivity-billing';
 import { INACTIVITY_BUDGET_MS, INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS,
     INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_REMINDER_MS, INACTIVITY_TEMPLATE, INACTIVITY_REMINDER_TEMPLATE,
@@ -261,10 +262,16 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         if (timestampMillis(config.get('leaseUntil'))! > start) return { mode, status: 'contended' as const, cursor: undefined };
         const priorStart = timestampMillis(config.get('scanStartedAt'));
         const completedAt = timestampMillis(config.get('lastScanCompletedAt'));
+        const draft = mode === 'dry-run' ? dryRunDraft(config) : undefined;
+        // Legacy cursors and cursors from other modes have no matching report pages.
+        const restart = draft !== undefined && draft.id !== config.get('dryRunDraft.id');
         // A daily cap can stop the very first page, before any cursor is saved.
-        const scanStartedAt = priorStart !== null && (completedAt === null || priorStart > completedAt) ? priorStart : start;
-        tx.set(configRef, { leaseToken: token, leaseUntil: Timestamp.fromMillis(start + 540_000), lastStartedAt: Timestamp.fromMillis(start), scanStartedAt: Timestamp.fromMillis(scanStartedAt) }, { merge: true });
-        return { mode, status: 'started' as const, cursor: config.get('scanCursor') as string | undefined, scanStartedAt };
+        const scanStartedAt = !restart && priorStart !== null && (completedAt === null || priorStart > completedAt) ? priorStart : start;
+        tx.set(configRef, { leaseToken: token, leaseUntil: Timestamp.fromMillis(start + 540_000), lastStartedAt: Timestamp.fromMillis(start), scanStartedAt: Timestamp.fromMillis(scanStartedAt),
+            ...(restart ? { scanCursor: FieldValue.delete() } : {}),
+            dryRunDraft: draft ?? FieldValue.delete(),
+        }, { merge: true });
+        return { mode, status: 'started' as const, cursor: restart ? undefined : config.get('scanCursor') as string | undefined, scanStartedAt, draft };
     });
     const summary: InactivitySummary = { mode: acquired.mode, outcome: acquired.status === 'started' ? 'completed' : acquired.status,
         counts: {}, scanned: 0, capped: false, overdue: 0, reviewRequired: 0, scanAgeMs: Math.max(0, start - (acquired.scanStartedAt ?? start)) };
@@ -322,19 +329,26 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         let cursor = acquired.cursor;
         while (clock(ctx) < start + INACTIVITY_BUDGET_MS) {
             const page = await ctx.auth.listUsers(INACTIVITY_PAGE_SIZE, cursor);
+            const eligibleUids: string[] = [];
             let complete = true;
             for (const user of page.users) {
                 if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) { complete = false; summary.capped = true; break; }
                 summary.scanned++;
                 if (!inactiveIdentity(user, clock(ctx))) continue;
-                if (await process(user.uid, { discoveryOnly: true }) === 'capped') { complete = false; summary.capped = true; break; }
+                const outcome = await process(user.uid, { discoveryOnly: true });
+                if (acquired.draft && outcome === 'eligible') eligibleUids.push(user.uid);
+                if (acquired.draft && (outcome === 'failed' || outcome === 'contended')) { complete = false; break; }
+                if (outcome === 'capped') { complete = false; summary.capped = true; break; }
             }
             if (!complete) break; // Revisit the unfinished page; per-episode dedupe makes this safe.
             cursor = page.pageToken;
             await ctx.db.runTransaction(async tx => {
-                if (!await validRun(ctx, tx, run)) throw new Error('inactivity_run_superseded');
+                const config = await validRun(ctx, tx, run);
+                if (!config) throw new Error('inactivity_run_superseded');
+                const finishedAt = cursor ? null : Timestamp.fromMillis(clock(ctx));
+                if (acquired.draft) await recordDryRunPage(ctx.db, tx, config, acquired.draft, eligibleUids, finishedAt);
                 tx.update(configRef, { scanCursor: cursor ?? FieldValue.delete(),
-                    ...(!cursor ? { lastScanCompletedAt: Timestamp.fromMillis(clock(ctx)) } : {}) });
+                    ...(finishedAt ? { lastScanCompletedAt: finishedAt } : {}) });
             });
             if (!cursor) { summary.scanAgeMs = 0; break; }
         }

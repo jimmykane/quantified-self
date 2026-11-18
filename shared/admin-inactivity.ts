@@ -1,6 +1,6 @@
 export const INACTIVITY_MODES = ['off', 'dry-run', 'warnings-only', 'enforce'] as const;
 export type InactivityMode = typeof INACTIVITY_MODES[number];
-export const INACTIVITY_ADMIN_VIEWS = ['queued', 'warned', 'cancelled', 'pending-deletion'] as const;
+export const INACTIVITY_ADMIN_VIEWS = ['queued', 'warned', 'cancelled', 'pending-deletion', 'eligible'] as const;
 export type InactivityAdminView = typeof INACTIVITY_ADMIN_VIEWS[number];
 export const INACTIVITY_WARNING_LIMIT = 100;
 export const INACTIVITY_DELETION_LIMIT = 25;
@@ -12,7 +12,7 @@ export interface InactivitySettings {
     deletionDailyLimit: number;
     revision: number;
 }
-export interface InactivityAdminRequest { view: InactivityAdminView; afterUid?: string }
+export interface InactivityAdminRequest { view: InactivityAdminView; afterUid?: string; dryRunId?: string }
 export interface InactivityAdminAccount {
     uid: string;
     email: string | null;
@@ -30,6 +30,7 @@ export interface InactivityAdminResponse {
     lastStartedAt: number | null;
     lastFinishedAt: number | null;
     lastScanCompletedAt: number | null;
+    lastCompletedDryRun: { id: string; finishedAt: number; eligibleCount: number } | null;
     budgetDay: string | null;
     warningsReserved: number;
     deletionsReserved: number;

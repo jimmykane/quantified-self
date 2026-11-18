@@ -38,3 +38,11 @@ describe('Workout library Firestore retention', () => {
       && override.ttl === true)).toBe(false);
   });
 });
+
+describe('Inactive account dry-run report', () => {
+  it('indexes the server-owned report membership for UID-ordered pages', () => {
+    const config = JSON.parse(readFileSync(resolve(__dirname, '../firestore.indexes.json'), 'utf8'));
+    expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'inactivityDryRunMatches', fieldPath: 'scanId',
+      indexes: [{ order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' }] });
+  });
+});
