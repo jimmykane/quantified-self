@@ -187,10 +187,12 @@ describe('history completion notification policy', () => {
   it.each([404, 410])('cleans only the expired registration generation on %s', async statusCode => {
     const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode }); await h.send();
     expect(h.rows.has(`users/owner/pushSubscriptions/${id}`)).toBe(false);
+    expect(h.rows.get(`users/owner/pushState/removed_${id}`)).toMatchObject({ reason: 'push_service_expired', sender: 'history_import' });
     const replacement = harness(); replacement.deps.send = vi.fn(async () => {
       replacement.rows.set(`users/owner/pushSubscriptions/${id}`, { ...replacement.registration, generation: runId }); throw { statusCode };
     });
     await replacement.send(); expect(replacement.rows.get(`users/owner/pushSubscriptions/${id}`).generation).toBe(runId);
+    expect(replacement.rows.has(`users/owner/pushState/removed_${id}`)).toBe(false);
   });
   it('does not read or send when completion has no consent; the switch blocks sending before claiming', async () => {
     const h = harness(); delete h.run.notification; await h.send(); expect(h.deps.configuration).not.toHaveBeenCalled();

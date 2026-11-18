@@ -1,3 +1,4 @@
+import { removeExpiredDevice } from './device-removal';
 import { notificationExpiry } from './retention';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -64,11 +65,7 @@ export async function sendPushTest(
   } catch (error: unknown) {
     const status = (error as { statusCode?: unknown } | null)?.statusCode;
     if (status === 404 || status === 410) {
-      await deps.db.runTransaction(async tx => {
-        const current = await tx.get(ref);
-        // Registration records are leaves; Rules prohibit all descendants.
-        if (current.get('generation') === registration.generation) tx.delete(ref);
-      });
+      await removeExpiredDevice(deps.db, uid, data.installationId, registration.generation, 'test', deps.now());
       deps.outcome('expired');
       return { status: 'subscription_expired' };
     }

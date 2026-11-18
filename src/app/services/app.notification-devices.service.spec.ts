@@ -109,6 +109,9 @@ describe('notification device management', () => {
   it('does not change local browser permission when disabling another device', async () => {
     const service = setup(); await tick(); await service.disable(service.devices()[0]);
     expect(push.refreshRegistration).not.toHaveBeenCalled();
+    expect(tx.set).toHaveBeenCalledWith({ path: `users/owner/pushState/removed_${id}` }, {
+      reason: 'disabled_from_device_list', origin, device: data.device, removedAt: expect.anything(), expireAt: expect.any(Date),
+    });
     expect(tx.set).toHaveBeenCalledWith({ path: 'users/owner/config/settings' },
       { appSettings: { notificationInvitation: { version: 1, choice: 'disabled' } } }, { merge: true });
   });

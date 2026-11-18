@@ -21,6 +21,19 @@ export interface PushRegistration {
   keys: { p256dh: string; auth: string };
   device?: PushDeviceInfo;
 }
+export type PushClientRemovalReason = 'disabled_on_device' | 'disabled_from_device_list' | 'signed_out' | 'account_switch' | 'custom_token_sign_in'
+  | 'permission_denied' | 'browser_subscription_missing' | 'signing_key_changed' | 'invalid_registration';
+
+export const NOTIFICATION_RETENTION_MS = 31 * 86_400_000;
+export function pushRemovalPath(uid: string, installationId: string): string {
+  return `users/${uid}/pushState/removed_${installationId}`;
+}
+/** Only coarse labels enter the private diagnostic, including for malformed and legacy registrations. */
+export function pushRemovalRecord<T>(reason: PushClientRemovalReason | 'push_service_expired', origin: unknown, device: unknown,
+  removedAt: T, now: number) {
+  return { reason, origin: isPushOrigin(origin) ? origin : null, device: isPushDeviceInfo(device)
+    ? { browser: device.browser, platform: device.platform } : null, removedAt, expireAt: new Date(now + NOTIFICATION_RETENTION_MS) };
+}
 export interface PushTestRequest { installationId: string; }
 export interface PushTestResponse { status: 'accepted' | 'subscription_expired'; }
 export function isPushId(value: unknown): value is string {

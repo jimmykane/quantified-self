@@ -48,6 +48,11 @@ service cloud.firestore {
         ]);
       allow delete: if false;
       
+      function validPushDevice(device) {
+        return device is map && device.keys().hasOnly(['browser', 'platform'])
+          && device.browser in ['Chrome', 'Safari', 'Firefox', 'Edge', 'Opera', 'Samsung Internet', 'Browser']
+          && device.platform in ['macOS', 'Windows', 'Android', 'iOS', 'ChromeOS', 'Linux', 'Unknown device'];
+      }
       // Private device registrations are leaves, never event/metric or MCP data.
       match /pushSubscriptions/{installationID} {
         function validId(value) { return value is string && value.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'); }
@@ -64,10 +69,7 @@ service cloud.firestore {
             && d.keys.p256dh is string && d.keys.p256dh.matches('^B[A-Za-z0-9_-]{86}$')
             && d.keys.auth is string && d.keys.auth.matches('^[A-Za-z0-9_-]{22}$')
             && d.updatedAt == request.time
-            && (!('device' in d) || (d.device is map && d.device.keys().hasOnly(['browser', 'platform'])
-              && d.device.keys().hasAll(['browser', 'platform'])
-              && d.device.browser in ['Chrome', 'Safari', 'Firefox', 'Edge', 'Opera', 'Samsung Internet', 'Browser']
-              && d.device.platform in ['macOS', 'Windows', 'Android', 'iOS', 'ChromeOS', 'Linux', 'Unknown device']));
+            && (!('device' in d) || validPushDevice(d.device));
         }
         allow get: if isOwner();
         allow list: if isOwner() && !('impersonatedBy' in request.auth.token)
@@ -77,6 +79,25 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/users/$(userID)) && validRegistration();
         allow delete: if isOwner() && !('impersonatedBy' in request.auth.token);
         match /{descendants=**} { allow read, write: if false; }
+      }
+      // Removal receipts hold only a private, expiring explanation for an actual registration deletion.
+      match /pushState/{receiptID} {
+        function validDeviceRemoval() {
+          let d = request.resource.data;
+          let installationID = receiptID.replace('^removed_', '');
+          let registration = /databases/$(database)/documents/users/$(userID)/pushSubscriptions/$(installationID);
+          return receiptID.matches('^removed_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$')
+            && d.keys().hasOnly(['reason', 'origin', 'device', 'removedAt', 'expireAt'])
+            && d.reason in ['disabled_on_device', 'disabled_from_device_list', 'signed_out', 'account_switch', 'custom_token_sign_in',
+              'permission_denied', 'browser_subscription_missing', 'signing_key_changed', 'invalid_registration']
+            && d.origin in [null, 'https://quantified-self.io', 'https://beta.quantified-self.io']
+            && (d.device == null || validPushDevice(d.device))
+            && d.removedAt == request.time && d.expireAt is timestamp
+            && d.expireAt <= request.time + duration.value(32, 'd')
+            && exists(registration) && !existsAfter(registration);
+        }
+        allow create, update: if mayWriteAccount(userID) && !('impersonatedBy' in request.auth.token)
+          && exists(/databases/$(database)/documents/users/$(userID)) && validDeviceRemoval();
       }
       match /pushState/{document=**} { allow read, write: if false; }
 

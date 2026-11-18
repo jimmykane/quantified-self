@@ -1,3 +1,4 @@
+import { recordExpiredDevice } from './device-removal';
 import { notificationExpiry } from './retention';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -115,9 +116,9 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     if (state?.providers?.[expected.serviceName]?.runId === runId) {
       tx.update(stateRef, { providers: { ...state.providers, [expected.serviceName]: { ...state.providers[expected.serviceName], outcome } } });
     }
-    if (outcome === 'expired' && registrationSnapshot.data()?.generation === consent.generation) {
-      // Registration records are leaves; Rules prohibit descendants.
-      tx.delete(registrationRef);
+    const registration = registrationSnapshot.data();
+    if (outcome === 'expired' && registration && registration.generation === consent.generation) {
+      recordExpiredDevice(db, tx, expected.userID, consent.installationId, registrationRef, registration, 'history_import', deps.now());
     }
   });
 }

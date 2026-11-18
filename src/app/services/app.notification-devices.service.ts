@@ -2,8 +2,8 @@ import { isPlatformBrowser } from '@angular/common';
 import { DestroyRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
-import { Firestore, Timestamp, collection, doc, documentId, getDocsFromServer, limit, orderBy, query, runTransaction, startAfter } from 'app/firebase/firestore';
-import { isPushDeviceInfo, isPushId, isPushOrigin, type PushDeviceInfo } from '@shared/web-push';
+import { Firestore, Timestamp, collection, doc, documentId, getDocsFromServer, limit, orderBy, query, runTransaction, serverTimestamp, startAfter } from 'app/firebase/firestore';
+import { isPushDeviceInfo, isPushId, isPushOrigin, pushRemovalPath, pushRemovalRecord, type PushDeviceInfo } from '@shared/web-push';
 import { AppPushService } from './app.push.service';
 
 export interface NotificationDevice {
@@ -122,6 +122,8 @@ export class AppNotificationDevicesService {
         }, { merge: true });
         // Registrations are leaves: Rules prohibit all descendants.
         transaction.delete(ref);
+        transaction.set(doc(this.firestore, pushRemovalPath(owner.uid, device.id)),
+          pushRemovalRecord('disabled_from_device_list', current.origin, current.device, serverTimestamp(), Date.now()));
         return true;
       });
       if (!this.current(owner, epoch)) return false;

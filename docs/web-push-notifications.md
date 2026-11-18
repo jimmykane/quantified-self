@@ -24,6 +24,7 @@ connection and account deletion checks still apply before sending. An ambiguous 
 | Stored data | Retention |
 | --- | --- |
 | Bounded suppression/rate state and grouped notification records | 31 days after the latest relevant write, covering the 30-day manual-delivery replay fence |
+| Device removal diagnostics | 31 days from removal |
 | Training send outcome tracking, including unfinished requests | Two days from the original request, without extending its lifetime on status updates |
 | Training attention receipts | At least 31 days, and through the workout date plus three days when later; shared issue receipts extend to the latest relevant workout |
 
@@ -87,6 +88,15 @@ beta versus production installations, and native declarative delivery. Unit test
 ## Data flow and ownership
 
 The browser obtains a subscription through `window.pushManager` when available, otherwise Angular's existing root worker. The browser writes a private leaf at `users/{uid}/pushSubscriptions/{installationId}` with schema version, origin, public signing-key version, random generation, endpoint, encryption keys and server timestamp. Firestore Rules permit direct owner CRUD, allow bounded owner-only listing (maximum 26 documents per request), prohibit descendants and impersonated listing/writes, validate supported endpoints and fence deleted/missing accounts. Optional `device: { browser, platform }` contains only allowlisted coarse display hints, never a raw user agent or hardware identifier. Subscription endpoints and encryption material are capability credentials: never log or publish them.
+
+For a missing device, query the affected account’s `users/{uid}/pushState` by `removedAt` descending.
+Documents named `removed_{installationId}` record the Firestore commit time, the reason, site and coarse browser/platform when available.
+Reasons cover disabling from the device or the device list, signing out, starting an impersonation switch or another
+custom-token sign-in, denied permission, a missing browser subscription, a signing-key change, and an invalid stored
+registration. A push service returning HTTP 404 or 410 records `push_service_expired` and the sender that encountered it.
+The deletion and diagnostic commit together. A stale provider response cannot remove a replacement registration or overwrite the earlier diagnostic. An account
+deletion removes diagnostics along with the account. Browser-only changes that QS has yet to observe have no removal time.
+Deploy the Firestore Rules before releasing the updated client. Older clients can still remove devices without a diagnostic.
 
 Endpoint validation is shared by browser/server code and mirrored in Rules: Google FCM, Mozilla Push, Apple Web Push, and a single DNS label under `notify.windows.com` for Edge's Windows Push Notification Service (WNS). HTTPS, hostname boundaries and the absence of credentials, custom ports and fragments remain mandatory. [Microsoft documents Edge's WNS transport](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/forcebuiltinpushmessagingclient) and [its service domain](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/firewall-allowlist-config). WNS requests retain Web Push encryption/VAPID and add the [raw notification type and 60-second WNS expiry headers](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/push-request-response-headers); `web-push` supplies the encrypted binary content type.
 

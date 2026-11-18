@@ -63,7 +63,7 @@ export class AppImpersonationService {
             const { AdminService } = await import('./admin.service');
             const adminService = this.environmentInjector.get(AdminService);
             const result = await firstValueFrom(adminService.impersonateUser(target.uid));
-            await this.authService.loginWithCustomToken(result.token);
+            await this.authService.loginWithCustomToken(result.token, 'account_switch');
             this.redirectTo('/dashboard');
         } catch (error: unknown) {
             this.logger.error('[Impersonation] startImpersonation error:', error);
@@ -97,7 +97,7 @@ export class AppImpersonationService {
 
         try {
             const result = await this.functionsService.call<void, { token: string }>('stopImpersonation');
-            await this.authService.loginWithCustomToken(result.data.token);
+            await this.authService.loginWithCustomToken(result.data.token, 'account_switch');
             await this.ensureAdminClaimIsReady();
             this.redirectTo('/admin');
         } catch (error: unknown) {

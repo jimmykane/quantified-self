@@ -3,7 +3,7 @@ import { PLATFORM_ID, signal } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user } from 'app/firebase/auth';
-import { Firestore, getDocFromServer, setDoc, updateDoc, deleteDoc } from 'app/firebase/firestore';
+import { Firestore, getDocFromServer, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { AppPushService } from './app.push.service';
 import { AppNotificationInvitationService } from './app.notification-invitation.service';
@@ -16,7 +16,8 @@ import { AuthSessionCleanupService } from './auth-session-cleanup.service';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), user: vi.fn() }));
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
-  doc: vi.fn((_db, path) => ({ path })), getDocFromServer: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn() }));
+  doc: vi.fn((_db, path) => ({ path })), getDocFromServer: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(), writeBatch: vi.fn(() => batch) }));
+const batch = vi.hoisted(() => ({ delete: vi.fn(), set: vi.fn(), commit: vi.fn() }));
 const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
 const categoryEnabled = signal(true);
@@ -67,7 +68,7 @@ beforeEach(() => {
   notifications = { permission: 'default', requestPermission: vi.fn().mockResolvedValue('granted') }; vi.stubGlobal('Notification', notifications);
   support = { checkPushSupport: vi.fn().mockReturnValue(true), createRandomUUID: vi.fn().mockReturnValue(id) };
   vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => registration } as never);
-  vi.mocked(setDoc).mockResolvedValue(undefined); vi.mocked(updateDoc).mockResolvedValue(undefined); vi.mocked(deleteDoc).mockResolvedValue(undefined);
+  vi.mocked(setDoc).mockResolvedValue(undefined); vi.mocked(updateDoc).mockResolvedValue(undefined); batch.commit.mockResolvedValue(undefined);
 });
 afterEach(() => { TestBed.resetTestingModule(); vi.unstubAllGlobals(); });
 describe('device notification lifecycle', () => {
@@ -98,7 +99,7 @@ describe('device notification lifecycle', () => {
     await service.enable(); await tick();
     expect(setDoc).toHaveBeenCalledWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }),
       expect.objectContaining({ endpoint: replacement.endpoint }));
-    expect(deleteDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+    expect(batch.delete).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
   });
   it('keeps the same device entry when retrying with a different subscription key', async () => {
     const retainedId = '00000000-0000-4000-8000-000000000002';
@@ -201,6 +202,7 @@ describe('device notification lifecycle', () => {
     await service.enable(); await tick();
     expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'enabled');
     await service.disable(); await tick();
+    expect(batch.set).toHaveBeenCalledWith({ path: `users/owner/pushState/removed_${id}` }, expect.objectContaining({ reason: 'disabled_on_device' }));
     expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
   });
   it('remembers a dismissed browser permission prompt without silently asking again', async () => {
@@ -232,7 +234,7 @@ describe('device notification lifecycle', () => {
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
     const service = setup(); await tick();
     expect(subscription.unsubscribe).toHaveBeenCalled(); expect(storage.getItem(localKey)).toBeNull();
-    expect(service.state()).toBe('signed-out'); expect(deleteDoc).not.toHaveBeenCalled();
+    expect(service.state()).toBe('signed-out'); expect(batch.delete).not.toHaveBeenCalled();
   });
   it('retains cleanup evidence when signed-out browser revocation fails', async () => {
     auth.currentUser = null; owner$.next(null); manager.getSubscription.mockResolvedValue(subscription);
@@ -347,21 +349,27 @@ describe('device notification lifecycle', () => {
     await service.refreshRegistration();
     expect(subscription.unsubscribe).toHaveBeenCalledOnce(); expect(service.state()).toBe('disabled');
     expect(service.isCurrentDevice(id, registration.origin)).toBe(false);
+    expect(batch.set).not.toHaveBeenCalled();
     expect(setDoc).not.toHaveBeenCalled(); expect(notifications.requestPermission).not.toHaveBeenCalled();
   });
   it('revokes stale subscriptions after key rotation', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
     config.webPushPublicKey.set('B' + 'C'.repeat(86)); storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
-    const service = setup(); await tick(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(deleteDoc).toHaveBeenCalled();
+    const service = setup(); await tick(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(batch.delete).toHaveBeenCalled();
+    expect(batch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reason: 'signing_key_changed' }));
   });
-  it.each(['missing', 'invalid-origin'])('does not recreate %s registration on a worker rotation', async kind => {
+  it.each(['missing', 'invalid-origin', 'old-key'])('does not recreate %s registration on a worker rotation', async kind => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
     const service = setup(); await tick(); expect(service.state()).toBe('enabled');
     vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => kind !== 'missing',
-      data: () => kind === 'missing' ? undefined : { ...registration, origin: 'https://beta.quantified-self.io' } } as never);
+      data: () => kind === 'missing' ? undefined : { ...registration, ...(kind === 'invalid-origin'
+        ? { origin: 'https://beta.quantified-self.io' } : { vapidPublicKey: 'B' + 'C'.repeat(86) }) } } as never);
     rotations.next({}); await tick();
     expect(setDoc).not.toHaveBeenCalled(); expect(updateDoc).not.toHaveBeenCalled(); expect(subscription.unsubscribe).toHaveBeenCalled();
+    if (kind === 'missing') expect(batch.set).not.toHaveBeenCalled();
+    else expect(batch.set).toHaveBeenCalledWith(expect.anything(),
+      expect.objectContaining({ reason: kind === 'old-key' ? 'signing_key_changed' : 'invalid_registration' }));
     expect(service.state()).toBe('disabled');
   });
   it('reconciles changed subscription encryption keys only while consent is still stored', async () => {
@@ -442,7 +450,7 @@ describe('device notification lifecycle', () => {
       } else {
         subscription.unsubscribe.mockImplementationOnce(() => new Promise(resolve => { finishCleanup = () => resolve(true); }));
       }
-      const cleanup = TestBed.inject(AuthSessionCleanupService).run(); await tick();
+      const cleanup = TestBed.inject(AuthSessionCleanupService).run('signed_out'); await tick();
       await vi.advanceTimersByTimeAsync(2000); await cleanup;
       manager.getSubscription.mockResolvedValue(replacement);
       storage.setItem(localKey, JSON.stringify({ uid: replacementOwner.uid, installationId: replacementId }));
@@ -453,7 +461,7 @@ describe('device notification lifecycle', () => {
       expect(JSON.parse(storage.getItem(localKey)!)).toEqual({ uid: replacementOwner.uid, installationId: replacementId });
       expect(service.state()).toBe('enabled'); expect(service.registered()).toBe(true);
       expect(replacement.unsubscribe).not.toHaveBeenCalled();
-      expect(deleteDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }));
+      expect(batch.delete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }));
     } finally { vi.useRealTimers(); }
   });
   it('finishes checking when another tab replaces consent during background revocation', async () => {
@@ -478,7 +486,8 @@ describe('device notification lifecycle', () => {
   it('revokes permission-denied registrations and deletes them as the owner', async () => {
     notifications.permission = 'denied'; manager.getSubscription.mockResolvedValue(subscription);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
-    const service = setup(); await tick(); expect(service.state()).toBe('denied'); expect(deleteDoc).toHaveBeenCalled(); expect(subscription.unsubscribe).toHaveBeenCalled();
+    const service = setup(); await tick(); expect(service.state()).toBe('denied'); expect(batch.delete).toHaveBeenCalled(); expect(subscription.unsubscribe).toHaveBeenCalled();
+    expect(batch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reason: 'permission_denied' }));
   });
   it('unsubscribes if account changes while registration is pending', async () => {
     let finish!: () => void; vi.mocked(setDoc).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
@@ -497,11 +506,32 @@ describe('device notification lifecycle', () => {
     });
     await service.sendTest(); await tick(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled();
   });
+  it.each(['signed_out', 'account_switch', 'custom_token_sign_in'] as const)('records why the session detached this device (%s)', async reason => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: owner.uid, installationId: id }));
+    setup(); await tick();
+    await TestBed.inject(AuthSessionCleanupService).run(reason);
+    expect(batch.set).toHaveBeenCalledExactlyOnceWith({ path: `users/owner/pushState/removed_${id}` }, {
+      reason, origin: registration.origin, device: registration.device, removedAt: expect.anything(), expireAt: expect.any(Date),
+    });
+    expect(batch.commit).toHaveBeenCalledOnce();
+  });
+  it('records a missing browser subscription and accepts a deletion that already won elsewhere', async () => {
+    notifications.permission = 'granted';
+    storage.setItem(localKey, JSON.stringify({ uid: owner.uid, installationId: id }));
+    batch.commit.mockRejectedValueOnce({ code: 'permission-denied' });
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false } as never);
+    const service = setup(); await tick();
+    expect(service.state()).toBe('disabled');
+    expect(batch.set).toHaveBeenCalledExactlyOnceWith({ path: `users/owner/pushState/removed_${id}` },
+      expect.objectContaining({ reason: 'browser_subscription_missing' }));
+    expect(batch.commit).toHaveBeenCalledOnce();
+  });
   it('detaches before auth cleanup, including browser revocation when deletion fails', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
-    setup(); await tick(); vi.mocked(deleteDoc).mockRejectedValueOnce(new Error('offline'));
-    await TestBed.inject(AuthSessionCleanupService).run(); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(storage.getItem(localKey)).toBeNull();
+    setup(); await tick(); batch.commit.mockRejectedValueOnce(new Error('offline'));
+    await TestBed.inject(AuthSessionCleanupService).run('signed_out'); expect(subscription.unsubscribe).toHaveBeenCalled(); expect(storage.getItem(localKey)).toBeNull();
   });
 });
 

@@ -90,11 +90,19 @@ describe('Web Push test sender', () => {
     const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode, body: 'private-canary' });
     expect(await sendPushTest(h.input, h.deps)).toEqual({ status: 'subscription_expired' });
     expect(h.records.has(`users/owner/pushSubscriptions/${id}`)).toBe(false);
+    expect(h.records.get(`users/owner/pushState/removed_${id}`)).toEqual({ reason: 'push_service_expired', sender: 'test', origin: h.input.origin,
+      device: null, removedAt: expect.anything(), expireAt: new Date(h.deps.now() + 31 * 86400000) });
     expect(h.deps.outcome).toHaveBeenCalledWith('expired');
+  });
+  it('skips the diagnostic if account deletion starts during transport', async () => {
+    const h = harness(); h.deps.send = async () => { h.records.set('userDeletionTombstones/owner', {}); throw { statusCode: 410 }; };
+    await sendPushTest(h.input, h.deps);
+    expect(h.records.has(`users/owner/pushState/removed_${id}`)).toBe(false);
   });
   it('does not delete a replacement registration after an old request expires', async () => {
     const h = harness(); h.deps.send = async () => { h.records.set(`users/owner/pushSubscriptions/${id}`, { ...h.registration, generation: id }); throw { statusCode: 410 }; };
     await sendPushTest(h.input, h.deps); expect(h.records.get(`users/owner/pushSubscriptions/${id}`)?.generation).toBe(id);
+    expect(h.records.has(`users/owner/pushState/removed_${id}`)).toBe(false);
   });
   it.each([429, 500, 302, undefined])('redacts temporary errors and does not retry %s', async statusCode => {
     const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode, body: 'private-canary' });

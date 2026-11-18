@@ -1,3 +1,4 @@
+import { removeExpiredDevice } from './device-removal';
 import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
@@ -179,12 +180,7 @@ async function deliverClaim(uid: string, claim: Claim, deps: DeliveryPushDepende
         ready.entries.some(entry => entry.attention)))); outcome = 'accepted'; }
       catch (error) { const status = (error as { statusCode?: unknown } | null)?.statusCode; outcome = status === 404 || status === 410 ? 'expired' : 'failed'; }
       deps.outcome(outcome);
-      if (outcome === 'expired') await db.runTransaction(async tx => {
-        const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, deps.now());
-        const registration = await tx.get(registrationRef);
-        // Registration records are leaves; Rules prohibit descendants.
-        if (!guard.shouldSkip && registration.data()?.generation === target.generation) tx.delete(registrationRef);
-      });
+      if (outcome === 'expired') await removeExpiredDevice(db, uid, target.id, target.generation, 'activity_delivery', deps.now());
     }));
     if (results.some(result => result.status === 'rejected')) failed = true;
   }

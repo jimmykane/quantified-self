@@ -3,7 +3,7 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal, 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
-import { Firestore, doc, getDocFromServer, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'app/firebase/firestore';
+import { Firestore, doc, getDocFromServer, setDoc, updateDoc, writeBatch, serverTimestamp } from 'app/firebase/firestore';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { AppWindowService } from './app.window.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
@@ -17,7 +17,7 @@ import type { DeliveryNotificationTarget } from '../../../shared/activity-delive
 import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { pushDeviceInfo } from '../helpers/push-device.helper';
-import { isPushDeviceInfo } from '@shared/web-push';
+import { isPushDeviceInfo, pushRemovalPath, pushRemovalRecord, type PushClientRemovalReason } from '@shared/web-push';
 import { AppNotificationInvitationService } from './app.notification-invitation.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
@@ -70,7 +70,7 @@ export class AppPushService {
 
   constructor() {
     if (!this.browser) { this.state.set('unsupported'); return; }
-    const unregister = this.cleanup.register(async () => { await this.detach(); });
+    const unregister = this.cleanup.register(async reason => { await this.detach(reason); });
     this.destroy.onDestroy(unregister);
     user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => {
       this.authObserved = true; this.owner = owner; void this.refresh();
@@ -178,7 +178,7 @@ export class AppPushService {
       this.registered.set(!!subscription);
       this.permissionUnasked.set(Notification.permission === 'default' && !local && !subscription);
       if (Notification.permission === 'denied') {
-        const cleanupEpoch = local?.uid === owner.uid ? await this.detach() : epoch;
+        const cleanupEpoch = local?.uid === owner.uid ? await this.detach('permission_denied') : epoch;
         if (this.current(owner, cleanupEpoch)) this.state.set('denied');
         return;
       }
@@ -188,7 +188,7 @@ export class AppPushService {
       }
       if (Notification.permission !== 'granted') { this.state.set('disabled'); return; }
       if (!subscription && local?.uid === owner.uid) {
-        await this.detach(); return;
+        await this.detach('browser_subscription_missing'); return;
       }
       if (!subscription || !local || local.uid !== owner.uid) {
         // A browser permission is not account consent. Orphan subscriptions must not cross accounts.
@@ -199,7 +199,7 @@ export class AppPushService {
       const key = subscription.options.applicationServerKey;
       const actualKey = key ? this.encodeKey(key) : '';
       if (actualKey !== this.config.webPushPublicKey()) {
-        await this.detach(); return;
+        await this.detach('signing_key_changed'); return;
       }
       const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`);
       const snapshot = await getDocFromServer(ref);
@@ -212,8 +212,10 @@ export class AppPushService {
         }
         return;
       }
-      if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()
-        || saved.vapidPublicKey !== actualKey) { await this.detach(); return; }
+      if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()) {
+        await this.detach('invalid_registration'); return;
+      }
+      if (saved.vapidPublicKey !== actualKey) { await this.detach('signing_key_changed'); return; }
       const current = subscription.toJSON();
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
         await this.persist(owner, local.installationId, subscription, epoch, true);
@@ -326,7 +328,7 @@ export class AppPushService {
     this.operation.set('disable'); this.message.set('');
     if (owner) this.invitation.recordDeviceChoice(owner.uid, 'disabled');
     try {
-      const epoch = await this.detach();
+      const epoch = await this.detach('disabled_on_device');
       if (this.current(owner, epoch)) this.message.set('Notifications disabled on this device.');
     }
     catch { this.message.set('Could not finish disabling notifications. Please retry.'); throw new Error('Notification disable failed.'); }
@@ -386,12 +388,25 @@ export class AppPushService {
     this.subscription = null; this.storage.removeItem(STORAGE_KEY);
     return true;
   }
-  private async detach(): Promise<number> {
+  private async removeRegistration(local: LocalInstallation, reason: PushClientRemovalReason): Promise<void> {
+    const ref = doc(this.firestore, `users/${local.uid}/pushSubscriptions/${local.installationId}`);
+    const batch = writeBatch(this.firestore);
+    batch.delete(ref);
+    batch.set(doc(this.firestore, pushRemovalPath(local.uid, local.installationId)),
+      pushRemovalRecord(reason, this.origin(), pushDeviceInfo(this.windows.windowRef.navigator), serverTimestamp(), Date.now()));
+    try { await batch.commit(); }
+    catch (error) {
+      // Another tab or the sender may already have removed it. Keep the original cause.
+      if ((error as { code?: string })?.code === 'permission-denied' && !(await getDocFromServer(ref)).exists()) return;
+      throw error;
+    }
+  }
+  private async detach(reason: PushClientRemovalReason): Promise<number> {
     const epoch = ++this.epoch; const owner = this.owner;
     const local = this.readLocal();
     // Start the owner-authorized delete while Auth is still valid; revoke the browser even if it fails.
     const deletion = local && local.uid === this.auth.currentUser?.uid
-      ? deleteDoc(doc(this.firestore, `users/${local.uid}/pushSubscriptions/${local.installationId}`)) : Promise.resolve();
+      ? this.removeRegistration(local, reason) : Promise.resolve();
     // Attach a rejection handler immediately, even while browser revocation is pending.
     const deleted = deletion.then(() => true, () => false);
     const revoked = await this.revokeBrowser(local).catch(() => false);

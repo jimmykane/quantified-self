@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { Firestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
@@ -276,7 +276,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
     vi.mocked(deps.send).mockImplementation(async target => { if (target.origin === origin) throw { statusCode: 410 }; return {}; });
     await flush(); expect(deps.send).toHaveBeenCalledTimes(2);
     const expired = vi.mocked(deps.send).mock.calls.find(([target]) => target.origin === origin)![0];
-    expect((await db.doc(`${root}/pushSubscriptions/${expired.generation === aliasGeneration ? alias : device}`).get()).exists).toBe(false);
+    const expiredId = expired.generation === aliasGeneration ? alias : device;
+    expect((await db.doc(`${root}/pushSubscriptions/${expiredId}`).get()).exists).toBe(false);
+    const diagnostic = (await db.doc(`${root}/pushState/removed_${expiredId}`).get()).data();
+    expect(diagnostic).toEqual({ reason: 'push_service_expired', sender: 'training_send', origin, device: null,
+      removedAt: expect.any(Timestamp), expireAt: expect.any(Timestamp) });
   });
   it('never replays an ambiguous transport failure', async () => {
     await command(); await drain(); await deliver(); vi.mocked(deps.send).mockRejectedValue(new Error('private-transport-canary'));
@@ -288,5 +292,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
       await db.doc(`${root}/pushSubscriptions/${device}`).update({ generation: next }); throw { statusCode: 410 };
     });
     await flush(); expect((await db.doc(`${root}/pushSubscriptions/${device}`).get()).get('generation')).toBe(next);
+    expect((await db.doc(`${root}/pushState/removed_${device}`).get()).exists).toBe(false);
   });
 });

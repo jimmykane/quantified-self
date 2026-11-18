@@ -132,7 +132,7 @@ describe('AppImpersonationService', () => {
         });
 
         expect(adminServiceMock.impersonateUser).toHaveBeenCalledWith('user-1');
-        expect(authServiceMock.loginWithCustomToken).toHaveBeenCalledWith('custom-token');
+        expect(authServiceMock.loginWithCustomToken).toHaveBeenCalledWith('custom-token', 'account_switch');
         expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/dashboard');
     });
 
@@ -169,7 +169,7 @@ describe('AppImpersonationService', () => {
         await service.returnToAdmin();
 
         expect(functionsServiceMock.call).toHaveBeenCalledWith('stopImpersonation');
-        expect(authServiceMock.loginWithCustomToken).toHaveBeenCalledWith('admin-token');
+        expect(authServiceMock.loginWithCustomToken).toHaveBeenCalledWith('admin-token', 'account_switch');
         expect(windowServiceMock.windowRef.location.assign).toHaveBeenCalledWith('/admin');
         expect(service.isReturning()).toBe(false);
     });

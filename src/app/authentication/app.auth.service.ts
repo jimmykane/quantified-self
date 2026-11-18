@@ -221,8 +221,8 @@ export class AppAuthService {
     }
   }
 
-  async loginWithCustomToken(token: string) {
-    await this.sessionCleanup.run();
+  async loginWithCustomToken(token: string, reason: 'account_switch' | 'custom_token_sign_in' = 'custom_token_sign_in') {
+    await this.sessionCleanup.run(reason);
     try {
       return await signInWithCustomToken(this.auth, token);
     } catch (e: any) {
@@ -246,7 +246,7 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
-    await this.sessionCleanup.run();
+    await this.sessionCleanup.run('signed_out');
     await signOut(this.auth);
     try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY);
       this.window.windowRef.sessionStorage.removeItem('qs.daily-workout-suggestion.v1'); }

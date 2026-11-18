@@ -1,3 +1,4 @@
+import { removeExpiredDevice } from './device-removal';
 import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
@@ -123,10 +124,7 @@ export async function sendConnectionNotification(uid: string, deps: ConnectionPu
       try { await deps.send(ready.registration, JSON.stringify(connectionNotificationPayload(ready.registration.origin, ready.live.map(entry => entry.service)))); outcome = 'accepted'; }
       catch (error) { const status = (error as { statusCode?: unknown } | null)?.statusCode; outcome = status === 404 || status === 410 ? 'expired' : 'failed'; }
       deps.outcome(outcome);
-      if (outcome === 'expired') await db.runTransaction(async tx => {
-        if ((await getUserDeletionGuardStateInTransaction(db, tx, uid, deps.now())).shouldSkip) return;
-        const current = await tx.get(registrationRef); if (current.data()?.generation === target.generation) tx.delete(registrationRef);
-      });
+      if (outcome === 'expired') await removeExpiredDevice(db, uid, target.id, target.generation, 'connection_attention', deps.now());
     }));
     if (results.some(result => result.status === 'rejected')) failed = true;
   }
