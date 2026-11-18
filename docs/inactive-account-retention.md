@@ -64,6 +64,8 @@ cannot repeatedly starve newer warning receipts. A global lease prevents overlap
 (initial warnings and final reminders combined) and 25 deletion
 initiations per day across retries; `warningDailyLimit`/`deletionDailyLimit` may lower these, including zero, but cannot
 raise them. Missing limits use those defaults. Invalid limits fail closed. A cap reservation is not refunded after failure.
+The budget day and queue timestamps use the current transaction attempt's time after eligibility reads, including
+when those reads or a retry cross UTC midnight.
 
 `dry-run` performs eligibility reads and saves operational cursor/lease progress, including a transient native billing
 lease; it creates no warning, episode or deletion fence. `warnings-only` queues/observes warnings but cannot initiate
@@ -173,16 +175,17 @@ Before an approved rollout:
 1. Review current native billing ownership, indexes, TTL configuration and existing cleanup health. Verify
    `STRIPE_BILLING_KEY` permits Customers, Subscriptions, Subscription Schedules and Checkout Sessions reads. The new
    Subscription Schedules read permission must be verified; this PR does not modify a key or secret.
-2. With separate deployment approval, use Node 22 and the repository's pinned CLI:
+2. Before deploying the reminder-capable scheduler, with separate template-write approval, seed both retention
+   templates and their required partials using
+   `npm --prefix functions run seed-emails -- --templates=account_inactivity_warning,account_inactivity_final_reminder` under an explicitly verified
+   target project environment. The seeder does not select a project from a `--project` argument. Verify HTML/plaintext
+   previews first, then read back the seeded templates and partials before proceeding. A controlled-inbox SMTP test
+   needs its own mail authorization.
+3. After the template readback, with separate deployment approval, use Node 22 and the repository's pinned CLI:
    `npm run firebase -- deploy --project quantified-self-io --only firestore:rules,firestore:indexes`, then
    `npm run firebase -- deploy --project quantified-self-io --only functions:processInactiveAccounts,functions:getInactivityAdmin,functions:onSubscriptionUpdated,functions:deleteSelf`.
    Verify the due/state collection-group query indexes and 90-day episode TTL are active, not merely present in source.
    Deploy the help/policy changes with the normal approved Hosting build.
-3. Before deploying the reminder-capable scheduler, with separate template-write approval, seed both retention
-   templates and their required partials using
-   `npm --prefix functions run seed-emails -- --templates=account_inactivity_warning,account_inactivity_final_reminder` under an explicitly verified
-   target project environment. The seeder does not select a project from a `--project` argument. Verify HTML/plaintext
-   previews first; a controlled-inbox SMTP test needs its own mail authorization.
 4. Preview monitoring offline with `node tools/cleanup-monitoring/cli.mjs --project=quantified-self-io`. Apply only
    under separately approved configuration authority with the verified existing independent notification channel.
    The bundle enables policies during apply; allow for the initial absence incident described above. Keep retention off

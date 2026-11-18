@@ -182,6 +182,37 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await inactivityRef(db, uid).get()).get('state')).toBe('warned');
         expect(auth.deleteUser).not.toHaveBeenCalled();
     });
+    it.each([0, 100])('charges a reminder crossing UTC midnight to the new day with %i previous reservations', async warnings => {
+        await reminderWindow();
+        const midnight = new Date(now); midnight.setUTCHours(23, 59, 59, 0); now = midnight.getTime();
+        await refreshRun();
+        await config().update({ budgetDay: new Date(now).toISOString().slice(0, 10), warnings, deletions: 7 });
+        const runTransaction = db.runTransaction.bind(db);
+        let crossedMidnight = false;
+        const transactions = vi.spyOn(db, 'runTransaction').mockImplementation((update, options) => runTransaction(async tx => {
+            const getAll = tx.getAll.bind(tx);
+            const reads = vi.spyOn(tx, 'getAll').mockImplementation(async (...refs) => {
+                const snapshots = await getAll(...refs);
+                // Model billing guard reads finishing after midnight, inside the mail transaction.
+                if (!crossedMidnight && refs.some(ref => 'path' in ref && ref.path === 'configuration/stripeBilling')) {
+                    now += 2000; crossedMidnight = true;
+                }
+                return snapshots;
+            });
+            try { return await update(tx); } finally { reads.mockRestore(); }
+        }, options));
+        try {
+            expect(await process()).toBe('queued');
+            expect(crossedMidnight).toBe(true);
+            expect((await config().get()).data()).toMatchObject({
+                budgetDay: new Date(now).toISOString().slice(0, 10), warnings: 1, deletions: 0,
+            });
+            const episode = (await inactivityRef(db, uid).get()).data()!;
+            expect(episode.reminderQueuedAt.toMillis()).toBe(now);
+            expect(episode.nextCheckAt.toMillis()).toBe(now + INACTIVITY_DAY_MS);
+            expect((await db.doc(`mail/${episode.reminderMailId}`).get()).get('expireAt').toMillis()).toBe(now + 90 * INACTIVITY_DAY_MS);
+        } finally { transactions.mockRestore(); }
+    });
     it.each(['off', 'dry-run', 'warnings-only'] as const)('respects %s mode for final reminders', async mode => {
         await reminderWindow();
         const before = (await inactivityRef(db, uid).get()).data();

@@ -82,7 +82,6 @@ async function abandonPreparedDeletion(ctx: InactivityContext, uid: string, gene
 async function prepareMutation(ctx: InactivityContext, uid: string, run: InactivityRun, lease: BillingLease,
     billing: InactivityBilling, identity: InactiveIdentity, previous: DocumentSnapshot,
     mutation: 'warning' | 'reminder' | 'deletion'): Promise<InactivityOutcome> {
-    const now = clock(ctx);
     const deleting = mutation === 'deletion';
     const reminding = mutation === 'reminder';
     const generation = mutation === 'warning' ? randomUUID() : previous.get('generation') as string;
@@ -103,6 +102,9 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
             || timestampMillis(current.get('acceptedAt')) === null
             || timestampMillis(current.get('deleteAfter'))! < timestampMillis(current.get('acceptedAt'))! + INACTIVITY_NOTICE_MS)) return 'blocked';
         if (reminding && !finalReminderDue(current.data(), clock(ctx))) return 'skipped';
+        // Guard reads or a transaction retry can cross UTC midnight. Charge the
+        // current attempt's day and use that same time for its persisted timestamps.
+        const now = clock(ctx);
         if (!consumeBudget(tx, config, deleting ? 'deletions' : 'warnings', now)) return 'capped';
         if (deleting) {
             tx.set(marker.ref, { ...pendingAccountDeletionMarker('inactivity'), inactivityGeneration: generation, authDeleteStatus: 'prepared' }, { merge: true });
