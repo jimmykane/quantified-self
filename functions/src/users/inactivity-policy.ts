@@ -3,9 +3,11 @@ import type { UserRecord } from 'firebase-admin/auth';
 
 export const INACTIVITY_DAY_MS = 86_400_000;
 export const INACTIVITY_NOTICE_MS = 30 * INACTIVITY_DAY_MS;
+export const INACTIVITY_REMINDER_MS = 7 * INACTIVITY_DAY_MS;
 export const INACTIVITY_CONTROL = 'configuration/inactiveAccounts';
 export const INACTIVITY_COLLECTION = 'inactivityRetention';
 export const INACTIVITY_TEMPLATE = 'account_inactivity_warning';
+export const INACTIVITY_REMINDER_TEMPLATE = 'account_inactivity_final_reminder';
 export const INACTIVITY_PAGE_SIZE = 100;
 export const INACTIVITY_BUDGET_MS = 240_000;
 export type { InactivityMode } from '../../../shared/admin-inactivity';
@@ -34,6 +36,16 @@ export function timestampMillis(value: unknown): number | null {
         // submillisecond precision.
         return Number.isFinite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
     } catch { return null; }
+}
+
+/** Supplemental reminder only: never create or extend the original notice deadline. */
+export function finalReminderDue(episode: Record<string, unknown> | undefined, now: number): boolean {
+    if (episode?.state !== 'warned' || episode.reminderMailId !== undefined || episode.reminderQueuedAt !== undefined) return false;
+    const accepted = timestampMillis(episode.acceptedAt);
+    const deadline = timestampMillis(episode.deleteAfter);
+    return accepted !== null && accepted <= now && deadline !== null
+        && deadline >= accepted + INACTIVITY_NOTICE_MS && deadline > now && deadline - now <= INACTIVITY_REMINDER_MS
+        && (timestampMillis(episode.expireAt) ?? 0) > now;
 }
 
 export function emailFingerprint(email: string): string {

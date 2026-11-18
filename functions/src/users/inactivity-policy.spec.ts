@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { UserRecord } from 'firebase-admin/auth';
 import { Timestamp } from 'firebase-admin/firestore';
-import { emailFingerprint, inactiveIdentity, inactivityMode, isTerminalSubscription, sixMonthsAfter, timestampMillis, warningAcceptedAt } from './inactivity-policy';
+import { emailFingerprint, finalReminderDue, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS, INACTIVITY_REMINDER_MS,
+    inactiveIdentity, inactivityMode, isTerminalSubscription, sixMonthsAfter, timestampMillis, warningAcceptedAt } from './inactivity-policy';
 
 it('retains submillisecond server timestamp precision without accepting malformed values', () => {
     const time = { toMillis: () => 1_800_000_000_123.456 };
@@ -13,6 +14,26 @@ it('retains submillisecond server timestamp precision without accepting malforme
 });
 
 const now = Date.parse('2026-11-13T12:00:00Z');
+describe('final reminder window', () => {
+    const deadline = now + INACTIVITY_REMINDER_MS;
+    const episode = () => ({ state: 'warned', acceptedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS),
+        deleteAfter: Timestamp.fromMillis(deadline), expireAt: Timestamp.fromMillis(deadline + INACTIVITY_DAY_MS) });
+    it('opens at seven days remaining and closes at the original deadline', () => {
+        expect(finalReminderDue(episode(), now - 1)).toBe(false);
+        expect(finalReminderDue(episode(), now)).toBe(true);
+        expect(finalReminderDue(episode(), deadline - 1)).toBe(true);
+        expect(finalReminderDue(episode(), deadline)).toBe(false);
+        expect(finalReminderDue(episode(), deadline + 1)).toBe(false);
+    });
+    it.each([{ state: 'queued' }, { state: 'cancelled' }, { state: 'deletion_requested' },
+        { acceptedAt: null }, { acceptedAt: Timestamp.fromMillis(now + 1) },
+        { acceptedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS + 1) },
+        { deleteAfter: null }, { expireAt: null }, { expireAt: Timestamp.fromMillis(now) },
+        { reminderMailId: 'already-queued' }, { reminderQueuedAt: Timestamp.fromMillis(now - 1) },
+        { reminderQueuedAt: null }])('rejects invalid evidence or an already attempted reminder: %j', patch => {
+        expect(finalReminderDue({ ...episode(), ...patch }, now)).toBe(false);
+    });
+});
 const user = (patch: Record<string, unknown> = {}) => ({ uid: 'synthetic', email: 'synthetic@example.com',
     metadata: { creationTime: '2020-01-01T00:00:00Z', lastSignInTime: '2026-01-01T00:00:00Z' }, ...patch } as UserRecord);
 describe('inactivity eligibility', () => {
@@ -72,6 +93,7 @@ describe('warning acceptance evidence', () => {
         expect(accepted({ ...mail(), to: 'other@example.com' })).toBeNull();
         expect(accepted({ ...mail(), inactivity: { generation: 'old' } })).toBeNull();
         expect(accepted({})).toBeNull();
+        expect(accepted({ ...mail(), template: { name: 'account_inactivity_final_reminder' } })).toBeNull();
     });
     it('rejects partial or malformed success and impossible times', () => {
         for (const info of [{ accepted: [], rejected: [] }, { accepted: ['other@example.com'], rejected: [] },

@@ -14,6 +14,7 @@
     <section aria-labelledby="retention-settings" class="section">
       <div class="section-heading"><h2 id="retention-settings">Retention settings</h2><span>Current mode: <strong>{{ currentModeLabel() }}</strong></span></div>
       <p>Free accounts qualify after more than six calendar months without an app sign-in or session refresh. Confirmed warning delivery starts a full 30-day return period. Basic, Pro, trials, gifts and active grace periods are protected.</p>
+      <p>One final reminder is queued during the last seven days if the account still qualifies. It includes the original deadline and does not extend it.</p>
       @if (!snapshot.settingsValid) { <p class="feedback error" role="alert">Stored settings are invalid. An operator must review them before this form can save changes.</p> }
       @if (conflict()) { <p class="feedback error" role="alert">Settings changed while you were editing. Reset changes to load the current values.</p> }
       <app-compact-select label="Processing mode" [value]="mode()" [options]="modes" [disabled]="loading() || saving()" (selectionChange)="changeMode($event)" />
@@ -30,7 +31,7 @@
           <mat-hint>0–{{ maximumDeletions }}</mat-hint>
         </mat-form-field>
       </div>
-      <p id="retention-cap-help" class="secondary">Limits reset at midnight UTC. Zero pauses that action. Used reservations are not refunded after a failed attempt.</p>
+      <p id="retention-cap-help" class="secondary">Initial warnings and final reminders share the warning limit. Limits reset at midnight UTC. Zero pauses that action. Used reservations are not refunded after a failed attempt.</p>
       <div class="toolbar">
         <button mat-flat-button type="button" (click)="save()" [disabled]="!canSave()">
           <span class="button-content"><span class="button-icon">@if (saving()) { <mat-spinner diameter="18" /> } @else { <mat-icon>save</mat-icon> }</span>{{ saving() ? 'Saving…' : 'Save settings' }}</span>
@@ -52,10 +53,10 @@
         <p>Last run: <strong>{{ run.outcome === 'failed' ? 'Failed — review required' : 'Completed' }}</strong> · {{ run.finishedAt | date:'medium' }}@if (run.capped) { · Limited by time or daily cap }</p>
         <dl class="status-grid run-counts">
           <div><dt>Warnings queued</dt><dd class="number">{{ run.queued | number }}</dd></div>
-          <div><dt>Warnings accepted</dt><dd class="number">{{ run.accepted | number }}</dd></div>
+          <div><dt>Initial warnings accepted</dt><dd class="number">{{ run.accepted | number }}</dd></div>
           <div><dt>Deletion initiated</dt><dd class="number">{{ run.deletionRequested | number }}</dd></div>
           <div><dt>Eligibility holds</dt><dd class="number">{{ run.blocked | number }}</dd></div>
-          <div><dt>Unconfirmed delivery</dt><dd class="number">{{ run.noticeUnconfirmed | number }}</dd></div>
+          <div><dt>Unconfirmed initial warnings</dt><dd class="number">{{ run.noticeUnconfirmed | number }}</dd></div>
           <div><dt>Processing failures</dt><dd class="number">{{ run.failed | number }}</dd></div>
           <div><dt>Observed overdue</dt><dd class="number">{{ run.overdue | number }}</dd></div>
           <div><dt>Deletion needs review</dt><dd class="number">{{ run.reviewRequired | number }}</dd></div>

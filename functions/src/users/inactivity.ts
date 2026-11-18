@@ -7,12 +7,12 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 import { acquireBillingLease, releaseBillingLease, type BillingLease } from '../stripe/billing/service';
 import { BillingContention } from '../stripe/billing/model';
 import { newEmailDeliveryFields } from '../email/queue-metadata';
-import { TRANSACTIONAL_EMAIL_FROM, TRANSACTIONAL_EMAIL_REPLY_TO } from '../email/config';
+import { formatEmailDateTime, TRANSACTIONAL_EMAIL_FROM, TRANSACTIONAL_EMAIL_REPLY_TO } from '../email/config';
 import { TTL_CONFIG } from '../shared/ttl-config';
 import { deleteAuthAccountAndNotify, pendingAccountDeletionMarker } from './initiate-deletion';
 import { readInactivityBilling, stripeAllowsInactivity, type InactivityBilling } from './inactivity-billing';
 import { INACTIVITY_BUDGET_MS, INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS,
-    INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_TEMPLATE, inactiveIdentity, inactivityMode,
+    INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_TEMPLATE, INACTIVITY_REMINDER_TEMPLATE, finalReminderDue, inactiveIdentity, inactivityMode,
     timestampMillis, warningAcceptedAt, type InactiveIdentity, type InactivityMode } from './inactivity-policy';
 
 export interface InactivityContext { db: Firestore; auth: Auth; stripe: () => Promise<Stripe>; now?: () => number }
@@ -80,10 +80,13 @@ async function abandonPreparedDeletion(ctx: InactivityContext, uid: string, gene
 }
 
 async function prepareMutation(ctx: InactivityContext, uid: string, run: InactivityRun, lease: BillingLease,
-    billing: InactivityBilling, identity: InactiveIdentity, previous: DocumentSnapshot, deleting: boolean): Promise<InactivityOutcome> {
+    billing: InactivityBilling, identity: InactiveIdentity, previous: DocumentSnapshot,
+    mutation: 'warning' | 'reminder' | 'deletion'): Promise<InactivityOutcome> {
     const now = clock(ctx);
-    const generation = deleting ? previous.get('generation') as string : randomUUID();
-    const mailRef = ctx.db.collection('mail').doc(`inactivity_${generation}`);
+    const deleting = mutation === 'deletion';
+    const reminding = mutation === 'reminder';
+    const generation = mutation === 'warning' ? randomUUID() : previous.get('generation') as string;
+    const mailRef = ctx.db.collection('mail').doc(`inactivity_${reminding ? 'reminder_' : ''}${generation}`);
     return ctx.db.runTransaction(async tx => {
         const [guard, config, current, currentBilling, ownsLease, marker] = await Promise.all([
             getUserDeletionGuardStateInTransaction(ctx.db, tx, uid, clock(ctx)), validRun(ctx, tx, run),
@@ -99,18 +102,23 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
             || timestampMillis(current.get('deleteAfter')) === null || timestampMillis(current.get('deleteAfter'))! > clock(ctx)
             || timestampMillis(current.get('acceptedAt')) === null
             || timestampMillis(current.get('deleteAfter'))! < timestampMillis(current.get('acceptedAt'))! + INACTIVITY_NOTICE_MS)) return 'blocked';
+        if (reminding && !finalReminderDue(current.data(), clock(ctx))) return 'skipped';
         if (!consumeBudget(tx, config, deleting ? 'deletions' : 'warnings', now)) return 'capped';
         if (deleting) {
             tx.set(marker.ref, { ...pendingAccountDeletionMarker('inactivity'), inactivityGeneration: generation, authDeleteStatus: 'prepared' }, { merge: true });
             tx.update(current.ref, { state: 'deletion_requested', requestedAt: Timestamp.fromMillis(now), nextCheckAt: FieldValue.delete() });
             return 'deletion_requested';
         }
-        tx.set(inactivityRef(ctx.db, uid), { uid, generation, state: 'queued', activityAt: identity.activityAt,
+        if (reminding) tx.update(current.ref, { reminderMailId: mailRef.id, reminderQueuedAt: Timestamp.fromMillis(now),
+            nextCheckAt: Timestamp.fromMillis(now + INACTIVITY_DAY_MS) });
+        else tx.set(inactivityRef(ctx.db, uid), { uid, generation, state: 'queued', activityAt: identity.activityAt,
             authCreatedAt: identity.createdAt, emailHash: identity.emailHash, billingRevision: billing.revision,
             mailId: mailRef.id, queuedAt: Timestamp.fromMillis(now), nextCheckAt: Timestamp.fromMillis(now + INACTIVITY_DAY_MS), expireAt: expiry(now) });
         tx.create(mailRef, { ...newEmailDeliveryFields(), uid, to: identity.email,
             from: TRANSACTIONAL_EMAIL_FROM, replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
-            template: { name: INACTIVITY_TEMPLATE, data: { login_url: 'https://quantified-self.io/login', support_email: TRANSACTIONAL_EMAIL_REPLY_TO } },
+            template: { name: reminding ? INACTIVITY_REMINDER_TEMPLATE : INACTIVITY_TEMPLATE,
+                data: { login_url: 'https://quantified-self.io/login', support_email: TRANSACTIONAL_EMAIL_REPLY_TO,
+                    ...(reminding ? { deletion_deadline: formatEmailDateTime(new Date(timestampMillis(current.get('deleteAfter'))!)) } : {}) } },
             inactivity: { generation }, expireAt: expiry(now) });
         return 'queued';
     });
@@ -160,7 +168,8 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
         });
     }
     const deleting = episode?.state === 'warned';
-    if (deleting && (timestampMillis(episode.deleteAfter) === null || timestampMillis(episode.deleteAfter)! > clock(ctx) || run.mode === 'warnings-only')) {
+    const reminding = finalReminderDue(episode, clock(ctx));
+    if (deleting && !reminding && (timestampMillis(episode.deleteAfter) === null || timestampMillis(episode.deleteAfter)! > clock(ctx) || run.mode === 'warnings-only')) {
         if (run.mode !== 'dry-run') await updateEpisode(ctx, uid, episode.generation, run, { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
         return 'waiting';
     }
@@ -179,9 +188,10 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
             if (activeEpisode(episode)) await updateEpisode(ctx, uid, episode!.generation, run, cancellation());
             return 'cancelled';
         }
-        const result = await prepareMutation(ctx, uid, run, lease, billing, identity, previous, deleting);
-        // A capped deletion must yield its old queue position. Otherwise a backlog
-        // can repeatedly exhaust the due lane before newer mail receipts are observed.
+        const result = await prepareMutation(ctx, uid, run, lease, billing, identity, previous,
+            reminding ? 'reminder' : deleting ? 'deletion' : 'warning');
+        // Capped deletions and reminders must yield their old queue position so a
+        // backlog cannot exhaust the due lane before newer mail receipts are observed.
         if (result === 'capped' && deleting) await updateEpisode(ctx, uid, episode!.generation, run,
             { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
         if (result !== 'deletion_requested') return result;

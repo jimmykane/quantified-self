@@ -69,12 +69,23 @@ export const EMAIL_PARTIAL_CATALOG: readonly EmailPartialCatalogEntry[] = [
 export const REFRESHED_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntry[] = [
     {
         id: 'account_inactivity_warning',
-        subject: 'Sign in within 30 days to keep your Quantified Self account',
+        subject: 'Action required: Sign in within 30 days to prevent account deletion',
         htmlFile: 'account_inactivity_warning.hbs',
         textFile: 'account_inactivity_warning.txt.hbs',
         partials: TRANSACTIONAL_PARTIALS,
         previewCases: [{ name: 'inactive-free-account', data: {
             login_url: 'https://quantified-self.io/login', support_email: 'support@quantified-self.io',
+        } }],
+    },
+    {
+        id: 'account_inactivity_final_reminder',
+        subject: 'Final reminder: Sign in to prevent account deletion',
+        htmlFile: 'account_inactivity_final_reminder.hbs',
+        textFile: 'account_inactivity_final_reminder.txt.hbs',
+        partials: TRANSACTIONAL_PARTIALS,
+        previewCases: [{ name: 'inactive-free-account', data: {
+            login_url: 'https://quantified-self.io/login', support_email: 'support@quantified-self.io',
+            deletion_deadline: '13 December 2026 at 12:00:00 UTC',
         } }],
     },
     {

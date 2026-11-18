@@ -4,7 +4,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { inactivityRef, processInactiveAccount, runInactivitySweep, type InactivityContext } from './inactivity';
-import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS } from './inactivity-policy';
+import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS, INACTIVITY_REMINDER_MS,
+    INACTIVITY_REMINDER_TEMPLATE } from './inactivity-policy';
+import { formatEmailDateTime } from '../email/config';
+import { emailEligibility, emailSource } from '../email/monitoring';
 import { invalidateInactivityWarning } from './inactivity-cancellation';
 import { readInactivityBilling } from './inactivity-billing';
 import { readInactivityAdmin } from './inactivity-admin';
@@ -37,6 +40,11 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(await process()).toBe('queued');
         await acceptWarning();
         now += INACTIVITY_NOTICE_MS;
+        await refreshRun();
+    }
+    async function reminderWindow() {
+        await process(); await acceptWarning();
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_REMINDER_MS;
         await refreshRun();
     }
     beforeAll(() => {
@@ -86,11 +94,149 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(await process()).toBe('queued'); now += 3 * INACTIVITY_DAY_MS; await refreshRun(); await acceptWarning();
         const episode = (await inactivityRef(db, uid).get()).data()!;
         await db.doc(`mail/${episode.mailId}`).delete(); // Synthetic TTL expiry; receipt survives.
-        now += INACTIVITY_NOTICE_MS - 1; await refreshRun(); expect(await process()).toBe('waiting');
+        now += INACTIVITY_NOTICE_MS - 1; await refreshRun(); expect(await process()).toBe('queued');
         now++; await refreshRun(); expect(await process()).toBe('deletion_requested');
         expect(auth.deleteUser).toHaveBeenCalledExactlyOnceWith(uid);
         expect((await db.doc(`userDeletionTombstones/${uid}`).get()).data()).toMatchObject({ source: 'inactivity', cleanupStatus: 'pending', authDeleteStatus: 'attempted' });
         expect((await db.doc(`mail/account_deleted_confirmation_${uid}`).get()).get('uid')).toBe(uid);
+    });
+    it('queues one owned final reminder in the last seven days without changing the notice or deadline', async () => {
+        await reminderWindow();
+        const before = (await inactivityRef(db, uid).get()).data()!;
+        now--; expect(await process()).toBe('waiting');
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+        now++;
+        expect(await process()).toBe('queued');
+        const after = (await inactivityRef(db, uid).get()).data()!;
+        for (const key of ['state', 'generation', 'mailId', 'acceptedAt', 'deleteAfter', 'expireAt']) expect(after[key]).toEqual(before[key]);
+        expect(after.reminderQueuedAt.toMillis()).toBe(now);
+        const mail = await db.doc(`mail/${after.reminderMailId}`).get();
+        expect(mail.data()).toMatchObject({ uid, to: authUser.email, inactivity: { generation: before.generation },
+            delivery: { state: 'PENDING', attempts: 0 }, template: { name: INACTIVITY_REMINDER_TEMPLATE,
+                data: { deletion_deadline: formatEmailDateTime(before.deleteAfter) } } });
+        expect(mail.get('expireAt').toMillis()).toBe(now + 90 * INACTIVITY_DAY_MS);
+        expect(emailSource(mail.data()!)).toBe('transactional');
+        expect(emailEligibility(mail, Date.now() + 1000)).toMatchObject({ source: 'transactional', kind: 'due' });
+        expect(await process()).toBe('waiting');
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(2);
+        expect((await config().get()).get('warnings')).toBe(1);
+        expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(false);
+        const view = await readInactivityAdmin(db, { getUsers: vi.fn().mockResolvedValue({ users: [authUser] }) }, { view: 'warned' }, now);
+        expect(view.accounts[0].detail).toContain('Final reminder queued');
+        expect(JSON.stringify(view)).not.toContain(after.reminderMailId);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it('deduplicates concurrent reminder attempts transactionally', async () => {
+        await reminderWindow();
+        const results = await Promise.allSettled([process(), process()]);
+        expect(results.filter(result => result.status === 'fulfilled' && result.value === 'queued')).toHaveLength(1);
+        expect((await config().get()).get('warnings')).toBe(1);
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(2);
+    }, 30_000);
+    it('requires a fresh notice after an email change and deduplicates reminders per episode', async () => {
+        await reminderWindow(); expect(await process()).toBe('queued');
+        const original = (await inactivityRef(db, uid).get()).data()!;
+        authUser = { ...authUser, email: 'changed@example.invalid' };
+        expect(await process()).toBe('cancelled'); expect(await process()).toBe('queued');
+        const replacement = (await inactivityRef(db, uid).get()).data()!;
+        expect(replacement.generation).not.toBe(original.generation);
+        expect(replacement.reminderMailId).toBeUndefined(); expect(replacement.reminderQueuedAt).toBeUndefined();
+        expect(replacement.acceptedAt).toBeUndefined(); expect(replacement.deleteAfter).toBeUndefined();
+        await acceptWarning();
+        expect((await inactivityRef(db, uid).get()).get('deleteAfter').toMillis()).toBe(now + INACTIVITY_NOTICE_MS);
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_REMINDER_MS; await refreshRun();
+        expect(await process()).toBe('queued');
+        const reminderId = (await inactivityRef(db, uid).get()).get('reminderMailId');
+        expect(reminderId).not.toBe(original.reminderMailId);
+        expect((await db.doc(`mail/${reminderId}`).get()).get('to')).toBe(authUser.email);
+    });
+    it.each(['ERROR', 'PENDING', 'missing'])('does not resend or extend the deadline for a %s final reminder', async state => {
+        await reminderWindow(); expect(await process()).toBe('queued');
+        const episode = (await inactivityRef(db, uid).get()).data()!;
+        const mail = db.doc(`mail/${episode.reminderMailId}`);
+        if (state === 'missing') await mail.delete(); else await mail.update({ 'delivery.state': state });
+        now += INACTIVITY_DAY_MS; await refreshRun(); expect(await process()).toBe('waiting');
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBe(episode.reminderMailId);
+        expect((await config().get()).get('budgetDay')).not.toBe(new Date(now).toISOString().slice(0, 10));
+        now = episode.deleteAfter.toMillis(); await refreshRun();
+        expect(await process()).toBe('deletion_requested');
+        expect(auth.deleteUser).toHaveBeenCalledExactlyOnceWith(uid);
+    });
+    it('shares the warning cap, yields when capped, and uses the original deadline on a late scan', async () => {
+        await reminderWindow();
+        const deadline = (await inactivityRef(db, uid).get()).get('deleteAfter');
+        await config().update({ budgetDay: new Date(now).toISOString().slice(0, 10), warnings: 100 });
+        expect(await process()).toBe('capped');
+        expect((await inactivityRef(db, uid).get()).get('nextCheckAt').toMillis()).toBe(now + INACTIVITY_DAY_MS);
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+        now += 2 * INACTIVITY_DAY_MS; await refreshRun(); expect(await process()).toBe('queued');
+        const episode = (await inactivityRef(db, uid).get()).data()!;
+        expect(episode.deleteAfter).toEqual(deadline);
+        expect((await db.doc(`mail/${episode.reminderMailId}`).get()).get('template.data.deletion_deadline')).toBe(formatEmailDateTime(deadline));
+    });
+    it('observes reminder queues in the existing daily warning counters', async () => {
+        await reminderWindow(); await config().set({ mode: 'warnings-only' });
+        const summary = await runInactivitySweep(ctx);
+        expect(summary.counts.queued).toBe(1);
+        expect((await config().get()).get('lastRun.counts.queued')).toBe(1);
+        expect((await inactivityRef(db, uid).get()).get('state')).toBe('warned');
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it.each(['off', 'dry-run', 'warnings-only'] as const)('respects %s mode for final reminders', async mode => {
+        await reminderWindow();
+        const before = (await inactivityRef(db, uid).get()).data();
+        await config().update({ mode });
+        expect(await processInactiveAccount(ctx, uid, { ...run, mode })).toBe(mode === 'off' ? 'skipped' : mode === 'dry-run' ? 'eligible' : 'queued');
+        if (mode !== 'warnings-only') expect((await inactivityRef(db, uid).get()).data()).toEqual(before);
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(mode === 'warnings-only' ? 2 : 1);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it.each(['login', 'refresh', 'email', 'basic', 'pro', 'trial', 'grace', 'expired-evidence'])('cancels the pending reminder after %s', async change => {
+        await reminderWindow();
+        if (change === 'login' || change === 'refresh') authUser = { ...authUser, metadata: { ...authUser.metadata,
+            [change === 'login' ? 'lastSignInTime' : 'lastRefreshTime']: new Date(now).toISOString() } } as admin.auth.UserRecord;
+        else if (change === 'email') authUser = { ...authUser, email: 'replacement@example.invalid' };
+        else if (change === 'basic' || change === 'pro') authUser = { ...authUser, customClaims: { stripeRole: change } };
+        else if (change === 'trial') await db.doc(`customers/${uid}/subscriptions/sub_trial`).set({ status: 'trialing' });
+        else if (change === 'grace') await db.doc(`users/${uid}/system/status`).set({ gracePeriodUntil: Timestamp.fromMillis(now + INACTIVITY_DAY_MS) });
+        else await inactivityRef(db, uid).update({ expireAt: Timestamp.fromMillis(now) });
+        expect(await process()).toBe('cancelled');
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(1);
+    });
+    it('rechecks Auth after billing reads before queuing the reminder', async () => {
+        await reminderWindow();
+        auth.getUser.mockResolvedValueOnce(authUser).mockResolvedValue({ ...authUser,
+            metadata: { ...authUser.metadata, lastRefreshTime: new Date(now).toISOString() } });
+        expect(await process()).toBe('cancelled');
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+    });
+    it.each(['off', 'missing-user', 'deletion', 'cancelled', 'billing', 'deadline', 'expiry'])('rechecks the %s boundary inside the reminder transaction', async change => {
+        await reminderWindow();
+        // Keep both leases valid so the test exercises the deadline/evidence check itself.
+        if (change === 'deadline') { now += INACTIVITY_REMINDER_MS - 1; await refreshRun(); }
+        if (change === 'expiry') await inactivityRef(db, uid).update({ expireAt: Timestamp.fromMillis(now + 1) });
+        stripe.customers.list.mockImplementation(async () => {
+            if (change === 'off') await config().update({ mode: 'off' });
+            else if (change === 'missing-user') await db.doc(`users/${uid}`).delete();
+            else if (change === 'deletion') await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+            else if (change === 'cancelled') await invalidateInactivityWarning(db, uid, now);
+            else if (change === 'billing') await db.doc(`users/${uid}/system/status`).set({ gracePeriodUntil: Timestamp.fromMillis(now + INACTIVITY_DAY_MS) });
+            else now++;
+            return { data: [], has_more: false };
+        });
+        expect(await process()).toBe('skipped');
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(1);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it('reports billing read failures and defers a reminder without reserving mail', async () => {
+        await reminderWindow(); await config().set({ mode: 'enforce' });
+        stripe.customers.list.mockRejectedValue(new Error('synthetic billing outage'));
+        expect((await runInactivitySweep(ctx)).counts.failed).toBe(1);
+        expect((await inactivityRef(db, uid).get()).get('nextCheckAt').toMillis()).toBe(now + INACTIVITY_DAY_MS);
+        expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
+        expect((await config().get()).get('warnings')).toBeUndefined();
     });
     it('preserves the notice across daily claims signals and accepts server timestamp precision', async () => {
         await db.doc('configuration/stripeBilling').update({ nativeSince: new Timestamp(1, 123_456_000) });

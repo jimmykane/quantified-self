@@ -30,6 +30,13 @@ notices even if a short membership ends between daily scans. Old redeliveries ca
 Unchanged daily claims signals do not reset warnings. A later eligible episode receives a new warning and full 30 days.
 There is no hourly requirement or exact deletion-time promise: caps, outages and daily scheduling can delay processing.
 
+The daily due lane also attempts **one final reminder during the last seven days before the original deadline**.
+It requires a still-valid accepted notice and repeats the Auth, billing, deletion-guard and lease checks used for
+initial warnings. A delayed scan sends the exact existing deadline, including UTC time, rather than promising
+another seven days. No reminder is queued at or after that deadline. The reminder is supplemental: its delivery failure,
+absence or delay neither extends the original 30-day period nor replaces the initial SMTP-acceptance evidence.
+Returning or losing eligibility cancels a reminder that has not yet been queued. Already queued mail cannot be recalled.
+
 ## State and safety boundary
 
 - `configuration/inactiveAccounts`: private runtime state, global expiring lease, UTC counters and resumable Auth cursor.
@@ -42,6 +49,10 @@ There is no hourly requirement or exact deletion-time promise: caps, outages and
   The `expireAt` TTL is 90 days; recursive account cleanup also erases it. Expired or missing expiry evidence requires
   a fresh notice even if asynchronous TTL cleanup has not removed the record yet.
 - `mail/inactivity_{generation}`: existing mail lifecycle with UID, current recipient and 90-day TTL.
+- `mail/inactivity_reminder_{generation}`: one supplemental mail per episode, also UID-owned with 90-day TTL.
+  The episode's `reminderMailId` and `reminderQueuedAt` are committed atomically with this mail. They remain as
+  deduplication evidence even if the mail fails or expires; scheduled processing never resends that reminder.
+  A new episode replaces these markers and must earn its own initial accepted notice and 30-day deadline.
 - `userDeletionTombstones/{uid}`: existing durable writer fence, created only when deletion is due. Pending fences
   have no TTL. The existing cleanup owner creates its expiring completed receipt only after verified cleanup.
 
@@ -49,7 +60,8 @@ State proceeds queued → warned → deletion_requested; cancellation permits a 
 pages of 100 and a durable cursor. Due episodes get an independent two-minute lane within a four-minute scan budget;
 an unfinished Auth page is revisited. Discovery skips existing active notices, so an exhausted deletion budget cannot
 block new warnings. Capped deletions yield their due-queue position until the next daily check so an older backlog
-cannot repeatedly starve newer warning receipts. A global lease prevents overlap. UTC caps are 100 new warnings and 25 deletion
+cannot repeatedly starve newer warning receipts. A global lease prevents overlap. UTC caps are 100 warning emails
+(initial warnings and final reminders combined) and 25 deletion
 initiations per day across retries; `warningDailyLimit`/`deletionDailyLimit` may lower these, including zero, but cannot
 raise them. Missing limits use those defaults. Invalid limits fail closed. A cap reservation is not refunded after failure.
 
@@ -58,6 +70,8 @@ lease; it creates no warning, episode or deletion fence. `warnings-only` queues/
 deletion. Switching to `enforce` can act on already elapsed warnings, so inspect their ages before changing mode.
 `off` stops new scans and is rechecked inside mutation transactions. It does not recall queued mail or undo an Auth
 deletion already attempted; existing cleanup must continue.
+Final reminders run in both `warnings-only` and `enforce`, subject to the shared warning cap. A capped reminder yields
+its due position until the next daily check. `dry-run` checks eligibility without queuing a reminder or changing its episode.
 
 Native billing ownership and a valid handover timestamp are required. The scanner holds the same customer lease as
 native billing, rechecks guarded Firestore state transactionally and reads Stripe without mutating or linking customers.
@@ -104,9 +118,9 @@ sessions may write; impersonated sessions are denied. The page discards pending 
 account change or destruction. Returning to the same UID cannot revive an old confirmation or let an old save result
 clear a newer dialog or its pending state. There are no manual-delete, retry, reset-counter or send-email buttons.
 
-The existing help/policy content already describes the unchanged customer-facing retention behavior; this admin-only
-surface does not change those rules. Monitoring coverage is unchanged: dashboard data reuses scheduler outcomes and
-does not replace the existing heartbeat, failure, delivery, overdue or pending-fence policies.
+The Help page explains the supplemental reminder and unchanged original deadline. Admin account details distinguish a
+queued final reminder from the initial accepted warning. Daily warning reservations and queued counts include both
+email types; accepted counts still describe initial notices that establish the deadline.
 
 ## Monitoring and recovery
 
@@ -120,6 +134,13 @@ unconfirmed warnings, pending inactivity fences older than 24 hours, observed ov
 unfinished for seven days, and a missing daily heartbeat for 48 hours. Holds/caps/contention are not failed deletions.
 Samples are bounded; queued mail, Auth initiation and cleanup completion are distinct. Existing email-delivery and
 native cleanup policies remain authoritative for their stages.
+
+Final-reminder monitoring impact: **covered by existing telemetry; no new policy or label**. Queued reminders use the
+existing `counts.queued` warning metric and shared warning cap. Transaction/provider failures flow into `counts.failed`;
+the existing daily heartbeat and due-lane coverage apply. The ordinary `mail` record initializes `queuedAt` and pending
+delivery metadata, so the existing transactional email backlog, unknown-state, SMTP failure and partial-acceptance
+monitoring includes it automatically. The initial-notice-unconfirmed metric remains specific to deletion-blocking
+first-warning evidence. Protective cancellations, caps and contention remain excluded from failure pages.
 
 The 48-hour heartbeat uses a PromQL sum over the lookback window, with an explicit zero fallback for absent data;
 it alerts after five minutes without any positive observation in that window. This avoids the
@@ -141,7 +162,9 @@ is supplied. Reconcile through the existing deletion runbook after establishing 
 
 Local tests cover calendar boundaries, identity/recipient changes, refreshed sessions, billing ambiguity, paid/grace
 protection, delivery evidence, exact deadlines, repeated/concurrent runs, caps, cursor progress, guarded cancellation,
-ambiguous Auth failure and recursive cleanup. Lifecycle emulator tests use real loopback Firestore with fake Auth
+ambiguous Auth failure and recursive cleanup. Reminder checks cover the seven-day boundary, exact UTC deadline,
+concurrent deduplication, shared caps, all modes, changed Auth/billing state, deletion fences and failed/missing reminder
+mail without extending the deadline. Lifecycle emulator tests use real loopback Firestore with fake Auth
 and Stripe; the existing cleanup suite verifies its recursive data boundary. These do not prove real SMTP delivery,
 remote Stripe permissions or production Auth trigger delivery.
 
@@ -155,8 +178,9 @@ Before an approved rollout:
    `npm run firebase -- deploy --project quantified-self-io --only functions:processInactiveAccounts,functions:getInactivityAdmin,functions:onSubscriptionUpdated,functions:deleteSelf`.
    Verify the due/state collection-group query indexes and 90-day episode TTL are active, not merely present in source.
    Deploy the help/policy changes with the normal approved Hosting build.
-3. With separate template-write approval, seed only the selected warning and its required partials using
-   `npm --prefix functions run seed-emails -- --templates=account_inactivity_warning` under an explicitly verified
+3. Before deploying the reminder-capable scheduler, with separate template-write approval, seed both retention
+   templates and their required partials using
+   `npm --prefix functions run seed-emails -- --templates=account_inactivity_warning,account_inactivity_final_reminder` under an explicitly verified
    target project environment. The seeder does not select a project from a `--project` argument. Verify HTML/plaintext
    previews first; a controlled-inbox SMTP test needs its own mail authorization.
 4. Preview monitoring offline with `node tools/cleanup-monitoring/cli.mjs --project=quantified-self-io`. Apply only

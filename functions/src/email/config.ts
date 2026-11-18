@@ -86,6 +86,11 @@ export function formatEmailDate(value: Date | TimestampLike): string {
     return DATE_FORMATTER.format(toDate(value));
 }
 
+/** Preserve the existing deadline's UTC time; a date alone could imply extra hours. */
+export function formatEmailDateTime(value: Date | TimestampLike): string {
+    return `${formatEmailDate(value)} at ${toDate(value).toISOString().slice(11, 19)} UTC`;
+}
+
 export function calculateGracePeriodEnd(value: Date | TimestampLike): Date {
     return calculateGracePeriodEndFromStart(toDate(value));
 }

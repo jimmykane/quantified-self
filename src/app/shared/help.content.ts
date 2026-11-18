@@ -1991,7 +1991,9 @@ Some older email delivery records may remain after account deletion. Those with 
 
 Sign in within 30 days of the warning to keep your account; no purchase is required. An existing app session refreshing also counts as activity. Provider sync and MCP requests do not reset this period. If your sign-in email changes, a fresh warning period is required at the new address.
 
-Deletion checks run daily and never delete an account before the full 30-day warning period has elapsed. Unconfirmed warning delivery prevents deletion. If you remain inactive and Free, deletion uses the same permanent account and background data-cleanup process described above. Export anything you want to keep before the deadline.
+We also attempt one final reminder during the last seven days if your account still qualifies. It shows the original deadline in UTC and does not extend the 30-day warning period. Daily checks, delivery delays or limits can delay or prevent this extra reminder, so follow the deadline from the first warning. Signing in cancels deletion and any reminder that has not yet been queued.
+
+Deletion checks run daily and never delete an account before the full 30-day warning period has elapsed. Unconfirmed initial warning delivery prevents deletion. If you remain inactive and Free, deletion uses the same permanent account and background data-cleanup process described above. Export anything you want to keep before the deadline.
 
 ## Exports and legal requests
 

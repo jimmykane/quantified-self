@@ -3,6 +3,7 @@ import {
     buildEmailPlanDetails,
     calculateGracePeriodEnd,
     formatEmailDate,
+    formatEmailDateTime,
     formatGracePeriodEnd,
 } from './config';
 
@@ -35,6 +36,8 @@ describe('email config', () => {
         const expiration = new Date('2026-01-15T23:30:00.000Z');
 
         expect(formatEmailDate(expiration)).toBe('15 January 2026');
+        expect(formatEmailDateTime(expiration)).toBe('15 January 2026 at 23:30:00 UTC');
+        expect(formatEmailDateTime({ toDate: () => new Date('2026-01-16T01:30:42+02:00') })).toBe('15 January 2026 at 23:30:42 UTC');
         expect(calculateGracePeriodEnd(expiration).toISOString()).toBe('2026-02-14T23:30:00.000Z');
         expect(formatGracePeriodEnd(expiration)).toBe('14 February 2026');
     });

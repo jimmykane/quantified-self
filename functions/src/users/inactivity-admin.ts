@@ -50,6 +50,8 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             if (doc.get('authDeleteStatus') === 'prepared') detail = created === null || created + INACTIVITY_DAY_MS < now
                 ? 'Deletion prepared but not attempted; operator review required.' : 'Deletion prepared; awaiting Auth deletion.';
         } else if ((date(doc, 'expireAt') ?? 0) <= now) detail = 'Evidence expired; a new warning is required.';
+        else if (request.view === 'warned' && date(doc, 'reminderQueuedAt') !== null)
+            detail = 'Final reminder queued; the original deletion deadline is unchanged.';
         else if (request.view === 'queued') {
             const mailId = doc.get('mailId');
             const mail = typeof mailId === 'string' && /^inactivity_[A-Za-z0-9-]+$/.test(mailId) ? await db.doc(`mail/${mailId}`).get() : null;

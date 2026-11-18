@@ -15,7 +15,7 @@ export function buildInactivityMonitoring(project, channel, owner) {
   metric('review', 'jsonPayload.reviewRequired>0', 'Bounded pending inactivity deletion fences older than 24 hours; completed receipts excluded.');
   metric('overdue', 'jsonPayload.mode="enforce" jsonPayload.overdue>0', 'Observed still-actionable deadlines more than two days overdue; future work and protected/cancelled episodes excluded.');
   metric('scan_stalled', 'jsonPayload.scanAgeMs>=604800000', 'Auth scan has not completed a cycle for seven days; cursor progress is not complete inventory.');
-  metric('warnings', 'jsonPayload.counts.queued>=0', 'Warning documents queued per invocation, not SMTP acceptance.', 'counts.queued');
+  metric('warnings', 'jsonPayload.counts.queued>=0', 'Initial warning and final reminder documents queued per invocation, not SMTP acceptance.', 'counts.queued');
   metric('deletions', 'jsonPayload.counts.deletion_requested>=0', 'Individual Auth deletion initiations, not completed data cleanup.', 'counts.deletion_requested');
   metric('holds', 'jsonPayload.counts.blocked>=0', 'Protective or uncertain billing holds; informational, never a failure page.', 'counts.blocked');
   const filter = key => `metric.type="logging.googleapis.com/user/${name(key)}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;

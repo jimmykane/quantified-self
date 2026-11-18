@@ -700,7 +700,8 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
     for (const phrase of ['six calendar months', 'Sign in within 30 days', 'no purchase is required',
       'Provider sync and MCP requests do not reset', 'fresh warning period', 'Basic and Pro access',
-      'trials and gifts', 'grace period protect', 'run daily', 'Unconfirmed warning delivery prevents deletion']) {
+      'trials and gifts', 'grace period protect', 'run daily', 'Unconfirmed initial warning delivery prevents deletion',
+      'one final reminder during the last seven days', 'original deadline in UTC', 'does not extend the 30-day warning period']) {
       expect(copy).toContain(phrase);
     }
   });
