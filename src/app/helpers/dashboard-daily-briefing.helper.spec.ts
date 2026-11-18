@@ -14,6 +14,16 @@ function signals(overrides: Partial<DashboardGlanceReadiness> = {}, load: 'avail
 }
 
 describe('Dashboard daily briefing', () => {
+  it('describes above-range HRV neutrally without turning it into a recovery warning', () => {
+    const result = buildDashboardDailyBriefing(signals({ changeSignals: [
+      { ...health[0], state: 'above-range', statusText: 'Above personal range' }, health[1],
+    ] }));
+    expect(result.headline).toContain('7-day HRV is above your usual range');
+    expect(result.parts).toContainEqual({ text: '7-day HRV is above your usual range', tone: 'neutral' });
+    expect(result.tone).toBe('positive');
+    expect(result.headline).not.toContain('outside');
+  });
+
   it.each(['Ready', 'Mixed', 'Recover'])('summarizes %s readiness in one short sentence with the existing assessment tone', label => {
     const result = buildDashboardDailyBriefing(signals({ label }));
     expect(result).toMatchObject({ headline: `Training state is Fresh, readiness is ${label}, and 7-day HRV is within your usual range.`,

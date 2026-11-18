@@ -80,6 +80,8 @@ export interface ServiceConnectionMetaFields {
   /** Garmin's server-owned lower bound for automatic recorded-activity sending. */
   activitySyncCutoffMs?: number;
   connectionHistoryImport?: ConnectionHistoryStatusProjection;
+  /** Creation time of the latest manual history run claimed for a completion alert. */
+  historyNotificationRunCreatedAtMs?: number;
   connectionState?: ServiceConnectionState | null;
   /**
    * A display-only stable identifier supplied by the connected provider.
@@ -100,6 +102,9 @@ export interface ServiceConnectionMetaFields {
   lastDisconnectedAt?: number | null;
   /** Server-owned generation for the latest connection-state transition. */
   connectionStateGeneration?: string | null;
+  /** Stable notification episode; authentication retries may rotate the lifecycle generation. */
+  reconnectNotificationId?: string;
+  reconnectNotificationStartedAtMs?: number;
   /** Server-owned generation for the active pending-disconnect episode. */
   disconnectGeneration?: string | null;
   /** Durable provider-neutral repair marker for route restoration. */

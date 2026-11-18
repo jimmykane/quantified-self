@@ -5,6 +5,8 @@ vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { TRAINING_PUSH, type TrainingCandidate } from './training-policy';
 import { observeTrainingNotification, sendTrainingNotification, type TrainingPushDependencies } from './training-service';
+import { admitConnectionNotification, sendConnectionNotification } from './connection-service';
+import { connectionStatePath, type ConnectionIncident } from './connection-policy';
 
 const now = Date.UTC(2026, 10, 6, 12), key = 'B' + 'A'.repeat(86), origin = 'https://quantified-self.io';
 const device = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
@@ -56,8 +58,69 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
     expect(JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]).notification.navigate).toBe(origin + '/training/plans?sync=attention');
     expect(vi.mocked(h.deps.send).mock.calls[0][1]).not.toMatch(/private-canary|"workout"|destination/);
   }, 30000);
+  it('leaves repeated issue receipts untouched and only extends them for a later workout', async () => {
+    const h = await setup(), candidate = await h.seed('first', 'reconnect_required');
+    await h.observe(candidate);
+    const [receipt] = (await h.state.collection('issues').get()).docs;
+    const later = await h.seed('second', 'reconnect_required');
+    await db.doc(`${h.root}/scheduledWorkouts/second`).update({ localDate: '2027-11-18' });
+    await h.observe(later);
+    const extended = await receipt.ref.get();
+    expect(extended.get('expireAt').toMillis()).toBeGreaterThan(receipt.get('expireAt').toMillis());
+    await h.observe(candidate);
+    expect((await receipt.ref.get()).updateTime).toEqual(extended.updateTime);
+  });
+  it('clears the deadline left by an older worker that already claimed the batch', async () => {
+    const h = await setup();
+    await h.state.set({ attempts: [now], dueAt: now });
+    await h.send();
+    const state = await h.state.get();
+    expect(state.get('dueAt')).toBeUndefined();
+    expect(state.get('attempts')).toEqual([now]);
+    expect(h.deps.send).not.toHaveBeenCalled();
+  });
   it('notifies standalone workouts too', async () => {
     const h = await setup(); await h.observe(await h.seed('standalone', 'failed', null)); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it.each(['connection first', 'Training first', 'concurrent'])('shares exactly one reconnect warning across categories: %s', async order => {
+    const h = await setup(), incident: ConnectionIncident = { service: ServiceNames.GarminAPI,
+      id: randomUUID(), observedAt: now, providerUserId: 'account' };
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionState: 'reconnect_required',
+      reconnectNotificationId: incident.id, reconnectNotificationStartedAtMs: now });
+    const candidate = await h.seed('workout', 'reconnect_required');
+    const admit = () => admitConnectionNotification('owner', incident, h.deps);
+    if (order === 'connection first') { await admit(); await h.observe(candidate); }
+    else if (order === 'Training first') {
+      await h.observe(candidate); await h.observe(await h.seed('another-workout', 'reconnect_required')); await admit();
+    }
+    else await Promise.all([admit(), h.observe(candidate)]);
+    // Routine auth retries rotate lifecycle generations, not the unresolved notification episode.
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionStateGeneration: randomUUID() });
+    h.advance(); await Promise.all([h.send(), sendConnectionNotification('owner', h.deps)]);
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    const shared = (await db.doc(connectionStatePath('owner')).get()).data();
+    expect(shared?.incidents[ServiceNames.GarminAPI].id).toBe(incident.id);
+  }, 30000);
+  it('does not rewrite a reserved connection receipt for each affected workout or sender claim', async () => {
+    const h = await setup(), incidentId = randomUUID();
+    await db.doc(`${h.root}/meta/${ServiceNames.GarminAPI}`).update({ connectionState: 'reconnect_required',
+      reconnectNotificationId: incidentId, reconnectNotificationStartedAtMs: now });
+    const writes: string[] = [], original = db.runTransaction.bind(db);
+    vi.spyOn(db, 'runTransaction').mockImplementation(callback => original(async tx => {
+      const set = vi.spyOn(tx, 'set');
+      const result = await callback(tx);
+      writes.push(...set.mock.calls.map(([ref]) => ref.path).filter(path => path === connectionStatePath('owner')));
+      return result;
+    }));
+    h.advance(60000);
+    await h.observe(await h.seed('first', 'reconnect_required'));
+    const receipt = await db.doc(connectionStatePath('owner')).get();
+    expect(receipt.get('expireAt').toMillis()).toBe(h.deps.now() + 31 * TRAINING_PUSH.dayMs);
+    expect(writes).toHaveLength(1); writes.length = 0;
+    await h.observe(await h.seed('second', 'reconnect_required'));
+    await h.observe(await h.seed('first', 'reconnect_required'));
+    h.advance(); await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(writes).toEqual([]);
   });
   it('keeps a current sync problem eligible after an unrelated plan title edit', async () => {
     const h = await setup(), candidate = await h.seed(); await h.observe(candidate);
@@ -117,6 +180,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
     if (reason === 'midnight') h.advance(2 * TRAINING_PUSH.dayMs);
     if (reason === 'restore') await db.doc(`${h.root}/trainingPlanState/current/planDeletionLocks/_bulk_restore`).set({});
     h.advance(); await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
+    if (reason === 'deletion') {
+      const root = await h.state.get();
+      expect(root.exists).toBe(true);
+      expect(root.get('dueAt')).toBeUndefined();
+      expect(root.get('pending')).toBeUndefined();
+      expect((await h.state.collection('issues').get()).size).toBe(1);
+    }
   });
   it('delivers to beta and prod and deduplicates aliases with one shared daily budget', async () => {
     const h = await setup(); await db.doc(`${h.root}/pushSubscriptions/${randomUUID()}`).set(h.registration);

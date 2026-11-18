@@ -46,6 +46,15 @@ const entry = (event, fields = {}, service = SERVICES[1]) => ({
 const selected = (key, log) => matches(metric(key).filter, log);
 const filterType = filter => /metric\.type="([^"]+)"/.exec(filter)?.[1];
 
+test('foreground daily preparation failures use existing metrics without counting superseded tasks as failures', () => {
+  const service = 'generatedayworkout';
+  assert.ok(SERVICES.includes(service));
+  assert.equal(selected('enqueue_failures', entry('coordinator_commit', { outcome: 'enqueue_failed' }, service)), true);
+  for (const outcome of ['requeued', 'stale', 'deletion_blocked']) {
+    assert.equal(selected('enqueue_failures', entry('coordinator_commit', { outcome }, service)), false);
+  }
+});
+
 test('bounded canonical dimensions, exact native queue scopes and independent ownership', () => {
   const config = bundle(); assert.equal(config.metrics.length, 14); assert.equal(config.policies.length, 6);
   const kinds = [...readFileSync('shared/derived-metric-kinds.ts', 'utf8').split('} as const;')[0].matchAll(/:\s*'([^']+)'/g)].map(match => match[1]);

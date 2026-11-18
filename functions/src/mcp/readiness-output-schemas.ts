@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '../../../shared/training-readiness-metric';
-import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
+import { READINESS_EVIDENCE_VERSION, READINESS_FORMULA_VERSION } from '../../../shared/readiness';
 
 export const currentHrvRangeSchema = z.strictObject({
   tone: z.enum(['neutral', 'positive', 'caution', 'negative']),
@@ -19,7 +19,7 @@ export const currentHrvRangeSchema = z.strictObject({
 
 const nullableNumber = z.number().nullable();
 export const currentReadinessHistorySchema = z.strictObject({
-  formulaVersion: z.literal(4), dayBoundary: z.literal('UTC'),
+  formulaVersion: z.literal(READINESS_FORMULA_VERSION), dayBoundary: z.literal('UTC'),
   asOfDayMs: z.number().int(), generatedAtMs: z.number().int(), historyDays: z.literal(14),
   points: z.array(z.strictObject({
     dayMs: z.number().int(), score: z.number().int().min(0).max(100).nullable(),

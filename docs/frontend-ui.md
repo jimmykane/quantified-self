@@ -875,6 +875,22 @@ Rows keep their original lap objects, types, metrics and source-index selection/
 hydrating another lap type makes an assignment ambiguous. Only the table projection changes: source files, storage,
 chart/map marker exclusions, Training and MCP contracts remain unchanged; no reparse or migration is needed.
 
+Merged/benchmark comparisons opt into `includeWholeActivityLaps` in the lap-table visibility projection. A sole
+recorded lap stays inspectable even when it repeats its source activity's totals; ordinary activity views retain
+duplicate suppression. A single original lap whose positive time span covers the source activity within one second
+gets a **Whole activity** caption above its table. That caption is independent of duration/distance summary equality,
+so small source-summary differences cannot make compared devices appear to have different lap availability.
+Whole-activity rows also retain that source when its session boundary rounds up to one second before the lap end,
+even if another compared device has the same lap timestamps. These rows do not receive a cross-leg context label;
+actual laps spanning activity legs keep the existing ownership projection. Explicit `mergeType: 'benchmark'`
+metadata enables the comparison presentation even without a legacy merge flag.
+The caption sits outside the narrow pinned number column and does not change recorded lap types, numbering or metrics.
+Each selected comparison source without original laps gets a labelled **No laps recorded** state when its active view
+has no projected intervals either. The parent Laps section remains present even when every selected comparison source
+has no laps, and disappears when no source is selected. Swim interval projections retain their current default;
+switching to Original laps exposes the per-source absence state. This is a UI-only projection: marker exclusions,
+cross-leg ownership, original files, storage, Training and MCP contracts remain unchanged; no reparse is needed.
+
 The persistent lap Summary row appears only when an activity/display-group table contains at least two visible original
 laps and has summary metrics. A single lap retains its recorded row without a duplicate summary. Count original laps
 including any appended final segment before rest-block grouping, not the number of collapsed display rows. Column availability follows the same rule:
@@ -938,6 +954,15 @@ The shared summary's `--summary-primary-info-padding-inline` and section header'
 hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
 At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the
 identity and place the hero metrics below them, rather than creating a third header row.
+Saved benchmark comparisons with multiple activity recordings label the hero **Combined totals · N recordings**.
+The shared primary summary's optional `metricsHeading`/`metricsDescription` context groups this label, the existing
+canonical hero metrics, and always-visible explanatory text. Time and distance retain the persisted event totals
+across every recording, including overlapping recordings; source selection only changes the comparison views below.
+The count therefore follows all event activities, not the selected subset. Individual source time/distance values
+remain in the existing selectors. Ordinary activities, single-source records, and explicit sequential (`multi`) merges
+retain the original header layout. The context follows existing tablet/mobile metric ordering and wraps in both
+themes without an extra card, tooltip-only explanation, horizontal scrolling, or metric recalculation. No Training,
+storage, provider, or MCP contract changes.
 The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to
 desktop width when the viewport narrows. The shared chart host then resizes to the available content width.
 
@@ -1249,12 +1274,20 @@ dependency and verify that the installed tree has a single WebChannel instance b
 regression. Retain the HTTP guard and account/cache recovery paths when upgrading; passing the guarded tests alone
 does not establish that upstream handles malformed HTTP responses without it. Material/CDK remain on 20.2.14.
 After integrating develop's Sports Lib 23.12.0 and dated Training calibration changes, the upgraded production output
-measures 15.05 MB of total scripts, above develop's 14.88 MB cap. Beta and production share a 15.10 MB total-script
-error cap; the 1474 kB startup cap and 13000 kB warning stay unchanged.
+measured 15.05 MB of total scripts, above develop's 14.88 MB cap. That integration established a matching 15.10 MB
+beta/production total-script error cap; the 1474 kB startup cap and 13000 kB warning stayed unchanged.
 The optimized browser graph contains the browser Firestore entry, with no Firestore Node or gRPC implementation.
-Production Home plus its deferred signal preview measures 3104.5 KiB, so its combined static-graph cap is 3120 KiB
-(previously 3050 KiB). The preview itself adds 181.4 KiB and retains its separate 192 KiB limit. All public dependency
+That build's production Home plus its deferred signal preview measured 3104.5 KiB, setting its combined static-graph
+cap to 3120 KiB (previously 3050 KiB). The preview itself added 181.4 KiB and retained its separate 192 KiB limit. All public dependency
 exclusions remain in force; these are dependency-update size allowances, not runtime performance measurements.
+
+Later feature merges exceeded the 15.10 MB total-script cap. At develop `37eee959b`, fresh beta and production builds
+measure 15.13 MB, so both release configurations now use a 15.20 MB total-script error cap. The initial bundle measures
+1.42 MB; its 1474 kB cap and all warning thresholds remain unchanged. Production Home plus its deferred signal preview
+measures 3118.9 KiB within the existing 3120 KiB combined limit; the preview adds 177.7 KiB within its existing 192 KiB
+limit. Both builds verify 601 service-worker assets, and production verifies all 41 prerendered pages and public
+dependency exclusions. These are compiled-output measurements, not runtime performance claims.
+
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
@@ -2248,3 +2281,13 @@ the saved account units. It changes no Training calculations, planning rules, pr
 A late-loaded editor is not opened if the parent has started closing, even before its exit animation finishes.
 Regional formatting uses the existing cache/reload flow after a successful save. UI controls use Material and
 CompactSelect with the shared overlay/scrollbar theme and one haptic owner per accepted interaction.
+
+### Admin introductory trial controls (2026-11-16)
+
+The isolated `37eee959b` develop baseline, built with the same dependencies, measured 15.13 MB of total scripts,
+32.97 kB above the existing 15.10 MB cap. The billing-policy feature measures 15.15 MB, 46.24 kB above that cap:
+a 13.27 kB addition for the lazy Admin controls and shared offer validation/rendering. Beta and production
+shared a narrow 15.16 MB total-script cap on the feature branch. Integration retains develop's existing
+15.20 MB allowance documented above. Initial-load and warning caps are unchanged; the feature's initial bundle stays
+1.42 MB (337.78 kB estimated transfer, versus 337.80 kB for the baseline). These are compiled bundle measurements,
+not claims about runtime latency. Public trial policy uses one-time reads, without polling or a new listener.

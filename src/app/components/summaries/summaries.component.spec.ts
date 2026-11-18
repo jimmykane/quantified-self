@@ -2246,16 +2246,16 @@ describe('SummariesComponent', () => {
       component['syncDerivedMetricsSubscription']();
       expect(mockDashboardDerivedMetricsService.watch).toHaveBeenLastCalledWith(component.user,
         { metricKinds: expect.arrayContaining(['form', 'form_now', 'ramp_rate', 'training_summary']) });
-      load$.next({ ...loadState, trainingUpdatedAtMs: 100, formStatus: 'ready', trainingSummaryStatus: 'building' });
+      load$.next({ ...loadState, trainingSnapshotKey: 'building', formStatus: 'ready', trainingSummaryStatus: 'building' });
       expect(mockDashboardDerivedMetricsService.ensureForDashboard).toHaveBeenLastCalledWith(component.user,
         expect.anything(), { metricKinds: ['form', 'form_now', 'ramp_rate'] });
       expect(component['resolveDashboardDerivedMetricKinds'](false)).not.toContain('training_summary');
       expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();
-      load$.next({ ...loadState, trainingUpdatedAtMs: 101, formStatus: 'ready', trainingSummaryStatus: 'ready' });
-      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 101]));
+      load$.next({ ...loadState, trainingSnapshotKey: 'ready-1', formStatus: 'ready', trainingSummaryStatus: 'ready' });
+      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 'ready-1']));
       component.user.settings.appSettings.dailyWorkoutSuggestion.controls.freshnessContext = false;
-      load$.next({ ...loadState, trainingUpdatedAtMs: 102, formStatus: 'missing', formNowStatus: 'missing', rampRateStatus: 'missing', trainingSummaryStatus: 'ready' });
-      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 102]));
+      load$.next({ ...loadState, trainingSnapshotKey: 'ready-2', formStatus: 'missing', formNowStatus: 'missing', rampRateStatus: 'missing', trainingSummaryStatus: 'ready' });
+      expect(component.dailyWorkoutSuggestionTrainingKey).toBe(JSON.stringify(['readiness-owner', 'ready-2']));
       mockUserService.isProSignal.set(false);
       expect(component['resolveDashboardDerivedMetricKinds']()).not.toContain('training_summary');
       component['resetDerivedMetricsState'](); expect(component.dailyWorkoutSuggestionTrainingKey).toBeNull();

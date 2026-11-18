@@ -197,7 +197,7 @@ describe('training-readiness.helper', () => {
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'ready',
       history: {
-        formulaVersion: 4,
+        formulaVersion: 5,
         evidenceVersion: 4,
         dayBoundary: 'UTC',
         asOfDayMs,

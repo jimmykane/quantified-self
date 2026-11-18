@@ -29,7 +29,7 @@ import { firstValueFrom, take } from 'rxjs';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
+import { isBenchmarkEvent, isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 @Component({
@@ -58,6 +58,7 @@ export class EventSummaryComponent implements OnChanges {
   private heroStatsValue: string[] = [];
   private heroEffortStatTypeValue: string = DataSpeedAvg.type;
   private eventActivitiesCountValue = 0;
+  readonly comparisonTotalsDescription = 'Time and distance are summed across all recordings, including overlapping recordings. Selecting a recording below changes the comparison view, not these totals.';
   private mainActivityTypeValue = 'Other';
   private eventActivityTypesValue: ActivityTypes[] = [];
   private benchmarkCountValue = 0;
@@ -263,6 +264,13 @@ export class EventSummaryComponent implements OnChanges {
     return this.heroStatsValue.map((statType) =>
       buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings, this.eventActivityTypesValue)
     );
+  }
+
+  get comparisonTotalsHeading(): string {
+    if (!isBenchmarkEvent(this.event)) return '';
+    // Recordings can hydrate in place without replacing the event or selection inputs.
+    const recordingCount = this.event?.getActivities?.()?.length ?? 0;
+    return recordingCount > 1 ? `Combined totals · ${recordingCount} recordings` : '';
   }
 
   get benchmarkCount(): number {

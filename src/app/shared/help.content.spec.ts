@@ -141,8 +141,12 @@ describe('help.content', () => {
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
     expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
     expect(copy).toContain('Your browser and OS control banners, sound and vibration');
+    for (const phrase of ['Sleep synced', 'one per sleep date', 'at least 20 hours', 'Tap an alert to open Sleep in Health',
+      'Alerts contain no sleep scores, times or other health metrics']) expect(copy).toContain(phrase);
+    for (const phrase of ['Connection issues', 'Each unresolved connection problem is notified once',
+      'shared with Training alerts about that same problem', 'deliberate disconnects']) expect(copy).toContain(phrase);
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
-      'Activity delivery', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
+      'Activity delivery', 'Training send results', 'off independently of Training sync attention alerts', 'Background sync and automatic retries do not create success alerts', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
     }
   });
@@ -276,6 +280,12 @@ describe('help.content', () => {
     for (const phrase of ['New Pro trials require a payment method', 'no subscription charge during the free trial',
       'first payment date', 'before the trial ends to avoid the first payment', 'Existing trials keep the terms',
       'Starter stays free', 'safely replaces an earlier unfinished checkout']) expect(copy).toContain(phrase);
+  });
+  it('explains optional trial offers and admin controls without changing existing terms', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
+    for (const phrase of ['With no trial, paid billing starts at checkout', '**Admin → Billing policy**',
+      '**Off**, **7**, **14**, or **30 days**', '**Use price settings**', 'Changes affect new checkouts',
+      'grace periods keep their current terms']) expect(copy).toContain(phrase);
   });
   it('explains the checkout handoff and recovery before another payment', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
@@ -685,6 +695,15 @@ describe('help.content', () => {
     expect(copy).toContain('Some older email delivery records may remain after account deletion');
     expect(copy).toContain('Those with a 90-day expiry are removed automatically after that date');
     expect(copy).toContain('This action cannot be undone');
+  });
+  it('explains inactive Free account notice, cancellation and paid protection', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
+    for (const phrase of ['six calendar months', 'Sign in within 30 days', 'no purchase is required',
+      'Provider sync and MCP requests do not reset', 'fresh warning period', 'Basic and Pro access',
+      'trials and gifts', 'grace period protect', 'run daily', 'Unconfirmed initial warning delivery prevents deletion',
+      'one final reminder during the last seven days', 'original deadline in UTC', 'does not extend the 30-day warning period']) {
+      expect(copy).toContain(phrase);
+    }
   });
   it('explains campaign sender names, fixed addresses and retesting after sender edits', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'data-and-privacy')!.content;
@@ -1568,7 +1587,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('band continues across missing-reading days');
     expect(healthSection?.content).toContain('Until 14 nights exist');
     expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
-    expect(healthSection?.content).toContain('within, outside, or far outside');
+    expect(healthSection?.content).toContain('within, above, or below');
+    expect(healthSection?.content).toContain('Above-range HRV is informational and neutral');
     expect(healthSection?.content).toContain('color is never the only signal');
     expect(healthSection?.content).toContain('average or overnight HRV');
     expect(healthSection?.content).toContain('even if no standalone Health HRV record exists');
@@ -2324,7 +2344,10 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event lap tables');
-    expect(gettingStartedSection?.content).toContain('A sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain('For ordinary activities, a sole lap that repeats the whole activity is hidden');
+    expect(gettingStartedSection?.content).toContain("Comparisons retain each source's recorded whole-activity lap");
+    expect(gettingStartedSection?.content).toContain('labelled **Whole activity**');
+    expect(gettingStartedSection?.content).toContain('**No laps recorded**');
     expect(gettingStartedSection?.content).toContain('If the lap and activity totals cannot be compared reliably, the lap stays visible');
     expect(gettingStartedSection?.content).toContain('including Garmin **Session end** laps and Suunto final partial laps');
     expect(gettingStartedSection?.content).toContain('the last numbered row with a **Final lap** label, without a separate tab');
@@ -2513,10 +2536,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
     expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
     expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
+    expect(gettingStartedSection?.content).toContain('**Running, Walking, and Cycling also show Altitude**');
+    expect(gettingStartedSection?.content).toContain('a fourth chart alongside the existing primary charts');
+    expect(gettingStartedSection?.content).toContain('both individual activities and comparisons');
+    expect(gettingStartedSection?.content).toContain('Missing or disabled altitude does not add another chart instead');
+    expect(gettingStartedSection?.content).toContain('**Trail Running also shows Heart Rate** alongside Pace, Power, and Altitude when recorded and enabled');
+    expect(gettingStartedSection?.content).toContain('including Orienteering and Vertical Running');
+    expect(gettingStartedSection?.content).toContain('Missing or disabled Heart Rate does not add another chart instead');
+    expect(gettingStartedSection?.content).toContain('Saved custom chart selections still take precedence');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
+    expect(gettingStartedSection?.content).toContain('**Combined totals** in a saved benchmark comparison cover all its recordings');
+    expect(gettingStartedSection?.content).toContain('Selecting a recording changes the comparison view, not these header totals');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
     expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');

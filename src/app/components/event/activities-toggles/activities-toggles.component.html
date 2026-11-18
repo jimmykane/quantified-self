@@ -3,7 +3,7 @@
   @for (row of activityDisplayRows(); track row.trackKey) {
   <mat-chip-option [selected]="isSelected(row.activity)"
     [disabled]="isOnlySelectedActivity(row.activity)"
-    [style.--chip-accent-color]="row.color" (click)="toggleActivity(row.activity)"
+    [style.--chip-accent-color]="row.color" (selectionChange)="$event.isUserInput && toggleActivity(row.activity)"
     class="activity-chip">
     <div class="chip-content">
       <span class="chip-type">{{ row.primaryLabel }}</span>

@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
@@ -79,7 +80,7 @@ export async function admitActivityNotification(uid: string, candidate: Activity
       if (state.pending.entries.length < ACTIVITY_PUSH.batchLimit) state.pending.entries.push(entry);
       state.dueAt = state.pending.dueAt;
     }
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
   });
 }
 
@@ -103,7 +104,7 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
     const outcome: ActivityPushOutcome | null = !entries.length ? 'cancelled' : limited(state.attempts, now) ? 'limited' : null;
     delete state.pending; delete state.dueAt;
     if (!outcome) { state.attempts.push(now); state.lastClaimId = batch.id; }
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
     return { batch: { ...batch, entries }, outcome };
   });
   if (!claim) return;

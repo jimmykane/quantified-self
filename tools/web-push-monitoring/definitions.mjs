@@ -94,42 +94,77 @@ export function buildWebPushMonitoring(project, channel) {
     title, xyChart: { dataSets: (index === 0 ? [chartFilter, legacyActivityFilter] : [chartFilter]).map(filter => ({ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: {
       filter, aggregation: { ...aggregate, groupByFields: groups } }, unitOverride: '1' } })), yAxis: { label: 'Count', scale: 'LINEAR' } },
   } });
-  const deliveryRuntime = runtime.replace('sendtestpushnotification', 'sendactivitydeliverynotifications');
   const deliveryBase = `resource.type="cloud_run_revision" resource.labels.project_id="${project}" resource.labels.location="europe-west2"`;
   const deliveryName = 'qs_activity_delivery_push_outcomes_v1';
-  const deliveryHeartbeat = 'qs_activity_delivery_push_sweeps_v1';
-  const deliveryOverdue = 'qs_activity_delivery_push_overdue_v1';
   const deliveryFilter = `metric.type="logging.googleapis.com/user/${deliveryName}" ${deliveryBase}`;
-  const deliveryHeartbeatFilter = `metric.type="logging.googleapis.com/user/${deliveryHeartbeat}" ${deliveryRuntime}`;
-  const deliveryOverdueFilter = `metric.type="logging.googleapis.com/user/${deliveryOverdue}" ${deliveryRuntime}`;
   bundle.metrics.push({ name: deliveryName, description: `[${OWNER}] Activity delivery notification admission and send attempts. Acceptance is not device display.`,
     filter: `${deliveryBase} jsonPayload.message:"[ActivityDeliveryPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
-  for (const [name, extra] of [[deliveryHeartbeat, ''], [deliveryOverdue, ' jsonPayload.oldestDueAgeSeconds>=180']]) {
-    bundle.metrics.push({ name, description: `[${OWNER}] Bounded delivery notification sweep health, including idle/disabled operation.`,
-      filter: `${deliveryRuntime} jsonPayload.message="[ActivityDeliveryPushSweep]" jsonPayload.telemetryVersion=1 jsonPayload.oldestDueAgeSeconds>=0${extra}`,
-      metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: [] } });
-  }
   bundle.policies.push({ displayName: 'QS Web Push: Activity-delivery sender health', userLabels: { managed_by: OWNER, policy_id: 'delivery-sender' },
     enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
     conditions: [failureCondition('Repeated delivery notification admission or send failures', `${deliveryFilter} metric.labels.outcome="failed"`),
-      failureCondition('Repeated delivery notification runtime failures', `metric.type="run.googleapis.com/request_count" ${deliveryBase} resource.labels.service_name=one_of("sendactivitydeliverynotifications", "queueactivitysendnotification", "queueautomaticdeliverynotification") metric.labels.response_code_class="5xx"`),
-      { displayName: 'Two overdue delivery observations in five minutes', conditionThreshold: { filter: deliveryOverdueFilter,
-        aggregations: [{ ...aggregate, alignmentPeriod: '300s' }], comparison: 'COMPARISON_GT', thresholdValue: 1,
-        duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } },
-      { displayName: 'No completed delivery sweep for fifteen minutes', conditionAbsent: { filter: deliveryHeartbeatFilter,
-        aggregations: [{ ...aggregate, alignmentPeriod: '300s' }], duration: '900s', trigger: { count: 1 } } }],
+      failureCondition('Repeated delivery notification runtime failures', `metric.type="run.googleapis.com/request_count" ${deliveryBase} resource.labels.service_name=one_of("queueactivitysendnotification", "queueautomaticdeliverynotification") metric.labels.response_code_class="5xx"`),
+    ],
     alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
     documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Activity-delivery sender health',
-      content: `Verify the delivery scheduler, deliveryDueAt collection-group index, unconditional switches and key pairing. Confirm an initial heartbeat series after deployment. Category/registration cancellation, disconnect, Stop, duplicates, caps and expired subscriptions are expected. Claims are never replayed after ambiguous sends. Existing activity-delivery monitoring owns provider retries, backlog and dead letters; these alerts concern notifications only. Do not clear receipts or expose identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
+      content: `Verify direct manual results and grouped automatic failures. All grouped categories share sendActivitySyncNotifications, its dueAt index and its one backlog/heartbeat policy. Category/registration cancellation, disconnect, Stop, duplicates, caps and expired subscriptions are expected. Claims are never replayed after ambiguous sends. Existing activity-delivery monitoring owns provider retries, backlog and dead letters; these alerts concern notifications only. Do not clear receipts or expose identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
   for (const [index, title, filter, groups] of [
     [0, 'Activity-delivery notification outcomes', deliveryFilter, ['metric.label.outcome', 'metric.label.phase']],
-    [1, 'Activity-delivery overdue observations', deliveryOverdueFilter, []],
-    [2, 'Activity-delivery completed sweeps', deliveryHeartbeatFilter, []],
   ]) bundle.dashboard.mosaicLayout.tiles.push({ yPos: 28 + index * 4, width: 12, height: 4, widget: { title,
     xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter, aggregation: { ...aggregate, groupByFields: groups } }, unitOverride: '1' } }],
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   appendTrainingPushMonitoring(bundle, project, channel, OWNER, runbook);
+  const sleepName = 'qs_sleep_sync_push_outcomes_v1';
+  const sleepBase = `resource.type="cloud_run_revision" resource.labels.project_id="${project}" resource.labels.location="europe-west2"`;
+  const sleepFilter = `metric.type="logging.googleapis.com/user/${sleepName}" ${sleepBase}`;
+  bundle.metrics.push({ name: sleepName, description: `[${OWNER}] Sleep notification admission and send outcomes. Acceptance is not device display.`,
+    filter: `${sleepBase} jsonPayload.message:"[SleepSyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Sleep sender failures', userLabels: { managed_by: OWNER, policy_id: 'sleep-sender' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated sleep notification admission or send failures', `${sleepFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Sleep sender failures',
+      content: `Sleep sends directly from processSleepSyncTask after persistence. Notification errors never retry the successful import; the shared worker only drains pre-migration pending sleeps. Check web_push_sleep_sync_enabled, web_push_enabled and key pairing. Naps, history, initial backfills, duplicate nights, cooldown, cancellation and expired subscriptions are expected. Sleep ingestion retains its existing Health/Sleep monitoring. Claims are never replayed after ambiguous sends. Never clear receipts or expose sleep data, identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 52, width: 12, height: 4, widget: { title: 'Sleep notification outcomes — attempts, not display',
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: sleepFilter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  const connectionName = 'qs_connection_attention_push_outcomes_v1';
+  const connectionFilter = `metric.type="logging.googleapis.com/user/${connectionName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  const legacyConnectionFilter = connectionFilter.replace('resource.type="cloud_run_revision"', 'resource.type="cloud_function"');
+  bundle.metrics.push({ name: connectionName, description: `[${OWNER}] Connection attention notification admission and send outcomes. Acceptance is not display.`,
+    filter: `${activityBase} jsonPayload.message:"[ConnectionAttentionPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled" OR "limited")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Connection sender failures', userLabels: { managed_by: OWNER, policy_id: 'connection-sender' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated connection notification failures', `${connectionFilter} metric.labels.outcome="failed"`),
+      failureCondition('Repeated connection notification failures in legacy auth workers', `${legacyConnectionFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Connection sender failures',
+      content: `Connection alerts share sendActivitySyncNotifications and its dueAt backlog, heartbeat and runtime monitoring. Check web_push_connection_attention_enabled, web_push_enabled and key pairing. Training and connection alerts share episode receipts. Auth recovery must not fail because notification admission failed. Reconnected accounts, disabled preferences, caps, cancelled alerts and expired subscriptions are expected. Claims are never replayed. Never expose identifiers, credentials, endpoints or raw provider errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 56, width: 12, height: 4, widget: { title: 'Connection attention outcomes — attempts, not display',
+    xyChart: { dataSets: [connectionFilter, legacyConnectionFilter].map(filter => ({ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } })),
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
+  const trainingSendName = 'qs_training_send_push_outcomes_v1';
+  const trainingSendFilter = `metric.type="logging.googleapis.com/user/${trainingSendName}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
+  bundle.metrics.push({ name: trainingSendName, description: `[${OWNER}] Explicit Training send result admission and send outcomes. Provider acceptance is not watch receipt or notification display.`,
+    filter: `${sleepBase} jsonPayload.message:"[TrainingSendPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+    metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
+    labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
+  bundle.policies.push({ displayName: 'QS Web Push: Training send result failures', userLabels: { managed_by: OWNER, policy_id: 'training-send' },
+    enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
+    conditions: [failureCondition('Repeated Training send result failures', `${trainingSendFilter} metric.labels.outcome="failed"`)],
+    alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Training send result failures',
+      content: `Explicit sends, initial Enable sync and manual retries only. Background successes stay silent. Check web_push_training_sync_enabled, web_push_enabled and key pairing. Results send directly in queueTrainingSyncNotification after the final committed outcome. The shared sendActivitySyncNotifications worker drains only pre-migration ready records; it does not poll new Training requests. Existing Training delivery monitoring owns provider retries and backlog. Disabled preferences, edits, superseded requests, no-op sends and expired devices are expected. Claims are never replayed. Never expose workout names, identifiers, endpoints, credentials or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 60, width: 12, height: 4, widget: { title: 'Training send results — attempts, not display',
+    xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: trainingSendFilter,
+      aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
+      yAxis: { label: 'Count', scale: 'LINEAR' } } } });
   return bundle;
 }

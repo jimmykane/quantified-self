@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataAscent, DataDistance, DataDuration, DistanceUnits, DynamicDataLoader } from '@sports-alliance/sports-lib/metrics';
+import { ActivityTypes, DataAscent, DataDistance, DataDuration, DistanceUnits, DynamicDataLoader, ElevationUnits } from '@sports-alliance/sports-lib/metrics';
 import { FileType, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventSummary } from '@shared/event-summary';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { buildTrainingLogSportTotals, resolveTrainingLogWeek } from './activity-training-log.helper';
+import { buildTrainingLogSportTotals, buildTrainingLogTotals, resolveTrainingLogWeek } from './activity-training-log.helper';
 
 function event(id: string, types: string[], stats: Record<string, number> = {}) {
   return new AppEventSummary({ id, name: 'Synthetic activity', startDate: 0, endDate: 1,
@@ -40,6 +40,36 @@ describe('Training log weeks', () => {
 });
 
 describe('Training log sport totals', () => {
+  it('combines raw values before formatting and retains missing coverage and ascent exclusions', () => {
+    const records = [
+      event('run', [ActivityTypes.Running], { Duration: 60, Distance: 1, Ascent: 2 }),
+      event('ride', [ActivityTypes.Cycling], { Duration: 120, Distance: 1, Ascent: 3 }),
+      event('missing', [ActivityTypes.Cycling]),
+      event('ski', [ActivityTypes.AlpineSki], { Duration: 0, Distance: 0, Ascent: 999 }),
+    ];
+    const comparison = event('comparison', [ActivityTypes.Running], { Duration: 999, Distance: 999 });
+    comparison.isMerge = true;
+    const result = buildTrainingLogTotals([...records, comparison]);
+    expect(result.overall?.count).toBe(4);
+    expect(result.overall?.distance).toEqual({ value: '2.0 m', coverage: '3/4 activities' });
+    expect(result.overall?.ascent).toEqual({ value: '5 m', coverage: '2/3 activities' });
+    expect(result.overall?.duration.coverage).toBe('3/4 activities');
+    expect(result.sports).toEqual(buildTrainingLogSportTotals(records));
+    expect(buildTrainingLogTotals([])).toEqual({ overall: null, sports: [] });
+  });
+
+  it('uses the selected units for combined totals without constructing unrelated metrics', () => {
+    const records = [event('run', [ActivityTypes.Running], { Duration: 3600, Distance: 10_000, Ascent: 100 }),
+      event('ride', [ActivityTypes.Cycling], { Duration: 3600, Distance: 10_000, Ascent: 100 })];
+    const reads = records.map(record => vi.spyOn(record, 'getStat'));
+    const imperial = buildTrainingLogTotals(records, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+    expect(imperial.overall?.distance.value).toBe('12.43 mi');
+    expect(imperial.overall?.ascent.value).toBe('200 m');
+    for (const read of reads) expect(read.mock.calls.map(([type]) => type)).toEqual(['Duration', 'Distance', 'Ascent']);
+    expect(buildTrainingLogTotals(records, null, { removeAscentForEventTypes: [ActivityTypes.Running] }).overall?.ascent.value).toBe('100 m');
+    expect(buildTrainingLogTotals(records, normalizeUserUnitSettings({ elevationUnits: ElevationUnits.Feet })).overall?.ascent.value).toBe('656 ft');
+  });
+
   it('retains recorded ascent for summaries with no sport metadata', () => {
     const summary = event('unknown', [], { Duration: 600, Distance: 1000, Ascent: 123 });
     const [total] = buildTrainingLogSportTotals([summary]);

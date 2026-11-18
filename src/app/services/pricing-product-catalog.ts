@@ -1,3 +1,4 @@
+import { resolveBillingTrialDays, type BillingTrialPolicy } from '@shared/billing-trial-policy';
 import type { StripePrice, StripeProduct } from './app.payment.service';
 
 /**
@@ -140,4 +141,21 @@ function isPaidRecurringPrice(price: StripePrice): boolean {
 
     const interval = price.recurring?.interval ?? price.interval;
     return interval === 'month' || interval === 'year';
+}
+
+/** Apply app-owned terms before virtual plan grouping; Stripe product role is authoritative. */
+export function applyBillingTrialPolicy(products: StripeProduct[], policy: BillingTrialPolicy): StripeProduct[] {
+    return products.map(product => ({ ...product, prices: product.prices?.map(price => {
+        const role = product.metadata?.['firebaseRole'] ?? product.metadata?.['role'];
+        const days = price.type === 'recurring' ? resolveBillingTrialDays(policy, role, price.metadata?.['trial_days']) : 0;
+        return { ...price, trialPolicyRevision: policy.revision, trial_period_days: days || null,
+            metadata: { ...price.metadata, trial_days: String(days) } };
+    }) }));
+}
+
+/** Build-time offers can outlive an admin change. Only the browser advertises live trials. */
+export function withoutIntroductoryTrialOffers(products: StripeProduct[]): StripeProduct[] {
+    return products.map(product => ({ ...product, prices: product.prices?.map(price => ({
+        ...price, trial_period_days: null, metadata: { ...price.metadata, trial_days: '0' },
+    })) }));
 }

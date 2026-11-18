@@ -71,7 +71,8 @@ async function reconcileRouteQuotaCounterAfterDelete(
     }
 
     if (deletionGuard.shouldSkip) {
-      logger.warn('Skipping route quota reconciliation because user is missing or deletion is in progress', {
+      const log = deletionGuard.deletionInProgress ? logger.info : logger.warn;
+      log('Skipping route quota reconciliation because user is missing or deletion is in progress', {
         userId,
         routeId,
         eventId,

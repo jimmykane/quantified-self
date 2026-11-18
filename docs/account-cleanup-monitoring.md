@@ -15,8 +15,16 @@ depend on the retired extension, so monitoring coverage is **unchanged**. See th
 
 ## Ownership and meanings
 
+Prepared source addition (13 November 2026): [inactive account retention](inactive-account-retention.md) extends this
+same owner with nine metrics, five policies and dashboard panels for the new daily scheduler. The source bundle now
+contains 18 metrics and 12 policies. It preserves existing policy/condition identities and the independent Alerts channel.
+This addition has **not** been applied to production. Historical activation evidence below describes the original bundle.
+New coverage separates unconfirmed notices, actual failures, pending deletion review, overdue/stalled scan progress and
+a 48-hour heartbeat gap; expected billing holds are informational. The retention scanner's bounded operational reads,
+state, indexes and new Function are documented separately; the original logger-only instrumentation remains unchanged.
+
 `tools/cleanup-monitoring/` reuses the shared `tools/monitoring/` provisioner. Owner
-`qs-cleanup-monitoring-v1` has nine log metrics, seven policies and one dashboard,
+`qs-cleanup-monitoring-v1` originally had nine log metrics, seven policies and one dashboard,
 **QS Account Cleanup & Disconnect Recovery**. It reuses an explicitly selected,
 existing independent Alerts email channel, not the app's Trigger Email extension.
 Training plan/workout deletion is already covered by #655 and is not duplicated.
@@ -28,6 +36,13 @@ Gen 2 `onSubscriptionUpdated` service in `europe-west3`. The latter can complete
 disconnect/queue-release recovery when entitlement returns; its location must not
 silently exclude those observations. Unrelated west3 Functions remain outside the
 log metrics. No Function is relocated or added.
+
+Expected no-op messages use INFO only for explicit account-deletion token cleanup or an active deletion tombstone:
+an absent provider token, skipped activity-sync route changes, skipped route-quota writes and a late subscription
+update. A missing user without an active tombstone still warns. Actual local cleanup failures and unconfirmed remote
+revocation keep their existing diagnostics and `[CleanupHealth]` outcomes. Monitoring coverage is **unchanged**: metrics
+use those structured outcomes, not the severity of these incidental messages. No extra reads, cleanup work, retries or
+monitoring configuration are introduced.
 
 Cloud Logging evaluates `OR` before `AND`, including implicit whitespace conjunctions.
 Keep the complete Gen 1 and Gen 2 filter branches parenthesized, and retain the

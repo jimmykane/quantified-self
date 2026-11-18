@@ -1,13 +1,49 @@
-<div class="intensity-zones-container">
+<div class="intensity-zones-container" [class.intensity-zones-selectable]="allowMetricSelection">
   @if (showHeader) {
-  <div class="chart-intro" [class.chart-intro-with-actions]="headerActions">
+  <div class="chart-intro" [class.chart-intro-with-actions]="headerActions || allowMetricSelection">
     <div class="chart-intro-copy">
     <div class="chart-title">Intensity Zones</div>
     <div class="chart-description">Distribution of time spent across active intensity zones.</div>
     </div>
+    @if (allowMetricSelection && metricOptions.length) {
+    <button mat-button type="button" [matMenuTriggerFor]="metricsMenu" (menuOpened)="metricsMenuOpened()"
+      aria-label="Choose intensity metrics" class="intensity-metrics-trigger">
+      <mat-icon aria-hidden="true">tune</mat-icon>
+      Metrics · {{ selectedMetricCount }}
+      <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
+    </button>
+    }
     <ng-container [ngTemplateOutlet]="headerActions"></ng-container>
   </div>
   }
+  @if (allowMetricSelection) {
+  <div class="intensity-metric-legend" aria-label="Visible intensity metrics">
+    @for (metric of metricOptions; track metric.type) {
+      @if (metric.selected) {
+      <span class="intensity-metric-key"><span class="intensity-metric-swatch" [style.background-color]="metric.color" aria-hidden="true"></span>{{ metric.label }}</span>
+      }
+    }
+  </div>
+  }
+  @if (allowMetricSelection && metricPreferenceSaveFailed()) {
+  <p class="intensity-metrics-save-error" role="status">Your selection applies to this view but could not be saved.</p>
+  }
+  <mat-menu #metricsMenu="matMenu" class="qs-menu-panel" aria-label="Intensity metrics">
+    @for (metric of metricOptions; track metric.type) {
+    <button mat-menu-item type="button" role="menuitemcheckbox" [attr.aria-checked]="metric.selected"
+      (click)="$event.stopPropagation(); toggleMetric(metric.type)">
+      <mat-icon aria-hidden="true">{{ metric.selected ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+      <span class="intensity-metric-key"><span class="intensity-metric-swatch" [style.background-color]="metric.color" aria-hidden="true"></span>{{ metric.label }}</span>
+    </button>
+    }
+  </mat-menu>
+  <div class="intensity-zones-plot">
   <div class="intensity-zones-chart" data-dashboard-chart-plot #chartDiv role="img"
+    [style.visibility]="allowMetricSelection && !selectedMetricCount ? 'hidden' : null"
+    [attr.aria-hidden]="allowMetricSelection && !selectedMetricCount ? true : null"
     aria-label="Intensity zones bar chart showing time spent across available intensity metrics."></div>
+  @if (allowMetricSelection && !selectedMetricCount && metricOptions.length) {
+  <p class="intensity-metrics-empty" role="status">Choose a metric from Metrics to show its zones.</p>
+  }
+  </div>
 </div>

@@ -489,6 +489,7 @@ async function handleGarminAPIHealthData(
                 queueBatches.push({
                     input: {
                         type: 'garmin_ping_batch',
+                        sleepNotificationOrigin: 'live',
                         provider: SLEEP_PROVIDERS.GarminAPI,
                         providerUserId: group.providerUserId,
                         userID: group.firebaseUserID,
@@ -669,6 +670,7 @@ async function handleSuunto247DataWebhook(
             try {
                 await addSleepSyncQueueItem({
                     type: 'suunto_webhook',
+                    sleepNotificationOrigin: 'live',
                     provider: SLEEP_PROVIDERS.SuuntoApp,
                     userID,
                     providerUserId,

@@ -272,6 +272,14 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/admin/billing",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/inactive-accounts",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/admin/maintenance",
           "destination": "/index.csr.html"
         },
@@ -609,6 +617,14 @@
         },
         {
           "source": "/admin/marketing",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/billing",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/inactive-accounts",
           "destination": "/index.csr.html"
         },
         {

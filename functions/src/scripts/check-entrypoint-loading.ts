@@ -33,6 +33,7 @@ const BILLING_SUPPORT_TARGET_METADATA: Readonly<Record<string, {
   getUpcomingRenewalAmount: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'] },
   onSubscriptionUpdated: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', secrets: ['STRIPE_SECRET_KEY'], region: 'europe-west3', concurrency: 5 },
   enforceSubscriptionLimits: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'schedule', secrets: [...ACCOUNT_CLEANUP_SECRETS, 'STRIPE_SECRET_KEY'].sort() },
+  processInactiveAccounts: { memoryMb: 512, timeoutSeconds: 540, trigger: 'schedule', secrets: ['STRIPE_BILLING_KEY'], concurrency: 1, maxInstances: 1 },
   checkSubscriptionNotifications: { memoryMb: 512, timeoutSeconds: null, trigger: 'schedule', secrets: [] },
   cleanupStripeCustomer: { memoryMb: null, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'], minInstances: 0, maxInstances: 10 },
   cleanupUserAccounts: { memoryMb: 1024, timeoutSeconds: 540, trigger: 'event', secrets: ACCOUNT_CLEANUP_SECRETS, platform: 'gcfv1' },
@@ -98,6 +99,7 @@ const ADMIN_TARGET_METADATA: Readonly<Record<string, {
   getUserGrowthTrend: { ownerModule: 'trends.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
   setMaintenanceMode: { ownerModule: 'maintenance.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   getMaintenanceStatus: { ownerModule: 'maintenance.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
+  getInactivityAdmin: { ownerModule: 'inactivity.handlers', memoryMb: 256, timeoutSeconds: 60, trigger: 'callable' },
   impersonateUser: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   stopImpersonation: { ownerModule: 'impersonation.handlers', memoryMb: 256, timeoutSeconds: null, trigger: 'callable' },
   getFinancialStats: { ownerModule: 'financials.handlers', memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['STRIPE_SECRET_KEY'], allowsBigQuery: true },
@@ -186,7 +188,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   processSportsLibRouteReparseTask: { memoryMb: 4096, timeoutSeconds: 1800, trigger: 'task', cpu: 2, concurrency: 1 },
   processSleepSyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
     'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
-    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
+    'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY', 'WEB_PUSH_VAPID_KEYPAIR',
   ] },
   processGarminHealthBackfillTask: { maxAttempts: 20,
     memoryMb: 512, timeoutSeconds: 1800, trigger: 'task',
@@ -279,10 +281,8 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
 }>> = {
   sendHistoryImportNotification: { memoryMb: 256, timeoutSeconds: 30, trigger: 'event', eventDocument: 'connectionHistoryImports/{runId}', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 20, maxInstances: 2, minInstances: 0 },
   sendActivitySyncNotifications: { memoryMb: 256, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *', timeZone: 'UTC', retryCount: 0, secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 1, maxInstances: 1, minInstances: 0 },
-  sendActivityDeliveryNotifications: { memoryMb: 256, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *', timeZone: 'UTC', retryCount: 0, secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 1, maxInstances: 1, minInstances: 0 },
-  sendTrainingSyncNotifications: { memoryMb: 256, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *', timeZone: 'UTC', retryCount: 0, secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 1, maxInstances: 1, minInstances: 0 },
-  queueTrainingSyncNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'users/{uid}/trainingDeliveryStatuses/{deliveryId}', concurrency: 10, maxInstances: 2, minInstances: 0 },
-  queueActivitySendNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'users/{uid}/activitySends/{batchId}', concurrency: 10, maxInstances: 2, minInstances: 0 },
+  queueTrainingSyncNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'users/{uid}/trainingDeliveryStatuses/{deliveryId}', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 10, maxInstances: 2, minInstances: 0 },
+  queueActivitySendNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'users/{uid}/activitySends/{batchId}', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 10, maxInstances: 2, minInstances: 0 },
   queueAutomaticDeliveryNotification: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'failed_jobs/{jobId}', concurrency: 10, maxInstances: 2, minInstances: 0 },
   sendTestPushNotification: { memoryMb: 256, timeoutSeconds: 15, trigger: 'callable', secrets: ['WEB_PUSH_VAPID_KEYPAIR'], concurrency: 20, maxInstances: 2, minInstances: 0 },
   getTrainingGoalsProgress: { memoryMb: 256, timeoutSeconds: 30, trigger: 'callable', maxInstances: 100 },
@@ -732,6 +732,9 @@ async function check(): Promise<void> {
       assert(arraysEqual(triggers, [`${billingSupport.trigger}Trigger`]), `${target} trigger kind changed.`);
       if (billingSupport.trigger === 'schedule') {
         assert(endpoint.scheduleTrigger?.schedule === 'every 24 hours', `${target} schedule changed.`);
+        if (target === 'processInactiveAccounts') {
+          assert(endpoint.scheduleTrigger?.retryConfig?.retryCount === 0, 'Inactivity scheduler must not retry ambiguous deletion calls.');
+        }
       } else if (target === 'onSubscriptionUpdated') {
         assert(endpoint.eventTrigger?.eventType === 'google.cloud.firestore.document.v1.written'
           && endpoint.eventTrigger.eventFilterPathPatterns?.document === 'customers/{uid}/subscriptions/{subscriptionId}'

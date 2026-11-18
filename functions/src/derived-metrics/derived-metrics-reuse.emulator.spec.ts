@@ -353,7 +353,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect((await db.doc(`connectionHistoryImports/${historyId}`).get()).data()).not.toHaveProperty('derivedMetricsFlush');
     });
 
-    it('coalesces five simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {
+    it('coalesces five simultaneous ingress and automatic freshness requests without moving the deadline', async () => {
         const { claim } = await warm();
         await completeDerivedMetricsProcessing(uid, claim.generation, claim);
         const extraKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.Acwr,
@@ -365,14 +365,71 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         const before = (await coordinator().get()).data()!;
         const queuedCalls = mocks.enqueue.mock.calls.length;
         await ensureDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.TrainingDurability]);
-        const preparation = await prepareDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.Form], 0);
-        expect(preparation).toEqual({ status: 'preparing', metricKinds: [DERIVED_METRIC_KINDS.Form],
-            readyMetricKinds: [], retryAfterSeconds: 5 });
+        await ensureDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.Form]);
         const after = (await coordinator().get()).data()!;
         expect(after).toMatchObject({ generation: before.generation, buildNotBeforeMs: before.buildNotBeforeMs,
             requestedAtMs: before.requestedAtMs, eventMutationVersion: 6 });
         expect(new Set(after.dirtyMetricKinds)).toEqual(new Set([...extraKinds, DERIVED_METRIC_KINDS.TrainingDurability]));
         expect(mocks.enqueue).toHaveBeenCalledTimes(queuedCalls);
+    });
+
+    it('expedites one queued refresh for concurrent foreground preparations without invalidating inputs', async () => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        const selected = [DERIVED_METRIC_KINDS.FormNow];
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, [...kinds, ...selected], { background: true });
+        const before = (await coordinator().get()).data()!;
+        expect(before.buildNotBeforeMs).toBeGreaterThan(Date.now());
+        mocks.enqueue.mockClear();
+        const results = await Promise.all([0, 1].map(() => prepareDerivedMetricsForUser(uid, selected, 0)));
+        const after = (await coordinator().get()).data()!;
+        expect(results.every(result => result.status === 'preparing')).toBe(true);
+        expect(after).toMatchObject({ generation: before.generation + 1, status: 'queued',
+            dirtyMetricKinds: before.dirtyMetricKinds, eventMutationVersion: before.eventMutationVersion,
+            workoutInputsVersion: before.workoutInputsVersion });
+        expect(after.buildNotBeforeMs).toBeLessThanOrEqual(Date.now());
+        expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(uid, after.generation);
+        expect(await startDerivedMetricsProcessing(uid, before.generation)).toBeNull();
+        const start = (await startDerivedMetricsProcessing(uid, after.generation))!;
+        const running = (await coordinator().get()).data();
+        await prepareDerivedMetricsForUser(uid, selected, 0);
+        expect((await coordinator().get()).data()).toEqual(running);
+        expect(mocks.enqueue).toHaveBeenCalledOnce();
+        const activeClaim = { generation: after.generation, startedAtMs: start.startedAtMs };
+        await writeDerivedMetricSnapshotsReady(uid, start.dirtyMetricKinds, { formDocs: [], trainingActivities: [] }, {
+            claim: activeClaim, builtFromEventMutationVersion: start.eventMutationVersion,
+            workoutInputsVersion: start.workoutInputsVersion,
+        });
+        await completeDerivedMetricsProcessing(uid, after.generation, activeClaim);
+        const settled = (await coordinator().get()).data();
+        expect((await prepareDerivedMetricsForUser(uid, selected, 0)).status).toBe('ready');
+        expect((await coordinator().get()).data()).toEqual(settled);
+        expect(mocks.enqueue).toHaveBeenCalledOnce();
+    });
+
+    it('starts a missing foreground snapshot immediately without a batching delay', async () => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        mocks.enqueue.mockClear();
+        await prepareDerivedMetricsForUser(uid, [DERIVED_METRIC_KINDS.FormNow], 0);
+        const pending = (await coordinator().get()).data()!;
+        expect(pending.buildNotBeforeMs).toBeLessThanOrEqual(Date.now());
+        expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(uid, pending.generation);
+    });
+
+    it.each(['successor', 'claimed', 'settled', 'deletion'] as const)('fences an outdated foreground promotion after %s', async change => {
+        const { claim } = await warm();
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { background: true });
+        const old = (await coordinator().get()).data()!;
+        if (change === 'successor') await coordinator().update({ generation: old.generation + 1 });
+        if (change === 'claimed') await coordinator().update({ status: 'processing', processingMetricKinds: kinds, dirtyMetricKinds: [] });
+        if (change === 'settled') await coordinator().update({ status: 'idle', dirtyMetricKinds: [] });
+        if (change === 'deletion') await tombstone().set({ uid, status: 'processing' });
+        const before = (await coordinator().get()).data(); mocks.enqueue.mockClear();
+        await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds, { expediteGeneration: old.generation });
+        expect((await coordinator().get()).data()).toEqual(before);
+        expect(mocks.enqueue).not.toHaveBeenCalled();
     });
 
     it('keeps five concurrent owners in independent coordinators and task generations', async () => {

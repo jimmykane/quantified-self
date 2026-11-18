@@ -11,6 +11,7 @@ import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, re
   type DeliveryRuntime } from './delivery/contracts';
 import { deliveryIdentity } from './delivery/intent';
 import { readSuuntoGuideOwnerPreferences } from './delivery/store';
+import { prepareTrainingSend } from '../web-push/training-send-admission';
 
 /** Shares the authored transaction and existing reconciliation queue. No provider HTTP or browser follow-up. */
 export async function createWorkoutWithDeliveryForUser(uid: string, raw: MutateTrainingScheduleRequestV1,
@@ -29,12 +30,14 @@ export async function createWorkoutWithDeliveryForUser(uid: string, raw: MutateT
     title: operation.title, structure: strength ? projectStrengthWorkoutToV1(strength, operation.structure.sport) : operation.structure,
     lifecycle: 'planned', revision: 1, createdAtMs: now, updatedAtMs: now };
   const pro = await runtime.hasPro(uid);
+  const notificationConfig = await runtime.notificationConfiguration?.();
+  let notifications: NonNullable<Awaited<ReturnType<typeof prepareTrainingSend>>>[] = [];
   let outcomes: CreatedWorkoutDeliveryOutcomeV1[] = [], settings: TrainingDeliverySettingsV1[] = [], revision = 0, replay = false;
   const response = await mutateTrainingScheduleForUser(uid, request, { db, nowMs: now,
-    additionalWriteBudget: intent.providers.length + 2, // Settings, private revision, and the compound receipt.
+    additionalWriteBudget: intent.providers.length * 2 + 2, // Settings, optional result states, revision and receipt.
     transactionPrecondition: async tx => {
       // Reset retry-local preparation. Firestore may invoke this callback more than once.
-      outcomes = []; settings = []; revision = 0; replay = false;
+      outcomes = []; settings = []; notifications = []; revision = 0; replay = false;
       const [previous, authored, state, scope] = await tx.getAll(receipt, authoredReceipt, privateState,
         user.collection(DELIVERY_SCOPES).doc(operation.workoutId));
       if (previous.exists) {
@@ -83,12 +86,17 @@ export async function createWorkoutWithDeliveryForUser(uid: string, raw: MutateT
           // Creation establishes the first scope generation in the same authoring transaction.
           scopeGeneration: generation + 1, associationPlanId: null, approvedDigest: null, updatedAtMs: now });
         outcomes.push({ provider, state: 'queued' });
+        const notification = await prepareTrainingSend(runtime, tx, uid, { action: 'send', scope: 'workout',
+          scopeId: workout.id, provider, mutationId: `create_${hashTrainingScheduleRequestPayload(request.mutationId)}` },
+        null, settings[settings.length - 1], null, [workout], [strength], connection, transport, notificationConfig);
+        if (notification) notifications.push(notification);
       }
     },
     transactionPostcondition: tx => {
       if (replay) return; // A receipt replay must never undo a subsequent Stop, disconnect, edit or deletion.
       for (const setting of settings) tx.set(user.collection(TRAINING_DELIVERY_SETTINGS)
         .doc(deliverySettingsId('workout', operation.workoutId, setting.provider)), setting);
+      for (const notification of notifications) tx.set(notification.ref, notification.state);
       if (settings.length) tx.set(privateState, { revision }, { merge: true });
       tx.create(receipt, { hash, outcomes, createdAtMs: now, expireAt: Timestamp.fromMillis(now + 30 * 86_400_000) });
       // The schedule transaction already stages this workout on the existing reconciliation queue.

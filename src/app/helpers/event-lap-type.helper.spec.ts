@@ -12,6 +12,7 @@ import {
   isEventLapEndpointInActivity,
   getEventLapContextLabel,
   getEventLapTableGroups,
+  isWholeActivityLapSpan,
 } from './event-lap-type.helper';
 
 function createActivityWithLapTypes(types: Array<LapTypes | string | null | undefined>): ActivityInterface {
@@ -171,6 +172,48 @@ function createActivity(laps: LapInterface[]): ActivityInterface {
 }
 
 describe('event lap table visibility', () => {
+  it('retains both whole-activity source laps for comparisons despite small summary differences', () => {
+    const exact = createActivity([createLap(LapTypes.Unknown)]);
+    const different = createActivity([createLap(LapTypes.Unknown, 0, 600_000, 600, 1998.33)]);
+    const activities = [exact, different];
+    const before = activities.map(activity => JSON.stringify(activity.toJSON()));
+
+    expect(getVisibleEventLaps(exact, activities)).toEqual([]);
+    expect(getVisibleEventLaps(different, activities)).toHaveLength(1);
+    for (const activity of activities) {
+      const laps = activity.getLaps();
+      expect(getVisibleEventLaps(activity, activities, {includeWholeActivityLaps: true})).toEqual(laps);
+      expect(getEventLapTableGroups(activity, activities, {includeWholeActivityLaps: true}))
+        .toEqual([{lapType: LapTypes.Unknown, laps}]);
+      expect(isWholeActivityLapSpan(activity, laps[0])).toBe(true);
+    }
+    expect(activities.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+    expect(isEventLapTypeAllowed(LapTypes.session_end, [])).toBe(false);
+  });
+
+  it.each([
+    [0, 600_000, true], [1000, 599_000, true], [2000, 600_000, false],
+    [0, 598_000, false], [0, 0, false], [NaN, 600_000, false],
+  ])('identifies a whole-activity span from %s to %s without using summary totals', (start, end, expected) => {
+    const activity = createActivity([]);
+    expect(isWholeActivityLapSpan(activity, createLap(LapTypes.Unknown, start, end, 400, 1000))).toBe(expected);
+  });
+
+  it.each([1, 1000])('retains a comparison source lap ending %s ms after its rounded activity boundary', rounding => {
+    const first = createActivity([createLap(LapTypes.Unknown)]);
+    first.endDate = new Date(600_000 - rounding);
+    const second = createActivity([createLap(LapTypes.Unknown)]);
+    const activities = [first, second];
+    const before = activities.map(activity => JSON.stringify(activity.toJSON()));
+
+    for (const activity of activities) {
+      expect(getVisibleEventLaps(activity, activities, {includeWholeActivityLaps: true})).toEqual(activity.getLaps());
+      expect(getEventLapTableGroups(activity, activities, {includeWholeActivityLaps: true}))
+        .toEqual([{lapType: LapTypes.Unknown, laps: activity.getLaps()}]);
+    }
+    expect(activities.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+  });
+
   it('shows a shared multisport lap only in its ending leg without clipping its source interval', () => {
     const lap = createLap(LapTypes.Manual, 0, 450_000, 450, 1200);
     const first = createActivity([lap]);
@@ -181,6 +224,8 @@ describe('event lap table visibility', () => {
     last.type = ActivityTypes.Running;
     expect(getVisibleEventLaps(first, [first, last])).toEqual([]);
     expect(getVisibleEventLaps(last, [first, last])).toHaveLength(1);
+    expect(getVisibleEventLaps(first, [first, last], {includeWholeActivityLaps: true})).toEqual([]);
+    expect(getVisibleEventLaps(last, [first, last], {includeWholeActivityLaps: true})).toHaveLength(1);
     expect(getEventLapContextLabel(last, last.getLaps()[0], [first, last])).toBe('Multisport lap');
     expect(isEventLapEndpointInActivity(first, lap)).toBe(false);
     expect(isEventLapEndpointInActivity(last, lap)).toBe(true);

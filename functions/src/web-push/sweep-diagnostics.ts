@@ -1,5 +1,3 @@
-export type NotificationSweepStage = 'initialization' | 'configuration' | 'signing_key' | 'due_query' | 'account_processing' | 'backlog_probe';
-
 const GRPC_CODES = [
   'ok', 'cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found',
   'already-exists', 'permission-denied', 'resource-exhausted', 'failed-precondition',

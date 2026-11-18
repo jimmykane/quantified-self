@@ -1,0 +1,33 @@
+<main class="qs-workspace-page" aria-labelledby="billing-policy-title">
+  <app-page-header title="Billing policy" titleId="billing-policy-title" eyebrow="Administration" leadingIcon="payments"
+    subtitle="Set introductory trial offers for new Basic and Pro members."></app-page-header>
+  <p><a mat-button routerLink="/admin"><mat-icon>arrow_back</mat-icon> Admin dashboard</a></p>
+  <section aria-labelledby="trial-heading">
+    <div class="section-heading">
+      <h2 id="trial-heading">Introductory trials</h2>
+      <button mat-button type="button" [disabled]="loading() || saving()" (click)="load(true)"><mat-icon>refresh</mat-icon> Refresh</button>
+    </div>
+    <p>Choose a trial length for each plan. These offers apply to both monthly and yearly billing, for eligible members with no previous subscription.</p>
+    <p class="secondary">Use price settings keeps each price’s existing offer. Off starts paid billing at checkout. Existing subscriptions, complimentary extensions and accepted checkout terms keep their current terms.</p>
+    @if (loading()) { <mat-progress-spinner mode="indeterminate" diameter="24" aria-label="Loading trial settings"></mat-progress-spinner> }
+    @if (data()) {
+      <div class="choices">
+        <app-compact-select label="Basic free trial" [value]="basic()" [options]="options" [disabled]="loading() || saving()" (selectionChange)="select('basic', $event)"></app-compact-select>
+        <app-compact-select label="Pro free trial" [value]="pro()" [options]="options" [disabled]="loading() || saving()" (selectionChange)="select('pro', $event)"></app-compact-select>
+      </div>
+      <p aria-live="polite">{{ summary() }}</p>
+      <p class="secondary">Pro trials require a payment method. Basic trials keep their existing no-card policy. Disabling trials does not change plan prices.</p>
+      <button mat-flat-button type="button" [disabled]="!canSave()" (click)="save()">
+        <span class="button-content"><span class="button-icon">
+          @if (saving()) { <mat-progress-spinner mode="indeterminate" diameter="18" aria-label="Saving trial settings"></mat-progress-spinner> }
+          @else { <mat-icon>save</mat-icon> }
+        </span><span>{{ saving() ? 'Applying…' : 'Review changes' }}</span></span>
+      </button>
+      @if (data().updatedBy) {
+        <p class="secondary audit">Last changed by {{ data().updatedBy }}@if (data().updatedAt) { · {{ data().updatedAt | date:'medium' }} }. Revision {{ data().policy.revision }}.</p>
+      }
+    }
+    @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+    @if (notice()) { <p role="status">{{ notice() }}</p> }
+  </section>
+</main>

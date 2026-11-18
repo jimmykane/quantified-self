@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 export const EMULATOR_SUITES = {
   delivery: [
     'src/web-push/training.emulator.spec.ts',
+    'src/web-push/training-send.emulator.spec.ts',
     'src/web-push/delivery.emulator.spec.ts',
     'src/activity-sync/wahoo-cooldown.emulator.spec.ts',
     'src/activity-send/activity-send.emulator.spec.ts',
@@ -40,7 +41,9 @@ export const EMULATOR_SUITES = {
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
     'src/garmin/health-backfill-cutoffs.emulator.spec.ts',
+    'src/web-push/retention.emulator.spec.ts',
     'src/web-push/activity.emulator.spec.ts',
+    'src/web-push/sleep.emulator.spec.ts',
     'src/coros/history-import-lease.emulator.spec.ts',
     'src/activity-sync/monitoring.emulator.spec.ts',
     'src/routes/monitoring.emulator.spec.ts',
@@ -61,6 +64,7 @@ export const EMULATOR_SUITES = {
     'src/admin/marketing/marketing.emulator.spec.ts',
     'src/service-disconnect-cleanup.integration.spec.ts',
     'src/users/data-cleanup.emulator.spec.ts',
+    'src/users/inactivity.emulator.spec.ts',
   ],
 };
 

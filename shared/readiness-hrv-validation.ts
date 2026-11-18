@@ -1,5 +1,5 @@
 import type { ReadinessHrvPersonalRange } from './readiness';
-import { HRV_PERSONAL_RANGE_OPTIONS } from './personal-metric-range';
+import { HRV_PERSONAL_RANGE_OPTIONS, resolveHrvPersonalRangeTone } from './personal-metric-range';
 
 /** Every nonempty current window must contain a reading inside that window. */
 export function isReadinessHrvRangeValidAt(range: ReadinessHrvPersonalRange, evaluatedAtMs: number): boolean {
@@ -44,7 +44,8 @@ export function normalizeReadinessHrvPersonalRange(value: unknown): ReadinessHrv
     || Math.abs(distance - sd * 2) <= epsilon && adjacent('outside_range', 'far_outside_range'));
   if (sd === 0 && distance > epsilon || s.reason !== reason && !boundaryRounding) return null;
   const normalizedReason = s.reason as typeof reason;
-  const tone = normalizedReason === 'within_range' ? 'positive' : normalizedReason === 'outside_range' ? 'caution' : 'negative';
+  const tone = resolveHrvPersonalRangeTone(s.currentAverage, { min: r.min, max: r.max },
+    normalizedReason === 'within_range' ? 'positive' : normalizedReason === 'outside_range' ? 'caution' : 'negative');
   if (s.tone !== tone) return null;
   return { ...base, reason: normalizedReason, tone, baselineAverage: s.baselineAverage, currentAverage: s.currentAverage,
     normalRange: { min: r.min, max: r.max } };

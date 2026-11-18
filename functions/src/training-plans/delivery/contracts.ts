@@ -209,6 +209,8 @@ export class TrainingDeliveryBatchAdmissionChangedError extends TrainingDelivery
   constructor() { super('deferred', true); }
 }
 export interface DeliveryRuntime {
+  /** Internal notification switch; never part of the browser/MCP command contract. */
+  notificationConfiguration?(): Promise<{ enabled: boolean; publicKey: string }>;
   requestNotBefore?(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId, destination: string): Promise<number>;
   db: Firestore;
   now(): number;

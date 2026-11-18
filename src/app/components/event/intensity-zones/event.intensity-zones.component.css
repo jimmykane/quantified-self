@@ -1,3 +1,5 @@
+:host { display: block; min-width: 0; }
+
 .intensity-zones-container {
   display: flex;
   flex-direction: column;
@@ -9,6 +11,7 @@
   background: transparent;
   overflow: hidden;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .chart-intro {
@@ -34,6 +37,29 @@
 .intensity-zones-chart {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+.intensity-zones-selectable {
+  height: auto;
+  min-height: 0;
+}
+
+.intensity-zones-plot { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+.intensity-zones-selectable .intensity-zones-plot {
+  /* Wrapped controls and save messages must not take height from the chart. */
+  flex: none;
+  height: max(200px, calc(var(--performance-chart-height, 30vh) - 24px));
+}
+.intensity-metrics-trigger { flex-shrink: 0; }
+.intensity-metric-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; min-height: 20px; padding-bottom: 4px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.intensity-metric-key { display: inline-flex; align-items: center; gap: 6px; }
+.intensity-metric-swatch { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.intensity-metrics-empty { position: absolute; inset: 0; margin: 0; display: grid; place-content: center; text-align: center; padding: 8px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.intensity-metrics-save-error { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+@media (max-width: 599.98px) {
+  .intensity-zones-selectable .chart-intro { flex-wrap: wrap; }
+  .intensity-zones-selectable .chart-intro-copy { flex-basis: 120px; }
 }

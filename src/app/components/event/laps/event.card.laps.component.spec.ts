@@ -1884,6 +1884,150 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
+    it.each([
+        { flags: { isMerge: true }, distanceUnits: DistanceUnits.Kilometers, distance: '2.00 Km' },
+        { flags: { hasBenchmark: true }, distanceUnits: DistanceUnits.Miles, distance: '1.24 mi' },
+        { flags: { isMerge: false, mergeType: 'benchmark' }, distanceUnits: DistanceUnits.Kilometers, distance: '2.00 Km' },
+    ])('keeps both comparison whole-activity laps with $distanceUnits units', ({ flags, distanceUnits, distance }) => {
+        const sources = [2000, 1998.33].map((lapDistance, index) => {
+            const activity = createHydratedActivity([{
+                lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.Unknown, stats: { [DataDuration.type]: 600, [DataDistance.type]: lapDistance },
+            }]);
+            activity.setID(`comparison-source-${index}`);
+            return activity;
+        });
+        const before = sources.map(activity => JSON.stringify(activity.toJSON()));
+        component.selectedActivities = sources;
+        component.event = { ...flags, getActivities: () => sources } as EventInterface;
+        component.unitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+        component.canCustomize = true;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.availableLapTypes).toEqual([LapTypes.Unknown]);
+        const tables = component.lapTableGroups[0].tables;
+        expect(tables).toHaveLength(2);
+        tables.forEach((table, index) => {
+            expect(table.sourceActivity).toBe(sources[index]);
+            expect(table.isWholeActivity).toBe(true);
+            expect(table.dataSource.data).toHaveLength(1);
+            expect(table.dataSource.data[0].lap).toBe(sources[index].getLaps()[0]);
+            expect(table.dataSource.data[0].isLapAverage).toBeFalsy();
+        });
+        expect(tables[0].dataSource.data[0][DataDistance.type]).toBe(distance);
+        expect(fixture.nativeElement.querySelectorAll('.lap-whole-activity-label')).toHaveLength(2);
+        const headers = fixture.nativeElement.querySelectorAll('app-activity-toggle');
+        sources.forEach((source, index) => expect(headers[index].activity).toBe(source));
+        expect(component.comparisonActivitiesWithoutLaps).toEqual([]);
+        expect(fixture.nativeElement.querySelector('[aria-label="Choose lap columns"]')).not.toBeNull();
+        expect(haptics.selection).not.toHaveBeenCalled();
+
+        component.selectedActivities = [sources[0]];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.lapTableGroups[0].tables).toHaveLength(1);
+        expect(fixture.nativeElement.querySelectorAll('.lap-whole-activity-label')).toHaveLength(1);
+        expect(sources.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+    });
+
+    it('keeps rounded whole-activity source laps without a false cross-leg label', () => {
+        const sources = [0, 1].map(index => {
+            const activity = createHydratedActivity([{
+                lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+                type: LapTypes.Unknown, stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+            }]);
+            activity.setID(`rounded-source-${index}`);
+            return activity;
+        });
+        sources[0].endDate = new Date(599_000);
+        const before = sources.map(activity => JSON.stringify(activity.toJSON()));
+        component.selectedActivities = sources;
+        component.event = { isMerge: true, getActivities: () => sources } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const tables = component.lapTableGroups[0].tables;
+        expect(tables).toHaveLength(2);
+        tables.forEach(table => {
+            expect(table.isWholeActivity).toBe(true);
+            expect(table.hasContextLabels).toBe(false);
+            expect(table.dataSource.data[0].contextLabel).toBe('');
+        });
+        expect(fixture.nativeElement.querySelectorAll('.lap-whole-activity-label')).toHaveLength(2);
+        expect(fixture.nativeElement.textContent).not.toContain('Across activity legs');
+        expect(sources.map(activity => JSON.stringify(activity.toJSON()))).toEqual(before);
+    });
+
+    it('explains a comparison source with no laps and updates the message with source selection', () => {
+        const withLap = createHydratedActivity([{
+            lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,
+            type: LapTypes.Unknown, stats: { [DataDuration.type]: 600, [DataDistance.type]: 2000 },
+        }]);
+        const withoutLaps = createHydratedActivity([]);
+        withLap.setID('with-lap');
+        withoutLaps.setID('without-laps');
+        component.selectedActivities = [withLap, withoutLaps];
+        component.event = { isMerge: true, getActivities: () => [withLap, withoutLaps] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const emptyState = fixture.nativeElement.querySelector('.lap-source-empty-state');
+        expect(emptyState.textContent).toContain('No laps recorded.');
+        expect(emptyState.querySelector('app-activity-toggle').activity).toBe(withoutLaps);
+        expect(component.lapTableGroups[0].tables[0].sourceActivity).toBe(withLap);
+
+        component.selectedActivities = [withLap];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-source-empty-state')).toBeNull();
+
+        component.selectedActivities = [withoutLaps];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.lapTableGroups).toEqual([]);
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('.lap-source-empty-state').textContent).toContain('No laps recorded.');
+    });
+
+    it('shows a source-specific message when no compared source recorded laps', () => {
+        const sources = [createHydratedActivity([]), createHydratedActivity([])];
+        sources.forEach((source, index) => source.setID(`empty-source-${index}`));
+        component.selectedActivities = sources;
+        component.event = { isMerge: true, getActivities: () => sources } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.lapTableGroups).toEqual([]);
+        const states = fixture.nativeElement.querySelectorAll('.lap-source-empty-state');
+        expect(states).toHaveLength(2);
+        sources.forEach((source, index) => {
+            expect(states[index].querySelector('app-activity-toggle').activity).toBe(source);
+            expect(states[index].textContent).toContain('No laps recorded.');
+        });
+    });
+
+    it('keeps swim intervals available when a comparison source has no original laps', () => {
+        const source = createSwimIntervalFixture();
+        source.setID('swim-with-lengths');
+        source.getLaps().splice(0);
+        component.selectedActivities = [source];
+        component.event = { isMerge: true, getActivities: () => [source] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.hasSwimIntervals).toBe(true);
+        expect(component.lapTableGroups).toHaveLength(1);
+        expect(component.comparisonActivitiesWithoutLaps).toEqual([]);
+        expect(fixture.nativeElement.querySelector('.lap-source-empty-state')).toBeNull();
+
+        component.setOriginalLaps(true);
+        fixture.detectChanges();
+        expect(component.lapTableGroups).toEqual([]);
+        expect(component.comparisonActivitiesWithoutLaps).toEqual([source]);
+        expect(fixture.nativeElement.querySelector('.lap-source-empty-state').textContent).toContain('No laps recorded.');
+    });
+
     it('keeps a sole final lap visible when zero distance masks a missing duration', () => {
         const activity = createHydratedActivity([{
             lapId: 1, startDate: 0, endDate: 600_000, startIndex: null, endIndex: null,

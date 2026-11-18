@@ -16,6 +16,11 @@ describe('event-visibility.helper', () => {
     expect(isMergeOrBenchmarkEvent({ isMerge: false, hasBenchmark: true } as any)).toBe(true);
   });
 
+  it('recognizes an explicit benchmark merge type without the legacy merge flag', () => {
+    expect(isMergeOrBenchmarkEvent({ isMerge: false, mergeType: 'benchmark' } as any)).toBe(true);
+    expect(isMergeOrBenchmarkEvent({ mergeType: 'multi' } as any)).toBe(false);
+  });
+
   it('returns true for benchmark events by benchmark fields', () => {
     expect(isMergeOrBenchmarkEvent({ isMerge: false, benchmarkResults: { key: {} } } as any)).toBe(true);
     expect(isMergeOrBenchmarkEvent({ isMerge: false, benchmarkResult: {} } as any)).toBe(true);

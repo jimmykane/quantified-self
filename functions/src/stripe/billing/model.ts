@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
+import { BILLING_OFFER_CHANGED_MESSAGE } from '../../../../shared/billing-trial-policy';
 import { STRIPE_CHECKOUT_TERMS_VERSION } from '../../../../shared/stripe-checkout-terms';
 
 export const BILLING_REGION = 'europe-west3';
@@ -16,7 +17,7 @@ export const IDEMPOTENCY_WINDOW_MS = 23 * 60 * 60 * 1000;
 export const BILLING_LEASE_MS = 360_000; // Greater than the 300-second worker.
 
 export type BillingErrorCode = 'invalid_request' | 'maintenance' | 'account_unavailable'
-  | 'customer_conflict' | 'subscription_exists' | 'trial_ineligible' | 'checkout_terms_changed' | 'checkout_offer_pending'
+  | 'customer_conflict' | 'subscription_exists' | 'trial_ineligible' | 'checkout_terms_changed' | 'trial_policy_changed' | 'checkout_offer_pending'
   | 'checkout_completed' | 'checkout_expired' | 'checkout_replaced' | 'operation_uncertain' | 'provider_unavailable' | 'retry_exhausted' | 'checkout_rejected';
 const MESSAGES: Record<BillingErrorCode, string> = {
   invalid_request: 'This checkout request is not supported. Please refresh and try again.',
@@ -24,6 +25,7 @@ const MESSAGES: Record<BillingErrorCode, string> = {
   account_unavailable: 'This account is no longer available for billing.',
   customer_conflict: 'Your billing account needs support before you can continue.',
   subscription_exists: 'You already have a subscription. Please use Manage subscription.',
+  trial_policy_changed: BILLING_OFFER_CHANGED_MESSAGE,
   trial_ineligible: 'This trial is no longer available. Please refresh the pricing page.',
   checkout_terms_changed: 'New Pro trials require a payment method. Refresh the app and review the updated trial terms before continuing.',
   checkout_offer_pending: 'An earlier checkout is still open under different terms. Let it expire before starting a new checkout, or contact support.',
@@ -87,10 +89,11 @@ export function returnUrl(value: unknown, local = false): string {
 export interface CheckoutRequest {
   price: string; mode: 'subscription' | 'payment'; success_url: string; cancel_url: string;
   trial_period_days?: number;
+  trial_policy_revision?: number;
   checkout_terms_version?: typeof STRIPE_CHECKOUT_TERMS_VERSION;
 }
 const CHECKOUT_FIELDS = ['price', 'mode', 'success_url', 'cancel_url', 'allow_promotion_codes',
-  'automatic_tax', 'metadata', 'payment_method_collection', 'trial_period_days', 'checkout_terms_version'];
+  'automatic_tax', 'metadata', 'payment_method_collection', 'trial_period_days', 'checkout_terms_version', 'trial_policy_revision'];
 export function checkoutRequest(data: DocumentData, uid: string, local = false): CheckoutRequest {
   if (!data || Object.keys(data).some(k => !CHECKOUT_FIELDS.includes(k))
     || typeof data.price !== 'string' || !/^price_[a-zA-Z0-9]+$/.test(data.price)
@@ -100,12 +103,14 @@ export function checkoutRequest(data: DocumentData, uid: string, local = false):
     || data.metadata?.firebaseUID !== uid || Object.keys(data.metadata ?? {}).length !== 1
     || (data.payment_method_collection !== undefined && data.payment_method_collection !== 'if_required')
     || (data.checkout_terms_version !== undefined && data.checkout_terms_version !== STRIPE_CHECKOUT_TERMS_VERSION)
+    || (data.trial_policy_revision !== undefined && (!Number.isSafeInteger(data.trial_policy_revision) || data.trial_policy_revision < 0))
     || (data.trial_period_days !== undefined && (!Number.isInteger(data.trial_period_days)
       || data.trial_period_days < 1 || data.trial_period_days > 730 || data.mode !== 'subscription'))) {
     throw new BillingError('invalid_request');
   }
   return { price: data.price, mode: data.mode, success_url: returnUrl(data.success_url, local),
     cancel_url: returnUrl(data.cancel_url, local),
+    ...(data.trial_policy_revision === undefined ? {} : { trial_policy_revision: data.trial_policy_revision }),
     ...(data.checkout_terms_version === undefined ? {} : { checkout_terms_version: data.checkout_terms_version }),
     ...(data.trial_period_days === undefined ? {} : { trial_period_days: data.trial_period_days }) };
 }

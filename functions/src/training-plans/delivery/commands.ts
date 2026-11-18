@@ -21,6 +21,7 @@ import { productionDeliveryRuntime } from './runtime';
 import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-provider-verification';
 import { VERIFICATION_COALESCE_MS, VERIFICATION_DAY_MS } from './verification-contracts';
 import { inspectionBinding } from './verification-evidence';
+import { prepareTrainingSend } from '../../web-push/training-send-admission';
 
 export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: string, raw: unknown,
   previewOnly: boolean,
@@ -32,6 +33,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
   const receiptRef = privateState.collection(DELIVERY_RECEIPTS).doc(command.mutationId);
   const hash = hashTrainingScheduleRequestPayload(command);
   const pro = await runtime.hasPro(uid);
+  const notificationConfig = !previewOnly && ['send', 'configure', 'retry'].includes(command.action)
+    ? await runtime.notificationConfiguration?.() : undefined;
   return runtime.db.runTransaction(async tx => {
     if ((await getUserDeletionGuardStateInTransaction(runtime.db, tx, uid)).shouldSkip) {
       throw new HttpsError('failed-precondition', 'This account is unavailable or being deleted.');
@@ -240,6 +243,8 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       approvedDigest: command.action === 'approve' || command.action === 'send'
         ? command.approvalDigest ?? null : command.action === 'retry' ? previous?.approvedDigest ?? null : null,
       updatedAtMs: runtime.now() };
+    const sendNotification = await prepareTrainingSend(runtime, tx, uid, command, previous, result, planSetting,
+      workouts, strengths, connection, transport, notificationConfig);
     if (replacement && replacementContext && replacementRef) {
       // Preserve mapping approval and consent. Replacement approval is one operation,
       // not permission to broaden provider delivery or change the prescription.
@@ -269,6 +274,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       writeDelivery(runtime, tx, uid, fresh);
     }
     tx.set(settingRef, result);
+    if (sendNotification) tx.set(sendNotification.ref, sendNotification.state);
     tx.set(privateState, { revision }, { merge: true });
     tx.create(receiptRef, { hash, result, createdAtMs: runtime.now(), expireAt: Timestamp.fromMillis(runtime.now() + 30 * 86_400_000) });
     stageTrainingDeliveryReconciliation(tx, runtime.db, uid, command.scope === 'workout' ? [command.scopeId] : undefined);

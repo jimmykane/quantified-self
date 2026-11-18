@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DELIVERY_PUSH, type DeliveryCandidate } from './delivery-policy';
-import { admitDeliveryNotification, sendDeliveryNotification, type DeliveryPushDependencies } from './delivery-service';
+import { admitDeliveryNotification, sendDeliveryNotification, sendManualDeliveryNotification, type DeliveryPushDependencies } from './delivery-service';
 import { validateDeliveryNotificationConsent } from './delivery-consent';
 const now = Date.UTC(2026, 10, 4, 12), key = 'B' + 'A'.repeat(86), origin = 'https://quantified-self.io';
 const id = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
@@ -37,10 +37,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery notific
     return { seed, deps, advance: () => { clock += DELIVERY_PUSH.groupMs; }, state: db.doc('users/owner/pushState/activityDelivery'),
       admit: (candidate: DeliveryCandidate) => admitDeliveryNotification('owner', candidate, deps), send: () => sendDeliveryNotification('owner', deps) };
   }
+  it('clears the deadline left by an older worker that already claimed the batch', async () => {
+    const h = await setup();
+    await h.state.set({ attempts: [now], seen: [], dueAt: now });
+    await h.send();
+    const state = await h.state.get();
+    expect(state.get('dueAt')).toBeUndefined();
+    expect(state.get('attempts')).toEqual([now]);
+    expect(h.deps.send).not.toHaveBeenCalled();
+  });
+  it('sends a manual batch directly with an atomic receipt and no scheduled work', async () => {
+    const h = await setup(), candidate = await h.seed();
+    await Promise.all([sendManualDeliveryNotification('owner', candidate, h.deps), sendManualDeliveryNotification('owner', candidate, h.deps)]);
+    expect(h.deps.send).toHaveBeenCalledOnce();
+    const saved = await h.state.get(); expect(saved.get('dueAt')).toBeUndefined(); expect(saved.get('pending')).toBeUndefined();
+    expect(saved.get('expireAt').toMillis()).toBeGreaterThan(now + 30 * 86400000);
+    await sendManualDeliveryNotification('owner', candidate, h.deps); expect(h.deps.send).toHaveBeenCalledOnce();
+  }, 30000);
   it.each(['manual', 'automatic'] as const)('deduplicates real competing %s admissions and claims', async kind => {
     const h = await setup(), candidate = await h.seed(kind); await Promise.all([h.admit(candidate), h.admit(candidate)]);
     expect((await h.state.get()).data()?.pending.entries).toHaveLength(1); h.advance();
-    const due = await db.collectionGroup('pushState').where('deliveryDueAt', '<=', h.deps.now()).orderBy('deliveryDueAt').select('deliveryDueAt').get();
+    const due = await db.collectionGroup('pushState').where('dueAt', '<=', h.deps.now()).orderBy('dueAt').select('dueAt').get();
     expect(due.docs.map(doc => doc.ref.path)).toEqual([h.state.path]);
     await Promise.all([h.send(), h.send()]); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
     expect((await h.state.get()).data()?.attempts).toHaveLength(1); expect((await h.state.get()).data()).not.toHaveProperty('deliveryDueAt');

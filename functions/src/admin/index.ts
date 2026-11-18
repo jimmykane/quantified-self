@@ -1,4 +1,5 @@
 export { listUsers, getUserCount } from './handlers/users.handlers';
+export { getInactivityAdmin } from './handlers/inactivity.handlers';
 export { getAdminDashboardHistory, scheduleAdminDashboardSnapshot } from './handlers/dashboard-history.handlers';
 export { getSubscriptionHistoryTrend, getUserGrowthTrend } from './handlers/trends.handlers';
 export { getQueueStats, retrySportsLibReparseHeavyJob } from './handlers/queues.handlers';

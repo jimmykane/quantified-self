@@ -5,6 +5,10 @@ type EventLapActivityLike = Pick<ActivityInterface, 'getLaps'> & Partial<Pick<
   ActivityInterface, 'startDate' | 'endDate' | 'getDuration' | 'getDistance' | 'type'
 >>;
 
+export interface EventLapVisibilityOptions {
+  includeWholeActivityLaps?: boolean;
+}
+
 // Terminal chart/map markers remain separate from lap table visibility.
 export const EXCLUDED_EVENT_LAP_TYPES = [LapTypes.session_end] as const satisfies readonly LapTypes[];
 
@@ -60,20 +64,21 @@ export function isEventLapTypeAllowed(lapType: EventLapTypeInput, allowedLapType
   return allowedLapTypeSet.size === 0 || allowedLapTypeSet.has(normalizedLapType);
 }
 
-function isWholeActivityLap(activity: EventLapActivityLike, lap: LapInterface): boolean {
+/** Describes the recorded time span independently of lap/session summary differences. */
+export function isWholeActivityLapSpan(activity: EventLapActivityLike, lap: LapInterface): boolean {
   const activityStart = activity.startDate?.getTime();
   const activityEnd = activity.endDate?.getTime();
   const lapStart = lap.startDate?.getTime();
   const lapEnd = lap.endDate?.getTime();
-  // FIT timestamps and summary totals can round independently. Keep uncertain
-  // records visible; only suppress a confirmed duplicate of the activity.
-  if (![activityStart, activityEnd, lapStart, lapEnd].every(Number.isFinite)
-    || activityEnd <= activityStart
-    || lapEnd <= lapStart
-    || Math.abs(lapStart - activityStart) > 1000
-    || Math.abs(lapEnd - activityEnd) > 1000) {
-    return false;
-  }
+  return [activityStart, activityEnd, lapStart, lapEnd].every(Number.isFinite)
+    && activityEnd > activityStart && lapEnd > lapStart
+    && Math.abs(lapStart - activityStart) <= 1000
+    && Math.abs(lapEnd - activityEnd) <= 1000;
+}
+
+function isWholeActivityLap(activity: EventLapActivityLike, lap: LapInterface): boolean {
+  // Keep uncertain records visible; only suppress a confirmed duplicate.
+  if (!isWholeActivityLapSpan(activity, lap)) return false;
 
   const totals = [
     [activity.getDuration?.(), lap.getDuration?.()],
@@ -133,9 +138,12 @@ export function getEventLapContextLabel(
 
 export function getVisibleEventLaps(
   activity: EventLapActivityLike, activities: readonly EventLapActivityLike[] = [],
+  options: EventLapVisibilityOptions = {},
 ): LapInterface[] {
   const laps = activity.getLaps?.() || [];
-  if (laps.length === 1 && isWholeActivityLap(activity, laps[0])) {
+  const includeWholeActivityLap = options.includeWholeActivityLaps && laps.length === 1
+    && isWholeActivityLapSpan(activity, laps[0]);
+  if (!options.includeWholeActivityLaps && laps.length === 1 && isWholeActivityLap(activity, laps[0])) {
     return [];
   }
 
@@ -143,7 +151,9 @@ export function getVisibleEventLaps(
   // remainders. The provider's trigger does not determine table visibility.
   return laps.filter(lap => {
     if (!normalizeEventLapType(lap.type)) return false;
-    if (isEventLapEndpointInActivity(activity, lap)) return true;
+    // A rounded source boundary must not transfer its whole-activity lap to
+    // another compared device with the same recorded lap timestamps.
+    if (includeWholeActivityLap || isEventLapEndpointInActivity(activity, lap)) return true;
     const owners = activities.filter(a => a !== activity && isEventLapEndpointInActivity(a, lap)
       && Number.isFinite(a.startDate?.getTime()) && Number.isFinite(a.endDate?.getTime())
       && a.getLaps().filter(other => +other.startDate === +lap.startDate && +other.endDate === +lap.endDate
@@ -166,9 +176,10 @@ export interface EventLapTableGroup {
 /** Group table rows only; source lap types and chart/map marker rules stay intact. */
 export function getEventLapTableGroups(
   activity: EventLapActivityLike, activities: readonly EventLapActivityLike[] = [],
+  options: EventLapVisibilityOptions = {},
 ): EventLapTableGroup[] {
   const lapsByType = new Map<LapTypes, LapInterface[]>();
-  getVisibleEventLaps(activity, activities).forEach(lap => {
+  getVisibleEventLaps(activity, activities, options).forEach(lap => {
     const laps = lapsByType.get(lap.type) || [];
     laps.push(lap);
     lapsByType.set(lap.type, laps);

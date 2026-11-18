@@ -134,7 +134,7 @@
   } @else {
   <ng-container *ngIf="products$ | async as products; else loading">
   @if (selectedPriceId()) {
-  <p class="pricing-intro" role="status">Your selected plan is shown first. Review its current price and trial terms, then choose it to continue.</p>
+  <p class="pricing-intro" role="status">Your selected plan is shown first. Review its current price and billing terms, then choose it to continue.</p>
   } @else if (selectionUnavailable()) {
   <p class="pricing-intro" role="status">That plan option is no longer available. Choose a current option below.</p>
   }

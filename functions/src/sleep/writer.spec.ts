@@ -179,6 +179,24 @@ describe('sleep writer', () => {
         });
     });
 
+    it.each(['first save', 'update', 'nap', 'old sleep'])('offers only a recent first main-sleep save to notifications: %s', async kind => {
+        const now = Date.UTC(2026, 3, 29, 8);
+        const incoming = buildMapperResult({ startTimeMs: now - 8 * 3600000, endTimeMs: now - 60000,
+            isNap: kind === 'nap' });
+        if (kind === 'old sleep') {
+            incoming.session.startTimeMs -= 3 * 86400000;
+            incoming.session.endTimeMs -= 3 * 86400000;
+        }
+        hoisted.docGet.mockResolvedValue({ exists: kind === 'update', data: () => kind === 'update'
+            ? buildExistingSuuntoSession({ createdAtMs: now - 1000 }) : undefined });
+        const result = await upsertSleepSessions('user-1', [incoming], now);
+        expect(result.written).toBe(1);
+        if (kind === 'first save') expect(result.createdSessions).toEqual([expect.objectContaining({
+            id: expect.any(String), createdAtMs: now, endTimeMs: incoming.session.endTimeMs,
+        })]);
+        else expect(result.createdSessions).toBeUndefined();
+    });
+
     it('does not let a partial Suunto nap overwrite an existing fuller staged session', async () => {
         hoisted.docGet.mockResolvedValue({
             exists: true,

@@ -8,6 +8,7 @@ import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
 import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
   calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
+  READINESS_FORMULA_VERSION as CURRENT_READINESS_FORMULA_VERSION,
   type ReadinessEvaluation as CurrentReadinessEvaluation } from '../../../shared/readiness';
 import { normalizeDerivedTrainingReadinessMetricPayload as normalizeCurrentReadiness } from '../../../shared/training-readiness-metric';
 import { normalizeDerivedTrainingReadinessMetricPayload as normalizeLegacyReadiness } from '../../../shared/training-readiness-metric-legacy';
@@ -3647,7 +3648,7 @@ export function projectDerivedMetricPayloadForMcp(
         return projectFormForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
         const source = payload as DerivedTrainingReadinessMetricPayload;
-        const legacy = source.formulaVersion === 4
+        const legacy = (source.formulaVersion === 4 || source.formulaVersion === CURRENT_READINESS_FORMULA_VERSION)
           ? normalizeLegacyReadiness({ ...source, formulaVersion: 3,
             evidenceVersion: LEGACY_READINESS_EVIDENCE_VERSION, points: source.legacyPoints }) : source;
         return legacy ? { formulaVersion: legacy.formulaVersion, dayBoundary: legacy.dayBoundary,
@@ -4833,7 +4834,7 @@ function projectCurrentReadiness(input: Parameters<typeof projectTodayReadiness>
   const signals = input.current?.signals ?? null;
   return {
     ...previous,
-    formulaVersion: 4 as const,
+    formulaVersion: CURRENT_READINESS_FORMULA_VERSION,
     status: signals ? 'available' as const : 'no_signal' as const,
     score: signals?.score ?? null, label: signals?.label ?? null, confidence: signals?.confidence ?? null,
     availableSignalCount: signals?.availableSignalCount ?? 0,

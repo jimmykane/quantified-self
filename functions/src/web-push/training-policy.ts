@@ -5,6 +5,7 @@ import { isTrainingProviderDeliveryEnabled } from '../../../shared/training-deli
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createHash } from 'node:crypto';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
+import { connectionIncident, connectionIncidentOwner, type ConnectionIncident } from './connection-policy';
 
 const services = { garmin: ServiceNames.GarminAPI, coros: ServiceNames.COROSAPI,
   suunto: ServiceNames.SuuntoApp, wahoo: ServiceNames.WahooAPI } as const;
@@ -16,8 +17,10 @@ export const trainingRecovered = (status: unknown) => status === 'delivered';
 export const trainingIssuePath = (uid: string, id: string) => `users/${uid}/pushState/trainingSync/issues/${id}`;
 export interface TrainingCandidate { id: string; observedAt: number; status: string; }
 export interface TrainingEntry extends TrainingCandidate {
+  /** Prepared reservation, omitted on recheck once Training already owns the shared receipt. */
+  connectionIncident?: ConnectionIncident;
   episode: string; issueId: string; desiredGeneration: number; settingsRevision: number; connectionGeneration: string;
-  destinationKey: string; workoutUpdatedAt: number; consentUpdatedAt: number;
+  destinationKey: string; workoutUpdatedAt: number; workoutLocalDate: string; consentUpdatedAt: number;
 }
 const entityId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 
@@ -83,12 +86,21 @@ export async function currentTrainingEntry(db: Firestore, tx: Transaction, uid: 
   if (createHash('sha256').update(JSON.stringify([uid, status.provider, meta.providerUserId, 'account'])).digest('hex') !== ledger.destinationKey) return null;
   try { if (normalizeTrainingLocalDate(workout.localDate) < trainingDeliveryLocalDate(now, setting.timeZone)) return null; }
   catch { return null; }
-  const issueId = ['reconnect_required', 'connection_repair'].includes(status.status)
-    ? createHash('sha256').update(JSON.stringify([status.provider, ledger.destinationKey, meta.connectionStateGeneration, 'connection'])).digest('hex')
+  const connectionIssue = ['reconnect_required', 'connection_repair'].includes(status.status);
+  const incident = connectionIssue ? connectionIncident(services[status.provider], meta) : null;
+  if (incident && (incident.observedAt > now || now - incident.observedAt > TRAINING_PUSH.dayMs)) return null;
+  const owner = incident ? await connectionIncidentOwner(db, tx, uid, incident) : undefined;
+  if (owner === 'connection') return null;
+  const generation = incident?.id ?? meta.connectionStateGeneration;
+  const issueId = connectionIssue
+    ? createHash('sha256').update(JSON.stringify([status.provider, ledger.destinationKey, generation, 'connection'])).digest('hex')
     : candidate.id;
   const entry = { ...candidate, issueId, desiredGeneration: ledger.desiredGeneration, settingsRevision: ledger.settingsRevision,
-    connectionGeneration: meta.connectionStateGeneration, destinationKey: ledger.destinationKey, workoutUpdatedAt: workout.updatedAtMs,
+    connectionGeneration: generation, destinationKey: ledger.destinationKey, workoutUpdatedAt: workout.updatedAtMs, workoutLocalDate: workout.localDate,
+    ...(incident ? { connectionIncident: incident } : {}),
     consentUpdatedAt: Math.max(setting.updatedAtMs, currentOverride?.updatedAtMs ?? 0) };
+  // Do not inherit a stale reservation from a queued entry, or rewrite an already-owned receipt for each workout.
+  if (!incident || owner === 'training') delete entry.connectionIncident;
   const previous = candidate as Partial<TrainingEntry>;
   if (previous.desiredGeneration !== undefined && ['issueId', 'desiredGeneration', 'settingsRevision', 'connectionGeneration', 'destinationKey', 'workoutUpdatedAt', 'consentUpdatedAt']
     .some(key => previous[key as keyof TrainingEntry] !== entry[key as keyof typeof entry])) return null;

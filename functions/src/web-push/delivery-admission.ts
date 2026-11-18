@@ -1,8 +1,10 @@
+import { pushDependencies } from './runtime';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { automaticPushConfiguration } from './history-consent';
-import { admitDeliveryNotification } from './delivery-service';
+import { admitDeliveryNotification, sendManualDeliveryNotification } from './delivery-service';
 import { completedSend, automaticDeliveryFailure, type DeliveryCandidate } from './delivery-policy';
 
 const options = { region: 'europe-west2', memory: '256MiB' as const, timeoutSeconds: 60,
@@ -15,10 +17,15 @@ async function admit(uid: string, candidate: DeliveryCandidate): Promise<void> {
     throw new Error('Activity delivery notification admission failed.');
   }
 }
-export const queueActivitySendNotification = onDocumentWritten({ ...options, document: 'users/{uid}/activitySends/{batchId}' }, async event => {
+export const queueActivitySendNotification = onDocumentWritten({ ...options, secrets: FUNCTION_SECRET_BINDINGS.queueActivitySendNotification, document: 'users/{uid}/activitySends/{batchId}' }, async event => {
   const after = event.data?.after.data();
   if (!completedSend(after) || completedSend(event.data?.before.data())) return;
-  await admit(event.params.uid, { kind: 'manual', id: event.params.batchId, createdAt: after!.createdAt, completedAt: after!.updatedAt });
+  try {
+    await sendManualDeliveryNotification(event.params.uid, { kind: 'manual', id: event.params.batchId, createdAt: after!.createdAt, completedAt: after!.updatedAt }, pushDependencies('delivery'));
+  } catch {
+    logger.error('[ActivityDeliveryPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' });
+    throw new Error('Activity delivery notification admission failed.');
+  }
 });
 export const queueAutomaticDeliveryNotification = onDocumentWritten({ ...options, document: 'failed_jobs/{jobId}' }, async event => {
   const after = event.data?.after.data();

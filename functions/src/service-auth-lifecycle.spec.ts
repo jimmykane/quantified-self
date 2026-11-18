@@ -247,6 +247,26 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     });
   });
 
+  it.each([
+    SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+    SERVICE_AUTH_CLEANUP_REASONS.PartnerDisconnect,
+  ])('uses INFO for absent tokens only in account deletion (%s)', async reason => {
+    tokenCollectionRef.get.mockResolvedValue({ empty: true, size: 0, docs: [] });
+    const message = 'No tokens found for user firebase-user-123 in suuntoAppAccessTokens. Cleaning up abandoned data.';
+
+    const outcome = await cleanupServiceConnectionForUser('firebase-user-123', ServiceNames.SuuntoApp, reason, {
+      missingTokensBehavior: 'ignore',
+    });
+
+    const expected = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion ? logger.info : logger.warn;
+    const other = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion ? logger.warn : logger.info;
+    expect(expected).toHaveBeenCalledWith(message);
+    expect(other).not.toHaveBeenCalledWith(message);
+    expect(outcome.localCleanupStatus).toBe(reason === SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect ? 'completed' : 'no_tokens_found');
+    expect(mockAdapterDeauthorize).not.toHaveBeenCalled();
+  });
+
   it.each(([
     [ServiceNames.GarminAPI, 'GarminAPI'], [ServiceNames.SuuntoApp, 'SuuntoApp'],
     [ServiceNames.COROSAPI, 'COROSAPI'], [ServiceNames.WahooAPI, 'WahooAPI'],

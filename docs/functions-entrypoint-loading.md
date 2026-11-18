@@ -66,14 +66,10 @@ requires separately authorized deployment, index readiness, monitor activation/r
 
 ## Activity-delivery notification isolation
 
-`queueActivitySendNotification` and `queueAutomaticDeliveryNotification` load from `web-push/delivery-admission`;
-`sendActivityDeliveryNotifications` loads from `web-push/delivery`. Full discovery adds three exports. The admission
-triggers retain retry-enabled Firestore written descriptors (activitySends and failed_jobs), 256 MiB, 60 seconds,
-concurrency ten, max two and min zero, with no secret. The UTC minute scheduler uses 256 MiB, 120 seconds,
-concurrency/max one, min zero, zero schedule retries and only the existing VAPID secret. All run in europe-west2.
-Three isolated Node 22.23.3 samples per target on 2026-11-04 measured median startup of 223 ms / 87.3 MiB RSS
-for each admission trigger and 217 ms / 88.6 MiB for the sender, each exposing exactly one endpoint. These local
-measurements do not establish deployed latency. Full compiled verification covers 198 endpoints, including Calendar goal progress.
+`queueActivitySendNotification` and `queueAutomaticDeliveryNotification` load from `web-push/delivery-admission`.
+Both are retry-enabled Firestore write triggers in europe-west2 with 256 MiB, a 60-second timeout, concurrency ten,
+max two and min zero. The manual trigger binds the VAPID key to deliver the result directly. The automatic trigger
+groups failures for `sendActivitySyncNotifications`, the shared worker in `web-push/activity`.
 The compiled descriptor check covers isolated equivalence; the [delivery runbook](web-push-notifications.md#delivery-rollout-and-rollback)
 requires separately authorized deployment, index readiness, monitor activation/readback and production testing.
 

@@ -11,6 +11,7 @@ const priority = { unavailable: 0, attention: 1, 'outside-range': 1, insufficien
 
 function clause(signal: HealthChangeSignal): string {
   if (signal.id === 'hrv') {
+    if (signal.state === 'above-range') return '7-day HRV is above your usual range';
     if (signal.state === 'within-range') return '7-day HRV is within your usual range';
     if (signal.state === 'outside-range') return '7-day HRV is outside your usual range';
   }
@@ -19,6 +20,7 @@ function clause(signal: HealthChangeSignal): string {
 }
 
 function phraseTone(signal: DashboardAssessmentSignal): DashboardAssessmentTone {
+  if (signal.state === 'above-range') return 'neutral';
   if (signal.state === 'unavailable') return 'error';
   if (signal.state === 'loading' || signal.state === 'insufficient' || signal.state === 'recorded') return 'neutral';
   if (signal.state === 'attention' || signal.state === 'outside-range') return signal.tone === 'error' ? 'error' : 'caution';
@@ -41,7 +43,7 @@ export function buildDashboardDailyBriefing(signals: readonly DashboardAssessmen
   // Mention missing/error evidence before a reassuring HRV status. All details remain directly below.
   const relevant = supporting.filter(signal => priority[signal.state] !== undefined)
     .sort((a, b) => priority[a.state] - priority[b.state])[0]
-    || supporting.find(signal => signal.id === 'hrv' && signal.state === 'within-range');
+    || supporting.find(signal => signal.id === 'hrv' && ['within-range', 'above-range'].includes(signal.state));
   const selected = [training, readiness, relevant].filter((signal): signal is DashboardAssessmentSignal => !!signal);
   if (!selected.length) selected.push(signals[0]);
   const parts: DashboardDailyBriefing['parts'] = [];

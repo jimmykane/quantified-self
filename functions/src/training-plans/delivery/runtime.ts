@@ -19,6 +19,7 @@ import { reserveCorosIntegerIdentities } from './coros/identities';
 import { WahooTrainingTransport } from './wahoo/transport';
 import { createWahooTrainingClient } from './wahoo/http';
 import { authorizeWahooTrainingRequest } from './wahoo/authorization';
+import { trainingSendConfiguration } from '../../web-push/training-send-admission';
 export { DELIVERY_SERVICES } from './connection';
 
 // Bind pure policy methods intact: forwarding a hand-written argument list can
@@ -89,8 +90,10 @@ function wahooTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
 /** No environment/browser-selectable fake. Public admission comes from the shared capability decision;
  * provider credentials and configuration still fail closed in their own transport boundaries. */
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
+  let notificationConfig: ReturnType<typeof trainingSendConfiguration> | undefined;
   return {
     db, now: Date.now, hasPro: hasProAccess,
+    notificationConfiguration: () => notificationConfig ??= trainingSendConfiguration(),
     entitlement: async uid => {
       const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(uid);
       const graceActive = !!gracePeriodUntil && gracePeriodUntil > Date.now();

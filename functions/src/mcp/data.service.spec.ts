@@ -6522,7 +6522,7 @@ describe('MCP data service', () => {
     const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
     const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
     const legacy = await service.getTodayReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
-    expect(current.formulaVersion).toBe(4);
+    expect(current.formulaVersion).toBe(5);
     expect(current.drivers.hrv.personalRange).toMatchObject({ latestMs: 32, reason: 'outside_range', observationDayCount: 60, currentObservationDayCount: 7 });
     expect(current.drivers.hrv.personalRange?.currentAverage).toBeCloseTo(31 + 1 / 7);
     expect(report.readiness).toEqual(current);
@@ -6540,6 +6540,36 @@ describe('MCP data service', () => {
     expect(oldHistory.payload).toMatchObject({ formulaVersion: 3 });
     expect(JSON.stringify(current)).not.toContain('private');
     expect(JSON.stringify(history)).not.toContain('SourceKey');
+  });
+
+  it('keeps above-range HRV neutral in live readiness, daily workout reports and rebuilt history', async () => {
+    const { buildTrainingReadinessMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const day = 86400000;
+    const documents = (high: boolean) => Array.from({ length: 60 }, (_, index) => {
+      const end = now - (59 - index) * day - 4 * 3600000;
+      return { ...sleepDocument({ sleepDate: new Date(end).toISOString().slice(0, 10),
+        startTimeMs: end - 8 * 3600000, endTimeMs: end, durationSeconds: 28800,
+        vitals: { averageHrvMs: high && index >= 53 ? 90 : 40, averageHeartRateBpm: 60 },
+      }), id: `night-${index}` };
+    });
+    vi.mocked(dependencies.now).mockReturnValue(now);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(documents(false));
+    const service = createMcpDataService(dependencies);
+    const usual = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const high = documents(true);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(high);
+    const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(report.readiness.formulaVersion).toBe(5);
+    expect(report.readiness.score).toBe(usual.readiness.score);
+    expect(report.readiness.drivers.hrv.personalRange).toMatchObject({ tone: 'neutral', reason: 'far_outside_range', currentAverage: 90 });
+    const schemas = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false });
+    expect(schemas.get_daily_report.safeParse(report).success).toBe(true);
+    const payload = buildTrainingReadinessMetricPayload([], 0, high.map(doc => ({ id: doc.id, data: () => doc.data })) as never, now).payload;
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload });
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes: ['metrics:read', 'sleep:read', 'health:read'] });
+    expect(history.points.at(-1)?.hrvPersonalRange).toEqual(report.readiness.drivers.hrv.personalRange);
+    expect(schemas.get_readiness_history.safeParse(history).success).toBe(true);
   });
 
   it('withholds current HRV when the latest provider night is split into multiple fragments', async () => {

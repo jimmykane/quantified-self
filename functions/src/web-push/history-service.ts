@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import type { ConnectionHistoryRun } from '../connection-history/model';
@@ -38,15 +39,16 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
   if (!config.enabled) return;
   const runRef = db.doc(`connectionHistoryImports/${runId}`);
   const stateRef = db.doc(`users/${expected.userID}/pushState/historyCompletion`);
+  const metaRef = db.doc(`users/${expected.userID}/meta/${expected.serviceName}`);
   const consent = expected.notification!;
   const { origin, categoryRevision, ...target } = consent;
   if (!isAutomaticPushOrigin(origin) || !isHistoryNotificationTarget(target)
     || !Number.isSafeInteger(categoryRevision) || categoryRevision < 0) return;
   const registrationRef = db.doc(`users/${expected.userID}/pushSubscriptions/${consent.installationId}`);
-  const current = async (tx: Transaction) => {
+  const current = async (tx: Transaction, claimed = false) => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, expected.userID);
     const [snapshot, registrationSnapshot, metaSnapshot, preferenceSnapshot] = await Promise.all([
-      tx.get(runRef), tx.get(registrationRef), tx.get(db.doc(`users/${expected.userID}/meta/${expected.serviceName}`)),
+      tx.get(runRef), tx.get(registrationRef), tx.get(metaRef),
       tx.get(db.doc(notificationPreferencePath(expected.userID, 'history_import'))),
     ]);
     const run = snapshot.data() as ConnectionHistoryRun | undefined;
@@ -63,6 +65,9 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
       || meta.connectionHistoryImport?.runId !== runId || meta.connectionHistoryImport?.active !== false
       || !isPushRegistration(registration) || registration.origin !== origin
       || registration.generation !== consent.generation || registration.vapidPublicKey !== config.publicKey) return null;
+    const lastCreatedAt = meta.historyNotificationRunCreatedAtMs ?? -1;
+    if (!Number.isSafeInteger(lastCreatedAt) || !Number.isSafeInteger(run.dateCreated)
+      || (claimed ? lastCreatedAt !== run.dateCreated : lastCreatedAt >= run.dateCreated)) return null;
     return { run, registration };
   };
   const claim = await db.runTransaction(async tx => {
@@ -76,7 +81,9 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     const limited = attempts.length >= 2;
     // Store suppression too: replaying the same run after the cap expires must not send it.
     const receipt: Receipt = { runId, createdAt: expected.dateCreated, attemptedAt: now, outcome: limited ? 'limited' : 'claimed' };
-    tx.set(stateRef, { attempts: limited ? attempts : [...attempts, now],
+    // The provider watermark also fences older runs after their temporary receipts expire.
+    tx.update(metaRef, { historyNotificationRunCreatedAtMs: expected.dateCreated });
+    tx.set(stateRef, { expireAt: notificationExpiry(now), attempts: limited ? attempts : [...attempts, now],
       providers: { ...state?.providers, [expected.serviceName]: receipt } });
     return { ...live, limited };
   });
@@ -85,7 +92,7 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
   let outcome: HistoryPushOutcome = 'cancelled';
   // A replacement registration, connection, run or deletion can win while the claim commits.
   const ready = await db.runTransaction(async tx => {
-    const live = await current(tx);
+    const live = await current(tx, true);
     const state = (await tx.get(stateRef)).data() as HistoryPushState | undefined;
     return !!live && state?.providers?.[expected.serviceName]?.runId === runId
       && state.providers[expected.serviceName].outcome === 'claimed';

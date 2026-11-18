@@ -1389,12 +1389,12 @@ const service = {
       normalRange: { min: 40, max: 50 }, latestMs: 42, latestAtMs: DAY_MS - 3600000 };
     const score = calculateCurrentReadinessScore({ form: legacy.drivers.load.form, rampRate: legacy.drivers.load.rampRate,
       sleepScore: legacy.drivers.sleep.score, hrvPersonalRange: personalRange, overnightHeartRateRatio: legacy.drivers.overnightHeartRate.combinedRatio })!;
-    return { ...legacy, formulaVersion: 4, score: score.score, label: score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover',
+    return { ...legacy, formulaVersion: 5, score: score.score, label: score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover',
       availableSignalCount: score.availableSignalCount, availableWeightPercent: score.availableWeight,
       confidence: resolveReadinessConfidence(score.availableWeight, legacy.baselineEvidenceCount), drivers: { ...legacy.drivers,
       hrv: { weightPercent: 20, baselineWindowDays: 60, currentWindowDays: 7, personalRange } } };
   });
-  service.getReadinessHistory = vi.fn().mockResolvedValue({ formulaVersion: 4, dayBoundary: 'UTC',
+  service.getReadinessHistory = vi.fn().mockResolvedValue({ formulaVersion: 5, dayBoundary: 'UTC',
     asOfDayMs: DAY_MS, generatedAtMs: DAY_MS, historyDays: 14,
     points: Array.from({ length: 14 }, (_, index) => ({ dayMs: DAY_MS - (13 - index) * 86400000,
       score: 50, label: 'Recover', confidence: 'low', availableSignalCount: 1, baselineEvidenceCount: 0, totalSignalCount: 4,

@@ -9,8 +9,17 @@ export const NOTIFICATION_CATEGORIES = [{
   id: 'activity_delivery', label: 'Activity delivery',
   description: 'Results of sends you ask about, and grouped automatic sending failures that need attention.',
 }, {
+  id: 'sleep_sync', label: 'Sleep synced',
+  description: 'When your latest main sleep becomes available. History imports, naps and updates are excluded.',
+}, {
   id: 'training_sync', label: 'Training sync',
   description: 'Grouped alerts when upcoming workout sync needs attention or a service needs reconnecting.',
+}, {
+  id: 'training_send', label: 'Training send results',
+  description: 'One result for explicit sends, initial sync setup and manual retries. Background sync stays silent.',
+}, {
+  id: 'connection_attention', label: 'Connection issues',
+  description: 'When a connected service needs reconnecting so syncing can resume. One alert per unresolved problem.',
 }] as const;
 export type NotificationCategoryId = typeof NOTIFICATION_CATEGORIES[number]['id'];
 export interface NotificationCategoryPreference { enabled: boolean; revision: number; }

@@ -610,4 +610,35 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(component.shouldShowAllSeriesAction).toBe(false);
   });
+
+  it('renders all four trail recommendations and allows heart rate to be hidden or defaults reset', async () => {
+    fixture.componentRef.setInput('showSeriesMenu', true);
+    fixture.componentRef.setInput('recommendedSeriesMenuLabel', 'Recommended for Trail Running');
+    fixture.componentRef.setInput('resetToSportDefaultsLabel', 'Reset to Trail Running defaults');
+    fixture.componentRef.setInput('showResetToSportDefaults', true);
+    const items = ['Pace', 'Power', 'Altitude', 'Heart Rate'].map(label => ({
+      dataType: label, label, color: 'currentColor', visible: true,
+    }));
+    fixture.componentRef.setInput('recommendedSeriesMenuItems', items);
+    fixture.componentRef.setInput('seriesMenuItems', items);
+    const toggle = vi.spyOn(component.seriesVisibilityToggle, 'emit');
+    const reset = vi.spyOn(component.resetToSportDefaults, 'emit');
+    fixture.detectChanges();
+    fixture.debugElement.query(By.css('button[aria-label="Visible charts"]')).injector.get(MatMenuTrigger).openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.textContent).toContain('Recommended for Trail Running');
+    expect(component.seriesBadgeLabel).toBe('4/4');
+    const choices = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.series-menu__item'));
+    expect(choices.map(choice => choice.textContent.trim())).toEqual(['Pace', 'Power', 'Altitude', 'Heart Rate']);
+    expect(choices[3].getAttribute('aria-pressed')).toBe('true');
+    choices[3].click();
+    expect(toggle).toHaveBeenCalledExactlyOnceWith({dataType: 'Heart Rate', visible: false});
+    Array.from(overlay.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent.includes('Reset to Trail Running defaults'))!.click();
+    expect(reset).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
 });

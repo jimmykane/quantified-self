@@ -3,7 +3,7 @@ vi.unmock('@sports-alliance/sports-lib');
 import type { Firestore, Transaction, DocumentData } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DELIVERY_PUSH, type DeliveryCandidate } from './delivery-policy';
-import { admitDeliveryNotification, sendDeliveryNotification, type DeliveryPushDependencies } from './delivery-service';
+import { admitDeliveryNotification, sendDeliveryNotification, sendManualDeliveryNotification, type DeliveryPushDependencies } from './delivery-service';
 
 const now = Date.UTC(2026, 10, 4, 12), key = 'B' + 'A'.repeat(86), origin = 'https://quantified-self.io';
 const id = '00000000-0000-4000-8000-000000000001', generation = '00000000-0000-4000-8000-000000000002';
@@ -62,6 +62,26 @@ function harness() {
 }
 
 describe('activity delivery notifications', () => {
+  it('sends a completed manual result immediately and competing replays cannot send it again', async () => {
+    const h = harness();
+    await Promise.all([sendManualDeliveryNotification('owner', h.candidate, h.deps), sendManualDeliveryNotification('owner', h.candidate, h.deps)]);
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(h.state().pending).toBeUndefined(); expect(h.state().dueAt).toBeUndefined();
+    expect(h.state().expireAt).toBeInstanceOf(Date);
+    await sendManualDeliveryNotification('owner', h.candidate, h.deps); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it('does not consume or replace queued automatic failures while sending a manual result directly', async () => {
+    const h = harness(); const auto = h.seed('automatic', 'failure'); await h.admit(auto);
+    const pending = structuredClone(h.state().pending);
+    await sendManualDeliveryNotification('owner', h.candidate, h.deps);
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(h.state().pending).toEqual(pending);
+    expect(h.state().dueAt).toBe(pending.deliveryDueAt);
+  });
+  it('never retries an ambiguous direct manual transport outcome', async () => {
+    const h = harness(); vi.mocked(h.deps.send).mockRejectedValue({ statusCode: 503 });
+    await sendManualDeliveryNotification('owner', h.candidate, h.deps);
+    await sendManualDeliveryNotification('owner', h.candidate, h.deps);
+    expect(h.deps.send).toHaveBeenCalledOnce(); expect(h.deps.outcome).toHaveBeenCalledWith('failed');
+  });
   it('sends a beta manual result only to the initiating beta device', async () => {
     const h = harness(); const beta = 'https://beta.quantified-self.io';
     h.rows.get(`users/owner/pushSubscriptions/${id}`).origin = beta;

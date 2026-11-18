@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { FitBaseType, FitEncoder } from 'fit-file-parser/encoder';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
 import { USAGE_LIMITS } from '../../../shared/limits';
@@ -850,6 +851,70 @@ describe('uploadActivity', () => {
       uploadLimit: null,
       uploadCountAfterWrite: 250,
     }));
+  });
+
+  it.each([
+    [32, 'fit'], [44, 'fit'], [49, 'fit'], [35, 'fit'], [32, 'fit.gz'],
+  ] as const)('explains non-activity FIT type %i in %s without a parser-failure warning or debug copy', async (fileType, extension) => {
+    // Synthetic file declarations only; never retain private diagnostic payloads in fixtures.
+    const payload = Buffer.from(new FitEncoder().writeMessage(0, [
+      { number: 0, size: 1, baseType: FitBaseType.Enum, value: fileType },
+    ]).close());
+    const sportsLib = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+    const parserError: unknown = await sportsLib.EventImporterFIT.getFromArrayBuffer(
+      payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer,
+    ).catch((error: unknown) => error);
+    expect(parserError).toMatchObject({ code: 'PARSING_LIB_ERROR', message: 'FIT file is not an activity file' });
+    hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(parserError);
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': extension, 'X-Original-Filename': 'Private-place-name.fit',
+      },
+      rawBody: extension === 'fit.gz' ? gzipSync(payload) : payload,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledExactlyOnceWith(400);
+    expect(response.json).toHaveBeenCalledExactlyOnceWith({
+      error: 'This FIT file is not a recorded workout. Please select an activity FIT file instead of monitoring, settings or segment data.',
+      code: 'fit_not_activity',
+    });
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith('[uploadActivity] Rejected non-activity FIT file', {
+      userID: 'user-1', payloadSha256: createHash('sha256').update(payload).digest('hex'),
+      resolvedExtension: extension, fitEnvelopeReason: 'valid', reason: 'fit_not_activity',
+    });
+    expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('Private-place-name');
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['fit', 'PARSING_LIB_ERROR', 'FIT file is not an activity file: private details'],
+    ['fit', 'other_error', 'FIT file is not an activity file'],
+    ['gpx', 'PARSING_LIB_ERROR', 'FIT file is not an activity file'],
+  ])('keeps unexpected parser failures diagnostic: %s / %s / %s', async (extension, code, message) => {
+    const error = Object.assign(new Error(message), { code });
+    const importer = extension === 'fit' ? hoisted.mockFITImporter.getFromArrayBuffer : hoisted.mockGPXImporter.getFromString;
+    importer.mockRejectedValueOnce(error);
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check', 'X-File-Extension': extension },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledExactlyOnceWith(400);
+    expect(response.json).toHaveBeenCalledExactlyOnceWith({ error: 'Could not parse uploaded payload.' });
+    expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Activity parsing failed', expect.any(Object));
+    expect(logger.info).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private details');
+    expect(hoisted.mockUploadDebugFile).toHaveBeenCalledOnce();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
 
   it('should map FIT parser failures to 400', async () => {

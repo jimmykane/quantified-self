@@ -317,6 +317,11 @@ describe('AdminDashboardComponent', () => {
         expect(whatsNewServiceSpy.setAdminMode).not.toHaveBeenCalled();
         expect(whatsNewServiceSpy.requestAdminMode).toHaveBeenCalledOnce();
     });
+    it('links directly to the dedicated inactive accounts route', () => {
+        createComponent();
+        const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/admin/inactive-accounts"]');
+        expect(link?.textContent).toContain('Inactive accounts');
+    });
 
     it('should load all dashboard sections independently on init', () => {
         createComponent();

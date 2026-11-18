@@ -25,7 +25,7 @@ describe('billing trust boundaries', () => {
   it.each([
     { customer: 'cus_foreign' }, { line_items: [] }, { sessionId: 'cs_forged' }, { url: 'https://evil.example' },
     { metadata: { firebaseUID: 'other' } }, { metadata: { firebaseUID: 'owner', role: 'pro' } },
-    { trial_period_days: -1 }, { trial_period_days: 731 }, { trial_period_days: 1.5 },
+    { trial_policy_revision: -1 }, { trial_policy_revision: '1' }, { trial_policy_revision: 1.5 }, { trial_period_days: -1 }, { trial_period_days: 731 }, { trial_period_days: 1.5 },
     { mode: 'payment', trial_period_days: 7 }, { automatic_tax: { enabled: false } },
     { promotion_code: 'promo_arbitrary' }, { allow_promotion_codes: false }, { price: 'price_a/path' },
     { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' },

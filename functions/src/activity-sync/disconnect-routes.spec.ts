@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
 
@@ -435,6 +436,23 @@ describe('activity-sync/disconnect-routes', () => {
     });
 
     expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
+
+  it.each(['disable', 'restore'] as const)('logs %s skips at INFO only for confirmed deletion', async action => {
+    for (const deletionInProgress of [true, false]) {
+      vi.mocked(logger.info).mockClear();
+      vi.mocked(logger.warn).mockClear();
+      mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+        userExists: false, deletionInProgress, shouldSkip: true,
+      });
+      if (action === 'disable') await disableActivitySyncRoutesForDisconnectedService('missing-user', ServiceNames.SuuntoApp);
+      else await restoreActivitySyncRoutesForPendingDisconnectClear('missing-user', ServiceNames.SuuntoApp);
+
+      const message = `[ActivitySyncRouteCleanup] Skipping route ${action} for ${ServiceNames.SuuntoApp} user missing-user because the user is missing or deletion is in progress.`;
+      expect(deletionInProgress ? logger.info : logger.warn).toHaveBeenCalledWith(message);
+      expect(deletionInProgress ? logger.warn : logger.info).not.toHaveBeenCalledWith(message);
+      expect(mockSettingsSet).not.toHaveBeenCalled();
+    }
   });
 
   it('is idempotent when repeated delete events are delivered', async () => {

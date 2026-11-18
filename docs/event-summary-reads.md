@@ -155,6 +155,9 @@ There is no separate table presentation or temporary log layout.
 Sport totals consume all filtered activity rows before pagination. `activity-training-log.helper.ts` reads only
 Duration, Distance and eligible Ascent, formats through Sports Lib, and retains missing/zero/partial coverage,
 elevation exclusions, exact sports and one Multisport group per recording. Generated comparisons are excluded.
+The combined total is aggregated from raw sport accumulators before canonical formatting, avoiding rounding or
+unit-conversion errors from summing display strings. One combined row is visible initially; its disclosure shows
+the existing sport rows. Expansion is local to the table and does not reread metrics or request data.
 Totals are appended to the rendered page stream, outside the activity data source used for sorting, filtering,
 selection and exports. They share the table columns, have no event links/actions, and disappear while loading or
 failed. Their sport icon and leading color mark reuse the activity palette. Sport names sit in the sport/name column,

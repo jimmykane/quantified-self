@@ -1,64 +1,62 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
-import webpush from 'web-push';
-import { FUNCTION_SECRET_BINDINGS, SECRET_PARAMS } from '../secrets';
-import { automaticPushConfiguration } from './history-consent';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ACTIVITY_PUSH } from './activity-policy';
-import { sendActivityNotification, type ActivityPushDependencies } from './activity-service';
-import { parseVapidKeyPair } from './vapid';
-import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
+import { sendActivityNotification } from './activity-service';
+import { sendSleepNotification } from './sleep-service';
+import { sendConnectionNotification } from './connection-service';
+import { sendTrainingSendResult } from './training-send-service';
+import { sendDeliveryNotification } from './delivery-service';
+import { sendTrainingNotification } from './training-service';
+import { pushDependencies, type PushType } from './runtime';
+import { notificationSweepErrorCode } from './sweep-diagnostics';
 
+/** Deferred categories share pushState.dueAt and this one minute worker. */
 export const sendActivitySyncNotifications = onSchedule({
   schedule: '* * * * *', timeZone: 'UTC', region: 'europe-west2', memory: '256MiB',
   timeoutSeconds: 120, minInstances: 0, maxInstances: 1, concurrency: 1, retryCount: 0,
   secrets: FUNCTION_SECRET_BINDINGS.sendActivitySyncNotifications,
 }, async () => {
-  let failureStage: NotificationSweepStage = 'initialization';
-  const startedAtMs = Date.now();
+  let failureStage = 'initialization';
   try {
-    const db = getFirestore(); const now = Date.now();
-    failureStage = 'configuration';
-    const config = await automaticPushConfiguration('web_push_activity_sync_enabled');
-    failureStage = 'signing_key';
-    const pair = config.enabled ? parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value()) : null;
-    if (pair && pair.publicKey !== config.publicKey) throw new Error('Notification key mismatch.');
-    failureStage = 'due_query';
-    const due = await db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt')
-      .limit(ACTIVITY_PUSH.sweepLimit).select('dueAt').get();
-    const deps: ActivityPushDependencies = { db, now: Date.now, configuration: async () => config,
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair! }, TTL: 600, timeout: 5000,
-        urgency: 'low', topic: 'qs-activity-sync',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'send', outcome }),
+    const db = getFirestore(), now = Date.now();
+    const dependencies = new Map<PushType, ReturnType<typeof pushDependencies>>();
+    const deps = (type: PushType) => {
+      if (!dependencies.has(type)) dependencies.set(type, pushDependencies(type, db));
+      return dependencies.get(type)!;
     };
+    failureStage = 'due_query';
+    const queue = db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt');
+    const due = await queue.limit(ACTIVITY_PUSH.sweepLimit).select('dueAt').get();
     failureStage = 'account_processing';
-    let failed = false; let preparationError: unknown;
+    let failed = false; let firstError: unknown;
     for (let offset = 0; offset < due.docs.length; offset += 5) {
-      const results = await Promise.allSettled(due.docs.slice(offset, offset + 5).map(doc => {
-        const match = /^users\/([^/]+)\/pushState\/activitySync$/.exec(doc.ref.path);
-        return match ? sendActivityNotification(match[1], deps) : Promise.resolve();
+      const results = await Promise.allSettled(due.docs.slice(offset, offset + 5).map(async doc => {
+        const match = /^users\/([^/]+)\/pushState\/([^/]+)$/.exec(doc.ref.path);
+        if (!match) throw new Error('Invalid notification queue path.');
+        const [, uid, name] = match;
+        if (name === 'activitySync') return sendActivityNotification(uid, deps('activity'));
+        if (name === 'activityDelivery') return sendDeliveryNotification(uid, deps('delivery'));
+        if (name === 'trainingSync') return sendTrainingNotification(uid, deps('training'));
+        if (name === 'connectionAttention') return sendConnectionNotification(uid, deps('connection'));
+        // Drain older ready records during rollout. New Sleep/Training results send in their existing handlers.
+        if (name === 'sleepReady') return sendSleepNotification(uid, deps('sleep'));
+        if (/^trainingSend_[a-zA-Z0-9_-]+$/.test(name)) return sendTrainingSendResult(uid, name, deps('trainingSend'));
+        throw new Error('Unknown notification queue entry.');
       }));
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          if (!failed) preparationError = result.reason;
-          failed = true;
-        }
+      for (const result of results) if (result.status === 'rejected') {
+        if (!failed) firstError = result.reason;
+        failed = true;
       }
     }
-    if (failed) throw preparationError;
-    // Probe only the oldest due field after this bounded sweep; no global account scan.
+    if (failed) throw firstError;
     failureStage = 'backlog_probe';
-    const remaining = await db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt').limit(1).select('dueAt').get();
-    logger.info('[ActivitySyncPushSweep]', { telemetryVersion: 1, enabled: config.enabled,
+    const remaining = due.empty ? due : await queue.limit(1).select('dueAt').get();
+    logger.info('[ActivitySyncPushSweep]', { telemetryVersion: 1,
       oldestDueAgeSeconds: remaining.empty ? 0 : Math.max(0, Math.floor((now - Number(remaining.docs[0].data().dueAt)) / 1000)) });
   } catch (error) {
-    logger.error('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
-      failureStage, errorCode: notificationSweepErrorCode(error),
-      ...(failureStage === 'configuration' ? notificationConfigurationFailureDetails(error, Date.now() - startedAtMs) : {}) });
-    throw new Error('Activity sync notification sweep failed.');
+    logger.error('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed', failureStage, errorCode: notificationSweepErrorCode(error) });
+    throw new Error('Notification sweep failed.');
   }
 });

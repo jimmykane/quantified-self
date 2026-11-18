@@ -36,7 +36,8 @@ import { getNominalSwimDistanceDisplayContext } from '../../../helpers/event-swi
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { getVisibleEventLaps, getEventLapContextLabel, getEventLapTableGroups, normalizeEventLapType } from '../../../helpers/event-lap-type.helper';
+import { getVisibleEventLaps, getEventLapContextLabel, getEventLapTableGroups, isWholeActivityLapSpan, normalizeEventLapType } from '../../../helpers/event-lap-type.helper';
+import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   EventLapMetricOption,
   EventLapMetricOptionGroup,
@@ -114,6 +115,7 @@ interface LapTableView {
   key: string;
   activity: ActivityInterface;
   sourceActivity: ActivityInterface;
+  isWholeActivity: boolean;
   columnTooltips: Readonly<Record<string, string>>;
   rowNoun: 'interval' | 'lap';
   dataSource: MatTableDataSource<LapTableRow>;
@@ -186,6 +188,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public readonly isLapDataRow = (_index: number, row: LapTableRow): boolean => !row.isLapAverage;
   public swolfColumnLabel = '';
   public hasSwimIntervals = false;
+  public isComparison = false;
+  public comparisonActivitiesWithoutLaps: ActivityInterface[] = [];
   public readonly showOriginalLaps = signal(false);
   private displayActivities: ActivityInterface[] = [];
   private sourceEventActivities: ActivityInterface[] = [];
@@ -282,6 +286,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
     this.lapTableGroups = [];
+    this.isComparison = isMergeOrBenchmarkEvent(this.event);
+    this.comparisonActivitiesWithoutLaps = [];
 
     if (!this.selectedActivities) {
       this.hasSwimIntervals = false;
@@ -304,13 +310,21 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     const tablesByKey = new Map<string, LapTableView>();
     const groupsByActivity = new Map(this.displayActivities.map(activity => [activity,
       this.intervalActivities.has(activity) ? [{ lapType: LapTypes.Interval, laps: activity.getLaps() }]
-        : getEventLapTableGroups(activity, this.sourceEventActivities),
+        : getEventLapTableGroups(activity, this.sourceEventActivities, {includeWholeActivityLaps: this.isComparison}),
     ]));
+    if (this.isComparison) {
+      this.comparisonActivitiesWithoutLaps = this.selectedActivities.filter((activity, index) =>
+        (activity.getLaps?.() || []).length === 0
+        && groupsByActivity.get(this.displayActivities[index])!.length === 0,
+      );
+    }
     this.availableLapTypes = [...new Set(Array.from(groupsByActivity.values()).flatMap(groups => groups.map(group => group.lapType)))];
 
     this.displayActivities.forEach((activity, activityIndex) => {
       groupsByActivity.get(activity)!.forEach(({ lapType, laps }) => {
-        const data = this.generateLapData(activity, lapType, laps);
+        const isWholeActivity = this.isComparison && !this.intervalActivities.has(activity)
+          && activity.getLaps().length === 1 && isWholeActivityLapSpan(activity, laps[0]);
+        const data = this.generateLapData(activity, lapType, laps, isWholeActivity);
         const key = this.getKey(activity, lapType);
 
         if (data.length > 0) {
@@ -339,6 +353,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
             key,
             activity,
             sourceActivity: this.selectedActivities[activityIndex],
+            isWholeActivity,
             columnTooltips: resolveEventLapSportFamily(activity.type) !== 'swimming' ? {}
               : this.showOriginalLaps() && projections.get(activity) ? { ...SWIM_TABLE_HEADER_TOOLTIPS,
                 'Total strokes': 'Stroke count for this source lap. Use Intervals for complete set totals.',
@@ -398,7 +413,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return `${activity.getID()}-${this.intervalActivities.has(activity) ? 'intervals-' : ''}${lapType}`;
   }
 
-  private generateLapData(activity: ActivityInterface, lapType: LapTypes, laps: readonly LapInterface[]): LapTableRow[] {
+  private generateLapData(activity: ActivityInterface, lapType: LapTypes, laps: readonly LapInterface[], isWholeActivity = false): LapTableRow[] {
     const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
     const swimming = resolveEventLapSportFamily(activity.type) === 'swimming';
     const sourceIndexes = new Map((activity.getLaps?.() || []).map((lap, index) => [lap, index]));
@@ -410,7 +425,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         '#': index + 1,
       };
       const sourceIndex = sourceIndexes.get(lap) ?? index;
-      const contextLabel = getEventLapContextLabel(activity, lap, this.sourceEventActivities);
+      const contextLabel = isWholeActivity ? '' : getEventLapContextLabel(activity, lap, this.sourceEventActivities);
       const swim = contextLabel ? undefined : analytics.get(lap);
       // Synthetic row numbers can change when source lengths regroup during a live
       // refresh. State follows the same interval window and kind, never a reused number.
@@ -783,14 +798,16 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private getLapColumnFamilyActivityTypes(family: AppEventLapSportFamily): unknown[] {
     return this.displayActivities
       .filter(activity => resolveEventLapSportFamily(activity.type) === family
-        && (this.intervalActivities.has(activity) || getVisibleEventLaps(activity).length > 0))
+        && (this.intervalActivities.has(activity)
+          || getVisibleEventLaps(activity, this.sourceEventActivities, {includeWholeActivityLaps: this.isComparison}).length > 0))
       .map(activity => activity.type);
   }
 
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.displayActivities.forEach((activity) => {
-      if (this.intervalActivities.has(activity) || getVisibleEventLaps(activity, this.sourceEventActivities).length > 0) {
+      if (this.intervalActivities.has(activity)
+        || getVisibleEventLaps(activity, this.sourceEventActivities, {includeWholeActivityLaps: this.isComparison}).length > 0) {
         sportFamilies.add(resolveEventLapSportFamily(activity.type));
       }
     });

@@ -17,8 +17,29 @@ The chart applies these constraints in order:
    discovery later makes it available. An explicitly empty v2 custom preference remains empty.
 4. Without a custom preference, `resolveEventChartRecommendations` intersects the profile with the user's Default
    chart metrics, finite available panels, unit-derived selection keys, and explicit specialized-surface exclusions.
-5. The first up to three eligible recommendations become visible. The resolver does not pad a sparse profile with
-   unrelated panels and does not persist this automatic result as a custom choice.
+5. The first up to three eligible recommendations become visible. Each registry profile can declare
+   `additionalAutomaticFamilies` that remain eligible beyond that limit. Running, Walking, and Cycling declare the
+   Altitude family, so recorded altitude remains visible alongside the existing primary charts. Trail Running declares
+   Heart Rate, keeping Pace, Power, Altitude, and recorded Heart Rate automatic, including Orienteering and Vertical
+   Running. These additions apply to individual activities and benchmark comparisons, including shared profiles for
+   those variants. This policy still respects Default chart metrics and specialized exclusions; missing, disabled, or
+   excluded additional metrics do not open a fourth slot for another metric. The resolver
+   does not pad a sparse profile with unrelated panels and does not persist this automatic result as a custom choice.
+   Existing custom selections continue to win until reset.
+
+Trail Running keeps its Pace, Power, and Altitude priorities before the additional Heart Rate chart. Hiking, Mountain
+Biking, and skiing retain their existing altitude priorities. Track and Field,
+skating, indoor, swimming, water, diving, fitness, and team-sport profiles keep their current defaults; any discovered
+altitude panel remains manually selectable in **Visible charts**.
+
+The 16 November 2026 defaults review covered all 42 registry definitions and the complete canonical activity catalog.
+Heart Rate is among the first three candidate families everywhere except Trail Running, Sky Diving, and the empty
+Transition profile. Trail Running now includes recorded Heart Rate beyond the three-chart limit. Snowmobiling already
+defaults to Speed, Altitude, and Heart Rate. Sky Diving and Jumpmaster retain Altitude, Vertical Speed, and Speed first;
+Heart Rate remains recommended and manually selectable, and becomes automatic when an earlier metric is unavailable.
+Transitions intentionally have no automatic charts. Regression coverage checks recorded/enabled Heart Rate across the
+catalog, the deliberate sky-diving/transition exceptions, sparse recordings, exclusions, unit variants, and saved
+custom selections. This is presentation-only: no Training, provider, stored metric, or MCP contract changes.
 
 The profile resolver is a pure helper in
 `src/app/helpers/event-chart-sport-profile.helper.ts`. Its registry deliberately covers every canonical activity type

@@ -818,6 +818,13 @@ The first-party endurance decoder narrows standalone and repeated step endings t
 matching the generation validator. It must not advertise the full MCP editing union's `repetitions` or `kilojoules`:
 those can exhaust the one bounded correction and leave an included daily suggestion failed. Strength retains its
 separate repetitions/time schema. Pool length and the explicit Garmin-zone target choice are preserved.
+Ordinary endurance target choices are also narrowed before decoding: only relative formats matching the selected
+target and the exact athlete-reference snapshots already in context are offered, for standalone and repeated steps.
+Auto may use the available reference kinds; effort-only or missing references require `targets: []`. The decoder
+retains only that zero-length array bound (`maxItems: 0`); other size/value bounds remain enforced after generation.
+The shared MCP editing schema still supports its existing absolute targets and is not narrowed by this private path.
+Fixed scalar choices and athlete-reference values use single-value `enum` constraints in the model schema;
+Gemini's documented `responseJsonSchema` subset does not include Zod's emitted `const` keyword.
 MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
 unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
@@ -837,6 +844,10 @@ remaining second attempt after 500 ms and active-request checks before and after
 schema correction and provider-format improvement share that two-attempt ceiling, including mixed failures. Event-day
 guidance also permits one transport retry. Authorization, context, receipt and unknown errors are not model retries.
 This changes neither quota reservations nor daily admission; an unmetered response stays explicitly unknown in usage logs.
+Manual generation logs a fixed `completed` or `completed_after_correction` outcome, total model attempts and elapsed
+milliseconds only after saving the result. Telemetry failure cannot fail the saved request. Daily generation retains
+its existing final outcome/attempt/usage log. Validation issue codes are derived from the same bounded, sanitized
+diagnostics for canonical and Genkit failures, so schema corrections no longer have an empty code list when details exist.
 MCP impact review: no wire or consent impact; the diagnostics and correction prompt are private to first-party generation.
 Help explains bounded recovery and the manual-generation allowance after a confirmed daily failure.
 
@@ -3100,15 +3111,24 @@ leaf's presence is used; no recording data is read and no completion is inferred
 the provider ledger acknowledges workout/settings changes, not the plan title's unrelated update timestamp.
 
 `users/{uid}/pushState/trainingSync` owns a two-minute first-event batch of at most 25 references and ten destinations,
-an indexed `trainingDueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
+an indexed `dueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
 production share preferences, receipts and limits. Capped/overflowed problems are suppressed, never a later backlog.
 Private `issues/{issueId}` descendants retain unresolved workout episodes through retries until a confirmed healthy
-delivery closes them. Connection problems share one receipt per provider/destination/connection generation, including
+delivery closes them. Connection problems share one receipt per provider/destination/reconnect episode, including
 new workouts affected by the same problem. Alternative affected workouts may join the original pending batch, so
 cancelling its first workout need not hide the connection issue. Recursive account cleanup owns these descendants;
 clients cannot read, list or reset them.
 
-`sendTrainingSyncNotifications` runs each minute with a bounded masked due-state query, claims before network I/O,
+New reconnect transitions have a stable server notification episode that survives routine auth-generation changes.
+Training and the **Connection issues** category claim a shared bounded receipt in
+`users/{uid}/pushState/connectionAttention`: whichever admits the same incident first owns its notification, including
+when admissions race. Both senders recheck that ownership before transport; capped or cancelled incidents do not
+become duplicate alerts through the other category. Older metadata without an episode retains the legacy Training
+path. Once Training owns the shared receipt, repeated affected-workout observations and sender claims reuse it
+without rewriting it. This changes notification deduplication only; MCP plan/workout reads, public statuses, provider consent,
+prescriptions, retries and delivery mutations are unchanged. See [Connection issues](web-push-notifications.md#connection-issues).
+
+The shared `sendActivitySyncNotifications` worker runs each minute with a bounded masked due-state query, claims before network I/O,
 rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best
 effort, at most one attempt per batch/destination; a crash after claim can lose an alert. The generic standard/declarative
 payload contains no workout names, metrics, provider IDs or errors. It opens `/training/plans?sync=attention` on the
@@ -3121,9 +3141,9 @@ The automatic redirect to a remembered Standalone view preserves incoming query 
 notification, so it can open the same history after that redirect without changing the saved view preference.
 
 The new unconditional `web_push_training_sync_enabled` parameter defaults false. Shared `web_push_enabled` and the
-matching VAPID key remain required; only the sender binds the existing secret. Under separate approval, deploy Rules
-and the `trainingDueAt` index, wait for index readiness, then deploy both new Functions, the frontend and updated Web Push monitoring using the existing
-alert channel. Verify index readiness, scheduler/heartbeat and devices before enabling the new flag. Switching it off
+matching VAPID key remain required. Both the shared worker and the Training observer bind the key. Follow the
+[notification rollout](web-push-notifications.md#current-sending-queue-and-retention-model) for worker order,
+the shared `dueAt` index, TTL migration and monitoring on the existing channel. Verify index readiness, scheduler/heartbeat and devices before enabling the new flag. Switching it off
 discards pending alerts without affecting sync. Accepted pushes cannot be recalled; never clear receipts or replay.
 
 Monitoring is **covered in source** by `tools/web-push-monitoring/`: admission/send failures, both native runtimes,
@@ -3132,6 +3152,30 @@ provider backlog/retries/dead letters. Deployment, monitoring apply and live rea
 MCP impact: **no wire change**. Recipes, sync projections, scopes, proposal/apply and provider consent are unchanged;
 private notification preferences/receipts stay excluded. Extended read tests retain the four existing attention outcomes
 and reject private receipt fields. No plugin rebuild or registered schema change is needed.
+
+#### Explicit Training send result notifications
+
+The separate default-on `training_send` category reports one combined result per explicit provider operation:
+Send, Add & send, initial Enable sync and manual Retry. A multi-workout plan waits for all captured, eligible workouts;
+partial failures become one summary. Already-current/completed/suppressed/past/outside-horizon workouts and no-op
+requests are silent. Provider acceptance is not watch receipt. Background horizon sync, configuration edits, Resume
+and automatic retries do not create result requests. Users can enable results independently of `training_sync`
+attention alerts, while
+failures captured by an explicit result do not also create per-workout attention pushes. Recovery still closes old
+issue receipts. Connection issue alerts keep their existing account-wide policy.
+
+The existing confirmation receipt binds the request; private bounded counters/members live in one pushState leaf
+per scope/service. The status observer sends the result directly when the last captured workout finishes.
+The tracking leaf expires two days after the original request. Newer explicit requests supersede an unsent request for the same
+scope/service. Current sources, consent, category/device generations, completion and deletion/restore fences are
+rechecked before claim; device preparation also rechecks authority and the schedule revision. Private state is excluded
+from public statuses and MCP reads. MCP confirmed delivery uses the same internal admission without a wire change.
+
+Monitoring is **covered in source** by the Web Push bundle using the existing channel, with fixed
+`[TrainingSendPush]` admission/send/sweep outcomes and the shared sweep health signals. The existing
+`web_push_training_sync_enabled` internal flag controls both senders; their user category settings remain independent.
+No new internal flag is added.
+If existing switches are on, result capture starts with deployment. See the [result runbook and deployment list](web-push-notifications.md#explicit-training-send-results) for bounds, cancellation, rollout and rollback.
 
 #### Reconciliation database work
 
@@ -6500,9 +6544,14 @@ that finishes while hidden retains its result, but its shown event waits until t
 returns after hiding cannot start a new automatic model preparation until foreground return.
 Before charging, automatic daily preparation checks whether the selected Training snapshots are ready. A pending,
 failed or unavailable preparation/read becomes private `waiting-training` with `charged:false`; ready snapshots with
-no history are allowed. Explicit **Use available data** can proceed from this deferred state with uncertainty stated
-in Context. Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction
-admit only one resumed generation; completed or failed charged receipts are never reset by Training updates.
+no history are allowed. The shared foreground preparation brings a delayed queued rebuild forward through the existing
+coordinator, preserving its dirty union and input revisions. It never restarts claimed work. Passive dashboard freshness
+probes retain background batching. Today labels this state **Refreshing your Training summary…**, shows the shared
+Material progress bar and a primary **Check again** action, and explains that the daily suggestion remains unused.
+**Use available data** stays available in the options menu and can proceed with uncertainty stated in Context.
+A `preparing` receipt also keeps the progress bar visible after the initiating request finishes; this adds no polling.
+Planned/completed workouts and rest intent still take precedence. The existing lease and charge transaction admits only
+one resumed generation; completed or failed charged receipts are never reset by Training updates.
 Automatic preparation checks the selected, sport-independent Training kinds before weekday sport selection. A pending
 or failed check stops before the bounded weekday-history scan (up to two 100-item pages) and before reading the daily
 report, Timeline, nearby plans/goals, feedback and detailed duration routine. Ready-day collection reuses the preparation
@@ -6517,8 +6566,10 @@ The existing dashboard derived-metric subscription includes the daily suggestion
 opted-in Pro owners viewing Today. Daily-only kinds are read-only subscriptions: the dashboard's ensure call still
 contains only its displayed metrics. The uncovered-day generator owns preparation of additional daily context, so a
 covered/dismissed/cached day does not cause a new Training-summary build solely for the suggestion. A ready snapshot update resumes `waiting-training`, including an update arriving
-while the previous context request was in flight. The browser caches the checked Training update key across remounts
-and reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
+while the previous context request was in flight. Its key includes each selected core snapshot's kind, resolved status
+and update time, rather than their maximum update time: one newer snapshot cannot conceal another kind arriving later.
+Unrelated Recovery updates do not change this key. The browser caches the checked Training key across remounts and
+reloads; equal snapshots and tab focus do not retry, and ready suggestions retain their cached result. No new
 poller, collection or Firestore index is introduced. MCP impact: these are private first-party admission and browser
 recovery changes; public tools, projections, permissions, Training mutations and plugin contracts remain unchanged.
 
@@ -6707,7 +6758,7 @@ It does not infer causes, prescribe training, add thresholds or introduce a new 
 so it cannot be confused with the latest nightly value. Missing today's sleep remains pending, not a positive assessment.
 
 Each phrase uses existing theme tokens independently: positive Training/Ready/within-range evidence stays green,
-Mixed and outside-range evidence uses caution, and Recover, negative Training/overnight-HR or unavailable evidence
+Mixed and below-range HRV evidence uses caution; above-range HRV is informational and neutral. Recover, negative Training/overnight-HR or unavailable evidence
 uses error. Neutral classifications, loading, insufficient and recorded-only context stay neutral. The existing
 assessment color is carried separately from availability so an available neutral Training state is not made positive.
 A neighboring caution/error phrase never recolors positive phrases; punctuation and the greeting remain neutral. Missing/unavailable inputs are stated rather than hidden behind a reassuring
@@ -6792,9 +6843,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
   `training_readiness.payload.evidenceVersion = 3` lets the frontend and backend freshness gate rebuild old readiness
-  inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
+  inputs independently from the formula version. Readiness formula 4 added the shared HRV range; formula 5 removes the above-range penalty. Recovery version 4 withholds HRV comparison across incompatible sources.
   MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
-  version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
+  version-3 formulas and wire shapes; additive current-readiness tools expose formula 5. Rebuilds use the ordinary
   targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
@@ -6876,18 +6927,24 @@ there is still only one active claim. Completion queues any pending work, and wr
 pending kinds with the same bounded background deadline. Neither path needs a later import to wake the final rebuild.
 All generation, claim, revision, enqueue-failure and account-deletion guards remain in force.
 
-Opening Training/Dashboard, automatic freshness probes, MCP preparation and the generic refresh retry join this same
-policy; they cannot cancel the delay by requesting a missing kind. A scheduled rebuild is still preparing, not a fresh
-zero-valued result. The added background wait is at most two minutes under a healthy queue, in addition to the existing
-up-to-30-second ingress bucket plus buffer, processing time and queue delivery latency. Explicit owner edits bypass the
-build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot schemas are
-unchanged; no activity reparse or data migration is required for this scheduling change.
+Opening Training/Dashboard, automatic freshness probes and the generic dashboard refresh retry retain this background
+policy. Foreground `prepare_training_metrics` calls from MCP, the Assistant and daily-workout preparation bypass the
+batching delay. They can promote only the exact still-delayed queued generation observed by the freshness probe, keeping
+its dirty union and source/workout-input revisions. Concurrent calls promote it once; a claimed, settled, superseded or
+already-immediate generation is left alone. The old delayed task remains fenced by its generation. Missing selected
+kinds use the existing priority enqueue path. There is no second calculation for a repeated preparation of queued or
+claimed kinds, and no reset of the daily AI allowance. A scheduled rebuild is still preparing, not a fresh zero-valued
+result. Background wait is at most two minutes under a healthy queue, in addition to the existing up-to-30-second
+ingress bucket plus buffer, processing time and queue delivery latency. Foreground preparation and explicit owner edits
+bypass the build cooldown, not ingress delivery or an already-running build. Calculations, UTC boundaries and snapshot
+schemas are unchanged; no activity reparse or data migration is required for this scheduling change.
 
 Validation uses synthetic fixtures in the existing isolated Firestore emulator suite: fourteen ingress arrivals 30
 seconds apart with representative 21-second builds require five background builds instead of fourteen prompt builds,
 while the final ready snapshot includes all fourteen mutation revisions. This is a scheduling comparison, not a measured
 production cost reduction. It also covers concurrent arrivals, delayed enqueue failure after priority promotion,
-automatic/MCP freshness requests, completion/write-block follow-ups, stale tasks and account deletion.
+automatic freshness batching, concurrent foreground promotion and ready completion, completion/write-block follow-ups,
+stale tasks and account deletion.
 Focused unit regressions additionally cover slow enqueue retries and claims delayed by transaction contention.
 Emulator regressions cover ingress enqueue failure, repeated completion/write-block handoff failures, predecessor
 redelivery without another source write, and handoff fencing after deletion, priority promotion or a successor claim.
@@ -6992,7 +7049,7 @@ seed and the bounded sleep envelope; it does not trigger an event or activity hi
 when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
 indefinitely on Preparing.
 
-The readiness payload also carries `formulaVersion: 4`. This is intentionally independent of the global derived schema:
+The readiness payload also carries `formulaVersion: 5`. This is intentionally independent of the global derived schema:
 changing the current/historical readiness formula or its persisted input projection invalidates only
 `training_readiness`, preserving compatible snapshots for every unrelated kind.
 
@@ -7320,20 +7377,33 @@ days in the last seven days for the current average. Every historical date uses 
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
 sleep-session-average sources remain separate; spot, workout and manual HRV are not readiness inputs.
 
-Formula 4 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within the range.
-Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
-earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
+Formula 5 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within or above the range.
+Only below-range values lower its component: `max(0, 50 - 100 × max(0, lowerBound - weeklyAverage) / baselineMean)`.
+Above-range HRV is informational and earns neither a penalty nor a bonus. Its recorded range, direction and distance
+remain visible, with a neutral tone even far above the range; below-range classifications remain unchanged. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
 range status, recent direction and date-labelled latest HRV reading separately, instead of a percentage against a different short median.
 When the latest eligible night has no single authoritative HRV value, the current HRV driver shows **No current HRV**
 and exposes no previous numeric reading as current evidence.
 
+The shared HRV interpretation guidance is included in manual/daily workout generation, event-day guidance, the
+internal Assistant and MCP instructions. Above-range HRV alone cannot justify lower intensity, rest, higher stress or
+poor recovery; independent recorded evidence still can. The daily report uses this exact live shared score and neutral
+HRV tone. Existing daily receipts remain cached: code release does not rewrite an already generated explanation or
+reset the daily allowance. The existing explicit Regenerate flow obtains fresh context and uses the Assistant allowance;
+no silent regeneration, saved-workout replacement, provider send or receipt deletion is introduced.
+
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
 the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
-is needed. Deploy the verified Functions update before the frontend rollout so formula-4 history can be generated.
+is needed. Deploy the verified Functions update before the frontend rollout so formula-5 history can be generated.
 The builder also stores identity-free `legacyPoints` calculated by the frozen `shared/readiness-legacy.ts` evaluator.
 Only registered legacy MCP projections consume those points; the current frontend and new tools strip them. Old scores
-are never relabelled as formula 4, and new scores are never relabelled as formula 3. The current history validator requires
+are never relabelled as formula 5, and new scores are never relabelled as formula 3. MCP current-readiness/daily-report/history tools remain unregistered additions: their pending contract now advertises
+formula 5; frozen formula-3 projections remain unchanged. Deploy `generateDayWorkout`, `assistantChat`, `mcpApi`,
+`processDerivedMetricsTask` and `ensureDerivedMetrics` before the matching frontend so current history can rebuild.
+This changes no queue lifecycle, dispatch, retries, resources, Rules or indexes. Monitoring coverage is unchanged;
+existing rebuild and committed-failure metrics cover the ordinary formula-version refresh.
+The current history validator requires
 the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
 must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
 
@@ -7350,7 +7420,7 @@ It spans at most 93 provider dates in single-day queries, 512 chunks, 550,000 po
 reads have at most four windows in flight. Only dates adjoining missing nights are read, and browser HRV/sample
 listeners update independently without resubscribing to the other source. Native Sleep and HRV remain usable on optional app-read failure. Existing
 history needs no migration or reimport. Internal readiness evidence version 4 invalidates only readiness history for
-the normal ensure/build lifecycle; formula 4 and weights are unchanged. Frozen legacy history omits the new
+the normal ensure/build lifecycle; that evidence enrichment does not change formula weights. Frozen legacy history omits the new
 Health-derived HR values. Creates/deletes and changed content digests for sampled Garmin Daily HR invalidate only
 `training_readiness` through the existing Health ingress; watermark-only updates do not.
 
@@ -9678,9 +9748,11 @@ contract for every kind, whether or not that kind needs an additional public pro
 It polls for at most five seconds. Its strict response contains only `ready`, `preparing`, or `unavailable`, the
 requested and ready kind lists, and a retry delay; it never returns a metric payload, worker error, or source identity.
 An in-flight coordinator is not treated as a ready snapshot. Clients retry preparation after a `preparing` result
-and then call the unchanged `get_training_metric` read. Repeated preparation joins queued work without creating a
-new generation. A future email worker can call the same authenticated backend service without opening `/training`;
-this change adds no email job or sending behavior.
+and then call the unchanged `get_training_metric` read. Foreground preparation expedites a still-delayed generation
+once through the existing queue; repeated preparation then joins immediate queued or claimed work without creating
+another generation or invalidating its inputs. The public input/output schema, scopes and redaction are unchanged;
+this internal scheduling change needs no registered-app rescan or plugin rebuild. A future email worker can call the same
+authenticated backend service without opening `/training`; this change adds no email job or sending behavior.
 
 The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
@@ -9900,6 +9972,14 @@ exactly-once audit ledger or unique-task/account counts. A multi-kind failure pr
 kind; failure policies group by kind instead of summing a single failed generation into a global surge. Exceptions
 before a guarded failure write remain visible in attempts/native HTTP charts, but cannot establish committed failure.
 Existing claims, revisions, publication fences, retry policy, source reads and calculation results remain authoritative.
+
+Foreground Training preparation monitoring review (16 November 2026): **covered in the source definitions**. The existing
+bundle now includes `generatedayworkout` alongside `mcpapi` and `assistantchat`, so guarded dispatch failures from
+promotion reach the existing enqueue-failure metric and policy. Native queue depth/latency, committed failures,
+pending-age and unknown-coverage probes retain the same queues, labels, thresholds and owners. Promoted deadlines
+become eligible immediately; superseded delayed-task acknowledgements remain non-failures. No new telemetry, scanner,
+scheduler or alert resource is added. Offline filter/reapply tests cover the addition. The filter update requires a
+separately approved monitoring apply; code verification does not establish live activation.
 
 #### Bounded pending-generation observation
 

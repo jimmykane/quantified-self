@@ -2,11 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import {
   DataPace,
   DataPaceMinutesPerMile,
+  DataAltitude,
   DataPower,
   DataSpeed,
   EventInterface,
 } from '@sports-alliance/sports-lib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_STORAGE } from './app.storage.token';
 import { MemoryStorage } from './memory.storage';
 import { AppChartSettingsLocalStorageService } from './app.chart.settings.local.storage.service';
@@ -35,6 +36,31 @@ describe('AppChartSettingsLocalStorageService', () => {
     storage.clear();
   });
 
+  it('remembers intensity metric visibility independently from event chart visibility', () => {
+    const event = mockEvent('intensity');
+    service.setEventChartCustomVisibilityPreference(event, 'Running', [DataPower.type]);
+    service.setHiddenIntensityZoneMetrics(['Heart Rate', 'Speed', 'Heart Rate']);
+    expect(new AppChartSettingsLocalStorageService(storage).getHiddenIntensityZoneMetrics()).toEqual(['Heart Rate', 'Speed']);
+    expect(service.getEventChartVisibilityPreference(event, 'Running').selectionKeys).toEqual([DataPower.type]);
+    service.setHiddenIntensityZoneMetrics([]);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it.each(['{invalid', 'null', '{}', '"Power"'])('ignores malformed intensity preferences: %s', value => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', value);
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
+  it('ignores invalid stored metric entries', () => {
+    storage.setItem('chart.settings.service.hiddenIntensityZoneMetrics', '["Power",null,42,"Power","Speed"]');
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual(['Power', 'Speed']);
+  });
+
+  it('uses default intensity visibility when browser storage cannot be read', () => {
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new DOMException('Storage is unavailable', 'SecurityError'); });
+    expect(service.getHiddenIntensityZoneMetrics()).toEqual([]);
+  });
+
   it('persists custom visibility independently for each activity-type signature', () => {
     const event = mockEvent('event-v2-custom');
 
@@ -60,6 +86,21 @@ describe('AppChartSettingsLocalStorageService', () => {
       mode: 'custom',
       selectionKeys: [],
     });
+  });
+
+  it('retains a saved three-chart trail selection across reloads until that signature is reset', () => {
+    const event = mockEvent('trail-default-update');
+    const signature = 'types-v1:Trail%20Running';
+    const selectionKeys = [DataPace.type, DataPower.type, DataAltitude.type];
+    service.setEventChartCustomVisibilityPreference(event, signature, selectionKeys);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPower.type]);
+
+    const restored = new AppChartSettingsLocalStorageService(storage);
+    expect(restored.getEventChartVisibilityPreference(event, signature)).toEqual({mode: 'custom', selectionKeys});
+    restored.resetEventChartVisibilityPreference(event, signature);
+    expect(restored.getEventChartVisibilityPreference(event, signature)).toEqual({mode: 'automatic', selectionKeys: []});
+    expect(restored.getEventChartVisibilityPreference(event, 'types-v1:Running'))
+      .toEqual({mode: 'custom', selectionKeys: [DataPower.type]});
   });
 
   it('ignores selections from the unversioned visibility store', () => {

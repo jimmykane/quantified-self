@@ -378,7 +378,10 @@ describe('Firebase Hosting configuration', () => {
     // Onboarding help keeps analysis/Compare free and sends Sync to Pro selection unless Pro access already exists (2026-11-11).
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
+    // Same-day chart help adds automatic Trail Running Heart Rate and preserves custom selections (2026-11-16).
+    // Comparison help clarifies persisted combined totals versus the visible source selection (2026-11-16).
+    // Final inactivity reminder retains the original deletion deadline (2026-11-18).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -429,6 +432,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/health/compare')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/admin/inactive-accounts')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
@@ -516,9 +520,10 @@ describe('Firebase Hosting configuration', () => {
     // Same-day startup Help explains the independent profile check and recovery without clearing browser storage.
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
+    // Final inactivity reminder retains the original deletion deadline (2026-11-18).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
     // Approved corrections preserve manual Health permissions and link existing account tools.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
@@ -528,7 +533,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-11-12');
     // Pricing now explicitly names plans and pricing in its title and heading.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-11');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-16');
     // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
@@ -549,7 +554,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-coros`)).toBe('2026-11-01');
     // History wording separates request acceptance from delivery without a duration estimate.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-11-16');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-11-03');
     // COROS guide clarifies the history limit and keeps its setup tab through signup.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
@@ -605,10 +610,12 @@ describe('Firebase Hosting configuration', () => {
     // Generation uses recent imported FTP only with Recent activities enabled; saved references remain independent (2026-11-07).
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-12');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
+    // Final inactivity reminder retains the original deletion deadline (2026-11-18).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
+    // Inactive Free account notice and retention policy (2026-11-13).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-11-13');
   });
 
   it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {
@@ -727,7 +734,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.10mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.20mb',
     });
   });
 
