@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -41,7 +42,7 @@ export async function sendPushTest(
     if ((saved && now - Number(saved.lastAttemptAt) < 60_000) || count >= 10 || !Number.isFinite(count)) {
       throw new HttpsError('resource-exhausted', 'Please wait before sending another test notification.');
     }
-    tx.set(rate, { day, count: count + 1, lastAttemptAt: now });
+    tx.set(rate, { expireAt: notificationExpiry(now), day, count: count + 1, lastAttemptAt: now });
     return registration;
   });
   const config = await deps.configuration();

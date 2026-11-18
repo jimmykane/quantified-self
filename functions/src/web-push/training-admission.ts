@@ -4,17 +4,24 @@ import * as logger from 'firebase-functions/logger';
 import { automaticPushConfiguration } from './history-consent';
 import { trainingAttention, trainingRecovered } from './training-policy';
 import { observeTrainingNotification } from './training-service';
-import { observeTrainingSend } from './training-send-service';
+import { observeTrainingSend, sendTrainingSendResult } from './training-send-service';
+import { pushDependencies } from './runtime';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export const queueTrainingSyncNotification = onDocumentWritten({
   document: 'users/{uid}/trainingDeliveryStatuses/{deliveryId}', region: 'europe-west2', memory: '256MiB',
   timeoutSeconds: 60, minInstances: 0, maxInstances: 2, concurrency: 10, retry: true,
+  secrets: FUNCTION_SECRET_BINDINGS.queueTrainingSyncNotification,
 }, async event => {
   const after = event.data?.after?.data(), before = event.data?.before?.data();
   if (!after) return;
   let covered = false;
   if (before?.status !== after.status || before?.updatedAtMs !== after.updatedAtMs) {
-    try { covered = await observeTrainingSend(event.params.uid, after, { db: getFirestore(), now: Date.now }); }
+    try {
+      const deps = pushDependencies('trainingSend');
+      covered = await observeTrainingSend(event.params.uid, after, { db: deps.db, now: deps.now,
+        sendReady: id => sendTrainingSendResult(event.params.uid, id, deps) });
+    }
     catch {
       logger.error('[TrainingSendPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' });
       throw new Error('Training send notification admission failed.');

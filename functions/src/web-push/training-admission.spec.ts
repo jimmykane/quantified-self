@@ -2,20 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { queueTrainingSyncNotification } from './training-admission';
 import { observeTrainingNotification } from './training-service';
-import { observeTrainingSend } from './training-send-service';
+import { observeTrainingSend, sendTrainingSendResult } from './training-send-service';
 const log = vi.hoisted(() => vi.fn());
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({}) }));
 vi.mock('firebase-functions/logger', () => ({ error: log }));
 vi.mock('./training-service', () => ({ observeTrainingNotification: vi.fn() }));
-vi.mock('./training-send-service', () => ({ observeTrainingSend: vi.fn() }));
+vi.mock('./training-send-service', () => ({ observeTrainingSend: vi.fn(), sendTrainingSendResult: vi.fn() }));
 const event = (status = 'failed', before = 'retrying') => ({ params: { uid: 'owner', deliveryId: 'a'.repeat(64) },
   data: { before: { data: () => ({ status: before }) }, after: { data: () => ({ status, updatedAtMs: 123 }) } } });
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(observeTrainingNotification).mockResolvedValue(); vi.mocked(observeTrainingSend).mockResolvedValue(false); });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(observeTrainingNotification).mockResolvedValue(); vi.mocked(observeTrainingSend).mockResolvedValue(false); vi.mocked(sendTrainingSendResult).mockResolvedValue(); });
 describe('training notification status observer', () => {
   it('collapses failures covered by an explicit send but still processes recovery', async () => {
     vi.mocked(observeTrainingSend).mockResolvedValue(true);
     await queueTrainingSyncNotification.run(event() as never); expect(observeTrainingNotification).not.toHaveBeenCalled();
     await queueTrainingSyncNotification.run(event('delivered') as never); expect(observeTrainingNotification).toHaveBeenCalledOnce();
+  });
+  it('sends a ready explicit result in the existing status handler', async () => {
+    vi.mocked(observeTrainingSend).mockImplementation(async (_uid, _status, deps) => { await deps.sendReady!('request'); return true; });
+    await queueTrainingSyncNotification.run(event() as never);
+    expect(sendTrainingSendResult).toHaveBeenCalledWith('owner', 'request', expect.any(Object));
   });
   it('observes newer evidence even when the public status is unchanged', async () => {
     await queueTrainingSyncNotification.run(event('delivered', 'delivered') as never);

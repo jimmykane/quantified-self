@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
@@ -16,7 +17,7 @@ export interface DeliveryPushDependencies {
 }
 interface Target { id: string; generation: string; }
 interface Batch { id: string; deliveryDueAt: number; categoryRevision: number; entries: DeliveryEntry[]; targets: Target[]; }
-interface State { attempts: number[]; seen: { id: string; expiresAt: number }[]; pending?: Batch; deliveryDueAt?: number; lastClaimId?: string; }
+interface State { attempts: number[]; seen: { id: string; expiresAt: number; claimId?: string }[]; pending?: Batch; dueAt?: number; deliveryDueAt?: number; lastClaimId?: string; }
 const statePath = (uid: string) => `users/${uid}/pushState/activityDelivery`;
 const documentId = (value: string) => typeof value === 'string' && value.length > 0 && value.length <= 256 && !value.includes('/');
 const currentAttempts = (state: State, now: number) => state.attempts.filter(at => at > now - DELIVERY_PUSH.dayMs);
@@ -31,14 +32,26 @@ function readState(value: State | undefined): State {
   return value;
 }
 
-/** Enqueue only a committed batch result or automatic dead letter; provider transport is untouched. */
+interface Claim { batch: Batch; outcome: 'cancelled' | 'limited' | null; direct?: boolean; }
+/** Deferred automatic failures use the shared queue; kept compatible with older queued manual batches. */
 export async function admitDeliveryNotification(uid: string, candidate: DeliveryCandidate,
   deps: Pick<DeliveryPushDependencies, 'db' | 'now' | 'configuration'>): Promise<void> {
+  await prepareDelivery(uid, candidate, deps, false);
+}
+/** The completed manual-send trigger already knows the final result; send it without a scheduled job. */
+export async function sendManualDeliveryNotification(uid: string, candidate: DeliveryCandidate, deps: DeliveryPushDependencies): Promise<void> {
+  if (candidate.kind !== 'manual') return;
+  const claim = await prepareDelivery(uid, candidate, deps, true);
+  if (claim) await deliverClaim(uid, claim, deps);
+}
+
+async function prepareDelivery(uid: string, candidate: DeliveryCandidate,
+  deps: Pick<DeliveryPushDependencies, 'db' | 'now' | 'configuration'>, direct: boolean): Promise<Claim | undefined> {
   if (![uid, candidate.id].every(documentId)) return;
   const config = await deps.configuration();
   if (!config.enabled) return;
   const { db } = deps; const now = deps.now(); const ref = db.doc(statePath(uid));
-  await db.runTransaction(async tx => {
+  return db.runTransaction(async tx => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, now);
     const [preferenceSnapshot, stateSnapshot, entry] = await Promise.all([
       tx.get(db.doc(notificationPreferencePath(uid, 'activity_delivery'))), tx.get(ref),
@@ -67,8 +80,19 @@ export async function admitDeliveryNotification(uid: string, candidate: Delivery
     // cease eligibility after one day, so keeping every failed file for a month would crowd out new results.
     state.seen.push({ id: `${entry.kind}:${entry.id}`, expiresAt: entry.kind === 'manual'
       ? now + DELIVERY_PUSH.receiptMs : entry.completedAt + DELIVERY_PUSH.dayMs });
+    if (direct) {
+      const batch: Batch = { id: randomUUID(), deliveryDueAt: now, categoryRevision: preference.revision,
+        entries: [{ ...entry, targets }], targets };
+      const allowed = !limited(state.attempts, now);
+      if (allowed) {
+        state.attempts.push(now);
+        state.seen[state.seen.length - 1].claimId = batch.id;
+      }
+      tx.set(ref, { ...state, expireAt: notificationExpiry(now) });
+      return allowed ? { batch, outcome: null, direct: true } : undefined;
+    }
     if (state.pending && (state.pending.categoryRevision !== preference.revision || now > state.pending.deliveryDueAt + DELIVERY_PUSH.batchExpiryMs)) {
-      delete state.pending; delete state.deliveryDueAt;
+      delete state.pending; delete state.dueAt; delete state.deliveryDueAt;
     }
     if (!limited(state.attempts, now)) {
       if (!state.pending) state.pending = { id: randomUUID(), deliveryDueAt: now + DELIVERY_PUSH.groupMs,
@@ -81,9 +105,10 @@ export async function admitDeliveryNotification(uid: string, candidate: Delivery
         });
         if (acceptedTargets.length) state.pending.entries.push({ ...entry, targets: acceptedTargets });
       }
-      state.deliveryDueAt = state.pending.deliveryDueAt;
+      state.dueAt = state.pending.deliveryDueAt; delete state.deliveryDueAt;
     }
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
+    return undefined;
   });
 }
 
@@ -105,12 +130,15 @@ export async function sendDeliveryNotification(uid: string, deps: DeliveryPushDe
       ? (await Promise.all(batch.entries.map(entry => currentDeliveryEntry(db, tx, uid, entry, now)))).filter((entry): entry is DeliveryEntry => !!entry) : [];
     state.attempts = currentAttempts(state, now);
     const outcome: DeliveryPushOutcome | null = !entries.length ? 'cancelled' : limited(state.attempts, now) ? 'limited' : null;
-    delete state.pending; delete state.deliveryDueAt;
+    delete state.pending; delete state.dueAt; delete state.deliveryDueAt;
     if (!outcome) { state.attempts.push(now); state.lastClaimId = batch.id; }
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
     return { batch: { ...batch, entries }, outcome };
   });
-  if (!claim) return;
+  if (claim) await deliverClaim(uid, claim, deps);
+}
+async function deliverClaim(uid: string, claim: Claim, deps: DeliveryPushDependencies): Promise<void> {
+  const { db } = deps, config = await deps.configuration(), ref = db.doc(statePath(uid));
   if (claim.outcome) { deps.outcome(claim.outcome); return; }
   // Bounded device fan-out. A newer registration never inherits a previously queued batch.
   const attemptedEndpoints = new Set<string>();
@@ -129,7 +157,9 @@ export async function sendDeliveryNotification(uid: string, deps: DeliveryPushDe
           && (!entry.target || entry.target.origin === registration?.origin)
           && entry.targets.some(saved => saved.id === target.id && saved.generation === target.generation));
         if (guard.shouldSkip || !preference?.enabled || preference.revision !== claim.batch.categoryRevision
-          || snapshot.data()?.lastClaimId !== claim.batch.id || !liveEntries.length
+          || !(claim.direct
+            ? (snapshot.data()?.seen as State['seen'] | undefined)?.some(row => row.id === `manual:${claim.batch.entries[0].id}` && row.claimId === claim.batch.id)
+            : snapshot.data()?.lastClaimId === claim.batch.id) || !liveEntries.length
           || !isPushRegistration(registration) || !isAutomaticPushOrigin(registration.origin)
           || registration.generation !== target.generation || registration.vapidPublicKey !== config.publicKey) return null;
         return { registration, entries: liveEntries };

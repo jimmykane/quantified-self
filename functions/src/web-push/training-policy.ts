@@ -20,7 +20,7 @@ export interface TrainingEntry extends TrainingCandidate {
   /** Prepared reservation, omitted on recheck once Training already owns the shared receipt. */
   connectionIncident?: ConnectionIncident;
   episode: string; issueId: string; desiredGeneration: number; settingsRevision: number; connectionGeneration: string;
-  destinationKey: string; workoutUpdatedAt: number; consentUpdatedAt: number;
+  destinationKey: string; workoutUpdatedAt: number; workoutLocalDate: string; consentUpdatedAt: number;
 }
 const entityId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 
@@ -88,6 +88,7 @@ export async function currentTrainingEntry(db: Firestore, tx: Transaction, uid: 
   catch { return null; }
   const connectionIssue = ['reconnect_required', 'connection_repair'].includes(status.status);
   const incident = connectionIssue ? connectionIncident(services[status.provider], meta) : null;
+  if (incident && (incident.observedAt > now || now - incident.observedAt > TRAINING_PUSH.dayMs)) return null;
   const owner = incident ? await connectionIncidentOwner(db, tx, uid, incident) : undefined;
   if (owner === 'connection') return null;
   const generation = incident?.id ?? meta.connectionStateGeneration;
@@ -95,7 +96,7 @@ export async function currentTrainingEntry(db: Firestore, tx: Transaction, uid: 
     ? createHash('sha256').update(JSON.stringify([status.provider, ledger.destinationKey, generation, 'connection'])).digest('hex')
     : candidate.id;
   const entry = { ...candidate, issueId, desiredGeneration: ledger.desiredGeneration, settingsRevision: ledger.settingsRevision,
-    connectionGeneration: generation, destinationKey: ledger.destinationKey, workoutUpdatedAt: workout.updatedAtMs,
+    connectionGeneration: generation, destinationKey: ledger.destinationKey, workoutUpdatedAt: workout.updatedAtMs, workoutLocalDate: workout.localDate,
     ...(incident ? { connectionIncident: incident } : {}),
     consentUpdatedAt: Math.max(setting.updatedAtMs, currentOverride?.updatedAtMs ?? 0) };
   // Do not inherit a stale reservation from a queued entry, or rewrite an already-owned receipt for each workout.

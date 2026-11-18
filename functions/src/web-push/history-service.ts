@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import type { ConnectionHistoryRun } from '../connection-history/model';
@@ -43,7 +44,7 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
   if (!isAutomaticPushOrigin(origin) || !isHistoryNotificationTarget(target)
     || !Number.isSafeInteger(categoryRevision) || categoryRevision < 0) return;
   const registrationRef = db.doc(`users/${expected.userID}/pushSubscriptions/${consent.installationId}`);
-  const current = async (tx: Transaction) => {
+  const current = async (tx: Transaction, attemptedAt?: number) => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, expected.userID);
     const [snapshot, registrationSnapshot, metaSnapshot, preferenceSnapshot] = await Promise.all([
       tx.get(runRef), tx.get(registrationRef), tx.get(db.doc(`users/${expected.userID}/meta/${expected.serviceName}`)),
@@ -53,6 +54,7 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     const registration = registrationSnapshot.data(); const meta = metaSnapshot.data();
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
     if (guard.shouldSkip || !run || run.userID !== expected.userID || run.id !== runId
+      || run.notificationAttemptedAtMs !== attemptedAt
       || !preference?.enabled || preference.revision !== categoryRevision || run.notification?.categoryRevision !== categoryRevision
       || run.revision !== expected.revision || run.dateCreated !== expected.dateCreated
       || run.serviceName !== expected.serviceName || run.connectionGeneration !== expected.connectionGeneration
@@ -76,16 +78,17 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     const limited = attempts.length >= 2;
     // Store suppression too: replaying the same run after the cap expires must not send it.
     const receipt: Receipt = { runId, createdAt: expected.dateCreated, attemptedAt: now, outcome: limited ? 'limited' : 'claimed' };
-    tx.set(stateRef, { attempts: limited ? attempts : [...attempts, now],
+    tx.update(runRef, { notificationAttemptedAtMs: now });
+    tx.set(stateRef, { expireAt: notificationExpiry(now), attempts: limited ? attempts : [...attempts, now],
       providers: { ...state?.providers, [expected.serviceName]: receipt } });
-    return { ...live, limited };
+    return { ...live, limited, attemptedAt: now };
   });
   if (!claim) return;
   if (claim.limited) { deps.outcome('limited'); return; }
   let outcome: HistoryPushOutcome = 'cancelled';
   // A replacement registration, connection, run or deletion can win while the claim commits.
   const ready = await db.runTransaction(async tx => {
-    const live = await current(tx);
+    const live = await current(tx, claim.attemptedAt);
     const state = (await tx.get(stateRef)).data() as HistoryPushState | undefined;
     return !!live && state?.providers?.[expected.serviceName]?.runId === runId
       && state.providers[expected.serviceName].outcome === 'claimed';

@@ -1,5 +1,57 @@
 # Browser notifications
 
+## Current sending, queue and retention model
+
+Completed manual activity-send results, Sleep saves, History import completion and self-tests send directly from their
+existing handler after the underlying work commits. Explicit Training send results send from the existing status
+observer as soon as all captured workouts have terminal outcomes. Training still needs temporary outcome tracking
+across workouts; it creates no new scheduled notification job. Background Training success remains silent.
+
+Only alerts requiring grouping use deferred work: new activities, automatic activity-delivery failures, Training
+attention and connection issues. These share **one `pushState.dueAt` queue and one minute worker**,
+`sendActivitySyncNotifications`. Each category retains its own preference, batching window, source checks and rate
+limits. The worker queries at most 25 due records, caches configuration only for categories with work, and shares
+one backlog/heartbeat policy. Old ready Sleep/Training records can drain through the same worker during migration.
+The two former delivery/Training scheduled Functions are removed from source. Route notifications remain reverted.
+
+The existing handlers use a shared Web Push transport and claim before network I/O. Direct manual results retain
+the existing account delivery budget and initiating-device consent; automatic failures keep their grouping window.
+Notification transport errors never cause a completed provider import/upload to be retried. Preference/device/key,
+connection and account deletion checks still apply before sending. An ambiguous send is never replayed.
+
+`expireAt` is an actual Firestore Timestamp, configured as a TTL field on `pushState` and Training `issues` documents:
+
+| Stored data | Retention |
+| --- | --- |
+| Bounded suppression/rate state and grouped notification records | 31 days after the latest relevant write, covering the 30-day manual-delivery replay fence |
+| Training send outcome tracking, including unfinished requests | Two days from the original request, without extending its lifetime on status updates |
+| Training attention receipts | At least 31 days, and through the workout date plus three days when later; shared issue receipts extend to the latest relevant workout |
+
+Sending still rejects logically expired notifications immediately. Firestore TTL deletion is asynchronous and does
+not delete subcollections, so Training issue descendants have their own TTL policy and timestamps ([Firestore TTL documentation](https://firebase.google.com/docs/firestore/ttl)). A durable
+`notificationAttemptedAtMs` on the existing history-import run prevents a retry from becoming a second notification
+after its temporary receipt is deleted. Old reconnect episodes cannot be revived after receipt cleanup. No new
+recurring cleanup job or notification collection is introduced.
+
+### Consolidation rollout (separate approval; local work does not deploy)
+
+1. Apply the updated monitoring bundle using the existing channel. Its existing category policies stop expecting
+   the two retired schedulers; only the shared worker owns backlog/absence alerts.
+2. Retire `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications` in the deployed environment and
+   allow their in-flight invocations to finish before switching producers to the unified deadline field.
+3. Deploy the shared worker and affected producers/observers. Direct send handlers now require the existing VAPID
+   secret binding: `queueActivitySendNotification`, `queueTrainingSyncNotification` and `processSleepSyncTask`.
+   Other notification producer helpers also write expiry timestamps; include their existing owning Functions.
+4. Build Functions, then preview the one-time migration:
+   `node functions/lib/functions/src/scripts/backfill-notification-retention.js --project=quantified-self-io`.
+   Review its counts, then run with `--apply`. It pages 100 documents at a time, touches only notification paths,
+   preserves history-run attempt fences, migrates legacy due fields, and is safe to repeat. It prints counts only.
+5. Deploy `firestore.indexes.json` to activate `expireAt` TTL for `pushState` and `issues`; verify both policies are
+   active. This is required for automatic deletion. The emulator verifies Timestamp writes/migration, not the cloud
+   TTL service. Existing `dueAt` indexing remains; legacy deadline indexes can remain unused during migration.
+6. Verify direct results, grouped bursts, category/device cancellation, duplicate suppression and shared-worker
+   monitoring on beta before broader release. Existing switches and category defaults are unchanged.
+
 ## Product boundary
 
 Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
@@ -22,7 +74,7 @@ reuse an existing one. Exact single-activity links, grouped Activities links and
 Declarative platforms continue to route their existing `navigate` URL through the browser.
 
 This payload change requires redeploying the affected senders: `sendTestPushNotification`, `sendHistoryImportNotification`,
-`sendActivitySyncNotifications`, `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications`.
+`sendActivitySyncNotifications`, `sendActivitySyncNotifications` and `sendActivitySyncNotifications`.
 The Training sender still requires its separate first-deployment prerequisites below if not already deployed.
 Routing itself needs no flag, Rules, index or service-worker change. Already delivered notifications retain their old
 payload. Monitoring coverage is unchanged: transport, queues, rates, schedules and outcome labels are unchanged.
@@ -36,7 +88,7 @@ The browser obtains a subscription through `window.pushManager` when available, 
 
 Endpoint validation is shared by browser/server code and mirrored in Rules: Google FCM, Mozilla Push, Apple Web Push, and a single DNS label under `notify.windows.com` for Edge's Windows Push Notification Service (WNS). HTTPS, hostname boundaries and the absence of credentials, custom ports and fragments remain mandatory. [Microsoft documents Edge's WNS transport](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/forcebuiltinpushmessagingclient) and [its service domain](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/firewall-allowlist-config). WNS requests retain Web Push encryption/VAPID and add the [raw notification type and 60-second WNS expiry headers](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/push-request-response-headers); `web-push` supplies the encrypted binary content type.
 
-The `sendTestPushNotification` App-Check callable accepts only an installation UUID. It derives UID from Auth, validates caller/stored origins and endpoint, transactionally reserves one of ten UTC-day tests with a one-minute cooldown, then checks current configuration and deletion/registration state again before sending. Rate state is server-only at `users/{uid}/pushState/testRateLimit`. All state falls under the existing recursive user-root deletion; no top-level feature collection or TTL policy is added. Rates count attempts, including configuration/network failures.
+The `sendTestPushNotification` App-Check callable accepts only an installation UUID. It derives UID from Auth, validates caller/stored origins and endpoint, transactionally reserves one of ten UTC-day tests with a one-minute cooldown, then checks current configuration and deletion/registration state again before sending. Rate state is server-only at `users/{uid}/pushState/testRateLimit`. All state falls under the existing recursive user-root deletion; no top-level feature collection is added; notification state uses the expireAt TTL policy above. Rates count attempts, including configuration/network failures.
 
 The fixed payload contains `web_push: 8030`, title/body, `icon`, `navigate`, and Angular's `onActionClick` fallback. The icon is an absolute URL to the existing 192×192 QS app PNG at `/assets/favicons/android-chrome-192x192.png` on the registration's own origin. Both declarative delivery and Angular's worker receive the same icon. The browser/OS controls its presentation: [Safari on macOS uses the Safari icon for browser notifications and the installed app icon for Add to Dock web apps](https://developer.apple.com/videos/play/wwdc2023/10120/). No extra push or click listener displays a second notification. The payload expires after 60 seconds. The sender times out after five seconds, never follows redirects and never retries self-tests in the background. HTTP 404/410 removes only the matching registration generation. Other errors retain the registration and return a generic error; acceptance does not prove display or reading.
 
@@ -172,7 +224,7 @@ sweep, only when a connection leaf is due. The sender claims before transport, n
 cancels reconnected/disconnected accounts, changed preferences/devices, or groups more than ten minutes overdue.
 
 Rollout requires Rules and frontend category changes, the shared notification worker, `queueTrainingSyncNotification`
-and `sendTrainingSyncNotifications`, and the Functions that bundle the shared provider auth/lifecycle code. Deploy
+and `sendActivitySyncNotifications`, and the Functions that bundle the shared provider auth/lifecycle code. Deploy
 those together through the existing Functions release workflow; deploying only the notification sender cannot enable
 new episode admission in old auth workers. No new Function export or infrastructure resource is needed. Apply the
 updated monitoring bundle using the existing alert channel, then verify shared-worker heartbeat/backlog and fixed
@@ -212,9 +264,9 @@ and at most one pending alert. Dates/end times advance monotonically across prov
 admissions. This prevents duplicate nights across Garmin/Suunto/COROS, midnight boundaries and recreated documents.
 Overlapping sleep intervals are suppressed even if a delayed provider report uses a different calendar date and
 arrives after the cooldown. Disabled categories and existing receipts stop admission before device/session reads.
-Cancelled/failed alerts retain the receipt. The existing `sendActivitySyncNotifications` dueAt query processes this
+Cancelled/failed alerts retain the receipt. The successful sleep-import handler sends this directly after persistence; the legacy `sendActivitySyncNotifications` query can drain older
 leaf alongside activity batches: there is no new Function, scheduler, idle query, collection-group index, secret or
-per-user polling loop. Sleep configuration is loaded only when a sleep leaf is due, once per sweep.
+per-user polling loop. Sleep configuration and the signing key are loaded only for an eligible import notification, once per handler.
 
 The sender clears pending work and claims before transport, then rechecks consent, account/session/connection state
 and each captured device generation. Claims are deliberately not replayed after ambiguous transport failure or a
@@ -250,10 +302,10 @@ The new operational parameter is `web_push_training_sync_enabled=false`. After s
 npm run firebase -- deploy --only firestore:rules,firestore:indexes --project quantified-self-io
 ```
 
-Wait for the `pushState.trainingDueAt` collection-group index to become ready, then deploy the Functions:
+Verify the shared `pushState.dueAt` index is ready, then deploy the Functions:
 
 ```sh
-npm run firebase -- deploy --only functions:queueTrainingSyncNotification,functions:sendTrainingSyncNotifications --project quantified-self-io
+npm run firebase -- deploy --only functions:queueTrainingSyncNotification,functions:sendActivitySyncNotifications --project quantified-self-io
 ```
 
 Deploying the scheduled Function starts its minute sweeps even while the sender flag is false. Admission
@@ -273,7 +325,7 @@ The existing three admission callables accept optional `notification: { installa
 
 The sender re-reads the exact revision, live user/deletion guard, current connection generation and latest inactive projection, and the consented registration. It rejects results older than 24 hours, superseded runs, revoked/rotated registrations and changed connections. It repeats lifecycle checks after claiming and before external I/O. A change after the final check or a push already accepted by the browser service cannot be recalled. A registration generation change, including a subscription refresh, conservatively cancels the old consent; it is not transferred silently.
 
-Anti-spam state is a server-only leaf at `users/{uid}/pushState/historyCompletion`: at most two attempt timestamps in a rolling 24-hour window and one receipt per supported provider (maximum three). A transaction reserves the attempt **before** sending. Concurrent/repeated events, explicit retries of the same run and older runs cannot pass the provider receipt watermark. A capped result also receives a suppression receipt, so it cannot send when the cap later expires. The rate is per account across providers, independent of the existing self-test rate; cancelled/failed attempts consume it. This bounded state uses existing browser-deny Rules and recursive user cleanup, with no new TTL, index or collection scan.
+Anti-spam state is a server-only leaf at `users/{uid}/pushState/historyCompletion`: at most two attempt timestamps in a rolling 24-hour window and one receipt per supported provider (maximum three). A transaction reserves the attempt **before** sending. Concurrent/repeated events, explicit retries of the same run and older runs cannot pass the provider receipt watermark. A capped result also receives a suppression receipt, so it cannot send when the cap later expires. The rate is per account across providers, independent of the existing self-test rate; cancelled/failed attempts consume it. This bounded state uses existing browser-deny Rules and recursive user cleanup, with expireAt TTL and no new recurring collection scan.
 
 Delivery is **best-effort, at most one attempt per import**, not exactly once. A crash after the durable claim, an ambiguous network result or failed bookkeeping must not initiate another send. Platform retries can recover preparation failures before a claim; a claim prevents replay afterward. This deliberately prefers a missed alert over duplicates. Connections remains the authoritative progress/result surface. Turning the switch off discards newly observed completions; turning it back on does not scan or replay them.
 
@@ -289,7 +341,7 @@ After separate approval, deploy the category Rules, existing admission callables
 npm run firebase -- deploy --only firestore:rules,functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:sendHistoryImportNotification --project quantified-self-io
 ```
 
-The history-only subset requires the Rules deployment above. It needs no key rotation, ingestion-worker deployment, schedule or queue change. Releasing the full PR also requires the live-activity deployment below. The existing shared key is bound to the two automatic senders and the self-test sender; admission workers never receive it. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+The history-only subset requires the Rules deployment above. It needs no key rotation, ingestion-worker deployment, schedule or queue change. Releasing the full PR also requires the live-activity deployment below. The shared key is bound only to handlers that send notifications. Direct manual/Sleep/Training send handlers now receive it through their existing Function secret bindings. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 
 Rollback of new admissions/sends is the new switch set to false; existing imports continue normally. Already claimed/accepted sends may finish. Never clear receipts or replay completed runs. The trigger uses 256 MiB, 30 seconds, max two instances, concurrency 20 and zero minimum instances in `europe-west2`; no idle warm instance or new scheduler is provisioned. Once deployed it is invoked on history-document writes even while disabled, then filters unrelated checkpoints in memory. Consented completion handling adds bounded configuration/Firestore reads, transactional claim/bookkeeping writes and one push request at most. This has incremental invocation/read/write costs; it is not a free or guaranteed-delivery service.
 
@@ -373,7 +425,7 @@ One private leaf, `users/{uid}/pushState/activitySync`, holds at most one pendin
 256 event-ID suppression receipts and one claim ID. Receipts expire logically 48 hours after workout completion and
 are pruned on new admission. Recreating the same canonical event during this period does not notify again. At the
 receipt limit, further arrivals are silently omitted until space becomes available. This bounded state is denied to
-clients by existing Rules and removed by existing recursive account cleanup; no TTL policy is needed.
+clients by existing Rules and removed by existing recursive account cleanup; expireAt TTL removes the retained state after its suppression window.
 
 The first eligible arrival fixes a two-minute batching deadline and snapshots at most ten registered devices across production and beta. Later arrivals do not extend that deadline or add newly enabled devices. The batch holds at most 50 unique
 workouts; excess arrivals are suppressed. The minute scheduler normally sends after roughly two to three minutes.
@@ -497,8 +549,8 @@ remains authoritative; this adds no provider API calls or automatic resends.
 A server-only leaf `users/{uid}/pushState/activityDelivery` holds one pending batch, at most 50 results, ten device
 references, four attempt timestamps and 256 suppression receipts. Manual batch receipts expire logically after 30 days; automatic
 failure receipts expire with their 24-hour source eligibility, so old failure bursts cannot fill the state for a month. No endpoints,
-metrics, titles, filenames or raw errors enter this state or telemetry. The first result fixes a two-minute window;
-the UTC minute scheduler sends after roughly two to three minutes. Per-result targets preserve initiating-device
+metrics, titles, filenames or raw errors enter this state or telemetry. The first automatic failure fixes a two-minute window;
+the shared minute worker sends grouped failures after roughly two to three minutes. Completed manual batch results send directly from their existing trigger. Per-result targets preserve initiating-device
 consent when manual results share a window with automatic failures. Browser endpoint aliases receive at most one push.
 There is at most **one delivery batch attempt per 15 minutes and four per rolling 24 hours per account**, independently
 of import/live-sync/test budgets. Capped or overflow results are suppressed permanently, not queued for a later digest.
@@ -508,8 +560,7 @@ or retried source, connection change and deletion cancel stale work. Claims clea
 ambiguous sends/crashes are never replayed. A failed device cannot strand other devices. 404/410 removes only the exact
 expired registration generation. Pending batches expire ten minutes after becoming due; results older than 24 hours
 cannot enter delivery. The scheduler reads at most 25 due users and processes five at a time, with five device sends
-at a time per user. It uses `deliveryDueAt`, separately indexed from activity-sync `dueAt`, to avoid either queue
-starving the other. This private leaf participates in existing recursive account cleanup; no new TTL policy is needed.
+at a time per user. It uses the same `dueAt` queue and worker as the other grouped notifications. This private leaf participates in existing recursive account cleanup; the notification expireAt TTL policy applies.
 
 The shared standard/declarative payload includes the QS icon, worker click fallback, fixed tag/topic
 `qs-activity-delivery`, low urgency, `renotify: false`, ten-minute TTL and five-second timeout. Push acceptance is not
@@ -521,8 +572,8 @@ After separate deployment approval, with the new sender switch **false**:
 
 ```sh
 npm run firebase -- deploy --only firestore:rules,firestore:indexes
-# Wait for pushState.deliveryDueAt's collection-group index to become ready.
-npm run firebase -- deploy --only functions:activitySendCommand,functions:projectActivitySendDelivery,functions:queueActivitySendNotification,functions:queueAutomaticDeliveryNotification,functions:sendActivityDeliveryNotifications
+# Verify the shared pushState.dueAt index is ready.
+npm run firebase -- deploy --only functions:activitySendCommand,functions:projectActivitySendDelivery,functions:queueActivitySendNotification,functions:queueAutomaticDeliveryNotification,functions:sendActivitySyncNotifications
 ```
 
 Both admission triggers use 256 MiB, 60 seconds, retry enabled, concurrency ten, max two and min zero in europe-west2;
@@ -574,21 +625,14 @@ The bundle retains the self-test metric/policy and adds `sendhistoryimportnotifi
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 
-Activity-sync, activity-delivery and Training sweep errors additionally record `failureStage` (initialization, configuration,
-signing key, due query, account processing or backlog probe) and an allowlisted `errorCode`. Codes cover canonical
-gRPC/Firestore statuses, known SDK/network codes and numeric HTTP error statuses; other errors become `unknown`.
-Account processing retains only the first rejection's safe code while awaiting the existing bounded fan-out.
-No raw error, stack, account/device identifier, endpoint, signing key or notification payload is added to these logs.
-Monitoring coverage is unchanged: the existing `phase: sweep`, `outcome: failed`, native 5xx and heartbeat filters
-remain authoritative. This diagnostic-only change adds no queries, retries, sends, public/MCP fields or Training planning behavior.
-Configuration-stage failures also include `configurationOperation=get_client_template`, bounded
-`configurationElapsedMs` and `configurationFailureKind`. For an Admin SDK non-JSON error envelope, only its numeric
-`upstreamHttpStatus` is retained; its embedded response body stays private. Resource exhaustion records
-`explicitQuotaExceeded` only when the SDK message is available, distinguishing an explicit quota-exceeded message
-from a generic exhaustion response. A false value does not rule out a quota restriction. Compare native Remote Config
-request metrics and live project quotas before attributing exhaustion to application traffic. The Admin SDK already
-retries selected network/503 failures; these diagnostics introduce no extra retry or cached configuration.
-Deploy `sendActivitySyncNotifications`, `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications`
+The shared worker records `failureStage` (due query, account processing or backlog probe) and an allowlisted
+`errorCode`. It preserves the first rejection's safe code while awaiting the bounded fan-out, so one failing category
+does not strand other categories. Configuration is lazy per category and is not fetched on idle sweeps. Direct
+handlers keep fixed category/phase/outcome markers. Raw errors, keys, account/device identifiers, endpoints and
+payloads are never logged. Category policies cover their admission/send errors; one shared policy covers worker
+runtime, backlog and missing heartbeats.
+
+Deploy `sendActivitySyncNotifications`, `sendActivitySyncNotifications` and `sendActivitySyncNotifications`
 after separate approval to activate these configuration diagnostics. No frontend release is required.
 
 The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
@@ -629,8 +673,7 @@ category revision, destination/epoch, device generations and incremental counter
 scope/service supersedes an unsent older result. Mutation receipt replay cannot recreate it. The existing
 `queueTrainingSyncNotification` observer performs at most two masked request lookups per changed terminal/cancellation status; pending/retrying writes add no reads. Only a
 matching request causes transactional source reads and a counter update. There are no per-workout notification
-documents, extra provider requests, AI work, new Functions, idle queries or indexes. The existing indexed `dueAt`
-minute sweep (`sendActivitySyncNotifications`) claims a completed result before transport, with bounded device
+documents, extra provider requests, AI work, new Functions, idle queries or indexes. The existing status observer calls the sender directly when the final outcome commits. It claims before transport, with bounded device
 fan-out and endpoint deduplication across beta and production. There is no daily cap on explicitly requested results.
 
 The sender rechecks source versions, active plan, consent/settings, scope generation, deletion/restore locks,
@@ -639,7 +682,7 @@ rechecks authority and the schedule revision before each device send. Changed so
 claiming success for newer content. Requests expire after 24 hours; a ready result expires after ten minutes. Claims
 are never replayed after crashes or ambiguous transport failures. Payloads contain only generic counts and service
 names, use request-specific tags without a shared transport topic, and open the relevant plan or Training sync
-history using standard/declarative navigation. Recursive account cleanup owns private leaves.
+history using standard/declarative navigation. Training outcome tracking also receives a two-day expireAt TTL from its original request; completed and stalled records are removed automatically after TTL activation. Recursive account cleanup still owns private leaves.
 
 ### Training send result rollout
 
@@ -651,7 +694,7 @@ This local change does not modify any remote configuration.
 
 1. Deploy Firestore Rules for the new `training_send` preference. Existing indexes cover the feature.
 2. Deploy `mutateTrainingProviderDelivery`, `mutateTrainingSchedule` (Add & send), `mcpApi` (confirmed MCP sends),
-   `queueTrainingSyncNotification` and `sendActivitySyncNotifications`, then the frontend. Provider delivery workers
+   `queueTrainingSyncNotification` and the shared `sendActivitySyncNotifications`, then the frontend. Provider delivery workers
    and their schedules are unchanged.
 3. Apply the updated `tools/web-push-monitoring/` bundle using the existing alert channel and verify readback.
    The new fixed `[TrainingSendPush]` outcome metric/policy/chart covers admission, preparation and transport
@@ -661,6 +704,6 @@ This local change does not modify any remote configuration.
    registrations on both sites can receive results.
 
 Rollback: restore the prior backend code, or turn the existing `web_push_training_sync_enabled` flag off to silence
-**both** explicit Training results and grouped Training attention alerts. The next shared sweep discards ready results;
+**both** explicit Training results and grouped Training attention alerts. The existing observer rejects disabled ready results, and the shared sweep discards legacy queued results;
 new commands do not capture requests. Provider sending continues. Already accepted notifications cannot be recalled.
 Never clear claims or replay requests.

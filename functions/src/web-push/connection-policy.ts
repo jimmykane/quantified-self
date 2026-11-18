@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { isAutomaticPushOrigin, isPushId } from '../../../shared/web-push';
@@ -32,7 +33,7 @@ export async function connectionIncidentOwner(db: Firestore, tx: Transaction, ui
 
 /** The caller has read the shared receipt in this transaction. Reserve only after all reads finish. */
 export function reserveTrainingConnectionIncident(db: Firestore, tx: Transaction, uid: string, incident: ConnectionIncident | undefined) {
-  if (incident) tx.set(db.doc(connectionStatePath(uid)), { incidents: { [incident.service]: {
+  if (incident) tx.set(db.doc(connectionStatePath(uid)), { expireAt: notificationExpiry(incident.observedAt), incidents: { [incident.service]: {
     id: incident.id, observedAt: incident.observedAt, owner: 'training',
   } satisfies ConnectionReceipt } }, { merge: true });
 }

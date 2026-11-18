@@ -1,140 +1,61 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
-import webpush from 'web-push';
-import { FUNCTION_SECRET_BINDINGS, SECRET_PARAMS } from '../secrets';
-import { automaticPushConfiguration } from './history-consent';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ACTIVITY_PUSH } from './activity-policy';
-import { sendActivityNotification, type ActivityPushDependencies } from './activity-service';
+import { sendActivityNotification } from './activity-service';
 import { sendSleepNotification } from './sleep-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
-import { parseVapidKeyPair } from './vapid';
-import { notificationConfigurationFailureDetails, notificationSweepErrorCode, type NotificationSweepStage } from './sweep-diagnostics';
+import { sendDeliveryNotification } from './delivery-service';
+import { sendTrainingNotification } from './training-service';
+import { pushDependencies, type PushType } from './runtime';
+import { notificationSweepErrorCode } from './sweep-diagnostics';
 
+/** Deferred categories share pushState.dueAt and this one minute worker. */
 export const sendActivitySyncNotifications = onSchedule({
   schedule: '* * * * *', timeZone: 'UTC', region: 'europe-west2', memory: '256MiB',
   timeoutSeconds: 120, minInstances: 0, maxInstances: 1, concurrency: 1, retryCount: 0,
   secrets: FUNCTION_SECRET_BINDINGS.sendActivitySyncNotifications,
 }, async () => {
-  let failureStage: NotificationSweepStage = 'initialization';
-  const startedAtMs = Date.now();
+  const db = getFirestore(), now = Date.now();
+  const dependencies = new Map<PushType, ReturnType<typeof pushDependencies>>();
+  const deps = (type: PushType) => {
+    if (!dependencies.has(type)) dependencies.set(type, pushDependencies(type, db));
+    return dependencies.get(type)!;
+  };
+  let failureStage = 'due_query';
   try {
-    const db = getFirestore(); const now = Date.now();
-    failureStage = 'configuration';
-    const config = await automaticPushConfiguration('web_push_activity_sync_enabled');
-    failureStage = 'signing_key';
-    const pair = config.enabled ? parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value()) : null;
-    if (pair && pair.publicKey !== config.publicKey) throw new Error('Notification key mismatch.');
-    failureStage = 'due_query';
     const due = await db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt')
       .limit(ACTIVITY_PUSH.sweepLimit).select('dueAt').get();
-    const deps: ActivityPushDependencies = { db, now: Date.now, configuration: async () => config,
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair! }, TTL: 600, timeout: 5000,
-        urgency: 'low', topic: 'qs-activity-sync',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'send', outcome }),
-    };
-    // Sleep shares the existing dueAt index and sweep. No new idle queries, schedules or credentials.
-    let sleepConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
-    let sleepPair: ReturnType<typeof parseVapidKeyPair> | undefined;
-    const sleepDeps: ActivityPushDependencies = { ...deps,
-      configuration: () => sleepConfig ??= (async () => {
-        const setting = await automaticPushConfiguration('web_push_sleep_sync_enabled');
-        if (setting.enabled) {
-          sleepPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
-          if (sleepPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
-        }
-        return setting;
-      })(),
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...sleepPair! }, TTL: 600, timeout: 5000,
-        urgency: 'low', topic: 'qs-sleep-sync',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[SleepSyncPush]', { telemetryVersion: 1, phase: 'send', outcome }),
-    };
-    let connectionConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
-    let connectionPair: ReturnType<typeof parseVapidKeyPair> | undefined;
-    const connectionDeps: ActivityPushDependencies = { ...deps,
-      configuration: () => connectionConfig ??= (async () => {
-        const setting = await automaticPushConfiguration('web_push_connection_attention_enabled');
-        if (setting.enabled) {
-          connectionPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
-          if (connectionPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
-        }
-        return setting;
-      })(),
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...connectionPair! }, TTL: 600, timeout: 5000,
-        urgency: 'low', topic: 'qs-connection-attention',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'send', outcome }),
-    };
-    let trainingSendConfig: ReturnType<typeof automaticPushConfiguration> | undefined;
-    let trainingSendPair: ReturnType<typeof parseVapidKeyPair> | undefined;
-    const trainingSendDeps: ActivityPushDependencies = { ...deps,
-      configuration: () => trainingSendConfig ??= (async () => {
-        const setting = await automaticPushConfiguration('web_push_training_sync_enabled');
-        if (setting.enabled) {
-          trainingSendPair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
-          if (trainingSendPair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
-        }
-        return setting;
-      })(),
-      send: (registration, payload) => webpush.sendNotification(registration, payload, {
-        vapidDetails: { subject: 'mailto:support@quantified-self.io', ...trainingSendPair! }, TTL: 600, timeout: 5000,
-        urgency: 'low',
-        ...(new URL(registration.endpoint).hostname.endsWith('.notify.windows.com')
-          ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-      }),
-      outcome: outcome => logger[outcome === 'failed' ? 'error' : 'info']('[TrainingSendPush]', { telemetryVersion: 1, phase: 'send', outcome }),
-    };
     failureStage = 'account_processing';
-    let failed = false; let preparationError: unknown;
+    let failed = false; let firstError: unknown;
     for (let offset = 0; offset < due.docs.length; offset += 5) {
-      const results = await Promise.allSettled(due.docs.slice(offset, offset + 5).map(doc => {
-        const match = /^users\/([^/]+)\/pushState\/activitySync$/.exec(doc.ref.path);
-        if (match) return sendActivityNotification(match[1], deps);
-        const sleep = /^users\/([^/]+)\/pushState\/sleepReady$/.exec(doc.ref.path);
-        if (sleep) return sendSleepNotification(sleep[1], sleepDeps).catch(() => {
-          logger.error('[SleepSyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
-          throw new Error('Sleep notification processing failed.');
-        });
-        const connection = /^users\/([^/]+)\/pushState\/connectionAttention$/.exec(doc.ref.path);
-        if (connection) return sendConnectionNotification(connection[1], connectionDeps).catch(() => {
-          logger.error('[ConnectionAttentionPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
-          throw new Error('Connection notification processing failed.');
-        });
-        const training = /^users\/([^/]+)\/pushState\/(trainingSend_[a-zA-Z0-9_-]+)$/.exec(doc.ref.path);
-        return training ? sendTrainingSendResult(training[1], training[2], trainingSendDeps).catch(() => {
-          logger.error('[TrainingSendPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
-          throw new Error('Training send notification processing failed.');
-        }) : Promise.resolve();
+      const results = await Promise.allSettled(due.docs.slice(offset, offset + 5).map(async doc => {
+        const match = /^users\/([^/]+)\/pushState\/([^/]+)$/.exec(doc.ref.path);
+        if (!match) throw new Error('Invalid notification queue path.');
+        const [, uid, name] = match;
+        if (name === 'activitySync') return sendActivityNotification(uid, deps('activity'));
+        if (name === 'activityDelivery') return sendDeliveryNotification(uid, deps('delivery'));
+        if (name === 'trainingSync') return sendTrainingNotification(uid, deps('training'));
+        if (name === 'connectionAttention') return sendConnectionNotification(uid, deps('connection'));
+        // Drain older ready records during rollout. New Sleep/Training results send in their existing handlers.
+        if (name === 'sleepReady') return sendSleepNotification(uid, deps('sleep'));
+        if (/^trainingSend_[a-zA-Z0-9_-]+$/.test(name)) return sendTrainingSendResult(uid, name, deps('trainingSend'));
+        throw new Error('Unknown notification queue entry.');
       }));
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          if (!failed) preparationError = result.reason;
-          failed = true;
-        }
+      for (const result of results) if (result.status === 'rejected') {
+        if (!failed) firstError = result.reason;
+        failed = true;
       }
     }
-    if (failed) throw preparationError;
-    // Probe only the oldest due field after this bounded sweep; no global account scan.
+    if (failed) throw firstError;
     failureStage = 'backlog_probe';
     const remaining = await db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt').limit(1).select('dueAt').get();
-    logger.info('[ActivitySyncPushSweep]', { telemetryVersion: 1, enabled: config.enabled,
+    logger.info('[ActivitySyncPushSweep]', { telemetryVersion: 1,
       oldestDueAgeSeconds: remaining.empty ? 0 : Math.max(0, Math.floor((now - Number(remaining.docs[0].data().dueAt)) / 1000)) });
   } catch (error) {
-    logger.error('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
-      failureStage, errorCode: notificationSweepErrorCode(error),
-      ...(failureStage === 'configuration' ? notificationConfigurationFailureDetails(error, Date.now() - startedAtMs) : {}) });
-    throw new Error('Activity sync notification sweep failed.');
+    logger.error('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed', failureStage, errorCode: notificationSweepErrorCode(error) });
+    throw new Error('Notification sweep failed.');
   }
 });

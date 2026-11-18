@@ -3,15 +3,15 @@ vi.unmock('@sports-alliance/sports-lib');
 import type { SleepSession } from '../../../shared/sleep';
 import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { notifyNewSleepAfterPersistence } from './sleep-admission';
-import { admitSleepNotification } from './sleep-service';
+import { admitSleepNotification, sendSleepNotification } from './sleep-service';
 import { automaticPushConfiguration } from './history-consent';
 const mocks = vi.hoisted(() => ({ template: vi.fn(), error: vi.fn(), history: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({}) }));
 vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTemplate: mocks.template }) }));
 vi.mock('firebase-functions/logger', () => ({ error: mocks.error }));
 vi.mock('../connection-history/context', () => ({ currentHistoryExecution: mocks.history }));
-vi.mock('./sleep-service', () => ({ admitSleepNotification: vi.fn() }));
-beforeEach(() => { vi.clearAllMocks(); mocks.history.mockReturnValue(undefined); vi.mocked(admitSleepNotification).mockResolvedValue(); });
+vi.mock('./sleep-service', () => ({ admitSleepNotification: vi.fn(), sendSleepNotification: vi.fn() }));
+beforeEach(() => { vi.clearAllMocks(); mocks.history.mockReturnValue(undefined); vi.mocked(admitSleepNotification).mockResolvedValue(); vi.mocked(sendSleepNotification).mockResolvedValue(); });
 function input() {
   const now = Date.now();
   const queue = { id: 'queue', type: 'garmin_push', sleepNotificationOrigin: 'live', dateCreated: now } as SleepSyncQueueItemInterface;
@@ -36,12 +36,19 @@ describe('post-persistence sleep admission', () => {
     const { queue, session } = input();
     await notifyNewSleepAfterPersistence('owner', queue, [{ ...session, id: 'older', endTimeMs: session.endTimeMs - 3600000 }, session]);
     expect(admitSleepNotification).toHaveBeenCalledOnce();
+    expect(sendSleepNotification).toHaveBeenCalledOnce();
     expect(admitSleepNotification).toHaveBeenCalledWith('owner', expect.objectContaining({ sessionId: 'canonical' }), queue, expect.anything());
   });
   it('keeps the successful import successful if notification preparation fails', async () => {
     const { queue, session } = input(); vi.mocked(admitSleepNotification).mockRejectedValue(new Error('private-canary'));
     await expect(notifyNewSleepAfterPersistence('owner', queue, [session])).resolves.toBeUndefined();
+    expect(sendSleepNotification).not.toHaveBeenCalled();
     expect(mocks.error).toHaveBeenCalledWith('[SleepSyncPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' });
+    expect(JSON.stringify(mocks.error.mock.calls)).not.toContain('private-canary');
+  });
+  it('keeps a committed import successful even if immediate sending fails', async () => {
+    const { queue, session } = input(); vi.mocked(sendSleepNotification).mockRejectedValueOnce(new Error('private-canary'));
+    await expect(notifyNewSleepAfterPersistence('owner', queue, [session])).resolves.toBeUndefined();
     expect(JSON.stringify(mocks.error.mock.calls)).not.toContain('private-canary');
   });
   it.each(['missing', 'off', 'foundation off', 'conditional', 'enabled'])('requires both unconditional flags: %s', async kind => {

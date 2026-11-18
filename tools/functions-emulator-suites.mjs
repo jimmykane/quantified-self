@@ -41,6 +41,7 @@ export const EMULATOR_SUITES = {
     'src/connection-history/monitoring.emulator.spec.ts',
     'src/connection-history/manual-activity.emulator.spec.ts',
     'src/garmin/health-backfill-cutoffs.emulator.spec.ts',
+    'src/web-push/retention.emulator.spec.ts',
     'src/web-push/activity.emulator.spec.ts',
     'src/web-push/sleep.emulator.spec.ts',
     'src/coros/history-import-lease.emulator.spec.ts',

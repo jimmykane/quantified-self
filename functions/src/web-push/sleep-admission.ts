@@ -3,8 +3,8 @@ import * as logger from 'firebase-functions/logger';
 import type { SleepSession } from '../../../shared/sleep';
 import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { currentHistoryExecution } from '../connection-history/context';
-import { admitSleepNotification } from './sleep-service';
-import { automaticPushConfiguration } from './history-consent';
+import { admitSleepNotification, sendSleepNotification } from './sleep-service';
+import { pushDependencies } from './runtime';
 import { liveSleepQueue, sleepPushCandidate } from './sleep-policy';
 
 /** Notification failure must never retry or fail a successful provider sleep import. */
@@ -16,7 +16,8 @@ export async function notifyNewSleepAfterPersistence(uid: string, queue: SleepSy
   if (!candidates.length) return;
   try {
     // One operation per queue, even when polling returns many nights or several provider fragments.
-    await admitSleepNotification(uid, candidates[0], queue, { db: getFirestore(), now: Date.now,
-      configuration: () => automaticPushConfiguration('web_push_sleep_sync_enabled') });
+    const deps = pushDependencies('sleep', getFirestore());
+    await admitSleepNotification(uid, candidates[0], queue, deps);
+    await sendSleepNotification(uid, deps);
   } catch { logger.error('[SleepSyncPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' }); }
 }

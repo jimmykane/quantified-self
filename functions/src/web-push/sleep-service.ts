@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
@@ -84,11 +85,11 @@ export async function admitSleepNotification(uid: string, candidate: SleepPushCa
     if (!targets.length) return;
     const pending: Batch = { id: randomUUID(), candidate, connectionGeneration: generation,
       categoryRevision: preference.revision, dueAt: now, targets };
-    tx.set(ref, { sleepDate: candidate.sleepDate, endMs: candidate.endMs, admittedAt: now, pending, dueAt: now } satisfies State);
+    tx.set(ref, { sleepDate: candidate.sleepDate, endMs: candidate.endMs, admittedAt: now, pending, expireAt: notificationExpiry(now) });
   });
 }
 
-/** Shares the activity sender's existing dueAt query. Claims before transport are never replayed. */
+/** Sends in the import handler after persistence. Claims before transport are never replayed. */
 export async function sendSleepNotification(uid: string, deps: SleepPushDependencies): Promise<void> {
   const config = await deps.configuration(); const { db } = deps; const ref = db.doc(statePath(uid));
   const claim = await db.runTransaction(async tx => {
@@ -106,7 +107,7 @@ export async function sendSleepNotification(uid: string, deps: SleepPushDependen
       && await currentSleep(db, tx, uid, batch.candidate, now, batch.connectionGeneration);
     delete state.pending; delete state.dueAt;
     if (valid) state.lastClaimId = batch.id;
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
     return { batch, valid: !!valid };
   });
   if (!claim) return;

@@ -18,8 +18,6 @@ describe('function target loader', () => {
       'enforceSubscriptionLimits',
       'sendTestPushNotification',
       'sendHistoryImportNotification',
-      'sendActivityDeliveryNotifications',
-      'sendTrainingSyncNotifications',
       'queueTrainingSyncNotification',
       'queueActivitySendNotification',
       'queueAutomaticDeliveryNotification',

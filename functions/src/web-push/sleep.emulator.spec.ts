@@ -41,10 +41,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('sleep notification Firest
       admit: () => Promise.all(entries.map(({ candidate, queue }) => admitSleepNotification('owner', candidate, queue, deps))),
       send: () => sendSleepNotification('owner', deps) };
   }
-  it('admits one cross-provider night under contention and shares the existing dueAt index', async () => {
+  it('admits one cross-provider night under contention and retains a TTL fence without entering the scheduled queue', async () => {
     const h = await seed(); await h.admit();
     const due = await db.collectionGroup('pushState').where('dueAt', '<=', now).orderBy('dueAt').limit(25).select('dueAt').get();
-    expect(due.docs.map(doc => doc.ref.path)).toEqual([h.state.path]);
+    expect(due.docs).toEqual([]);
+    expect((await h.state.get()).get('expireAt').toMillis()).toBeGreaterThan(now + 86400000);
     await Promise.all([h.send(), h.send()]); expect(h.deps.send).toHaveBeenCalledOnce();
     expect((await h.state.get()).data()).not.toHaveProperty('dueAt');
     await h.admit(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();

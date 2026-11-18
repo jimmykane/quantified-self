@@ -51,6 +51,12 @@ function harness() {
   return { run, registration, rows, deps, hooks, seed, send: () => sendHistoryCompletion(run.id, structuredClone(run), deps) };
 }
 describe('history completion notification policy', () => {
+  it('cannot replay an already-attempted run after temporary notification receipts are deleted', async () => {
+    const h = harness(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+    expect(h.rows.get(`connectionHistoryImports/${runId}`).notificationAttemptedAtMs).toBe(now);
+    h.rows.delete('users/owner/pushState/historyCompletion');
+    await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
   it('accepts beta import consent and sends its result back to beta', async () => {
     const h = harness(), beta = 'https://beta.quantified-self.io';
     h.registration.origin = beta; h.run.notification!.origin = beta;
@@ -157,7 +163,7 @@ describe('history completion notification policy', () => {
       if (count !== 1) return;
       if (reason === 'revoked') h.rows.delete(`users/owner/pushSubscriptions/${id}`);
       if (reason === 'deleted') h.rows.set('userDeletionTombstones/owner', {});
-      if (reason === 'run resumed') h.run.processed = false;
+      if (reason === 'run resumed') h.rows.get(`connectionHistoryImports/${runId}`).processed = false;
     };
     await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
   });

@@ -7,6 +7,8 @@ import { sendActivityNotification } from './activity-service';
 import { sendSleepNotification } from './sleep-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
+import { sendDeliveryNotification } from './delivery-service';
+import { sendTrainingNotification } from './training-service';
 import { automaticPushConfiguration } from './history-consent';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), limit: vi.fn(), select: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGroup: () => ({ where: () => ({ orderBy: () => ({
@@ -14,13 +16,15 @@ vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGr
 }) }) }) }) }));
 vi.mock('firebase-functions/logger', () => ({ info: mocks.log, error: mocks.log }));
 vi.mock('./history-consent', () => ({ automaticPushConfiguration: vi.fn() }));
+vi.mock('./delivery-service', () => ({ sendDeliveryNotification: vi.fn() }));
+vi.mock('./training-service', () => ({ sendTrainingNotification: vi.fn() }));
 vi.mock('./activity-service', () => ({ sendActivityNotification: vi.fn() }));
 vi.mock('./sleep-service', () => ({ sendSleepNotification: vi.fn() }));
 vi.mock('./connection-service', () => ({ sendConnectionNotification: vi.fn() }));
 vi.mock('./training-send-service', () => ({ sendTrainingSendResult: vi.fn() }));
 vi.mock('web-push', async original => ({ default: { ...(await original<{ default: typeof webpush }>()).default, sendNotification: vi.fn().mockResolvedValue({}) } }));
 beforeEach(() => {
-  vi.clearAllMocks(); vi.mocked(sendActivityNotification).mockResolvedValue();
+  vi.clearAllMocks(); vi.mocked(sendDeliveryNotification).mockResolvedValue(); vi.mocked(sendTrainingNotification).mockResolvedValue(); vi.mocked(sendActivityNotification).mockResolvedValue();
   vi.mocked(sendSleepNotification).mockResolvedValue();
   vi.mocked(sendConnectionNotification).mockResolvedValue();
   vi.mocked(sendTrainingSendResult).mockResolvedValue();
@@ -28,98 +32,56 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 const run = () => sendActivitySyncNotifications.run({} as never);
-describe('bounded activity notification scheduler', () => {
-  it('dispatches explicit Training results lazily on the shared sweep, without coalescing different requests in transport', async () => {
-    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
-    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_training_sync_enabled', publicKey: pair.publicKey }));
-    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/trainingSend_plan_p_garmin` } })) });
-    vi.mocked(sendTrainingSendResult).mockImplementation(async (_uid, id, deps) => {
-      expect(id).toBe('trainingSend_plan_p_garmin'); expect((await deps.configuration()).enabled).toBe(true);
-      await deps.send({ endpoint: 'https://web.push.apple.com/training' } as never, 'payload');
-    });
-    await run(); expect(sendTrainingSendResult).toHaveBeenCalledTimes(2);
-    expect(automaticPushConfiguration).toHaveBeenCalledTimes(2); expect(mocks.limit.mock.calls).toEqual([[25], [1]]);
-    expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), 'payload', {
-      vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair }, TTL: 600, timeout: 5000, urgency: 'low',
-    });
-  });
-  it('reports Training preparation failure while continuing other accounts', async () => {
-    mocks.get.mockResolvedValueOnce({ docs: ['trainingSend_plan_p_garmin', 'activitySync'].map(name => ({ ref: { path: `users/owner/pushState/${name}` } })) });
-    vi.mocked(sendTrainingSendResult).mockRejectedValue(new Error('private-canary'));
-    await expect(run()).rejects.toThrow('Activity sync notification sweep failed.'); expect(sendActivityNotification).toHaveBeenCalledOnce();
-    expect(mocks.log).toHaveBeenCalledWith('[TrainingSendPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
-    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
-  });
-  it('does not access the signing secret for disabled Training result work', async () => {
+describe('one shared notification worker', () => {
+  it('does only two masked queue queries when idle, without configuration or signing-key reads', async () => {
     const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value');
-    mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/trainingSend_plan_p_garmin' } }] });
-    vi.mocked(sendTrainingSendResult).mockImplementation(async (_uid, _id, deps) => {
-      expect((await deps.configuration()).enabled).toBe(false);
+    await run();
+    expect(automaticPushConfiguration).not.toHaveBeenCalled(); expect(secret).not.toHaveBeenCalled();
+    expect(mocks.limit.mock.calls).toEqual([[25], [1]]); expect(mocks.select.mock.calls).toEqual([[['dueAt']], [['dueAt']]]);
+    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPushSweep]', { telemetryVersion: 1, oldestDueAgeSeconds: 0 });
+  });
+  it.each([
+    ['activitySync', sendActivityNotification, 'web_push_activity_sync_enabled', 'qs-activity-sync'],
+    ['activityDelivery', sendDeliveryNotification, 'web_push_activity_delivery_enabled', 'qs-activity-delivery'],
+    ['trainingSync', sendTrainingNotification, 'web_push_training_sync_enabled', 'qs-training-sync'],
+    ['sleepReady', sendSleepNotification, 'web_push_sleep_sync_enabled', 'qs-sleep-sync'],
+    ['connectionAttention', sendConnectionNotification, 'web_push_connection_attention_enabled', 'qs-connection-attention'],
+    ['trainingSend_plan_p_garmin', sendTrainingSendResult, 'web_push_training_sync_enabled', undefined],
+  ] as const)('dispatches %s with only its own configuration and caches it across accounts', async (name, sender, flag, topic) => {
+    const pair = webpush.generateVAPIDKeys(); const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
+    vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: true, publicKey: pair.publicKey });
+    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/${name}` } })) });
+    (sender as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+      const deps = args.at(-1) as Parameters<typeof sendActivityNotification>[1];
+      expect((await deps.configuration()).enabled).toBe(true);
+      await deps.send({ endpoint: 'https://web.push.apple.com/synthetic' } as never, 'payload');
     });
+    await run(); expect(sender).toHaveBeenCalledTimes(2); expect(automaticPushConfiguration).toHaveBeenCalledExactlyOnceWith(flag);
+    expect(secret).toHaveBeenCalledOnce();
+    expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), 'payload', {
+      vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair }, TTL: 600, timeout: 5000, urgency: 'low', ...(topic ? { topic } : {}),
+    });
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+  });
+  it('does not read the signing key for disabled work', async () => {
+    const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value');
+    mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/activitySync' } }] });
+    vi.mocked(sendActivityNotification).mockImplementation(async (_uid, deps) => { expect((await deps.configuration()).enabled).toBe(false); });
     await run(); expect(secret).not.toHaveBeenCalled(); expect(webpush.sendNotification).not.toHaveBeenCalled();
   });
-  it('dispatches connection alerts independently of activity and sleep switches without adding queries', async () => {
-    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
-    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_connection_attention_enabled', publicKey: pair.publicKey }));
-    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/connectionAttention` } })) });
-    vi.mocked(sendConnectionNotification).mockImplementation(async (_uid, deps) => {
-      expect((await deps.configuration()).enabled).toBe(true);
-      await deps.send({ endpoint: 'https://web.push.apple.com/connection' } as never, 'payload');
-    });
-    await run(); expect(sendConnectionNotification).toHaveBeenCalledTimes(2);
-    expect(automaticPushConfiguration).toHaveBeenCalledTimes(2); expect(mocks.limit.mock.calls).toEqual([[25], [1]]);
-    expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), 'payload', expect.objectContaining({ topic: 'qs-connection-attention', TTL: 600 }));
-  });
-  it('shares the existing two queries with sleep and resolves its flag independently and only once when work exists', async () => {
-    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
-    vi.mocked(automaticPushConfiguration).mockImplementation(async flag => ({ enabled: flag === 'web_push_sleep_sync_enabled', publicKey: pair.publicKey }));
-    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/sleepReady` } })) });
-    vi.mocked(sendSleepNotification).mockImplementation(async (_uid, deps) => {
-      const config = await deps.configuration(); expect(config.enabled).toBe(true);
-      await deps.send({ endpoint: 'https://web.push.apple.com/sleep' } as never, 'payload');
-    });
-    await run(); expect(sendSleepNotification).toHaveBeenCalledTimes(2);
-    expect(automaticPushConfiguration).toHaveBeenCalledTimes(2); expect(mocks.limit.mock.calls).toEqual([[25], [1]]);
-    expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), 'payload', expect.objectContaining({ topic: 'qs-sleep-sync', TTL: 600 }));
-  });
-  it('reports sleep preparation failures while continuing activity processing', async () => {
-    mocks.get.mockResolvedValueOnce({ docs: ['sleepReady', 'activitySync'].map(name => ({ ref: { path: `users/owner/pushState/${name}` } })) });
-    vi.mocked(sendSleepNotification).mockRejectedValue(new Error('private-canary'));
-    await expect(run()).rejects.toThrow('Activity sync notification sweep failed.');
-    expect(sendActivityNotification).toHaveBeenCalledOnce();
-    expect(mocks.log).toHaveBeenCalledWith('[SleepSyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed' });
+  it('continues other categories after a failure and preserves its safe error code', async () => {
+    mocks.get.mockResolvedValueOnce({ docs: ['activitySync', 'activityDelivery', 'trainingSync'].map(name => ({ ref: { path: `users/owner/pushState/${name}` } })) });
+    vi.mocked(sendDeliveryNotification).mockRejectedValue(Object.assign(new Error('private-canary'), { code: 14 }));
+    await expect(run()).rejects.toThrow('Notification sweep failed.');
+    expect(sendActivityNotification).toHaveBeenCalledOnce(); expect(sendTrainingNotification).toHaveBeenCalledOnce();
+    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed', failureStage: 'account_processing', errorCode: 'unavailable' });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
   });
-  it('emits an idle heartbeat, uses masked indexed bounded queries and does not read the secret while disabled', async () => {
-    const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value'); await run();
-    expect(secret).not.toHaveBeenCalled(); expect(mocks.limit.mock.calls).toEqual([[25], [1]]);
-    expect(mocks.select.mock.calls).toEqual([[['dueAt']], [['dueAt']]]);
-    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPushSweep]', { telemetryVersion: 1, enabled: false, oldestDueAgeSeconds: 0 });
-    expect(sendActivityNotification).not.toHaveBeenCalled();
-    expect(automaticPushConfiguration).toHaveBeenCalledTimes(1);
-  });
-  it.each(['https://web.push.apple.com/synthetic', 'https://test.notify.windows.com/synthetic'])('sends with bounded declarative transport to %s', async endpoint => {
-    const pair = webpush.generateVAPIDKeys(); vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
-    vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: true, publicKey: pair.publicKey });
-    mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/activitySync' } }, { ref: { path: 'unrelated/owner/pushState/activitySync' } }] });
-    await run(); expect(sendActivityNotification).toHaveBeenCalledOnce(); const [uid, deps] = vi.mocked(sendActivityNotification).mock.calls[0];
-    expect(uid).toBe('owner'); await deps.send({ endpoint } as never, 'payload');
-    expect(webpush.sendNotification).toHaveBeenCalledWith({ endpoint }, 'payload', {
-      vapidDetails: { subject: 'mailto:support@quantified-self.io', ...pair }, TTL: 600, timeout: 5000, urgency: 'low', topic: 'qs-activity-sync',
-      ...(endpoint.includes('windows') ? { headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '600' } } : {}),
-    });
-  });
-  it('rejects mismatched keys before claiming work', async () => {
-    vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(webpush.generateVAPIDKeys()));
-    vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: true, publicKey: 'different' });
-    await expect(run()).rejects.toThrow('Activity sync notification sweep failed.'); expect(sendActivityNotification).not.toHaveBeenCalled();
-  });
-  it('isolates per-account preparation failure and reports unknown health rather than a healthy heartbeat', async () => {
-    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/activitySync` } })) });
-    vi.mocked(sendActivityNotification).mockImplementation(async uid => { if (uid === 'one') throw new Error('private-canary'); });
-    await expect(run()).rejects.toThrow('Activity sync notification sweep failed.'); expect(sendActivityNotification).toHaveBeenCalledTimes(2);
-    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed',
-      failureStage: 'account_processing', errorCode: 'unknown' });
-    expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/private-canary|ActivitySyncPushSweep/);
+  it.each(['due_query', 'backlog_probe'])('classifies a failed %s without exposing raw errors', async stage => {
+    if (stage === 'backlog_probe') mocks.get.mockResolvedValueOnce({ empty: true, docs: [] });
+    mocks.get.mockRejectedValueOnce(Object.assign(new Error('private-canary'), { code: 4 }));
+    await expect(run()).rejects.toThrow('Notification sweep failed.');
+    expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed', failureStage: stage, errorCode: 'deadline-exceeded' });
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
   });
 });

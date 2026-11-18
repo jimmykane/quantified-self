@@ -1,3 +1,4 @@
+import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
@@ -69,7 +70,7 @@ export async function admitConnectionNotification(uid: string, incident: Connect
     }
     // Capped/cancelled incidents cannot become a later backlog or a duplicate Training warning.
     state.incidents[incident.service] = { id: live.id, observedAt: live.observedAt, owner: 'connection' };
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
   });
 }
 
@@ -99,7 +100,7 @@ export async function sendConnectionNotification(uid: string, deps: ConnectionPu
     const outcome = !live.length ? 'cancelled' as const : !budget(state, now) ? 'limited' as const : null;
     delete state.pending; delete state.dueAt;
     if (!outcome) { state.attempts.push(now); state.lastClaimId = batch.id; }
-    tx.set(ref, state); return { batch: { ...batch, entries: live }, outcome };
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) }); return { batch: { ...batch, entries: live }, outcome };
   });
   if (!claim) return;
   if (claim.outcome) { deps.outcome(claim.outcome); return; }

@@ -36,6 +36,8 @@ export interface HistoryStep extends ConnectionHistoryStepStatus {
 export interface ConnectionHistoryRun {
   /** Explicit consent for one manual import, never included in the public projection. */
   notification?: HistoryNotificationConsent;
+  /** Durable idempotency on the existing run, independent of temporary notification receipt retention. */
+  notificationAttemptedAtMs?: number;
   id: string;
   userID: string;
   serviceName: ServiceNames;

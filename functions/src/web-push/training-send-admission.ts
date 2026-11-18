@@ -1,3 +1,4 @@
+import { trainingResultExpiry } from './retention';
 import * as logger from 'firebase-functions/logger';
 import type { Transaction } from 'firebase-admin/firestore';
 import type { ScheduledWorkoutV1 } from '../../../shared/training-plans';
@@ -67,7 +68,7 @@ export async function prepareTrainingSend(runtime: DeliveryRuntime, tx: Transact
       contentDigest: digest, result: 'waiting', observedAt: 0 };
   }
   if (!Object.keys(members).length || Object.keys(members).length > TRAINING_SEND.memberLimit) return null;
-  const state: TrainingSendState = { schemaVersion: 1, requestId: command.mutationId, scope: command.scope, scopeId: command.scopeId,
+  const state: TrainingSendState = { schemaVersion: 1, expireAt: trainingResultExpiry(now), requestId: command.mutationId, scope: command.scope, scopeId: command.scopeId,
     planId: command.scope === 'plan' ? command.scopeId : workouts[0]?.planId ?? null, total: Object.keys(members).length, unchanged: 0,
     provider: command.provider, settingsRevision: setting.revision, destinationKey: connection.destinationKey, connectionEpoch: connection.epoch,
     categoryRevision: preference.revision, createdAt: now, members, targets, remaining: Object.keys(members).length, sent: 0, failed: 0 };

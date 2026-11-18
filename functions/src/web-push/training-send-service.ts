@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { trainingResultExpiry } from './retention';
 import { FieldValue, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
 import { deliverySettingsId, parseTrainingDeliveryStatusV1 } from '../../../shared/training-provider-delivery';
@@ -11,7 +12,7 @@ import { TRAINING_SEND, TRAINING_SEND_SERVICES, trainingSendId, trainingSendPayl
 
 const refFor = (db: Firestore, uid: string, id: string) => db.doc(`users/${uid}/pushState/${id}`);
 const headers = ['schemaVersion', 'requestId', 'scope', 'scopeId', 'provider', 'settingsRevision', 'destinationKey',
-  'connectionEpoch', 'categoryRevision', 'createdAt', 'remaining', 'sent', 'failed', 'unchanged', 'total', 'planId', 'finished', 'dueAt'];
+  'connectionEpoch', 'categoryRevision', 'createdAt', 'remaining', 'sent', 'failed', 'unchanged', 'total', 'planId', 'finished', 'dueAt', 'readyAt'];
 const ledgerFields = ['status', 'settingsRevision', 'destinationKey', 'connectionEpoch', 'contentDigest', 'acceptedContentDigest',
   'actual.ids', 'verification.missing', 'verification.state', 'lastAcceptedAtMs', 'updatedAtMs'];
 function valid(state: TrainingSendState | undefined): state is TrainingSendState {
@@ -81,7 +82,8 @@ async function memberResult(db: Firestore, tx: Transaction, uid: string, state: 
 }
 
 /** At most two masked lookups on existing terminal status writes; intermediate retries cost no extra reads. */
-export async function observeTrainingSend(uid: string, raw: unknown, deps: { db: Firestore; now(): number }): Promise<boolean> {
+export async function observeTrainingSend(uid: string, raw: unknown,
+  deps: { db: Firestore; now(): number; sendReady?(id: string): Promise<void> }): Promise<boolean> {
   let status: ReturnType<typeof parseTrainingDeliveryStatusV1>;
   try { status = parseTrainingDeliveryStatusV1(raw); } catch { return false; }
   if (trainingSendTerminal(status.status) === 'waiting') return false;
@@ -93,7 +95,7 @@ export async function observeTrainingSend(uid: string, raw: unknown, deps: { db:
   let covered = false;
   for (const candidate of candidates) {
     if (!candidate.get(`members.${status.id}`)) continue;
-    covered = await db.runTransaction(async tx => {
+    const observed = await db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const [snapshot] = await tx.getAll(candidate.ref, { fieldMask: [...headers, `members.${status.id}`] });
       const state = snapshot.data() as TrainingSendState | undefined;
@@ -104,15 +106,20 @@ export async function observeTrainingSend(uid: string, raw: unknown, deps: { db:
       const live = preference?.enabled && preference.revision === state.categoryRevision && deps.now() - state.createdAt <= TRAINING_SEND.lifetimeMs
         ? await authority(db, tx, uid, state) : null;
       const next = live ? await memberResult(db, tx, uid, state, status.id, member) : { result: 'cancelled' as const, observedAt: 0 };
-      if (next.result === 'cancelled') { tx.update(candidate.ref, { finished: true, dueAt: FieldValue.delete() }); return false; }
+      if (next.result === 'cancelled') { tx.update(candidate.ref, {
+        finished: true, dueAt: FieldValue.delete(), expireAt: trainingResultExpiry(state.createdAt),
+      }); return false; }
       const count = (result: TrainingSendMember['result']) => Number(next.result === result) - Number(member.result === result);
       const remaining = state.remaining + count('waiting'), sent = state.sent + count('sent'), failed = state.failed + count('failed');
       tx.update(candidate.ref, { [`members.${status.id}`]: { ...member, result: next.result, observedAt: next.observedAt },
         remaining, sent, failed, unchanged: state.unchanged + count('unchanged'),
         ...(remaining === 0 && sent + failed === 0 ? { finished: true } : {}),
-        dueAt: remaining === 0 && sent + failed > 0 ? state.dueAt ?? deps.now() : FieldValue.delete() });
-      return true;
-    }) || covered;
+        expireAt: trainingResultExpiry(state.createdAt), dueAt: FieldValue.delete(),
+        readyAt: remaining === 0 && sent + failed > 0 ? state.readyAt ?? state.dueAt ?? deps.now() : FieldValue.delete() });
+      return { ready: remaining === 0 && sent + failed > 0 };
+    });
+    if (observed && typeof observed === 'object' && observed.ready) await deps.sendReady?.(candidate.id);
+    covered = !!observed || covered;
   }
   return covered;
 }
@@ -124,12 +131,14 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
     if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) { const snap = await tx.get(ref); if (snap.exists) tx.delete(ref); return null; }
     const snapshot = await tx.get(ref), state = snapshot.data() as TrainingSendState | undefined;
     if (!valid(state)) { if (snapshot.exists) tx.update(ref, { finished: true, dueAt: FieldValue.delete() }); return null; }
-    if (state.finished || state.remaining !== 0 || state.dueAt === undefined || state.dueAt > deps.now()) return null;
+    const readyAt = state.readyAt ?? state.dueAt;
+    if (state.finished || state.remaining !== 0 || readyAt === undefined || readyAt > deps.now()) return null;
+    state.readyAt = readyAt;
     const preference = readNotificationCategoryPreference((await tx.get(db.doc(notificationPreferencePath(uid, 'training_send')))).data());
     const targetsValid = Array.isArray(state.targets) && state.targets.length > 0 && state.targets.length <= TRAINING_SEND.deviceLimit
       && state.targets.every(target => target && isPushId(target.id) && isPushId(target.generation) && isAutomaticPushOrigin(target.origin));
     const live = config.enabled && targetsValid && preference?.enabled && preference.revision === state.categoryRevision
-      && state.createdAt <= deps.now() && deps.now() - state.createdAt <= TRAINING_SEND.lifetimeMs && deps.now() - state.dueAt <= TRAINING_SEND.expiryMs
+      && state.createdAt <= deps.now() && deps.now() - state.createdAt <= TRAINING_SEND.lifetimeMs && deps.now() - readyAt <= TRAINING_SEND.expiryMs
       ? await authority(db, tx, uid, state) : null;
     const entries = Object.entries(state.members ?? {});
     const results = live && entries.length === state.total
@@ -139,7 +148,7 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
     }
     const sent = results.filter(row => row.result === 'sent').length, failed = results.filter(row => row.result === 'failed').length;
     const claimId = randomUUID();
-    tx.update(ref, { finished: true, claimId, dueAt: FieldValue.delete(),
+    tx.update(ref, { finished: true, claimId, dueAt: FieldValue.delete(), readyAt: FieldValue.delete(), expireAt: trainingResultExpiry(state.createdAt),
       ...(results.length ? { members: Object.fromEntries(entries.map(([key, member], index) => [key,
         { ...member, ...results[index] }])) } : {}) });
     if (!live || results.some(row => row.result === 'cancelled') || sent + failed === 0) return { cancelled: true as const };
@@ -157,7 +166,7 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
         const preference = readNotificationCategoryPreference(pref.data()), registration = device.data();
         if (snapshot.get('claimId') !== claim.claimId || snapshot.get('requestId') !== claim.state.requestId
           || !preference?.enabled || preference.revision !== claim.state.categoryRevision || deps.now() - claim.state.createdAt > TRAINING_SEND.lifetimeMs
-          || deps.now() - claim.state.dueAt! > TRAINING_SEND.expiryMs || !isPushRegistration(registration) || registration.origin !== target.origin
+          || deps.now() - claim.state.readyAt! > TRAINING_SEND.expiryMs || !isPushRegistration(registration) || registration.origin !== target.origin
           || registration.generation !== target.generation || registration.vapidPublicKey !== config.publicKey || !isAutomaticPushOrigin(registration.origin)) return null;
         const live = await authority(db, tx, uid, claim.state);
         return live?.scheduleRevision === claim.scheduleRevision ? registration : null;

@@ -1,3 +1,4 @@
+import { notificationExpiry, trainingIssueExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
@@ -15,7 +16,7 @@ export interface TrainingPushDependencies {
 }
 interface Target { id: string; generation: string; origin: string; }
 interface Batch { id: string; dueAt: number; categoryRevision: number; entries: TrainingEntry[]; targets: Target[]; }
-interface State { attempts: number[]; pending?: Batch; trainingDueAt?: number; lastClaimId?: string; }
+interface State { attempts: number[]; pending?: Batch; dueAt?: number; trainingDueAt?: number; lastClaimId?: string; }
 const statePath = (uid: string) => `users/${uid}/pushState/trainingSync`;
 function readState(value: State | undefined): State {
   if (!value) return { attempts: [] };
@@ -51,7 +52,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
       // A delayed success event cannot close a newer unresolved problem.
       if (status?.status === 'delivered' && status.hasRemoteCopy === true && status.differsFromQS === false
         && Number.isSafeInteger(status.lastAcceptedAtMs) && status.lastAcceptedAtMs >= 0 && status.updatedAtMs >= candidate.observedAt
-        && status.updatedAtMs >= issue.data()!.observedAt) tx.update(issueRef, { open: false });
+        && status.updatedAtMs >= issue.data()!.observedAt) tx.update(issueRef, { open: false, expireAt: notificationExpiry(now) });
       return;
     }
     const [preferenceDoc, stateDoc, entry, registrations] = await Promise.all([
@@ -64,6 +65,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
     const issueRef = db.doc(trainingIssuePath(uid, entry.issueId)), issue = await tx.get(issueRef);
     const state = readState(stateDoc.data() as State | undefined);
     if (issue.data()?.open) {
+      tx.update(issueRef, { expireAt: trainingIssueExpiry(now, entry.workoutLocalDate, issue.data()?.expireAt) });
       reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
       // One connection incident can affect many workouts, including newly scheduled ones.
       // Retain alternatives only inside its original pending batch; never start a new batch for that incident.
@@ -71,7 +73,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
       if (pending && pending.categoryRevision === preference.revision && now <= pending.dueAt + TRAINING_PUSH.batchExpiryMs
         && pending.entries.some(row => row.issueId === entry.issueId && row.episode === issue.data()!.episode)
         && !pending.entries.some(row => row.id === entry.id) && pending.entries.length < TRAINING_PUSH.batchLimit) {
-        pending.entries.push({ ...entry, episode: issue.data()!.episode }); tx.set(ref, state);
+        pending.entries.push({ ...entry, episode: issue.data()!.episode }); tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
       }
       return;
     }
@@ -85,17 +87,17 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
     reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
     const episode = randomUUID();
     if (state.pending && (state.pending.categoryRevision !== preference.revision || now > state.pending.dueAt + TRAINING_PUSH.batchExpiryMs)) {
-      delete state.pending; delete state.trainingDueAt;
+      delete state.pending; delete state.dueAt; delete state.trainingDueAt;
     }
     if (budget(state, now)) {
       if (!state.pending) state.pending = { id: randomUUID(), dueAt: now + TRAINING_PUSH.groupMs,
         categoryRevision: preference.revision, entries: [], targets };
       if (state.pending.entries.length < TRAINING_PUSH.batchLimit) state.pending.entries.push({ ...entry, episode });
-      state.trainingDueAt = state.pending.dueAt;
+      state.dueAt = state.pending.dueAt; delete state.trainingDueAt;
     }
     // Even capped/overflowed problems receive a receipt. They cannot become a later backlog of alerts.
-    tx.set(issueRef, { schemaVersion: 1, open: true, episode, observedAt: candidate.observedAt });
-    tx.set(ref, state);
+    tx.set(issueRef, { schemaVersion: 1, open: true, episode, observedAt: candidate.observedAt, expireAt: trainingIssueExpiry(now, entry.workoutLocalDate) });
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
   });
 }
 
@@ -118,14 +120,14 @@ export async function sendTrainingNotification(uid: string, deps: TrainingPushDe
       && now <= batch.dueAt + TRAINING_PUSH.batchExpiryMs
       ? (await Promise.all(batch.entries.map(entry => current(tx, entry, now)))).filter((entry): entry is TrainingEntry => !!entry) : [];
     const outcome = !entries.length ? 'cancelled' as const : !budget(state, now) ? 'limited' as const : null;
-    delete state.pending; delete state.trainingDueAt;
+    delete state.pending; delete state.dueAt; delete state.trainingDueAt;
     if (!outcome) { state.attempts.push(now); state.lastClaimId = batch.id; }
     if (!outcome) {
       const incidents = new Map(entries.flatMap(entry => entry.connectionIncident
         ? [[entry.connectionIncident.service, entry.connectionIncident] as const] : []));
       for (const incident of incidents.values()) reserveTrainingConnectionIncident(db, tx, uid, incident);
     }
-    tx.set(ref, state);
+    tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
     return { batch: { ...batch, entries }, outcome };
   });
   if (!claim) return;

@@ -15,13 +15,13 @@ export interface TrainingSendMember {
   result: 'waiting' | 'sent' | 'failed' | 'unchanged'; observedAt: number;
 }
 export interface TrainingSendState {
-  schemaVersion: 1; requestId: string; scope: TrainingDeliveryScope; scopeId: string; provider: PlannedWorkoutProviderId;
+  schemaVersion: 1; expireAt?: Date; requestId: string; scope: TrainingDeliveryScope; scopeId: string; provider: PlannedWorkoutProviderId;
   planId: string | null; total: number; unchanged: number;
   settingsRevision: number; destinationKey: string; connectionEpoch: number; categoryRevision: number;
   createdAt: number; remaining: number; sent: number; failed: number;
   members: Record<string, TrainingSendMember>;
   targets: { id: string; generation: string; origin: string }[];
-  dueAt?: number; finished?: boolean; claimId?: string;
+  dueAt?: number; readyAt?: number; finished?: boolean; claimId?: string;
 }
 export const trainingSendTerminal = (status: string): TrainingSendMember['result'] | 'cancelled' =>
   status === 'delivered' ? 'sent' : ['failed', 'needs_attention', 'reconnect_required', 'connection_repair',

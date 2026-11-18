@@ -69,6 +69,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
   });
   afterAll(async () => { for (const id of users) await db.recursiveDelete(db.doc(`users/${id}`)); await db.terminate(); });
 
+  it('sends directly on the final committed workout outcome without entering the scheduled queue', async () => {
+    await plan(2); await drain(); now += 1000;
+    const rows = await ledgers();
+    const immediate = async (id: string) => observeTrainingSend(uid, (await db.doc(`${root}/trainingDeliveryStatuses/${id}`).get()).data(), {
+      db, now: () => now, sendReady: id => sendTrainingSendResult(uid, id, deps),
+    });
+    await processTrainingDelivery(runtime, uid, rows[0].id); await immediate(rows[0].id);
+    expect(deps.send).not.toHaveBeenCalled(); expect((await stateRef('plan', 'p').get()).get('dueAt')).toBeUndefined();
+    const expiry = (await stateRef('plan', 'p').get()).get('expireAt'); expect(expiry.toMillis()).toBeGreaterThan(now + TRAINING_SEND.lifetimeMs);
+    await processTrainingDelivery(runtime, uid, rows[1].id); await Promise.all([immediate(rows[1].id), immediate(rows[1].id)]);
+    expect(deps.send).toHaveBeenCalledOnce(); expect((await stateRef('plan', 'p').get()).get('finished')).toBe(true);
+    expect((await stateRef('plan', 'p').get()).get('dueAt')).toBeUndefined();
+  });
   it('sends exactly one result for twenty workouts, after all pages complete, with competing claims and duplicate status events', async () => {
     await plan(); expect((await stateRef('plan', 'p').get()).get('total')).toBe(20); await drain();
     const rows = await ledgers(); now += 1000;
