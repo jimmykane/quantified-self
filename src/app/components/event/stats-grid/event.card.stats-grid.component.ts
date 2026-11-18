@@ -3,6 +3,7 @@ import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   Input,
   OnChanges,
@@ -37,6 +38,7 @@ import { RR_METRICS, RR_STAT_LABELS } from '../../../constants/rr-metrics';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
+import { buildBenchmarkSummaryCards, getBenchmarkSummarySources, type BenchmarkSummarySource } from '../../../helpers/benchmark-summary-rows.helper';
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 
 const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
@@ -70,7 +72,19 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   @ViewChild('summaryTabGroup', { read: ElementRef }) summaryTabGroupRef?: ElementRef<HTMLElement>;
   @Input() event!: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
-  // @Input() unitSettings = AppUserService.getDefaultUserUnitSettings(); // Removed, using service signal
+  @Input() compareRecordings = false;
+  readonly sources = signal<BenchmarkSummarySource[]>([]);
+  readonly referenceKey = signal('');
+  readonly reference = computed(() => this.sources().find(source => source.value === this.referenceKey()));
+  readonly comparisonCards = computed(() => buildBenchmarkSummaryCards(this.sources(), this.referenceKey(), this.unitSettings));
+  private comparisonEvent?: string | EventInterface;
+  readonly rrComparison = computed(() => {
+    const cards = this.comparisonCards();
+    const primary = RR_METRICS.filter(metric => metric.primary && cards.get(metric.type)?.length).map(metric => metric.type);
+    const details = RR_METRICS.filter(metric => !metric.primary && cards.get(metric.type)?.length).map(metric => metric.type);
+    return primary.length ? { primary, details } : { primary: details, details: [] };
+  });
+
   @Input() statsToShow?: string[]; // Optional override
   @Input() layout: 'grid' | 'condensed' = 'grid';
 
@@ -153,6 +167,11 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   ngOnChanges(simpleChanges: SimpleChanges) {
     const ngChangesStart = this.getPerfStart();
+    if (!this.compareRecordings || !this.selectedActivities.length) {
+      this.sources.set([]);
+      this.referenceKey.set('');
+      this.comparisonEvent = undefined;
+    }
     if (!this.selectedActivities.length) {
       this.rrRecordings = [];
       this.activeRRRecording.set(null);
@@ -175,6 +194,45 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
+    this.activityTypes = this.selectedActivities.map(activity => activity.type).filter(type => !!type);
+    const summaryTypesStart = this.getPerfStart();
+    this.displayedStatsToShow = this.statsToShow ?? getDefaultSummaryStatTypes(this.activityTypes, this.summariesSettings);
+    if (STATS_GRID_PERF_LOGS_ENABLED && !this.statsToShow) {
+      this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
+        activityTypes: this.activityTypes.length, displayedStats: this.displayedStatsToShow.length, eventId: this.event?.getID?.(),
+      });
+    }
+    if (this.compareRecordings) {
+      const all = this.event.getActivities();
+      const sources = getBenchmarkSummarySources(all, this.selectedActivities, expandStatsTypesForCompositeDiff(this.displayedStatsToShow),
+        activity => this.eventColorService.getActivityColor(all, activity));
+      this.sources.set(sources);
+      const scope = this.event.getID?.() || this.event;
+      if (scope !== this.comparisonEvent || !sources.some(source => source.value === this.referenceKey())) {
+        this.referenceKey.set(sources[0]?.value ?? '');
+      }
+      this.comparisonEvent = scope;
+      this.rrRecordings = [];
+      this.activeRRRecording.set(null);
+      this.stats = [];
+    } else {
+      this.buildActivityStats();
+    }
+    this.updateTabs();
+    this.updateDiffMap();
+    if (STATS_GRID_PERF_LOGS_ENABLED) {
+      this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: !!this.statsToShow });
+    }
+  }
+
+  public selectReference(key: string): void {
+    if (key === this.referenceKey() || !this.sources().some(source => source.value === key)) return;
+    this.referenceKey.set(key);
+    this.haptics.selection();
+    this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  private buildActivityStats(): void {
     const labels = getBenchmarkRRLabels(this.selectedActivities);
     const allActivities = this.event.getActivities();
     this.rrRecordings = this.selectedActivities.flatMap((activity, index) => {
@@ -205,35 +263,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         statsCount: this.stats.length,
         eventId: this.event?.getID?.(),
       });
-    }
-
-    this.activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
-
-    if (this.statsToShow) {
-      this.displayedStatsToShow = this.statsToShow;
-      this.updateTabs();
-      this.updateDiffMap();
-      if (STATS_GRID_PERF_LOGS_ENABLED) {
-        this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
-      }
-      return;
-    }
-
-    // the order here is important
-    const summaryTypesStart = this.getPerfStart();
-    this.displayedStatsToShow = getDefaultSummaryStatTypes(this.activityTypes, this.summariesSettings);
-    if (STATS_GRID_PERF_LOGS_ENABLED) {
-      this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
-        activityTypes: this.activityTypes.length,
-        displayedStats: this.displayedStatsToShow.length,
-        eventId: this.event?.getID?.(),
-      });
-    }
-
-    this.updateTabs();
-    this.updateDiffMap();
-    if (STATS_GRID_PERF_LOGS_ENABLED) {
-      this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
     }
   }
 
@@ -277,7 +306,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private updateDiffMap(unitSettings = this.unitSettings) {
     this.updateRRDiffMap(unitSettings);
     const diffStart = this.getPerfStart();
-    this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
+    this.showDiff = !this.compareRecordings && !!this.event?.isMerge && this.selectedActivities.length === 2;
     if (!this.showDiff || !unitSettings) {
       this.diffByType = new Map();
       if (STATS_GRID_PERF_LOGS_ENABLED) {
@@ -302,7 +331,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   private updateRRDiffMap(unitSettings = this.unitSettings): void {
     this.rrDiffByType = new Map();
-    this.rrShowDiff = isBenchmarkEvent(this.event) && this.selectedActivities.length === 2;
+    this.rrShowDiff = !this.compareRecordings && isBenchmarkEvent(this.event) && this.selectedActivities.length === 2;
     const source = this.activeRRRecording();
     if (!this.rrShowDiff || !source || !unitSettings) return;
     const other = this.rrRecordings.find(recording => recording.activity !== source.activity);
@@ -331,7 +360,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private updateTabs() {
-    const availableStatTypes = new Set(this.stats.map((stat) => stat.getType()));
+    const availableStatTypes = new Set(this.compareRecordings
+      ? this.sources().flatMap(source => [...source.stats.keys()])
+      : this.stats.map(stat => stat.getType()));
     const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
       ? ['diving']
       : [];
@@ -339,10 +370,15 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const rrTypes = new Set(this.rrRecordings.flatMap(recording => recording.stats.map(stat => stat.getType())));
 
     this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, { includeEmptyGroupIds })
-      .map((tab) => ({
-        ...tab,
-        metricTypes: tab.metricTypes.filter((metricType) => (tab.id === 'rr' ? rrTypes : availableStatTypes).has(metricType)),
-      }))
+      .map(tab => {
+        const available = tab.id === 'rr' && !this.compareRecordings ? rrTypes : availableStatTypes;
+        const metricTypes = tab.metricTypes.filter(type => available.has(type));
+        if (!this.compareRecordings || tab.id === EVENT_SUMMARY_DEFAULT_GROUP_ID) return { ...tab, metricTypes };
+        // Detail tabs previously showed recorded min/max siblings inside composite cards.
+        const families = metricTypes.filter(type => !tab.singleValueTypes?.includes(type));
+        const siblings = expandStatsTypesForCompositeDiff(families).filter(type => available.has(type));
+        return { ...tab, metricTypes: [...new Set([...metricTypes, ...siblings])] };
+      })
       .filter((tab) => tab.metricTypes.length > 0 || includeEmptyGroupIds.includes(tab.id));
     this.resetSelectedTab();
     this.invalidateTabBodyLayoutSignature();
@@ -445,8 +481,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private scheduleInitialTabsPrewarm() {
+    // Device rows render on first visit. Cycling their tabs on load also emits Material selection events.
     if (
-      this.isDestroyed
+      this.compareRecordings
+      || this.isDestroyed
       || this.didPrewarmTabs
       || this.isPrewarmingTabs
       || this.isMobileViewport()

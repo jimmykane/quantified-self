@@ -20,9 +20,7 @@ export class SummaryPrimaryInfoComponent {
   @Input() iconEvent: EventInterface | null = null;
   @Input() startDate: number | Date | null | undefined = null;
   @Input() fallbackTopMetaText = 'Activity start';
-  @Input() metrics: SummaryPrimaryInfoMetric[] = [];
-  @Input() metricsHeading = '';
-  @Input() metricsDescription = '';
+  @Input() metrics: SummaryPrimaryInfoMetric[] | null = [];
   @Input() iconTooltip = '';
   @Input() iconClickable = false;
 

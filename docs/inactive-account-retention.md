@@ -71,8 +71,9 @@ raise them. Missing limits use those defaults. Invalid limits fail closed. A cap
 The budget day and queue timestamps use the current transaction attempt's time after eligibility reads, including
 when those reads or a retry cross UTC midnight.
 
-`dry-run` performs eligibility reads and saves operational cursor/lease progress, including a transient native billing
-lease; it creates no warning, episode or deletion fence. `warnings-only` queues/observes warnings but cannot initiate
+`dry-run` checks eligibility using a transient native billing lease, saves scan progress, and records first-warning
+candidates in a private admin report. It creates no warning, episode or deletion fence.
+`warnings-only` queues/observes warnings but cannot initiate
 deletion. Switching to `enforce` can act on already elapsed warnings, so inspect their ages before changing mode.
 `off` stops new scans and is rechecked inside mutation transactions. It does not recall queued mail or undo an Auth
 deletion already attempted; existing cleanup must continue.
@@ -114,6 +115,25 @@ client-rendered and noindexed, and links directly from the Admin dashboard. The 
   by UID. Pending tombstones remain visible after user-root cleanup. Current email/absence comes from Firebase Auth;
   an Auth lookup failure fails the request rather than claiming the account is gone. Hold counts are observations from the
   last run, not a complete per-account billing investigation or a global candidate inventory.
+
+**Last completed dry run.** On this route, **Review eligible accounts** opens the completed scan's list of
+first-warning candidates in pages of 25. The total counts distinct accounts at scan time. Account cleanup removes
+that account's row, and Firebase Auth supplies the current sign-in email when the page is viewed. Warning and deletion
+decisions always run their own eligibility checks.
+
+During a dry run, each complete Auth page commits its cursor and eligible memberships in the same lease-checked
+transaction. A partial page is retried. A failed or contended discovery check also leaves that page for a later
+invocation. Only the final page publishes the new report and total. Until then the previous completed report remains
+available. Page requests carry its report ID so a newer published report starts the viewer on page one.
+
+The worker alternates two private leaves under `users/{uid}/inactivityDryRunMatches`. Each stores only a scan ID.
+Overlapping pages count a UID once per report. The account deletion guard protects these writes and recursive user
+cleanup removes both leaves. The control document holds the draft and the last published report. Changing settings
+during a scan discards the partial draft on the next dry run. Legacy cursors start a fresh report from the beginning.
+
+For rollout, deploy the collection-group ascending index on `inactivityDryRunMatches.scanId` and verify it is ready.
+Release `processInactiveAccounts` and `getInactivityAdmin` before the admin frontend. Complete a fresh dry run to
+populate the first report. Earlier scans retained batch counts only and cannot supply a list of accounts.
 
 The read-only `getInactivityAdmin` callable applies existing admin authentication/App Check and rejects impersonation.
 It returns an explicit bounded projection combining private retention/mail/cleanup records with current Auth identities;

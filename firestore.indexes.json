@@ -1811,6 +1811,9 @@
   "fieldOverrides": [
     { "collectionGroup": "pushState", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "issues", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "inactivityDryRunMatches", "fieldPath": "scanId", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
     { "collectionGroup": "inactivityRetention", "fieldPath": "state", "indexes": [
       { "order": "ASCENDING", "queryScope": "COLLECTION" }, { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
     ] },

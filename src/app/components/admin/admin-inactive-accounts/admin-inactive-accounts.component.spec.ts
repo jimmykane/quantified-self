@@ -12,7 +12,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 function response(): InactivityAdminResponse {
   return { settings: { mode: 'off', warningDailyLimit: 100, deletionDailyLimit: 25, revision: 2 }, settingsValid: true,
     running: false, lastStartedAt: null, lastFinishedAt: null, lastScanCompletedAt: null, budgetDay: '2026-11-14',
-    warningsReserved: 0, deletionsReserved: 0, lastRun: null, nextUid: 'synthetic',
+    warningsReserved: 0, deletionsReserved: 0, lastCompletedDryRun: null, lastRun: null, nextUid: 'synthetic',
     accounts: [{ uid: 'synthetic', email: 'synthetic@example.invalid', authPresent: true,
       queuedAt: Date.UTC(2026, 10, 14), acceptedAt: null, deleteAfter: null, requestedAt: null, detail: 'Awaiting confirmed warning delivery.' }] };
 }
@@ -85,6 +85,35 @@ describe('Admin inactive accounts route', () => {
     component.previous(); await fixture.whenStable(); expect(service.read).toHaveBeenLastCalledWith({ view: 'queued' });
     component.changeView('pending-deletion'); await fixture.whenStable();
     expect(service.read).toHaveBeenLastCalledWith({ view: 'pending-deletion' }); expect(component.page()).toBe(1);
+  });
+  it('shows the full scan total and pins subsequent pages to that report', async () => {
+    const { fixture, component, service, haptics } = await setup();
+    const first = response();
+    first.lastCompletedDryRun = { id: 'first', eligibleCount: 31, finishedAt: Date.UTC(2026, 10, 18) };
+    service.read.mockResolvedValue(first);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-labelledby="dry-run-report"]').textContent).toContain('31');
+    const review = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find(b => b.textContent.includes('Review eligible accounts'));
+    review!.click(); await fixture.whenStable();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible' });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.next(); await fixture.whenStable();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', afterUid: 'synthetic', dryRunId: 'first' });
+    expect(component.page()).toBe(2);
+    service.read.mockResolvedValue({ ...first, lastCompletedDryRun: { ...first.lastCompletedDryRun, id: 'replacement' } });
+    component.next(); await fixture.whenStable();
+    expect(component.page()).toBe(1);
+    expect(component.notice()).toContain('Showing its first page');
+    expect(service.save).not.toHaveBeenCalled();
+  });
+  it('distinguishes an older scan without a report from a completed empty report', async () => {
+    const { fixture, component, service } = await render();
+    expect(fixture.nativeElement.textContent).toContain('first full dry run with account reporting');
+    service.read.mockResolvedValue({ ...response(), accounts: [], nextUid: null,
+      lastCompletedDryRun: { id: 'empty', eligibleCount: 0, finishedAt: Date.UTC(2026, 10, 18) } });
+    component.changeView('eligible'); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No accounts qualified for a first warning');
+    expect(fixture.nativeElement.textContent).not.toContain('first full dry run with account reporting');
   });
   it('shows read failures without implying an empty queue and permits refresh', async () => {
     const { fixture, component, service, haptics } = await setup();

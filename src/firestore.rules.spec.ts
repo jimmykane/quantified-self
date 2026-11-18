@@ -79,7 +79,8 @@ describe('Firestore Security Rules', () => {
 
     describe('Server-owned inactivity retention', () => {
         it('keeps episodes and raw runtime control private, and rejects incomplete activation writes', async () => {
-            const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one', 'configuration/inactiveAccounts'];
+            const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one',
+                'users/owner/inactivityDryRunMatches/a', 'configuration/inactiveAccounts'];
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('users/owner').set({});
                 for (const path of paths) await context.firestore().doc(path).set({ state: 'warned', mode: 'off' });
@@ -106,7 +107,7 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(ref.set({ ...settings, mode: 'dry-run', warningDailyLimit: 2, deletionDailyLimit: 0, settingsRevision: 2 }, { merge: true }));
             await assertFails(ref.set({ ...settings, mode: 'enforce', settingsRevision: 2 }, { merge: true })); // stale editor
             for (const patch of [{ warnings: 0 }, { deletions: 0 }, { leaseToken: 'replacement' }, { scanCursor: 'reset' },
-                { lastRun: {} }, { warningDailyLimit: 101 }, { deletionDailyLimit: 26 }, { warningDailyLimit: -1 },
+                { lastRun: {} }, { dryRunDraft: {} }, { lastCompletedDryRun: {} }, { warningDailyLimit: 101 }, { deletionDailyLimit: 26 }, { warningDailyLimit: -1 },
                 { deletionDailyLimit: 1.5 }, { mode: 'unknown' }, { settingsUpdatedBy: 'another-admin' }, { settingsUpdatedAt: new Date(0) }]) {
                 await assertFails(ref.set({ ...settings, settingsRevision: 3, ...patch }, { merge: true }));
             }

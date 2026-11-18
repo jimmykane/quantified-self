@@ -263,3 +263,11 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
 .summary-stats-action-button:hover {
   color: var(--mat-sys-primary);
 }
+
+.combined-totals {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  button { min-height: 44px; }
+  p, dt { margin: 0; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+  dl { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 8px 0 0; }
+  dd { margin: 0; font: var(--mat-sys-title-medium); font-variant-numeric: tabular-nums; }
+}

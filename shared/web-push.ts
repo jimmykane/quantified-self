@@ -1,3 +1,5 @@
+import type { NotificationCategoryId } from './notification-categories';
+
 /** Browser subscription contract. Never log endpoint or encryption keys. */
 export const WEB_PUSH_ORIGINS = ['https://quantified-self.io', 'https://beta.quantified-self.io'] as const;
 export const WEB_PUSH_SETTINGS_PATH = '/settings?section=notifications';
@@ -21,6 +23,37 @@ export interface PushRegistration {
   keys: { p256dh: string; auth: string };
   device?: PushDeviceInfo;
 }
+export type PushClientRemovalReason = 'disabled_on_device' | 'disabled_from_device_list' | 'signed_out' | 'account_switch' | 'custom_token_sign_in'
+  | 'permission_denied' | 'browser_subscription_missing' | 'signing_key_changed' | 'invalid_registration';
+
+export const PUSH_REMOVAL_LOG = 'Web push device removal';
+export interface PushRemovalEvent {
+  uid: string;
+  installationId: string;
+  reason: PushClientRemovalReason | 'registration_already_missing' | 'account_changed' | 'push_service_expired';
+  action: 'browser_detached' | 'registration_removed' | 'registration_delete_acknowledged';
+  origin: unknown;
+  device: unknown;
+  sender?: NotificationCategoryId | 'test';
+}
+
+async function pushLogRef(kind: 'account' | 'device', value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`qs-web-push:${kind}:${value}`);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Both log sinks can be searched from a known UID, without sending the UID or subscription credentials. */
+export async function logPushRemoval(write: (message: string, attributes: Record<string, string>) => void, event: PushRemovalEvent): Promise<void> {
+  try {
+    const [accountRef, deviceRef] = await Promise.all([pushLogRef('account', event.uid), pushLogRef('device', event.installationId)]);
+    const device = isPushDeviceInfo(event.device) ? event.device : null;
+    write(PUSH_REMOVAL_LOG, { accountRef, deviceRef, reason: event.reason, action: event.action,
+      origin: isPushOrigin(event.origin) ? event.origin : 'unknown', browser: device?.browser ?? 'unknown',
+      platform: device?.platform ?? 'unknown', ...(event.sender ? { sender: event.sender } : {}) });
+  } catch { /* Telemetry must never interrupt a removal or retry a delivery. */ }
+}
+
 export interface PushTestRequest { installationId: string; }
 export interface PushTestResponse { status: 'accepted' | 'subscription_expired'; }
 export function isPushId(value: unknown): value is string {

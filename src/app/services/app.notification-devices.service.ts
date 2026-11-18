@@ -3,6 +3,7 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, Timestamp, collection, doc, documentId, getDocsFromServer, limit, orderBy, query, runTransaction, startAfter } from 'app/firebase/firestore';
+import { logBrowserPushRemoval } from '../helpers/push-removal-log.helper';
 import { isPushDeviceInfo, isPushId, isPushOrigin, type PushDeviceInfo } from '@shared/web-push';
 import { AppPushService } from './app.push.service';
 
@@ -110,7 +111,7 @@ export class AppNotificationDevicesService {
         const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${device.id}`);
         const snapshot = await transaction.get(ref);
         if (!this.current(owner, epoch)) throw new Error('Account changed.');
-        if (!snapshot.exists()) return false;
+        if (!snapshot.exists()) return null;
         const current = snapshot.data();
         // A stale page must never revoke a replacement registration after a transaction retry.
         if (current.generation !== device.generation || current.origin !== device.origin) throw new Error('Registration changed.');
@@ -122,13 +123,15 @@ export class AppNotificationDevicesService {
         }, { merge: true });
         // Registrations are leaves: Rules prohibit all descendants.
         transaction.delete(ref);
-        return true;
+        return { origin: current.origin, device: current.device };
       });
+      if (removed) await logBrowserPushRemoval({ uid: owner.uid, installationId: device.id, ...removed,
+        reason: 'disabled_from_device_list', action: 'registration_removed' });
       if (!this.current(owner, epoch)) return false;
       this.records.update(records => records.filter(record => record.id !== device.id));
       this.message.set(removed ? `Notifications disabled for ${device.label} (${device.site}).` : 'This device was already disabled.');
       if (this.push.isCurrentDevice(device.id, device.origin)) await this.push.refreshRegistration();
-      return this.current(owner, epoch) && removed;
+      return this.current(owner, epoch) && !!removed;
     } catch {
       if (!this.current(owner, epoch)) return false;
       this.message.set('Could not disable this device. Refresh the list and try again.');

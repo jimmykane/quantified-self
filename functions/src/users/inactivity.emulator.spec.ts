@@ -536,6 +536,111 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(auth.deleteUser).not.toHaveBeenCalled();
         expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(false);
     });
+    it('publishes only whole dry scans across batches, preserving the prior result and deduplicating replayed accounts', async () => {
+        const review = () => readInactivityAdmin(db, { getUsers: vi.fn().mockResolvedValue({ users: [authUser] }) }, { view: 'eligible' }, now);
+        await config().set({ mode: 'dry-run', scanCursor: 'pre-report-cursor', lastScanCompletedAt: Timestamp.fromMillis(now - 1) });
+        expect((await review()).lastCompletedDryRun).toBeNull();
+        await runInactivitySweep(ctx);
+        expect(auth.listUsers).toHaveBeenCalledWith(100, undefined);
+        const first = await review();
+        expect(first.lastCompletedDryRun).toMatchObject({ eligibleCount: 1, finishedAt: now });
+        expect(first.accounts.map(row => row.uid)).toEqual([uid]);
+
+        const other = { ...authUser, uid: uid + '-second' }; owners.push(other.uid);
+        await db.doc(`users/${other.uid}`).set({});
+        auth.getUser.mockImplementation(async id => id === other.uid ? other : authUser);
+        auth.listUsers.mockResolvedValueOnce({ users: [authUser], pageToken: 'next-page' })
+            .mockResolvedValueOnce({ users: [other, authUser] });
+        stripe.customers.list.mockResolvedValueOnce({ data: [], has_more: false }).mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { data: [], has_more: false };
+        });
+        expect((await runInactivitySweep(ctx)).capped).toBe(true);
+        expect((await config().get()).get('scanCursor')).toBe('next-page');
+        expect((await review()).lastCompletedDryRun).toEqual(first.lastCompletedDryRun);
+        auth.listUsers.mockResolvedValueOnce({ users: [other, authUser] });
+        await runInactivitySweep(ctx);
+        const completed = await review();
+        expect(completed.lastCompletedDryRun!.id).not.toBe(first.lastCompletedDryRun!.id);
+        expect(completed.lastCompletedDryRun!.eligibleCount).toBe(2);
+        expect(completed.accounts.map(row => row.uid)).toEqual([uid, other.uid]);
+
+        auth.listUsers.mockResolvedValue({ users: [] });
+        await runInactivitySweep(ctx);
+        const empty = await review();
+        expect(empty.lastCompletedDryRun!.eligibleCount).toBe(0);
+        expect(empty.accounts).toEqual([]);
+        expect((await inactivityRef(db, uid).get()).exists).toBe(false);
+        expect((await db.collection('mail').where('uid', '==', uid).get()).empty).toBe(true);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it('retries unresolved discovery pages and discards interrupted drafts when settings change', async () => {
+        await config().set({ mode: 'dry-run' });
+        auth.listUsers.mockResolvedValueOnce({ users: [authUser], pageToken: 'resume' });
+        stripe.customers.list.mockResolvedValueOnce({ data: [], has_more: false }).mockRejectedValueOnce(new Error('retry'));
+        expect((await runInactivitySweep(ctx)).counts.failed).toBe(1);
+        const interrupted = (await config().get()).data()!;
+        expect(interrupted.scanCursor).toBe('resume');
+        expect(interrupted.lastCompletedDryRun).toBeUndefined();
+        await config().update({ settingsRevision: 1 });
+        auth.listUsers.mockResolvedValue({ users: [] });
+        await runInactivitySweep(ctx);
+        expect(auth.listUsers).toHaveBeenLastCalledWith(100, undefined);
+        const saved = (await config().get()).data()!;
+        expect(saved.lastCompletedDryRun.id).not.toBe(interrupted.dryRunDraft.id);
+        expect(saved.lastCompletedDryRun.eligibleCount).toBe(0);
+    });
+    it('rechecks an unfinished page before publishing and keeps the report through later live scans', async () => {
+        await config().set({ mode: 'dry-run' });
+        auth.listUsers.mockResolvedValue({ users: [authUser, { ...authUser, disabled: true }] });
+        stripe.customers.list.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { data: [], has_more: false };
+        });
+        const partial = await runInactivitySweep(ctx);
+        expect(partial.counts.eligible).toBe(1);
+        expect((await config().get()).get('lastCompletedDryRun')).toBeUndefined();
+        expect((await db.collection(`users/${uid}/inactivityDryRunMatches`).get()).empty).toBe(true);
+        auth.listUsers.mockResolvedValue({ users: [{ ...authUser, disabled: true }] });
+        await runInactivitySweep(ctx);
+        const report = (await config().get()).get('lastCompletedDryRun');
+        expect(report.eligibleCount).toBe(0);
+        await config().update({ mode: 'warnings-only', settingsRevision: 1 });
+        await runInactivitySweep(ctx);
+        expect((await config().get()).get('lastCompletedDryRun')).toEqual(report);
+    });
+    it('checks account cleanup again before saving report membership', async () => {
+        await config().set({ mode: 'dry-run' });
+        stripe.customers.list.mockImplementationOnce(async () => {
+            await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+            return { data: [], has_more: false };
+        });
+        await runInactivitySweep(ctx);
+        expect((await config().get()).get('lastCompletedDryRun.eligibleCount')).toBe(0);
+        expect((await db.collection(`users/${uid}/inactivityDryRunMatches`).get()).empty).toBe(true);
+    });
+    it('pages only the published dry run and returns page one when a newer report replaces it', async () => {
+        const id = randomUUID();
+        const replacementId = randomUUID();
+        await config().set({ lastCompletedDryRun: { id, slot: 'a', finishedAt: Timestamp.fromMillis(now), eligibleCount: 26 } });
+        const batch = db.batch();
+        for (let index = 0; index < 26; index++) {
+            const owner = uid + '-' + String(index).padStart(2, '0'); owners.push(owner);
+            batch.set(db.doc(`users/${owner}/inactivityDryRunMatches/a`), { scanId: id });
+        }
+        batch.set(db.doc(`users/${uid}/inactivityDryRunMatches/b`), { scanId: replacementId });
+        await batch.commit();
+        const getUsers = vi.fn().mockResolvedValue({ users: [] });
+        const page = await readInactivityAdmin(db, { getUsers }, { view: 'eligible' }, now);
+        expect(page.accounts).toHaveLength(25); expect(page.nextUid).toBe(uid + '-24');
+        const request = { view: 'eligible' as const, afterUid: page.nextUid!, dryRunId: id };
+        const next = await readInactivityAdmin(db, { getUsers }, request, now);
+        expect(next.accounts.map(row => row.uid)).toEqual([uid + '-25']); expect(next.nextUid).toBeNull();
+        await config().update({ lastCompletedDryRun: { id: replacementId, slot: 'b', finishedAt: Timestamp.fromMillis(now), eligibleCount: 1 } });
+        const replaced = await readInactivityAdmin(db, { getUsers }, request, now);
+        expect(replaced.accounts.map(row => row.uid)).toEqual([uid]);
+        expect(replaced.accounts[0]).toMatchObject({ email: null, authPresent: false, deleteAfter: null });
+    });
     it('defaults off, dry-runs without account/mail changes, and skips overlapping sweeps', async () => {
         await config().set({}); expect((await runInactivitySweep(ctx)).outcome).toBe('off');
         expect(auth.listUsers).not.toHaveBeenCalled();

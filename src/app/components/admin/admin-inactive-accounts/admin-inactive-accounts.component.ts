@@ -52,6 +52,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
     { value: 'warnings-only', label: 'Warnings only' }, { value: 'enforce', label: 'Enforce deletion' },
   ];
   readonly views: CompactSelectOption<InactivityAdminView>[] = [
+    { value: 'eligible', label: 'Eligible in last dry run' },
     { value: 'queued', label: 'Warning delivery' }, { value: 'warned', label: 'Deletion deadlines' },
     { value: 'pending-deletion', label: 'Deletion follow-up' }, { value: 'cancelled', label: 'Cancelled notices' },
   ];
@@ -73,6 +74,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.unwatch = this.service.watchOwner(uid => {
       if (uid === this.owner) return;
+      this.cursors = [undefined]; this.page.set(1);
       this.owner = uid; this.ownerVersion++; this.sequence++; this.data.set(null); this.baseline.set(null);
       this.loading.set(false); this.saving.set(false); this.notice.set('');
       this.error.set('The signed-in account changed. Refresh to continue.'); this.confirmation?.close();
@@ -89,8 +91,13 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
     this.loading.set(true); this.error.set('');
     try {
       const afterUid = this.cursors[this.page() - 1];
-      const result = await this.service.read({ view: this.view(), ...(afterUid ? { afterUid } : {}) });
+      const dryRunId = this.view() === 'eligible' && afterUid ? this.data()?.lastCompletedDryRun?.id : undefined;
+      const result = await this.service.read({ view: this.view(), ...(afterUid ? { afterUid } : {}), ...(dryRunId ? { dryRunId } : {}) });
       if (this.destroyed || sequence !== this.sequence || owner !== this.owner) return;
+      if (dryRunId && dryRunId !== result.lastCompletedDryRun?.id) {
+        this.cursors = [undefined]; this.page.set(1);
+        this.notice.set('A newer dry run finished. Showing its first page.');
+      }
       if (resetDraft || !this.dirty()) this.syncDraft(result.settings);
       this.data.set(result);
     } catch {

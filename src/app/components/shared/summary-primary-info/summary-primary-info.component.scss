@@ -178,30 +178,6 @@ app-hero-metrics {
   max-width: 100%;
 }
 
-.metrics-context {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 360px;
-  min-width: 0;
-  max-width: 100%;
-  gap: 8px;
-}
-
-.metrics-context-heading {
-  color: var(--mat-sys-on-surface);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.metrics-context-description {
-  margin: 0;
-  max-width: 68ch;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
 .summary-actions {
   display: flex;
   align-items: center;
@@ -216,7 +192,6 @@ app-hero-metrics {
 .summary-actions:empty {
   display: none;
 }
-
 
 .summary-primary-info--force-mobile {
   flex-direction: column;
@@ -270,11 +245,6 @@ app-hero-metrics {
   margin: 0;
 }
 
-.summary-primary-info--force-mobile .metrics-context {
-  flex: 0 1 auto;
-  width: 100%;
-}
-
 .summary-primary-info--force-mobile .summary-actions {
   position: absolute;
   top: 12px;
@@ -302,11 +272,6 @@ app-hero-metrics {
     width: 100%;
   }
 
-  .summary-primary-info .metrics-context {
-    order: var(--summary-primary-info-metrics-order, 0);
-    flex-basis: 100%;
-    width: 100%;
-  }
 }
 
 @include bp.max-768 {
@@ -325,10 +290,6 @@ app-hero-metrics {
     flex: 0 1 auto;
     gap: 12px;
     padding-right: 0px;
-  }
-
-  .summary-primary-info .metrics-context {
-    flex: 0 1 auto;
   }
 
   .summary-primary-info .activity-icon-container {
@@ -374,8 +335,6 @@ app-hero-metrics {
   }
 }
 
-
-
 @include bp.max-480 {
   .summary-primary-info {
     padding: 12px;
@@ -395,13 +354,4 @@ app-hero-metrics {
     padding-bottom: var(--summary-primary-info-metrics-padding-bottom, 12px);
     gap: 16px;
   }
-}
-
-.summary-primary-info .metrics-context app-hero-metrics {
-  flex: 0 1 auto;
-  order: 0;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  justify-content: flex-start;
 }

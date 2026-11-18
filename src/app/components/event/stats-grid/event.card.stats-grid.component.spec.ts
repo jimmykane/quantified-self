@@ -53,6 +53,7 @@ import { SummaryDisclosureComponent } from '../../shared/summary-disclosure/summ
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { of } from 'rxjs';
+import { CompactSelectComponent } from '../../shared/compact-select/compact-select.component';
 import { MatSelect } from '@angular/material/select';
 
 const createStat = (type: string) => ({
@@ -148,7 +149,7 @@ describe('EventCardStatsGridComponent', () => {
             declarations: [EventCardStatsGridComponent],
             providers: [
                 { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
-                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn(() => '#00ff00') } },
+                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn(() => '#00ff00'), getActivityColor: () => '#2196f3' } },
                 { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
                 { provide: AppHapticsService, useValue: mockHaptics },
             ],
@@ -255,6 +256,99 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.rrRecordings).toEqual([]);
     });
 
+    it('preserves recorded min/max readings in benchmark detail tabs while Overall shows the chosen metric', () => {
+        const readings = [new DataPowerAvg(120), new DataPowerMin(0), new DataPowerMax(200)];
+        const all = ['A', 'B'].map(name => ({ getID: () => name, type: ActivityTypes.Running,
+            getStat: (type: string) => readings.find(stat => stat.getType() === type) }));
+        component.compareRecordings = true;
+        component.statsToShow = [DataPowerAvg.type];
+        component.selectedActivities = all as any;
+        component.event = { getActivities: () => all } as any;
+        component.ngOnChanges({});
+        expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([DataPowerAvg.type]);
+        expect(component.metricTabs.find(tab => tab.id === 'performance')?.metricTypes).toEqual([
+            DataPowerAvg.type, DataPowerMin.type, DataPowerMax.type,
+        ]);
+    });
+
+    it('keeps a chosen reference across hydration, falls back on deselection and resets for a new benchmark', async () => {
+        TestBed.resetTestingModule();
+        await TestBed.configureTestingModule({
+            declarations: [EventCardStatsGridComponent],
+            imports: [MaterialModule, SharedModule, CompactSelectComponent, NoopAnimationsModule],
+            providers: [
+                { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
+                { provide: AppEventColorService, useValue: { getActivityColor: () => '#2196f3' } },
+                { provide: BreakpointObserver, useValue: {
+                    observe: () => of({ matches: false, breakpoints: {} }), isMatched: () => false,
+                } },
+                { provide: AppHapticsService, useValue: mockHaptics },
+                { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
+            ], schemas: [NO_ERRORS_SCHEMA],
+        }).compileComponents();
+        fixture = TestBed.createComponent(EventCardStatsGridComponent);
+        component = fixture.componentInstance;
+        const devices = ['A', 'B', 'C', 'D'].map((name, index) => ({
+            type: ActivityTypes.Running, creator: { name }, getID: () => name,
+            getStat: (type: string) => {
+                if (type === DataDistance.type) return new DataDistance(1000 + 100 * index);
+                if (type === DataHeartRateAvg.type && name !== 'B') return new DataHeartRateAvg(130 + index);
+                return undefined;
+            },
+        }));
+        const load = async (id: string, all = devices, selected = all) => {
+            fixture.componentRef.setInput('event', { getID: () => id, isMerge: true, getActivities: () => all });
+            fixture.componentRef.setInput('selectedActivities', selected);
+            fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        };
+        fixture.componentRef.setInput('compareRecordings', true);
+        fixture.componentRef.setInput('statsToShow', [DataDistance.type, DataHeartRateAvg.type]);
+        await load('run');
+        const rows = () => Array.from(fixture.nativeElement.querySelectorAll('table[aria-label="Distance"] .comparison-row'),
+            (row: HTMLElement) => row.textContent);
+        const grid = fixture.nativeElement as HTMLElement;
+        expect(grid.querySelectorAll('app-compact-select')).toHaveLength(1);
+        expect(grid.querySelector('mat-tab-group app-compact-select')).toBeNull();
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="col"]')).toHaveLength(3);
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="row"]')).toHaveLength(4);
+        expect(rows()).toHaveLength(4);
+        expect(rows()[0]).toContain('Reference');
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        const picker = fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance;
+        picker.select('id:B'); fixture.detectChanges();
+        expect(rows()[0]).toContain('−100.0 m');
+        expect(rows()[1]).toContain('Reference');
+        expect(rows()[2]).toContain('+100.0 m');
+        const heartRate = grid.querySelector('table[aria-label="Average Heart Rate"]')!;
+        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(2);
+        expect(heartRate.querySelector('.reference-label')?.textContent).toContain('Reference');
+        expect(heartRate.closest('.comparison-card')?.querySelectorAll('.comparison-note')).toHaveLength(1);
+        expect(heartRate.textContent).toContain('Not recorded');
+        component.selectReference('id:B');
+        component.selectReference('invalid');
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        await load('run', devices.map(device => ({ ...device })), [devices[3], devices[1]]);
+        expect(rows()[0].replace(/\s+/g, '')).toContain('B1.10KmReference');
+        expect(rows()[1]).toContain('+200.0 m');
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+        fixture.detectChanges();
+        expect(rows()[0]).toContain('mi');
+        await load('run', devices, [devices[3]]);
+        expect(rows()).toHaveLength(1);
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="col"]')).toHaveLength(2);
+        expect(rows()[0]).not.toContain('Reference');
+        expect(fixture.debugElement.query(By.directive(CompactSelectComponent))).toBeNull();
+        await load('run');
+        expect(component.reference()?.label).toBe('D');
+        await load('another');
+        expect(component.reference()?.label).toBe('A');
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        fixture.componentRef.setInput('statsToShow', []);
+        fixture.detectChanges();
+        expect(grid.querySelector('.comparison-empty')?.textContent).toContain('No summary readings');
+        expect(grid.querySelector('app-compact-select')).toBeNull();
+    });
+
     it.each([
         { distanceUnits: DistanceUnits.Kilometers, benchmark: false },
         { distanceUnits: DistanceUnits.Miles, benchmark: false },
@@ -265,10 +359,10 @@ describe('EventCardStatsGridComponent', () => {
         mockUserSettingsQueryService.unitSettings.set({ ...getDefaultUserUnitSettings(), distanceUnits });
         await TestBed.configureTestingModule({
             declarations: [EventCardStatsGridComponent, HeaderStatsComponent],
-            imports: [MaterialModule, SharedModule, SummaryDisclosureComponent, NoopAnimationsModule],
+            imports: [MaterialModule, SharedModule, CompactSelectComponent, SummaryDisclosureComponent, NoopAnimationsModule],
             providers: [
                 { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
-                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn() } },
+                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn(), getActivityColor: () => '#2196f3' } },
                 { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
                 { provide: AppHapticsService, useValue: haptics },
                 { provide: BreakpointObserver, useValue: {
@@ -286,7 +380,7 @@ describe('EventCardStatsGridComponent', () => {
         const peer = EventImporterJSON.getActivityFromJSON(activity.toJSON());
         peer.setID('peer'); peer.creator.name = 'Peer'; peer.addStat(new DataRRRMSSD(17.2));
         const activities = benchmark ? [activity, peer] : [activity];
-        const event = { isMerge: benchmark, getActivities: () => activities, getStats: () => new Map() };
+        const event = { isMerge: benchmark, getID: () => 'rr-activity', getActivities: () => activities, getStats: () => new Map() };
         const readStreams = vi.spyOn(activity, 'getAllStreams');
         fixture.componentRef.setInput('event', event);
         fixture.componentRef.setInput('selectedActivities', activities);
@@ -332,6 +426,21 @@ describe('EventCardStatsGridComponent', () => {
         expect(summary.querySelectorAll('.condensed .rr-summary-details-action button')).toHaveLength(1);
         expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
         fixture.componentRef.setInput('layout', 'grid'); fixture.detectChanges();
+
+        if (benchmark) {
+            fixture.componentRef.setInput('compareRecordings', true);
+            fixture.detectChanges();
+            const overview = host.querySelector('table[aria-label="RMSSD"]')!;
+            expect(overview.querySelectorAll('.comparison-row')).toHaveLength(2);
+            expect(overview.textContent).toContain('+9.1 ms');
+            const detailsButton = host.querySelector<HTMLButtonElement>('.comparison-grid .summary-disclosure-control')!;
+            const detailRegion = document.getElementById(detailsButton.getAttribute('aria-controls')!)!;
+            expect(detailRegion.hidden).toBe(true);
+            detailsButton.click(); fixture.detectChanges();
+            expect(detailRegion.hidden).toBe(false);
+            expect(detailRegion.textContent).toContain('Artifact count');
+            fixture.componentRef.setInput('compareRecordings', false);
+        }
 
         // An ordinary event with heart rate, but no beat-interval statistics,
         // keeps its other summaries and removes the R–R category entirely.

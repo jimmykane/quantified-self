@@ -88,6 +88,21 @@ beta versus production installations, and native declarative delivery. Unit test
 
 The browser obtains a subscription through `window.pushManager` when available, otherwise Angular's existing root worker. The browser writes a private leaf at `users/{uid}/pushSubscriptions/{installationId}` with schema version, origin, public signing-key version, random generation, endpoint, encryption keys and server timestamp. Firestore Rules permit direct owner CRUD, allow bounded owner-only listing (maximum 26 documents per request), prohibit descendants and impersonated listing/writes, validate supported endpoints and fence deleted/missing accounts. Optional `device: { browser, platform }` contains only allowlisted coarse display hints, never a raw user agent or hardware identifier. Subscription endpoints and encryption material are capability credentials: never log or publish them.
 
+For a missing device, search **Sentry Logs** for browser removals and **Google Cloud Logging** for push-provider expiry.
+Both use the message `Web push device removal` and the logging system’s timestamp. Filter by `accountRef`, then
+by `deviceRef` or `origin` to distinguish installations. To calculate the account reference locally from a known Firebase UID:
+
+```sh
+printf 'qs-web-push:account:%s' "$QS_UID" | shasum -a 256
+```
+
+The `reason` field distinguishes device opt-out, sign-out or account switching, permission loss, a missing browser
+subscription or server registration, a changed signing key, and invalid registration data. The `action` is
+`browser_detached` when QS cleared the browser installation and `registration_removed` after a confirmed deletion.
+`registration_delete_acknowledged` means Firestore acknowledged an idempotent delete while browser cleanup did
+not complete. A provider HTTP 404 or 410 logs `push_service_expired` with the sender after the matching generation
+is deleted. Logs are best effort: an offline browser or telemetry blocker can prevent a browser log from arriving.
+
 Endpoint validation is shared by browser/server code and mirrored in Rules: Google FCM, Mozilla Push, Apple Web Push, and a single DNS label under `notify.windows.com` for Edge's Windows Push Notification Service (WNS). HTTPS, hostname boundaries and the absence of credentials, custom ports and fragments remain mandatory. [Microsoft documents Edge's WNS transport](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/forcebuiltinpushmessagingclient) and [its service domain](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/firewall-allowlist-config). WNS requests retain Web Push encryption/VAPID and add the [raw notification type and 60-second WNS expiry headers](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/push-request-response-headers); `web-push` supplies the encrypted binary content type.
 
 The `sendTestPushNotification` App-Check callable accepts only an installation UUID. It derives UID from Auth, validates caller/stored origins and endpoint, transactionally reserves one of ten UTC-day tests with a one-minute cooldown, then checks current configuration and deletion/registration state again before sending. Rate state is server-only at `users/{uid}/pushState/testRateLimit`. All state falls under the existing recursive user-root deletion; no top-level feature collection is added; notification state uses the expireAt TTL policy above. Rates count attempts, including configuration/network failures.

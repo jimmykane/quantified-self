@@ -50,7 +50,7 @@
         <div><dt>Deletions reserved today</dt><dd class="number">{{ snapshot.deletionsReserved | number }} / {{ snapshot.settings.deletionDailyLimit | number }}</dd></div>
       </dl>
       @if (snapshot.lastRun; as run) {
-        <p>Last run: <strong>{{ run.outcome === 'failed' ? 'Failed — review required' : 'Completed' }}</strong> · {{ run.finishedAt | date:'medium' }}@if (run.capped) { · Limited by time or daily cap }</p>
+        <p>Last batch: <strong>{{ run.outcome === 'failed' ? 'Failed — review required' : 'Completed' }}</strong> · {{ run.finishedAt | date:'medium' }}@if (run.capped) { · Limited by time or daily cap }</p>
         <dl class="status-grid run-counts">
           <div><dt>Warnings queued</dt><dd class="number">{{ run.queued | number }}</dd></div>
           <div><dt>Initial warnings accepted</dt><dd class="number">{{ run.accepted | number }}</dd></div>
@@ -61,19 +61,39 @@
           <div><dt>Observed overdue</dt><dd class="number">{{ run.overdue | number }}</dd></div>
           <div><dt>Deletion needs review</dt><dd class="number">{{ run.reviewRequired | number }}</dd></div>
         </dl>
-        <p class="secondary">Last-run counts are bounded observations, not a complete account inventory. Eligibility holds protect accounts when activity, warning evidence, access or billing checks do not pass. Initiating deletion does not mean background cleanup has finished.</p>
+        <p class="secondary">These counts cover the most recent batch. Eligibility holds protect accounts when activity, warning evidence, access or billing checks do not pass. Initiating deletion does not mean background cleanup has finished.</p>
       } @else { <p class="secondary">No run summary recorded yet. Off mode does not scan accounts.</p> }
+    </section>
+    <section aria-labelledby="dry-run-report" class="section">
+      <h2 id="dry-run-report">Last completed dry run</h2>
+      @if (snapshot.lastCompletedDryRun; as report) {
+        <dl class="status-grid">
+          <div><dt>Eligible for a first warning</dt><dd class="number">{{ report.eligibleCount | number }}</dd></div>
+          <div><dt>Scan completed</dt><dd>{{ report.finishedAt | date:'medium' }}</dd></div>
+        </dl>
+        @if (view() !== 'eligible' && report.eligibleCount > 0) {
+          <button mat-stroked-button type="button" (click)="changeView('eligible')" [disabled]="loading() || saving()">Review eligible accounts</button>
+        }
+      } @else {
+        <p class="secondary">The first full dry run with account reporting will populate this list.</p>
+      }
     </section>
     <section aria-labelledby="retention-accounts" class="section">
       <div class="section-heading"><h2 id="retention-accounts">Accounts</h2>
         <app-compact-select label="View" [value]="view()" [options]="views" [disabled]="loading() || saving()" (selectionChange)="changeView($event)" />
       </div>
-      <p class="secondary">Current sign-in addresses are shown. These are recorded states; activity and billing are checked again before deletion. Pending cleanup records remain visible even after the account is removed.</p>
+      @if (view() === 'eligible') {
+        <p class="secondary">The total reflects eligibility at scan time. This list shows current sign-in addresses and omits accounts removed by cleanup. Eligibility is checked again before a warning is sent.</p>
+      } @else {
+        <p class="secondary">Current sign-in addresses are shown. These are recorded states; activity and billing are checked again before deletion. Pending cleanup records remain visible even after the account is removed.</p>
+      }
       @if (!loading() && !error()) {
         <ul class="account-list">
           @for (account of snapshot.accounts; track account.uid) {
             <li>
-              <div class="account-identity"><strong>{{ account.email || (account.authPresent ? 'No sign-in email' : 'Auth account no longer present') }}</strong><span class="secondary account-id">{{ account.uid }}</span><p>{{ account.detail }}</p></div>
+              <div class="account-identity"><strong>{{ account.email || (account.authPresent ? 'No sign-in email' : 'Auth account no longer present') }}</strong><span class="secondary account-id">{{ account.uid }}</span>
+                @if (view() !== 'eligible') { <p>{{ account.detail }}</p> }
+              </div>
               <dl class="account-dates">
                 @if (account.queuedAt !== null) { <div><dt>Warning queued</dt><dd>{{ account.queuedAt | date:'medium' }}</dd></div> }
                 @if (account.acceptedAt !== null) { <div><dt>Delivery accepted</dt><dd>{{ account.acceptedAt | date:'medium' }}</dd></div> }
@@ -81,7 +101,7 @@
                 @if (account.requestedAt !== null) { <div><dt>Deletion requested</dt><dd>{{ account.requestedAt | date:'medium' }}</dd></div> }
               </dl>
             </li>
-          } @empty { <li class="secondary">No accounts in this view.</li> }
+          } @empty { <li class="secondary">{{ view() === 'eligible' && snapshot.lastCompletedDryRun?.eligibleCount === 0 ? 'No accounts qualified for a first warning in this scan.' : 'No accounts in this view.' }}</li> }
         </ul>
       }
       <div class="toolbar pagination">

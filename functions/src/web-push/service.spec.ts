@@ -1,3 +1,4 @@
+import { info } from 'firebase-functions/logger';
 import { describe, it, expect, vi } from 'vitest';
 import type { Firestore } from 'firebase-admin/firestore';
 import webpush from 'web-push';
@@ -87,19 +88,42 @@ describe('Web Push test sender', () => {
     }
   });
   it.each([404, 410])('removes expired leaf registrations on %s', async statusCode => {
+    vi.mocked(info).mockClear();
     const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode, body: 'private-canary' });
     expect(await sendPushTest(h.input, h.deps)).toEqual({ status: 'subscription_expired' });
     expect(h.records.has(`users/owner/pushSubscriptions/${id}`)).toBe(false);
+    expect(info).toHaveBeenCalledExactlyOnceWith('Web push device removal', { action: 'registration_removed', reason: 'push_service_expired',
+      sender: 'test', origin: h.input.origin, browser: 'unknown', platform: 'unknown', accountRef: expect.stringMatching(/^[a-f0-9]{64}$/),
+      deviceRef: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(h.records.has(`users/owner/pushState/removed_${id}`)).toBe(false);
     expect(h.deps.outcome).toHaveBeenCalledWith('expired');
   });
+  it('keeps the committed removal when the log sink fails', async () => {
+    const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode: 410 });
+    vi.mocked(info).mockImplementationOnce(() => { throw new Error('log sink unavailable'); });
+    expect(await sendPushTest(h.input, h.deps)).toEqual({ status: 'subscription_expired' });
+    expect(h.records.has(`users/owner/pushSubscriptions/${id}`)).toBe(false);
+  });
+  it('skips the diagnostic if account deletion starts during transport', async () => {
+    vi.mocked(info).mockClear();
+    const h = harness(); h.deps.send = async () => { h.records.set('userDeletionTombstones/owner', {}); throw { statusCode: 410 }; };
+    await sendPushTest(h.input, h.deps);
+    expect(info).not.toHaveBeenCalled();
+    expect(h.records.has(`users/owner/pushState/removed_${id}`)).toBe(false);
+  });
   it('does not delete a replacement registration after an old request expires', async () => {
+    vi.mocked(info).mockClear();
     const h = harness(); h.deps.send = async () => { h.records.set(`users/owner/pushSubscriptions/${id}`, { ...h.registration, generation: id }); throw { statusCode: 410 }; };
     await sendPushTest(h.input, h.deps); expect(h.records.get(`users/owner/pushSubscriptions/${id}`)?.generation).toBe(id);
+    expect(info).not.toHaveBeenCalled();
+    expect(h.records.has(`users/owner/pushState/removed_${id}`)).toBe(false);
   });
   it.each([429, 500, 302, undefined])('redacts temporary errors and does not retry %s', async statusCode => {
+    vi.mocked(info).mockClear();
     const h = harness(); h.deps.send = vi.fn().mockRejectedValue({ statusCode, body: 'private-canary' });
     await expect(sendPushTest(h.input, h.deps)).rejects.toMatchObject({ code: 'unavailable', message: 'The test could not be sent. Please try again later.' });
     expect(h.deps.send).toHaveBeenCalledTimes(1); expect(h.records.has(`users/owner/pushSubscriptions/${id}`)).toBe(true);
+    expect(info).not.toHaveBeenCalled();
   });
 });
 describe('Push credentials and destinations', () => {

@@ -144,11 +144,17 @@ describe('EventSummaryComponent', () => {
         fixture.componentRef.setInput('unitSettings', settings);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.metrics-context-heading').textContent).toContain('Combined totals · 2 recordings');
-        expect(fixture.nativeElement.querySelector('.metrics-context-description').textContent).toContain('summed across all recordings, including overlapping recordings');
-        expect(fixture.nativeElement.querySelector('.metrics-context-description').textContent).toContain('Selecting a recording below changes the comparison view, not these totals');
+        expect(fixture.nativeElement.querySelector('.combined-totals button').textContent).toContain('Combined totals · 2 recordings');
+        expect(fixture.nativeElement.querySelector('app-event-card-stats-grid').compareRecordings).toBe(true);
+        const toggle = fixture.nativeElement.querySelector('.combined-totals button');
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(fixture.nativeElement.querySelector('app-summary-primary-info app-hero-metrics')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.combined-totals dd')).toBeNull();
+        toggle.click();
+        fixture.detectChanges();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
         const distance = resolveUnitAwareDisplayFromValue(DataDistance.type, 10_000, settings);
-        expect(fixture.nativeElement.querySelector('.metrics-context app-hero-metrics').textContent.replace(/\s+/g, ' ')).toContain(distance.text);
+        expect(fixture.nativeElement.querySelector('.combined-totals dl').textContent).toContain(distance.text);
         const before = component.heroSummaryMetrics;
 
         fixture.componentRef.setInput('selectedActivities', [activities[0]]);
@@ -156,7 +162,11 @@ describe('EventSummaryComponent', () => {
         expect(component.comparisonTotalsHeading).toBe('Combined totals · 2 recordings');
         expect(component.heroSummaryMetrics).toEqual(before);
         expect(total.getValue()).toBe(10_000);
-        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('.combined-totals dl').textContent).toContain(distance.text);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        fixture.componentRef.setInput('event', {...component.event, getID: () => 'another-event'});
+        fixture.detectChanges();
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
     });
 
     it.each([
@@ -167,8 +177,9 @@ describe('EventSummaryComponent', () => {
         fixture.componentRef.setInput('event', {...mockEvent, ...classification,
             getActivities: () => Array.from({length: count}, () => ({type: ActivityTypes.Running}))});
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.combined-totals')).toBeNull();
         expect(fixture.nativeElement.querySelector('app-hero-metrics')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-event-card-stats-grid').compareRecordings).toBe(false);
     });
 
     it('refreshes comparison context when recordings or merge metadata update in place', () => {
@@ -177,23 +188,23 @@ describe('EventSummaryComponent', () => {
         fixture.componentRef.setInput('event', event);
         fixture.componentRef.setInput('selectedActivities', activities);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.combined-totals')).toBeNull();
 
         activities.push({type: ActivityTypes.Running});
         expect(component.comparisonTotalsHeading).toBe('Combined totals · 2 recordings');
         fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.metrics-context-heading')?.textContent).toContain('Combined totals · 2 recordings');
+        expect(fixture.nativeElement.querySelector('.combined-totals button')?.textContent).toContain('Combined totals · 2 recordings');
 
         activities.push({type: ActivityTypes.Running});
         fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.metrics-context-heading')?.textContent).toContain('Combined totals · 3 recordings');
+        expect(fixture.nativeElement.querySelector('.combined-totals button')?.textContent).toContain('Combined totals · 3 recordings');
 
         event.mergeType = 'multi';
         fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.metrics-context')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.combined-totals')).toBeNull();
         expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
