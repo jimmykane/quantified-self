@@ -2,7 +2,9 @@ import {
   type ActivityInterface, type DataInterface, DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
-import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import {
+  normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue, resolveUnitAwareDisplayStat, type UnitAwareStatDisplay,
+} from '@shared/unit-aware-display';
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 import { RR_STAT_LABELS } from '../constants/rr-metrics';
 import { getBenchmarkRRLabels } from './benchmark-rr.helper';
@@ -51,12 +53,13 @@ interface BenchmarkSummaryCard {
   type: string;
   label: string;
   hasReferenceReading: boolean;
+  range: string | null;
   rows: BenchmarkSummaryRow[];
 }
 
 interface BenchmarkReading {
   stat: DataInterface;
-  text: string;
+  display: UnitAwareStatDisplay;
 }
 
 function difference(reading: BenchmarkReading, reference: BenchmarkReading, settings: UserUnitSettingsInterface,
@@ -65,7 +68,7 @@ function difference(reading: BenchmarkReading, reference: BenchmarkReading, sett
   const value = reading.stat.getValue();
   const base = reference.stat.getValue();
   if (typeof value !== 'number' || typeof base !== 'number' || type === DataFeeling.type || type === DataRPE.type) {
-    return reading.text === reference.text ? 'Same' : 'Different';
+    return reading.display.text === reference.display.text ? 'Same' : 'Different';
   }
   const delta = value - base;
   if (!delta) return 'Same';
@@ -89,6 +92,45 @@ function difference(reading: BenchmarkReading, reference: BenchmarkReading, sett
   return `${sign}${display.text}`;
 }
 
+function formatRangeEndpoint(reading: BenchmarkReading): string {
+  const { stat, display } = reading;
+  // Keep duration ranges on a single compact line using Sports Lib's clock format.
+  return stat instanceof DataDuration && !display.unit
+    ? stat.getDisplayValue(false, true, false, true)
+    : display.value;
+}
+
+function formatReadingRange(readings: ReadonlyMap<string, BenchmarkReading>, first: BenchmarkReading): string | null {
+  const firstValue = first.stat.getValue();
+  if (typeof firstValue !== 'number' || first.stat instanceof DataFeeling || first.stat instanceof DataRPE) {
+    return [...readings.values()].every(reading => reading.display.text === first.display.text)
+      ? first.display.text : null;
+  }
+
+  let min = first;
+  let max = first;
+  let minValue = firstValue;
+  let maxValue = firstValue;
+  for (const reading of readings.values()) {
+    const value = reading.stat.getValue();
+    if (typeof value !== 'number') continue;
+    if (value < minValue) {
+      min = reading;
+      minValue = value;
+    }
+    if (value > maxValue) {
+      max = reading;
+      maxValue = value;
+    }
+  }
+
+  const low = formatRangeEndpoint(min);
+  const high = formatRangeEndpoint(max);
+  const unit = max.display.unit;
+  if (min.display.unit !== unit) return `${min.display.text}–${max.display.text}`;
+  return `${low === high ? high : `${low}–${high}`} ${unit}`.trim();
+}
+
 export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
   const settings = normalizeUserUnitSettings(units);
   const sports = sources.map(source => source.activity.type);
@@ -108,7 +150,7 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
           readings = new Map();
           variants.set(display.type, readings);
         }
-        readings.set(source.value, { stat: unitStat, text: display.text });
+        readings.set(source.value, { stat: unitStat, display });
       }
     }
     cards.set(type, [...variants].map(([displayType, readings]) => {
@@ -120,11 +162,17 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
         if (sources.length > 1 && reading && reference) {
           delta = source.value === referenceKey ? 'Reference' : difference(reading, reference, settings, sports);
         }
-        return { key: source.value, label: source.label, color: source.color, value: reading?.text ?? null, delta };
+        return { key: source.value, label: source.label, color: source.color, value: reading?.display.text ?? null, delta };
       });
       const label = RR_STAT_LABELS[type] ?? normalizeUnitDerivedStatLabel(sample.stat, { manufacturer });
       const unit = sample.stat.getDisplayUnit();
-      return { type: displayType, hasReferenceReading: !!reference, label: variants.size > 1 && unit ? `${label} (${unit})` : label, rows };
+      return {
+        type: displayType,
+        hasReferenceReading: !!reference,
+        label: variants.size > 1 && unit ? `${label} (${unit})` : label,
+        range: formatReadingRange(readings, sample),
+        rows,
+      };
     }));
   }
   return cards;

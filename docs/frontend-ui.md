@@ -958,7 +958,10 @@ Saved benchmark comparisons with multiple recordings use device rows in the exis
 reads the selected metric from its source activity. The reference menu lists selected recordings in event order.
 A chosen reference follows its recording ID across refreshes. Deselecting it or opening a different benchmark
 selects the first available recording. One picker above the tabs controls all metric tables. Each table labels
-its device, reading and difference columns. A metric missing from the reference gets one explanation and a
+its device, reading and difference columns. On handset portrait widths, each metric starts as a collapsed
+accordion row. The header shows the range of available readings in the selected units. Opening a row reveals
+the device table and closes the previous row. References and units refresh the open table in place.
+A metric missing from the reference gets one explanation and a
 two-column table of available readings. Differences use device minus reference in the user's preferred units.
 Time and pace differences under one second use Sports Lib's fractional stopwatch display. Smaller-than-display
 differences retain direction, while exact equality reads **Same**.

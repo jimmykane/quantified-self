@@ -106,6 +106,9 @@
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 12px;
   background: var(--mat-sys-surface-container-low);
+}
+
+.comparison-card, .comparison-metric {
   table { width: 100%; table-layout: fixed; border-collapse: collapse; }
   caption { text-align: start; }
   h4 { margin: 0 0 8px; font: var(--mat-sys-title-small); }
@@ -116,6 +119,63 @@
   th + th, th + td, td + td { padding-inline-start: 8px; }
   .device-column { width: 41%; }
   .difference-column { width: 26%; }
+}
+
+.comparison-metrics {
+  display: block;
+}
+
+.comparison-metrics-mobile {
+  .comparison-grid {
+    display: block;
+    padding-top: 4px;
+  }
+
+  .comparison-metric {
+    border-radius: 0;
+    margin: 0;
+    box-shadow: none;
+    --mat-expansion-container-background-color: transparent;
+    --mat-expansion-container-elevation-shadow: none;
+    --mat-expansion-header-text-color: var(--mat-sys-on-surface);
+    --mat-expansion-header-indicator-color: var(--mat-sys-on-surface-variant);
+
+    & + .comparison-metric { border-block-start: 1px solid var(--mat-sys-outline-variant); }
+    .device-column { width: 38%; }
+    .difference-column { width: 30%; }
+  }
+}
+
+.comparison-metric-header {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
+.comparison-metric-title {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding-inline-end: 8px;
+  font: var(--mat-sys-title-small);
+
+  app-data-type-icon { flex: 0 0 auto; }
+}
+
+.comparison-metric-label {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.comparison-metric-range {
+  max-width: 56%;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: end;
 }
 
 .comparison-row {
