@@ -49,7 +49,7 @@ function expectValidRenderedUrls(html: string): void {
 describe('refreshed email template catalog', () => {
     it('contains the approved template IDs and exact subjects', () => {
         expect(Object.fromEntries(REFRESHED_EMAIL_TEMPLATE_CATALOG.map(template => [template.id, template.subject]))).toEqual({
-            account_inactivity_warning: 'Sign in within 30 days to keep your Quantified Self account',
+            account_inactivity_warning: 'Action required: Sign in within 30 days to prevent account deletion',
             registration_welcome: 'Welcome to Quantified Self — a note from Dimitrios',
             welcome_email: 'Your {{role}} membership is active',
             subscription_upgrade: 'You’re now on {{new_role}}',
