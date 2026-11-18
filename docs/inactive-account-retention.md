@@ -149,14 +149,16 @@ delivery metadata, so the existing transactional email backlog, unknown-state, S
 monitoring includes it automatically. The initial-notice-unconfirmed metric remains specific to deletion-blocking
 first-warning evidence. Protective cancellations, caps and contention remain excluded from failure pages.
 
-The 48-hour heartbeat uses a PromQL sum over the lookback window, with an explicit zero fallback for absent data;
-it alerts after five minutes without any positive observation in that window. This avoids the
-[23.5-hour metric-absence limit](https://docs.cloud.google.com/monitoring/alerts/metric-absence). Warning/deletion/hold
+The 48-hour alert counts successful requests across revisions of the retention worker. Cloud Monitoring checks every
+five minutes and alerts when the preceding 48 hours contain zero successful responses, including when no series exists.
+The worker logs its summary before returning success. The dashboard and rollout check use that application heartbeat
+directly. The alert uses the native Cloud Run metric because [log-based PromQL alerts can look back at most 25 hours](https://docs.cloud.google.com/monitoring/promql/promql-in-alerting).
+Warning/deletion/hold
 distribution charts show per-run p95 counts, not totals; their percentile alignment produces numeric series as required
 by the [Monitoring aggregation contract](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aligner).
 On first creation, the metric has no history: [log-based metrics do not backfill earlier logs](https://docs.cloud.google.com/logging/docs/logs-based-metrics).
-The enabled policy can therefore open an initial absence incident until a new heartbeat is ingested. An older log entry
-is not proof that the new metric has data.
+The enabled policy can open an initial absence incident until the new service returns its first successful response.
+Verify the application heartbeat metric separately after the scheduled run.
 
 On an alert, inspect the exact episode, mail acceptance, latest Auth metadata, billing history, marker/checkpoints and
 native cleanup logs using read-only access. Do not infer an absent Auth user or finished cleanup from a network error.

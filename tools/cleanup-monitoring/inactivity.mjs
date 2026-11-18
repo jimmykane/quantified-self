@@ -20,9 +20,9 @@ export function buildInactivityMonitoring(project, channel, owner) {
   metric('holds', 'jsonPayload.counts.blocked>=0', 'Protective or uncertain billing holds; informational, never a failure page.', 'counts.blocked');
   const filter = key => `metric.type="logging.googleapis.com/user/${name(key)}" resource.type="cloud_run_revision" resource.labels.project_id="${project}"`;
   const sum = { alignmentPeriod: '86400s', perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM', groupByFields: [] };
-  // MetricAbsence has a 23.5-hour maximum, shorter than this job's cadence.
-  // Count positive heartbeat observations across revisions, including zero/absent series.
-  const heartbeat = `{__name__="logging.googleapis.com/user/${name('heartbeat')}",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts"}`;
+  // Log-based metrics support only 25 hours of alert history. A successful
+  // scheduler response follows the worker's summary, including when off.
+  const successfulRequests = `{__name__="run.googleapis.com/request_count",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts",response_code_class="2xx"}`;
   const threshold = key => ({ displayName: key, conditionThreshold: { filter: filter(key), aggregations: [sum],
     comparison: 'COMPARISON_GT', thresholdValue: 0, duration: '60s', trigger: { count: 1 }, evaluationMissingData: 'EVALUATION_MISSING_DATA_INACTIVE' } });
   const native = { displayName: 'Native daily scheduler errors, including hard timeout', conditionThreshold: {
@@ -39,8 +39,8 @@ export function buildInactivityMonitoring(project, channel, owner) {
     policy('review', 'Inactivity deletion needs review', [threshold('review')]),
     policy('progress', 'Inactivity processing overdue', [threshold('overdue'), threshold('scan_stalled')]),
     policy('heartbeat', 'Daily inactivity heartbeat missing', [{ displayName: 'Daily scheduler absent for 48 hours', conditionPrometheusQueryLanguage: {
-      query: `(sum(sum_over_time(${heartbeat}[48h])) or vector(0)) < 1`,
-      duration: '300s', evaluationInterval: '300s',
+      query: `(sum(sum_over_time(${successfulRequests}[48h])) or vector(0)) < 1`,
+      duration: '0s', evaluationInterval: '300s',
     } }]),
   ];
   const widgets = ['heartbeat', 'warnings', 'deletions', 'holds', 'failures', 'notice', 'review', 'overdue', 'scan_stalled'].map(key => ({

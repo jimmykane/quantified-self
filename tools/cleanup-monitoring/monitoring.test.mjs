@@ -132,8 +132,8 @@ test('policy thresholds are sustained, native abrupt account errors covered, onl
       if (c.conditionPrometheusQueryLanguage) {
         assert.equal(p.userLabels.policy_id, 'inactivity_heartbeat');
         const condition = c.conditionPrometheusQueryLanguage;
-        assert.equal(condition.query, `(sum(sum_over_time({__name__="logging.googleapis.com/user/qs_cleanup_inactivity_heartbeat_v1",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts"}[48h])) or vector(0)) < 1`);
-        assert.equal(condition.duration, '300s');
+        assert.equal(condition.query, `(sum(sum_over_time({__name__="run.googleapis.com/request_count",monitored_resource="cloud_run_revision",project_id="${project}",location="europe-west2",service_name="processinactiveaccounts",response_code_class="2xx"}[48h])) or vector(0)) < 1`);
+        assert.equal(condition.duration, '0s');
         assert.equal(condition.evaluationInterval, '300s');
         continue;
       }
