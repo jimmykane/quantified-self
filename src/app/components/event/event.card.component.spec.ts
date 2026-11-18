@@ -351,8 +351,11 @@ describe('EventCardComponent', () => {
         expect(snapshots$.observed).toBe(false);
     });
 
-    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('keeps benchmark HRV after performance charts without loading Training impact %j', classification => {
+    it.each([{ isMerge: true }, { mergeType: 'benchmark', isMerge: false }])('keeps benchmark HRV and regular charts while omitting performance charts and Training impact %j', classification => {
         mockTrainingImpactService.watch.mockClear();
+        mockedShouldRenderIntensityZonesChart.mockClear();
+        mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
+        mockPerformanceCurveDataService.getAvailability.mockClear();
         mockPerformanceCurveDataService.getAvailability.mockReturnValue({
             hasPowerCurve: true,
             hasDurability: false,
@@ -360,10 +363,19 @@ describe('EventCardComponent', () => {
             hasCadencePower: false,
             hasAny: true,
         });
-        component.selectedActivitiesInstant.set([{
-            ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
-        }]);
-        component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
+        const streams = [
+            new Stream(DataHeartRate.type, [130, 135, 138]),
+            new Stream(XAxisTypes.Time, [0, 10, 20]),
+        ];
+        const activity: ActivityInterface = {
+            ...mockActivity,
+            getAllStreams: () => streams,
+            getStream: type => streams.find(stream => stream.type === type),
+            getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
+        };
+        component.event.set({ ...mockEvent, ...classification, getActivities: () => [activity] } as AppEventInterface);
+        component.selectedActivitiesInstant.set([activity]);
+        component.selectedActivitiesDebounced.set([activity]);
         fixture.detectChanges();
 
         expect(component.trainingImpact()).toBeNull();
@@ -371,17 +383,17 @@ describe('EventCardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-training-impact')).toBeNull();
         expect(mockTrainingImpactService.watch).not.toHaveBeenCalled();
         expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
-        expect(Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(
-            'app-event-performance-charts, app-benchmark-rr',
-        )).map(element => element.tagName.toLowerCase())).toEqual([
-            'app-event-performance-charts',
-            'app-benchmark-rr',
-        ]);
+        expect(fixture.nativeElement.querySelector('app-event-card-chart')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.event-charts-summary-wrapper')).toBeNull();
+        expect(mockedShouldRenderIntensityZonesChart).not.toHaveBeenCalled();
+        expect(mockPerformanceCurveDataService.getAvailability).not.toHaveBeenCalled();
     });
 
-    it.each([{ isMerge: false }, { isMerge: true, mergeType: 'multi' }])('supports ordinary HRV alongside Training impact %j', classification => {
+    it.each([{ isMerge: false }, { isMerge: true, mergeType: 'multi' }])('shows HRV, performance charts, and Training impact for ordinary and sequential events %j', classification => {
         mockTrainingImpactService.watch.mockClear();
         component.event.set({ ...mockEvent, ...classification } as AppEventInterface);
+        mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
         component.selectedActivitiesInstant.set([{
             ...mockActivity, getStat: type => type === DataRRRMSSD.type ? new DataRRRMSSD(12) : null,
         }]);
@@ -389,6 +401,7 @@ describe('EventCardComponent', () => {
         expect(component.trainingImpact()?.availability).toBe('missing-tss');
         expect(mockTrainingImpactService.watch).toHaveBeenCalledWith('testUser', [component.event()]);
         expect(fixture.nativeElement.querySelector('app-training-impact')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
         expect(component.hasRRDataFlag()).toBe(true);
         expect(fixture.nativeElement.querySelector('app-benchmark-rr')).not.toBeNull();
     });
