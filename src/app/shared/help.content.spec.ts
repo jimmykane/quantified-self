@@ -2549,6 +2549,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
     expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
+    expect(gettingStartedSection?.content).toContain('**Slightly higher** and **Slightly lower**');
+    expect(gettingStartedSection?.content).toContain('If the reference has no reading for a metric');
     expect(gettingStartedSection?.content).toContain('Expand **Combined totals** below the metrics');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');

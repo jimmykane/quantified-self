@@ -1,5 +1,5 @@
 import {
-  type ActivityInterface, type DataInterface, DataDistance, DataFeeling, DataRPE, DynamicDataLoader,
+  type ActivityInterface, type DataInterface, DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings, resolveUnitAwareDisplayFromValue, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
@@ -43,13 +43,14 @@ interface BenchmarkSummaryRow {
   key: string;
   label: string;
   color: string;
-  value: string;
+  value: string | null;
   delta: string;
 }
 
 interface BenchmarkSummaryCard {
   type: string;
   label: string;
+  hasReferenceReading: boolean;
   rows: BenchmarkSummaryRow[];
 }
 
@@ -70,13 +71,22 @@ function difference(reading: BenchmarkReading, reference: BenchmarkReading, sett
   if (!delta) return 'Same';
   // Subtract after unit conversion. Display-only units such as elevation retain canonical raw values.
   const magnitude = Math.abs(delta);
+  const sign = delta > 0 ? '+' : '−';
+  if (reading.stat instanceof DataDuration && magnitude < 1) {
+    // The converted pace already carries seconds per preferred distance unit.
+    const stat = DynamicDataLoader.getDataInstanceFromDataType(type, magnitude);
+    if (stat instanceof DataDuration) {
+      const time = stat.getStopwatchDisplayValue(2);
+      if (/[1-9]/.test(time)) return `${sign}${time} ${stat.getDisplayUnit()}`.trim();
+    }
+  }
   const display = type === DataDistance.type
     ? resolvePrimaryUnitAwareDisplayStat(new DataDistance(magnitude), settings, type, sports)
     : resolveUnitAwareDisplayFromValue(type, magnitude, settings, { preferredType: type, stripRepeatedUnit: true });
   if (!display?.value) return 'Difference unavailable';
   // A real sub-precision difference can round to zero in the preferred unit.
-  if (/0/.test(display.value) && !/[1-9]/.test(display.value)) return `≈${display.text}`;
-  return `${delta > 0 ? '+' : '−'}${display.text}`;
+  if (/0/.test(display.value) && !/[1-9]/.test(display.value)) return delta > 0 ? 'Slightly higher' : 'Slightly lower';
+  return `${sign}${display.text}`;
 }
 
 export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
@@ -107,14 +117,14 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
       const rows = sources.map(source => {
         const reading = readings.get(source.value);
         let delta = '';
-        if (sources.length > 1 && reading) {
-          if (source.value === referenceKey) delta = 'Reference';
-          else if (!reference) delta = 'No reference reading';
-          else delta = difference(reading, reference, settings, sports);
+        if (sources.length > 1 && reading && reference) {
+          delta = source.value === referenceKey ? 'Reference' : difference(reading, reference, settings, sports);
         }
-        return { key: source.value, label: source.label, color: source.color, value: reading?.text ?? 'Not recorded', delta };
+        return { key: source.value, label: source.label, color: source.color, value: reading?.text ?? null, delta };
       });
-      return { type: displayType, label: RR_STAT_LABELS[type] ?? normalizeUnitDerivedStatLabel(sample.stat, { manufacturer }), rows };
+      const label = RR_STAT_LABELS[type] ?? normalizeUnitDerivedStatLabel(sample.stat, { manufacturer });
+      const unit = sample.stat.getDisplayUnit();
+      return { type: displayType, hasReferenceReading: !!reference, label: variants.size > 1 && unit ? `${label} (${unit})` : label, rows };
     }));
   }
   return cards;

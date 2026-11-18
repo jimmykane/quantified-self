@@ -27,10 +27,11 @@ describe('benchmark summary device rows', () => {
       ['9.27 Km', 'Reference'], ['9.25 Km', '−20.0 m'], ['9.90 Km', '+630.0 m'], ['9.27 Km', 'Same'],
     ]);
     expect(cards.has(DataDuration.type)).toBe(false);
-    expect(cards.get(DataHeartRateAvg.type)[0].rows.map(row => row.value)).toEqual(['0 bpm', 'Not recorded', '120 bpm', 'Not recorded']);
+    expect(cards.get(DataHeartRateAvg.type)[0].rows.map(row => row.value)).toEqual(['0 bpm', null, '120 bpm', null]);
     const changed = buildBenchmarkSummaryCards(sources, 'id:b', settings);
     expect(changed.get(DataDistance.type)[0].rows[0].delta).toBe('+20.0 m');
-    expect(changed.get(DataHeartRateAvg.type)[0].rows[0].delta).toBe('No reference reading');
+    expect(changed.get(DataHeartRateAvg.type)[0].hasReferenceReading).toBe(false);
+    expect(changed.get(DataHeartRateAvg.type)[0].rows.every(row => row.delta === '')).toBe(true);
   });
 
   it('uses selected units for both the readings and differences', () => {
@@ -50,7 +51,26 @@ describe('benchmark summary device rows', () => {
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const all = [recording('a', [new DataDistance(9000)]), recording('b', [new DataDistance(9001)])];
     const cards = buildBenchmarkSummaryCards(sourcesFor(all, [DataDistance.type]), 'id:a', units);
-    expect(cards.get(DataDistance.type)[0].rows[1].delta).toEqual('≈0.00 mi');
+    expect(cards.get(DataDistance.type)[0].rows[1].delta).toBe('Slightly higher');
+    const switched = buildBenchmarkSummaryCards(sourcesFor(all, [DataDistance.type]), 'id:b', units);
+    expect(switched.get(DataDistance.type)[0].rows[0].delta).toBe('Slightly lower');
+  });
+
+  it('keeps the direction and fractional seconds for close pace readings in the selected unit', () => {
+    const all = [recording('a', [new DataPaceAvg(300.8)]), recording('b', [new DataPaceAvg(300.5)])];
+    const sources = sourcesFor(all, [DataPaceAvg.type]);
+    expect(buildBenchmarkSummaryCards(sources, 'id:a', settings).get(DataPaceAvg.type)[0].rows[1].delta)
+      .toBe('−0:00.30 min/km');
+    const miles = normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerMile] });
+    expect(buildBenchmarkSummaryCards(sources, 'id:b', miles).get(DataPaceAvg.type)[0].rows[0].delta)
+      .toBe('+0:00.48 min/m');
+  });
+
+  it('distinguishes pace cards when the user selects two display units', () => {
+    const units = normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerKilometer, PaceUnits.MinutesPerMile] });
+    const sources = sourcesFor([recording('a', [new DataPaceAvg(300)])], [DataPaceAvg.type]);
+    expect(buildBenchmarkSummaryCards(sources, 'id:a', units).get(DataPaceAvg.type).map(card => card.label))
+      .toEqual(['Average Pace (min/km)', 'Average Pace (min/m)']);
   });
 
   it('keeps swim distance in yards and compares qualitative readings as labels', () => {

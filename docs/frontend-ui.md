@@ -957,7 +957,11 @@ identity and place the hero metrics below them, rather than creating a third hea
 Saved benchmark comparisons with multiple recordings use device rows in the existing summary tabs. Each row
 reads the selected metric from its source activity. The reference menu lists selected recordings in event order.
 A chosen reference follows its recording ID across refreshes. Deselecting it or opening a different benchmark
-selects the first available recording. Differences use device minus reference in the user's preferred units.
+selects the first available recording. One picker above the tabs controls all metric tables. Each table labels
+its device, reading and difference columns. A metric missing from the reference gets one explanation and a
+two-column table of available readings. Differences use device minus reference in the user's preferred units.
+Time and pace differences under one second use Sports Lib's fractional stopwatch display. Smaller-than-display
+differences retain direction, while exact equality reads **Same**.
 A single selected recording shows its readings alone. **Combined totals · N recordings** starts collapsed below
 the summary. Its duration and distance come from the saved parent event and include every recording, even when
 recordings overlap. Ordinary activities, single-source events and explicit sequential (`multi`) merges use the standard summary.

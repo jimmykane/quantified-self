@@ -290,7 +290,11 @@ describe('EventCardStatsGridComponent', () => {
         component = fixture.componentInstance;
         const devices = ['A', 'B', 'C', 'D'].map((name, index) => ({
             type: ActivityTypes.Running, creator: { name }, getID: () => name,
-            getStat: (type: string) => type === DataDistance.type ? new DataDistance(1000 + 100 * index) : undefined,
+            getStat: (type: string) => {
+                if (type === DataDistance.type) return new DataDistance(1000 + 100 * index);
+                if (type === DataHeartRateAvg.type && name !== 'B') return new DataHeartRateAvg(130 + index);
+                return undefined;
+            },
         }));
         const load = async (id: string, all = devices, selected = all) => {
             fixture.componentRef.setInput('event', { getID: () => id, isMerge: true, getActivities: () => all });
@@ -298,9 +302,15 @@ describe('EventCardStatsGridComponent', () => {
             fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
         };
         fixture.componentRef.setInput('compareRecordings', true);
-        fixture.componentRef.setInput('statsToShow', [DataDistance.type]);
+        fixture.componentRef.setInput('statsToShow', [DataDistance.type, DataHeartRateAvg.type]);
         await load('run');
-        const rows = () => [...fixture.nativeElement.querySelectorAll('.comparison-row')].map(row => (row as HTMLElement).textContent);
+        const rows = () => Array.from(fixture.nativeElement.querySelectorAll('table[aria-label="Distance"] .comparison-row'),
+            (row: HTMLElement) => row.textContent);
+        const grid = fixture.nativeElement as HTMLElement;
+        expect(grid.querySelectorAll('app-compact-select')).toHaveLength(1);
+        expect(grid.querySelector('mat-tab-group app-compact-select')).toBeNull();
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="col"]')).toHaveLength(3);
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="row"]')).toHaveLength(4);
         expect(rows()).toHaveLength(4);
         expect(rows()[0]).toContain('Reference');
         expect(mockHaptics.selection).not.toHaveBeenCalled();
@@ -309,17 +319,23 @@ describe('EventCardStatsGridComponent', () => {
         expect(rows()[0]).toContain('−100.0 m');
         expect(rows()[1]).toContain('Reference');
         expect(rows()[2]).toContain('+100.0 m');
+        const heartRate = grid.querySelector('table[aria-label="Average Heart Rate"]')!;
+        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(2);
+        expect(heartRate.querySelector('.reference-label')?.textContent).toContain('Reference');
+        expect(heartRate.closest('.comparison-card')?.querySelectorAll('.comparison-note')).toHaveLength(1);
+        expect(heartRate.textContent).toContain('Not recorded');
         component.selectReference('id:B');
         component.selectReference('invalid');
         expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
         await load('run', devices.map(device => ({ ...device })), [devices[3], devices[1]]);
-        expect(rows()[0]).toContain('B1.10 KmReference');
+        expect(rows()[0].replace(/\s+/g, '')).toContain('B1.10KmReference');
         expect(rows()[1]).toContain('+200.0 m');
         mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
         fixture.detectChanges();
         expect(rows()[0]).toContain('mi');
         await load('run', devices, [devices[3]]);
         expect(rows()).toHaveLength(1);
+        expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="col"]')).toHaveLength(2);
         expect(rows()[0]).not.toContain('Reference');
         expect(fixture.debugElement.query(By.directive(CompactSelectComponent))).toBeNull();
         await load('run');
@@ -327,6 +343,10 @@ describe('EventCardStatsGridComponent', () => {
         await load('another');
         expect(component.reference()?.label).toBe('A');
         expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        fixture.componentRef.setInput('statsToShow', []);
+        fixture.detectChanges();
+        expect(grid.querySelector('.comparison-empty')?.textContent).toContain('No summary readings');
+        expect(grid.querySelector('app-compact-select')).toBeNull();
     });
 
     it.each([
@@ -410,7 +430,7 @@ describe('EventCardStatsGridComponent', () => {
         if (benchmark) {
             fixture.componentRef.setInput('compareRecordings', true);
             fixture.detectChanges();
-            const overview = host.querySelector('.comparison-card[aria-label="RMSSD"]')!;
+            const overview = host.querySelector('table[aria-label="RMSSD"]')!;
             expect(overview.querySelectorAll('.comparison-row')).toHaveLength(2);
             expect(overview.textContent).toContain('+9.1 ms');
             const detailsButton = host.querySelector<HTMLButtonElement>('.comparison-grid .summary-disclosure-control')!;

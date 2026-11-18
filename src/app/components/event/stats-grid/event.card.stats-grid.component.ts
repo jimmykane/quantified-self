@@ -481,8 +481,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private scheduleInitialTabsPrewarm() {
+    // Device rows render on first visit. Cycling their tabs on load also emits Material selection events.
     if (
-      this.isDestroyed
+      this.compareRecordings
+      || this.isDestroyed
       || this.didPrewarmTabs
       || this.isPrewarmingTabs
       || this.isMobileViewport()
