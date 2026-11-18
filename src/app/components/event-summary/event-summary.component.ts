@@ -32,6 +32,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { isBenchmarkEvent, isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
+let nextTotalsId = 0;
+
 @Component({
   selector: 'app-event-summary',
   templateUrl: './event-summary.component.html',
@@ -58,7 +60,8 @@ export class EventSummaryComponent implements OnChanges {
   private heroStatsValue: string[] = [];
   private heroEffortStatTypeValue: string = DataSpeedAvg.type;
   private eventActivitiesCountValue = 0;
-  readonly comparisonTotalsDescription = 'Time and distance are summed across all recordings, including overlapping recordings. Selecting a recording below changes the comparison view, not these totals.';
+  readonly totalsId = `combined-totals-${++nextTotalsId}`;
+  totalsExpanded = false;
   private mainActivityTypeValue = 'Other';
   private eventActivityTypesValue: ActivityTypes[] = [];
   private benchmarkCountValue = 0;
@@ -90,6 +93,10 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    const change = changes['event'];
+    if (change && (change.previousValue?.getID?.() || change.previousValue) !== (this.event?.getID?.() || this.event)) {
+      this.totalsExpanded = false;
+    }
     if (changes['event'] || changes['selectedActivities'] || changes['unitSettings']) {
       this.rebuildTemplateState();
     }
@@ -264,6 +271,18 @@ export class EventSummaryComponent implements OnChanges {
     return this.heroStatsValue.map((statType) =>
       buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings, this.eventActivityTypesValue)
     );
+  }
+
+  get combinedTotals() {
+    return [DataDuration.type, DataDistance.type].map(type => ({
+      type,
+      text: resolvePrimaryUnitAwareDisplayStat(this.event.getStat(type), this.unitSettings, type, this.eventActivityTypesValue)?.text ?? 'Unavailable',
+    }));
+  }
+
+  toggleTotals(): void {
+    this.totalsExpanded = !this.totalsExpanded;
+    this.hapticsService.selection();
   }
 
   get comparisonTotalsHeading(): string {

@@ -954,15 +954,13 @@ The shared summary's `--summary-primary-info-padding-inline` and section header'
 hooks are set only by activity details; saved-route summaries and headers retain their default spacing.
 At tablet widths, activity details set `--summary-primary-info-metrics-order` to keep summary actions beside the
 identity and place the hero metrics below them, rather than creating a third header row.
-Saved benchmark comparisons with multiple activity recordings label the hero **Combined totals · N recordings**.
-The shared primary summary's optional `metricsHeading`/`metricsDescription` context groups this label, the existing
-canonical hero metrics, and always-visible explanatory text. Time and distance retain the persisted event totals
-across every recording, including overlapping recordings; source selection only changes the comparison views below.
-The count therefore follows all event activities, not the selected subset. Individual source time/distance values
-remain in the existing selectors. Ordinary activities, single-source records, and explicit sequential (`multi`) merges
-retain the original header layout. The context follows existing tablet/mobile metric ordering and wraps in both
-themes without an extra card, tooltip-only explanation, horizontal scrolling, or metric recalculation. No Training,
-storage, provider, or MCP contract changes.
+Saved benchmark comparisons with multiple recordings use device rows in the existing summary tabs. Each row
+reads the selected metric from its source activity. The reference menu lists selected recordings in event order.
+A chosen reference follows its recording ID across refreshes. Deselecting it or opening a different benchmark
+selects the first available recording. Differences use device minus reference in the user's preferred units.
+A single selected recording shows its readings alone. **Combined totals · N recordings** starts collapsed below
+the summary. Its duration and distance come from the saved parent event and include every recording, even when
+recordings overlap. Ordinary activities, single-source events and explicit sequential (`multi`) merges use the standard summary.
 The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to
 desktop width when the viewport narrows. The shared chart host then resizes to the available content width.
 
@@ -1046,9 +1044,8 @@ Expanded details remain below that overview. The same control keeps its state, A
 If only secondary statistics exist, they appear immediately. Missing/invalid values are omitted
 and recorded zero remains zero. `rr-metrics.ts` owns the common catalog; values and units remain Sports Lib's.
 Each selected activity is inspected separately; parent-event and multisport aggregates are never used for R–R.
-A local Recording selector preserves source identity across filtering. Two-source benchmarks use the shared stat
-delta formatter and card treatment, restricted to types valid in both sources. Explicit multisport merges and
-ordinary events have no R–R comparison deltas. Initialization and unchanged selections stay silent; accepted source
+Multisport activities offer a local Recording selector. Merged benchmarks use the same reference picker and signed
+device rows as the other categories, with secondary R–R metrics inside the disclosure. Initialization and unchanged selections stay silent; accepted source
 and category changes and the shared disclosure own one selection haptic. This summary does not inspect streams,
 start a worker, fetch originals, reparse, persist statistics or add backend reads. MCP metric projections, consent,
 catalog discovery and query/index contracts are unchanged; this is presentation of already-adopted saved metrics.

@@ -2548,8 +2548,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
-    expect(gettingStartedSection?.content).toContain('**Combined totals** in a saved benchmark comparison cover all its recordings');
-    expect(gettingStartedSection?.content).toContain('Selecting a recording changes the comparison view, not these header totals');
+    expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
+    expect(gettingStartedSection?.content).toContain('Expand **Combined totals** below the metrics');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
     expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');
