@@ -32,8 +32,8 @@ export async function connectionIncidentOwner(db: Firestore, tx: Transaction, ui
 }
 
 /** The caller has read the shared receipt in this transaction. Reserve only after all reads finish. */
-export function reserveTrainingConnectionIncident(db: Firestore, tx: Transaction, uid: string, incident: ConnectionIncident | undefined) {
-  if (incident) tx.set(db.doc(connectionStatePath(uid)), { expireAt: notificationExpiry(incident.observedAt), incidents: { [incident.service]: {
+export function reserveTrainingConnectionIncident(db: Firestore, tx: Transaction, uid: string, incident: ConnectionIncident | undefined, now: number) {
+  if (incident) tx.set(db.doc(connectionStatePath(uid)), { expireAt: notificationExpiry(now), incidents: { [incident.service]: {
     id: incident.id, observedAt: incident.observedAt, owner: 'training',
   } satisfies ConnectionReceipt } }, { merge: true });
 }

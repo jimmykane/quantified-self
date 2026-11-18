@@ -1,6 +1,6 @@
 import { notificationExpiry, trainingIssueExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
-import type { Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
 import { isPushId, isPushRegistration, isAutomaticPushOrigin, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
 import { trainingSyncNotificationPayload } from '../../../shared/training-sync-notifications';
@@ -65,8 +65,9 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
     const issueRef = db.doc(trainingIssuePath(uid, entry.issueId)), issue = await tx.get(issueRef);
     const state = readState(stateDoc.data() as State | undefined);
     if (issue.data()?.open) {
-      tx.update(issueRef, { expireAt: trainingIssueExpiry(now, entry.workoutLocalDate, issue.data()?.expireAt) });
-      reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
+      const expiry = trainingIssueExpiry(candidate.observedAt, entry.workoutLocalDate);
+      if ((issue.get('expireAt')?.toMillis() ?? 0) < expiry.getTime()) tx.update(issueRef, { expireAt: expiry });
+      reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident, now);
       // One connection incident can affect many workouts, including newly scheduled ones.
       // Retain alternatives only inside its original pending batch; never start a new batch for that incident.
       const pending = state.pending;
@@ -84,7 +85,7 @@ export async function observeTrainingNotification(uid: string, candidate: Traini
         ? [{ id: doc.id, generation: registration.generation, origin: registration.origin }] : [];
     });
     if (!targets.length) return;
-    reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident);
+    reserveTrainingConnectionIncident(db, tx, uid, entry.connectionIncident, now);
     const episode = randomUUID();
     if (state.pending && (state.pending.categoryRevision !== preference.revision || now > state.pending.dueAt + TRAINING_PUSH.batchExpiryMs)) {
       delete state.pending; delete state.dueAt; delete state.trainingDueAt;
@@ -110,11 +111,20 @@ export async function sendTrainingNotification(uid: string, deps: TrainingPushDe
   };
   const claim = await db.runTransaction(async tx => {
     const now = deps.now();
-    // The recursive account cleanup owns the state and its receipt descendants. Never recreate or leaf-delete this root.
-    if ((await getUserDeletionGuardStateInTransaction(db, tx, uid, now)).shouldSkip) return null;
+    if ((await getUserDeletionGuardStateInTransaction(db, tx, uid, now)).shouldSkip) {
+      // Remove this item from the shared queue while recursive deletion handles the account and its receipts.
+      const snapshot = await tx.get(ref);
+      if (snapshot.exists) tx.update(ref, { pending: FieldValue.delete(), dueAt: FieldValue.delete(), trainingDueAt: FieldValue.delete() });
+      return null;
+    }
     const [snapshot, pref] = await Promise.all([tx.get(ref), tx.get(db.doc(notificationPreferencePath(uid, 'training_sync')))]);
     const state = readState(snapshot.data() as State | undefined), batch = state.pending;
-    if (!batch || batch.dueAt > now) return null;
+    if (!batch) {
+      // A worker from before the rollout can claim the batch while leaving its new deadline behind.
+      if (state.dueAt !== undefined) tx.update(ref, { dueAt: FieldValue.delete() });
+      return null;
+    }
+    if (batch.dueAt > now) return null;
     const preference = readNotificationCategoryPreference(pref.data());
     const entries = config.enabled && preference?.enabled && preference.revision === batch.categoryRevision
       && now <= batch.dueAt + TRAINING_PUSH.batchExpiryMs
@@ -125,7 +135,7 @@ export async function sendTrainingNotification(uid: string, deps: TrainingPushDe
     if (!outcome) {
       const incidents = new Map(entries.flatMap(entry => entry.connectionIncident
         ? [[entry.connectionIncident.service, entry.connectionIncident] as const] : []));
-      for (const incident of incidents.values()) reserveTrainingConnectionIncident(db, tx, uid, incident);
+      for (const incident of incidents.values()) reserveTrainingConnectionIncident(db, tx, uid, incident, now);
     }
     tx.set(ref, { ...state, expireAt: notificationExpiry(deps.now()) });
     return { batch: { ...batch, entries }, outcome };

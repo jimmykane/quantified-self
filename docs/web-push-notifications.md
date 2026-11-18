@@ -28,24 +28,27 @@ connection and account deletion checks still apply before sending. An ambiguous 
 | Training attention receipts | At least 31 days, and through the workout date plus three days when later; shared issue receipts extend to the latest relevant workout |
 
 Sending still rejects logically expired notifications immediately. Firestore TTL deletion is asynchronous and does
-not delete subcollections, so Training issue descendants have their own TTL policy and timestamps ([Firestore TTL documentation](https://firebase.google.com/docs/firestore/ttl)). A durable
-`notificationAttemptedAtMs` on the existing history-import run prevents a retry from becoming a second notification
-after its temporary receipt is deleted. Old reconnect episodes cannot be revived after receipt cleanup. No new
-recurring cleanup job or notification collection is introduced.
+not delete subcollections, so Training issue descendants have their own TTL policy and timestamps.
+Each provider’s existing connection metadata retains one timestamp, `historyNotificationRunCreatedAtMs`.
+It records the creation time of the latest history run claimed for a notification, so even after receipt expiry,
+retrying that run or an older one stays silent. [Firestore TTL documentation](https://firebase.google.com/docs/firestore/ttl)
 
 ### Consolidation rollout (separate approval; local work does not deploy)
 
 1. Apply the updated monitoring bundle using the existing channel. Its existing category policies stop expecting
    the two retired schedulers; only the shared worker owns backlog/absence alerts.
-2. Retire `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications` in the deployed environment and
-   allow their in-flight invocations to finish before switching producers to the unified deadline field.
-3. Deploy the shared worker and affected producers/observers. Direct send handlers now require the existing VAPID
-   secret binding: `queueActivitySendNotification`, `queueTrainingSyncNotification` and `processSleepSyncTask`.
-   Other notification producer helpers also write expiry timestamps; include their existing owning Functions.
+2. Deploy the shared worker `sendActivitySyncNotifications` first. Keep both legacy schedulers running so
+   pending two-minute batches continue to drain while the writers switch to `dueAt`.
+3. Deploy the affected notification producers and observers, including the direct send handlers
+   `queueActivitySendNotification`, `queueTrainingSyncNotification` and `processSleepSyncTask` with the existing
+   VAPID binding. Include the history sender, self-test and existing Functions that write notification expiry timestamps.
+   Allow invocations from the previous producer revisions to finish before the final migration pass.
 4. Build Functions, then preview the one-time migration:
    `node functions/lib/functions/src/scripts/backfill-notification-retention.js --project=quantified-self-io`.
-   Review its counts, then run with `--apply`. It pages 100 documents at a time, touches only notification paths,
-   preserves history-run attempt fences, migrates legacy due fields, and is safe to repeat. It prints counts only.
+   Review its counts, then run with `--apply`. It pages 100 documents at a time, sets notification expiries,
+   preserves the history timestamp on each existing provider connection, migrates legacy deadlines and prints counts only. Repeat the preview
+   to verify zero remaining changes, then retire `sendActivityDeliveryNotifications` and `sendTrainingSyncNotifications`.
+   Both versions claim batches transactionally; the shared worker also clears leftover deadlines for completed batches.
 5. Deploy `firestore.indexes.json` to activate `expireAt` TTL for `pushState` and `issues`; verify both policies are
    active. This is required for automatic deletion. The emulator verifies Timestamp writes/migration, not the cloud
    TTL service. Existing `dueAt` indexing remains; legacy deadline indexes can remain unused during migration.
@@ -54,7 +57,7 @@ recurring cleanup job or notification collection is introduced.
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced covers newly saved recent main sleeps; Connection issues covers new reconnect-required episodes. Both share the activity sender's existing minute sweep. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced sends directly for newly saved recent main sleeps. Connection issues groups new reconnect-required episodes in the shared minute worker. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -74,8 +77,7 @@ reuse an existing one. Exact single-activity links, grouped Activities links and
 Declarative platforms continue to route their existing `navigate` URL through the browser.
 
 This payload change requires redeploying the affected senders: `sendTestPushNotification`, `sendHistoryImportNotification`,
-`sendActivitySyncNotifications`, `sendActivitySyncNotifications` and `sendActivitySyncNotifications`.
-The Training sender still requires its separate first-deployment prerequisites below if not already deployed.
+`sendActivitySyncNotifications`, `queueActivitySendNotification`, `queueTrainingSyncNotification` and `processSleepSyncTask`.
 Routing itself needs no flag, Rules, index or service-worker change. Already delivered notifications retain their old
 payload. Monitoring coverage is unchanged: transport, queues, rates, schedules and outcome labels are unchanged.
 Unit tests cover all payload families on both origins; real-device routing must still be verified with a fresh alert,
@@ -218,7 +220,7 @@ Ordinary workout errors remain separate. Existing activity-delivery validation a
 disconnect/reconnect; explicitly requested manual send results and uncertain-upload reconciliation retain their
 existing meaning and are not replaced by this generic connection warning.
 
-The shared `sendActivitySyncNotifications` dueAt query handles connection, activity and sleep leaves with no new
+The shared `sendActivitySyncNotifications` dueAt query handles grouped connection alerts with no extra
 scheduled Function, idle query, secret, index or historical scan. Connection configuration loads once per active
 sweep, only when a connection leaf is due. The sender claims before transport, never replays an ambiguous send, and
 cancels reconnected/disconnected accounts, changed preferences/devices, or groups more than ten minutes overdue.
@@ -264,9 +266,8 @@ and at most one pending alert. Dates/end times advance monotonically across prov
 admissions. This prevents duplicate nights across Garmin/Suunto/COROS, midnight boundaries and recreated documents.
 Overlapping sleep intervals are suppressed even if a delayed provider report uses a different calendar date and
 arrives after the cooldown. Disabled categories and existing receipts stop admission before device/session reads.
-Cancelled/failed alerts retain the receipt. The successful sleep-import handler sends this directly after persistence; the legacy `sendActivitySyncNotifications` query can drain older
-leaf alongside activity batches: there is no new Function, scheduler, idle query, collection-group index, secret or
-per-user polling loop. Sleep configuration and the signing key are loaded only for an eligible import notification, once per handler.
+Cancelled and failed alerts retain the receipt. The Sleep import handler sends the alert it admitted after persistence.
+The shared worker drains any alerts already scheduled by the previous version. Both use the existing VAPID key.
 
 The sender clears pending work and claims before transport, then rechecks consent, account/session/connection state
 and each captured device generation. Claims are deliberately not replayed after ambiguous transport failure or a
@@ -308,9 +309,9 @@ Verify the shared `pushState.dueAt` index is ready, then deploy the Functions:
 npm run firebase -- deploy --only functions:queueTrainingSyncNotification,functions:sendActivitySyncNotifications --project quantified-self-io
 ```
 
-Deploying the scheduled Function starts its minute sweeps even while the sender flag is false. Admission
-binds no secret; only the sender binds the existing VAPID key. Release the frontend and apply the updated monitoring
-bundle using the existing verified channel, then verify the new scheduler heartbeat and real devices before enabling
+The shared worker runs each minute, including while the Training flag is false. Both the shared worker and the
+Training observer bind the VAPID key because the observer sends explicit Training results directly. Release the frontend
+and apply the monitoring bundle using the existing channel, then verify the shared heartbeat and real devices before enabling
 the flag. The bundle covers fixed outcomes, both runtimes, overdue observations and idle/disabled sweeps. A never-seen
 heartbeat cannot bootstrap an absence alert: verify its initial series after deployment. Source tests are not live
 readback evidence. Provider queues and their retry/dead-letter monitoring remain unchanged.
@@ -576,9 +577,9 @@ npm run firebase -- deploy --only firestore:rules,firestore:indexes
 npm run firebase -- deploy --only functions:activitySendCommand,functions:projectActivitySendDelivery,functions:queueActivitySendNotification,functions:queueAutomaticDeliveryNotification,functions:sendActivitySyncNotifications
 ```
 
-Both admission triggers use 256 MiB, 60 seconds, retry enabled, concurrency ten, max two and min zero in europe-west2;
-neither binds a signing secret. The delivery scheduler uses 256 MiB, 120 seconds, concurrency/max one, min zero,
-zero Scheduler retries and the existing `WEB_PUSH_VAPID_KEYPAIR`. Isolated loading/resource checks cover all three.
+Both delivery triggers use 256 MiB, a 60-second timeout, retry enabled, concurrency ten, max two and min zero in
+europe-west2. The manual result trigger and the shared minute worker bind `WEB_PUSH_VAPID_KEYPAIR`.
+The automatic failure trigger only groups work.
 Release the verified frontend through the existing separately authorized workflow. Both deployed sites support delivery alerts.
 Apply/read back the existing monitoring bundle on its existing channel before enabling the delivery switch and
 checking an authorized production batch. Rollback sets only `web_push_activity_delivery_enabled=false`; it does not
@@ -625,25 +626,25 @@ The bundle retains the self-test metric/policy and adds `sendhistoryimportnotifi
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 
-The shared worker records `failureStage` (due query, account processing or backlog probe) and an allowlisted
+The shared worker records `failureStage` (initialization, due query, account processing or backlog probe) and an allowlisted
 `errorCode`. It preserves the first rejection's safe code while awaiting the bounded fan-out, so one failing category
 does not strand other categories. Configuration is lazy per category and is not fetched on idle sweeps. Direct
 handlers keep fixed category/phase/outcome markers. Raw errors, keys, account/device identifiers, endpoints and
 payloads are never logged. Category policies cover their admission/send errors; one shared policy covers worker
 runtime, backlog and missing heartbeats.
 
-Deploy `sendActivitySyncNotifications`, `sendActivitySyncNotifications` and `sendActivitySyncNotifications`
-after separate approval to activate these configuration diagnostics. No frontend release is required.
+A failed template read logs `[WebPushConfiguration]` once per active category per invocation, with a fixed
+failure classification and elapsed time. These diagnostics ship in the affected backend handlers.
 
 The activity sender adds three versioned metrics and one policy to the same owned bundle: fixed outcomes/phase
 (including admission failures in existing Gen 1/Gen 2 import workers), completed-sweep heartbeat, and positive oldest-due
 observations at least three minutes overdue. It alerts on three real admission/send/preparation failures or native 5xx
 in 15 minutes, two overdue observations in five minutes, or no completed sweep for 15 minutes. Disabled and idle sweeps
-emit heartbeats; failures report unknown health, never healthy zero. The post-sweep probe reads only the oldest due
-field. Verify an initial heartbeat metric series during activation: absence policies cannot detect a never-seen series.
+emit heartbeats. An empty first query establishes zero backlog. After processing due work, the worker reads only
+the oldest remaining deadline. A failed sweep emits its failure instead of a heartbeat. Verify an initial heartbeat metric series during activation: absence policies cannot detect a never-seen series.
 Expected histories, duplicates, category/lifecycle skips, rate caps and expired registrations are not service failures.
-With Activity delivery included, the combined bundle has eight metrics, four policies and ten charts; it reuses the
-existing verified channel. Delivery has its own fixed outcome, overdue and idle/disabled heartbeat coverage.
+The combined bundle has ten metrics, eight policies and twelve charts on the existing verified channel.
+Delivery has category-specific outcome monitoring and shares the worker’s backlog and heartbeat alerts.
 
 History, activity-sync and activity-delivery sender coverage is **covered in source** by the extended bundle and offline ownership/reapplication/privacy tests. Live activation and readback are **deferred** to [#1011](https://github.com/jimmykane/quantified-self/issues/1011); passing these tests does not establish live coverage. Existing import/provider processing coverage is **unchanged** because its schedules, leases, retries and outcomes are unchanged; notification invalidation uses the existing cancelled outcome and does not change alert filters or thresholds. New post-persistence admission failures are covered by the activity push bundle. Foundation physical-device verification remains tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
 

@@ -200,8 +200,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('manual history admission 
     const state = (await mocks.db.doc('users/owner/pushState/historyCompletion').get()).data();
     expect(state?.providers[run.serviceName]).toMatchObject({ runId: run.id, outcome: 'accepted' });
     expect(state?.attempts).toHaveLength(1);
-    await sendHistoryCompletion(run.id, { ...run, revision: run.revision + 1 }, deps);
+    await mocks.db.doc('users/owner/pushState/historyCompletion').delete();
+    const retried = { ...run, revision: run.revision + 1 };
+    await mocks.db.doc(`connectionHistoryImports/${run.id}`).update({ revision: retried.revision });
+    await sendHistoryCompletion(run.id, retried, deps);
     expect(deps.send).toHaveBeenCalledTimes(1);
+    expect((await mocks.db.doc('users/owner/pushState/historyCompletion').get()).exists).toBe(false);
   }, 30_000);
   it('enforces the two-alert rolling cap across concurrent providers in Firestore', async () => {
     const batches = [];

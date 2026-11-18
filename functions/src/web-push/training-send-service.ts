@@ -83,7 +83,7 @@ async function memberResult(db: Firestore, tx: Transaction, uid: string, state: 
 
 /** At most two masked lookups on existing terminal status writes; intermediate retries cost no extra reads. */
 export async function observeTrainingSend(uid: string, raw: unknown,
-  deps: { db: Firestore; now(): number; sendReady?(id: string): Promise<void> }): Promise<boolean> {
+  deps: { db: Firestore; now(): number; sendReady(id: string): Promise<void> }): Promise<boolean> {
   let status: ReturnType<typeof parseTrainingDeliveryStatusV1>;
   try { status = parseTrainingDeliveryStatusV1(raw); } catch { return false; }
   if (trainingSendTerminal(status.status) === 'waiting') return false;
@@ -107,7 +107,7 @@ export async function observeTrainingSend(uid: string, raw: unknown,
         ? await authority(db, tx, uid, state) : null;
       const next = live ? await memberResult(db, tx, uid, state, status.id, member) : { result: 'cancelled' as const, observedAt: 0 };
       if (next.result === 'cancelled') { tx.update(candidate.ref, {
-        finished: true, dueAt: FieldValue.delete(), expireAt: trainingResultExpiry(state.createdAt),
+        finished: true, dueAt: FieldValue.delete(), readyAt: FieldValue.delete(), expireAt: trainingResultExpiry(state.createdAt),
       }); return false; }
       const count = (result: TrainingSendMember['result']) => Number(next.result === result) - Number(member.result === result);
       const remaining = state.remaining + count('waiting'), sent = state.sent + count('sent'), failed = state.failed + count('failed');
@@ -116,9 +116,9 @@ export async function observeTrainingSend(uid: string, raw: unknown,
         ...(remaining === 0 && sent + failed === 0 ? { finished: true } : {}),
         expireAt: trainingResultExpiry(state.createdAt), dueAt: FieldValue.delete(),
         readyAt: remaining === 0 && sent + failed > 0 ? state.readyAt ?? state.dueAt ?? deps.now() : FieldValue.delete() });
-      return { ready: remaining === 0 && sent + failed > 0 };
+      return remaining === 0 && sent + failed > 0 ? 'ready' : true;
     });
-    if (observed && typeof observed === 'object' && observed.ready) await deps.sendReady?.(candidate.id);
+    if (observed === 'ready') await deps.sendReady(candidate.id);
     covered = !!observed || covered;
   }
   return covered;
@@ -144,7 +144,8 @@ export async function sendTrainingSendResult(uid: string, id: string, deps: Acti
     const results = live && entries.length === state.total
       ? await Promise.all(entries.map(([key, member]) => memberResult(db, tx, uid, state, key, member))) : [];
     if (!results.some(row => row.result === 'cancelled') && results.some(row => row.result === 'waiting')) {
-      tx.update(ref, { dueAt: FieldValue.delete() }); return null;
+      // A provider retry reopened the result. Start the delivery window at its next terminal status.
+      tx.update(ref, { dueAt: FieldValue.delete(), readyAt: FieldValue.delete() }); return null;
     }
     const sent = results.filter(row => row.result === 'sent').length, failed = results.filter(row => row.result === 'failed').length;
     const claimId = randomUUID();

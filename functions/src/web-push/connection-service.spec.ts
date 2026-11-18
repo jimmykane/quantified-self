@@ -47,7 +47,7 @@ function harness() {
     admit: (value = incident) => admitConnectionNotification('owner', value, deps), send: () => sendConnectionNotification('owner', deps),
     preference: (enabled: boolean, revision: number) => rows.set('users/owner/notificationPreferences/connection_attention', { schemaVersion: 1, enabled, revision }),
     training: (value = incident) => db.runTransaction(async tx => {
-      if (await connectionIncidentOwner(db, tx, 'owner', value) !== 'connection') reserveTrainingConnectionIncident(db, tx, 'owner', value);
+      if (await connectionIncidentOwner(db, tx, 'owner', value) !== 'connection') reserveTrainingConnectionIncident(db, tx, 'owner', value, clock);
     }),
   };
 }

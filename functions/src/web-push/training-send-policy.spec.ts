@@ -42,6 +42,6 @@ describe('Training send policy', () => {
     const raw = { schemaVersion: 1, id: 'a'.repeat(64), workoutId: 'w', planId: null, provider: 'garmin', status,
       differsFromQS: true, hasRemoteCopy: false, timeZone: 'UTC', approvalDigest: null, issues: [],
       lastAttemptAtMs: null, lastAcceptedAtMs: null, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 1 };
-    await expect(observeTrainingSend('owner', raw, { db: {} as never, now: () => 1 })).resolves.toBe(false);
+    await expect(observeTrainingSend('owner', raw, { db: {} as never, now: () => 1, sendReady: vi.fn() })).resolves.toBe(false);
   });
 });

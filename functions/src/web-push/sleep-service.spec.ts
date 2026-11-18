@@ -88,6 +88,15 @@ describe('sleep-ready notifications', () => {
     await Promise.all([h.admit(), h.admit(suunto), h.admit(coros)]); await h.send();
     h.advance(SLEEP_PUSH.cooldownMs); await h.admit(suunto); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
   });
+  it('only claims the sleep admitted by this import', async () => {
+    const h = harness();
+    const admittedId = await h.admit();
+    expect(admittedId).toBeTruthy();
+    await sendSleepNotification('owner', h.deps, 'superseded');
+    expect(h.deps.send).not.toHaveBeenCalled();
+    await sendSleepNotification('owner', h.deps, admittedId);
+    expect(h.deps.send).toHaveBeenCalledOnce();
+  });
   it('allows the following night while suppressing a second night admitted too soon', async () => {
     const h = harness(); await h.admit(); await h.send(); h.advance(18 * 3600000);
     await h.admit(h.seed()); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();

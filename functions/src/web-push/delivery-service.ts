@@ -1,6 +1,6 @@
 import { notificationExpiry } from './retention';
 import { randomUUID } from 'node:crypto';
-import type { Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { notificationPreferencePath, readNotificationCategoryPreference } from '../../../shared/notification-categories';
 import { isPushId, isPushRegistration, isAutomaticPushOrigin, WEB_PUSH_ORIGINS, type PushRegistration } from '../../../shared/web-push';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -123,7 +123,12 @@ export async function sendDeliveryNotification(uid: string, deps: DeliveryPushDe
     const state = readState(snapshot.data() as State | undefined); const batch = state.pending;
     // This server-owned state is a leaf by design; Rules deny all client writes, including descendants.
     if (guard.shouldSkip) { if (snapshot.exists) tx.delete(ref); return null; }
-    if (!batch || batch.deliveryDueAt > now) return null;
+    if (!batch) {
+      // A worker from before the rollout can claim the batch while leaving its new deadline behind.
+      if (state.dueAt !== undefined) tx.update(ref, { dueAt: FieldValue.delete() });
+      return null;
+    }
+    if (batch.deliveryDueAt > now) return null;
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
     const entries = config.enabled && preference?.enabled && preference.revision === batch.categoryRevision
       && now <= batch.deliveryDueAt + DELIVERY_PUSH.batchExpiryMs

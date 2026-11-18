@@ -161,9 +161,6 @@ async function saveRun(run: ConnectionHistoryRun, owner: string): Promise<{ run:
     // Preserve their private evidence rather than replacing it with our older snapshot.
     if (current.data()?.garminHealthBackfillCutoffs) checkpoint.garminHealthBackfillCutoffs = current.data()!.garminHealthBackfillCutoffs;
     else delete checkpoint.garminHealthBackfillCutoffs;
-    // Notification claims/migration can commit while the coordinator holds an older snapshot.
-    if (current.data()?.notificationAttemptedAtMs !== undefined) checkpoint.notificationAttemptedAtMs = current.data()!.notificationAttemptedAtMs;
-    else delete checkpoint.notificationAttemptedAtMs;
     let currentConnection = true;
     try { await assertHistoryConnectionCurrent(checkpoint, tx); }
     catch (error) { if (!(error instanceof HistoryLifecycleChangedError)) throw error; currentConnection = false; }

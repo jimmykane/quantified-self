@@ -10,11 +10,11 @@ import { sendTrainingSendResult } from './training-send-service';
 import { sendDeliveryNotification } from './delivery-service';
 import { sendTrainingNotification } from './training-service';
 import { automaticPushConfiguration } from './history-consent';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), limit: vi.fn(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), warn: vi.fn(), limit: vi.fn(), select: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGroup: () => ({ where: () => ({ orderBy: () => ({
   limit: (limit: number) => { mocks.limit(limit); return { select: (...fields: string[]) => { mocks.select(fields); return { get: mocks.get }; } }; },
 }) }) }) }) }));
-vi.mock('firebase-functions/logger', () => ({ info: mocks.log, error: mocks.log }));
+vi.mock('firebase-functions/logger', () => ({ info: mocks.log, error: mocks.log, warn: mocks.warn }));
 vi.mock('./history-consent', () => ({ automaticPushConfiguration: vi.fn() }));
 vi.mock('./delivery-service', () => ({ sendDeliveryNotification: vi.fn() }));
 vi.mock('./training-service', () => ({ sendTrainingNotification: vi.fn() }));
@@ -33,11 +33,11 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 const run = () => sendActivitySyncNotifications.run({} as never);
 describe('one shared notification worker', () => {
-  it('does only two masked queue queries when idle, without configuration or signing-key reads', async () => {
+  it('uses one masked queue query when idle, without configuration or signing-key reads', async () => {
     const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value');
     await run();
     expect(automaticPushConfiguration).not.toHaveBeenCalled(); expect(secret).not.toHaveBeenCalled();
-    expect(mocks.limit.mock.calls).toEqual([[25], [1]]); expect(mocks.select.mock.calls).toEqual([[['dueAt']], [['dueAt']]]);
+    expect(mocks.limit.mock.calls).toEqual([[25]]); expect(mocks.select.mock.calls).toEqual([[['dueAt']]]);
     expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPushSweep]', { telemetryVersion: 1, oldestDueAgeSeconds: 0 });
   });
   it.each([
@@ -63,6 +63,17 @@ describe('one shared notification worker', () => {
     });
     expect(mocks.get).toHaveBeenCalledTimes(2);
   });
+  it('retains safe Remote Config diagnostics once per affected category', async () => {
+    mocks.get.mockResolvedValueOnce({ docs: ['one', 'two'].map(uid => ({ ref: { path: `users/${uid}/pushState/activityDelivery` } })) });
+    vi.mocked(automaticPushConfiguration).mockRejectedValueOnce(Object.assign(
+      new Error('Unexpected response with status: 502 and body: private-canary'), { code: 'remote-config/unknown-error' }));
+    vi.mocked(sendDeliveryNotification).mockImplementation(async (_uid, deps) => { await deps.configuration(); });
+    await expect(run()).rejects.toThrow('Notification sweep failed.');
+    expect(mocks.warn).toHaveBeenCalledExactlyOnceWith('[WebPushConfiguration]', expect.objectContaining({
+      category: 'delivery', errorCode: 'remote-config/unknown-error', configurationFailureKind: 'non_json_response', upstreamHttpStatus: 502,
+    }));
+    expect(JSON.stringify(mocks.warn.mock.calls)).not.toContain('private-canary');
+  });
   it('does not read the signing key for disabled work', async () => {
     const secret = vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value');
     mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/activitySync' } }] });
@@ -78,7 +89,7 @@ describe('one shared notification worker', () => {
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private-canary');
   });
   it.each(['due_query', 'backlog_probe'])('classifies a failed %s without exposing raw errors', async stage => {
-    if (stage === 'backlog_probe') mocks.get.mockResolvedValueOnce({ empty: true, docs: [] });
+    if (stage === 'backlog_probe') mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/activitySync' } }] });
     mocks.get.mockRejectedValueOnce(Object.assign(new Error('private-canary'), { code: 4 }));
     await expect(run()).rejects.toThrow('Notification sweep failed.');
     expect(mocks.log).toHaveBeenCalledWith('[ActivitySyncPush]', { telemetryVersion: 1, phase: 'sweep', outcome: 'failed', failureStage: stage, errorCode: 'deadline-exceeded' });

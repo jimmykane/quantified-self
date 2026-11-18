@@ -13,10 +13,9 @@ describe('notification retention policy', () => {
     expect(notificationExpiry(now).getTime()).toBeGreaterThan(now + 30 * 86400000);
     expect(trainingResultExpiry(now).getTime()).toBe(now + 2 * 86400000);
   });
-  it('does not shorten a shared issue fence when later arrivals refer to an earlier workout', () => {
+  it('keeps an upcoming workout receipt through its scheduled date', () => {
     const now = Date.UTC(2026, 10, 18), future = trainingIssueExpiry(now, '2027-11-18');
     expect(future.getTime()).toBeGreaterThan(Date.UTC(2027, 10, 19));
-    expect(trainingIssueExpiry(now, '2026-11-19', future)).toEqual(future);
     expect(trainingIssueExpiry(now, 'invalid').getTime()).toBeGreaterThan(now);
   });
 });

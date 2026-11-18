@@ -1,4 +1,5 @@
 import { FieldPath, FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { supportsHistoryNotification } from '../../../shared/history-import-notifications';
 import { notificationExpiry, trainingIssueExpiry, trainingResultExpiry } from '../web-push/retention';
 
 const roots = /^(activitySync|activityDelivery|trainingSync|sleepReady|connectionAttention|historyCompletion|testRateLimit|trainingSend_[a-zA-Z0-9_-]+)$/;
@@ -18,37 +19,44 @@ export async function backfillNotificationRetention(db: Firestore, apply = false
         if (!issue && (!root || !roots.test(root[2]))) continue;
         totals.inspected++;
         const changed = await db.runTransaction(async tx => {
-          const current = await tx.get(row.ref), data = current.data();
+          const [current] = await tx.getAll(row.ref, { fieldMask: [
+            'expireAt', 'createdAt', 'providers', 'open', 'deliveryDueAt', 'trainingDueAt', 'pending.deliveryDueAt', 'pending.dueAt',
+          ] });
+          const data = current.data();
           if (!data) return false;
           const patch: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> = {};
-          const history: FirebaseFirestore.DocumentSnapshot[] = [];
+          const watermarks = new Map<FirebaseFirestore.DocumentReference, number>();
+          if (root?.[2] === 'historyCompletion') {
+            // A post-upgrade claim can add TTL while other providers still have legacy receipts.
+            for (const [service, value] of Object.entries(data.providers ?? {})) {
+              const createdAt = (value as { createdAt?: number } | null)?.createdAt;
+              if (!supportsHistoryNotification(service) || typeof createdAt !== 'number' || !Number.isSafeInteger(createdAt)) continue;
+              const ref = db.doc(`users/${root[1]}/meta/${service}`);
+              const [meta] = await tx.getAll(ref, { fieldMask: ['historyNotificationRunCreatedAtMs'] });
+              if (meta.exists && (meta.get('historyNotificationRunCreatedAtMs') ?? -1) < createdAt) watermarks.set(ref, createdAt);
+            }
+          }
           if (!data.expireAt) {
-            if (issue) {
+            if (issue && data.open === true) {
               const ledger = await tx.get(db.doc(`users/${issue[1]}/trainingDeliveryLedger/${issue[2]}`));
               const workoutId = ledger.get('workoutId');
               const workout = typeof workoutId === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(workoutId)
                 ? await tx.get(db.doc(`users/${issue[1]}/scheduledWorkouts/${workoutId}`)) : undefined;
               patch.expireAt = trainingIssueExpiry(now, workout?.get('localDate') ?? new Date(now).toISOString().slice(0, 10));
             } else {
-              patch.expireAt = root![2].startsWith('trainingSend_') && Number.isSafeInteger(data.createdAt)
+              patch.expireAt = root?.[2].startsWith('trainingSend_') && Number.isSafeInteger(data.createdAt)
                 ? trainingResultExpiry(data.createdAt) : notificationExpiry(now);
-              if (root![2] === 'historyCompletion') {
-                const ids = Object.values(data.providers ?? {}).map(value => (value as { runId?: string }).runId)
-                  .filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id));
-                if (ids.length) history.push(...await tx.getAll(...ids.slice(0, 3).map(id => db.doc(`connectionHistoryImports/${id}`))));
-              }
             }
           }
           // Existing queued records join the same dueAt index before their old schedules are retired.
           const legacyDue = data.deliveryDueAt ?? data.trainingDueAt;
           if (Number.isFinite(legacyDue) && data.pending) patch.dueAt = legacyDue;
           for (const field of ['deliveryDueAt', 'trainingDueAt']) if (field in data) patch[field] = FieldValue.delete();
-          if (!Object.keys(patch).length) return false;
+          const updateRoot = Object.keys(patch).length > 0;
+          if (!updateRoot && !watermarks.size) return false;
           if (apply) {
-            for (const run of history) if (run.exists && run.get('userID') === root![1] && run.get('notificationAttemptedAtMs') === undefined) {
-              tx.update(run.ref, { notificationAttemptedAtMs: now });
-            }
-            tx.update(row.ref, patch);
+            for (const [ref, createdAt] of watermarks) tx.update(ref, { historyNotificationRunCreatedAtMs: createdAt });
+            if (updateRoot) tx.update(row.ref, patch);
           }
           return true;
         });

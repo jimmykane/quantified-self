@@ -39,22 +39,22 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
   if (!config.enabled) return;
   const runRef = db.doc(`connectionHistoryImports/${runId}`);
   const stateRef = db.doc(`users/${expected.userID}/pushState/historyCompletion`);
+  const metaRef = db.doc(`users/${expected.userID}/meta/${expected.serviceName}`);
   const consent = expected.notification!;
   const { origin, categoryRevision, ...target } = consent;
   if (!isAutomaticPushOrigin(origin) || !isHistoryNotificationTarget(target)
     || !Number.isSafeInteger(categoryRevision) || categoryRevision < 0) return;
   const registrationRef = db.doc(`users/${expected.userID}/pushSubscriptions/${consent.installationId}`);
-  const current = async (tx: Transaction, attemptedAt?: number) => {
+  const current = async (tx: Transaction, claimed = false) => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, expected.userID);
     const [snapshot, registrationSnapshot, metaSnapshot, preferenceSnapshot] = await Promise.all([
-      tx.get(runRef), tx.get(registrationRef), tx.get(db.doc(`users/${expected.userID}/meta/${expected.serviceName}`)),
+      tx.get(runRef), tx.get(registrationRef), tx.get(metaRef),
       tx.get(db.doc(notificationPreferencePath(expected.userID, 'history_import'))),
     ]);
     const run = snapshot.data() as ConnectionHistoryRun | undefined;
     const registration = registrationSnapshot.data(); const meta = metaSnapshot.data();
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
     if (guard.shouldSkip || !run || run.userID !== expected.userID || run.id !== runId
-      || run.notificationAttemptedAtMs !== attemptedAt
       || !preference?.enabled || preference.revision !== categoryRevision || run.notification?.categoryRevision !== categoryRevision
       || run.revision !== expected.revision || run.dateCreated !== expected.dateCreated
       || run.serviceName !== expected.serviceName || run.connectionGeneration !== expected.connectionGeneration
@@ -65,6 +65,9 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
       || meta.connectionHistoryImport?.runId !== runId || meta.connectionHistoryImport?.active !== false
       || !isPushRegistration(registration) || registration.origin !== origin
       || registration.generation !== consent.generation || registration.vapidPublicKey !== config.publicKey) return null;
+    const lastCreatedAt = meta.historyNotificationRunCreatedAtMs ?? -1;
+    if (!Number.isSafeInteger(lastCreatedAt) || !Number.isSafeInteger(run.dateCreated)
+      || (claimed ? lastCreatedAt !== run.dateCreated : lastCreatedAt >= run.dateCreated)) return null;
     return { run, registration };
   };
   const claim = await db.runTransaction(async tx => {
@@ -78,17 +81,18 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     const limited = attempts.length >= 2;
     // Store suppression too: replaying the same run after the cap expires must not send it.
     const receipt: Receipt = { runId, createdAt: expected.dateCreated, attemptedAt: now, outcome: limited ? 'limited' : 'claimed' };
-    tx.update(runRef, { notificationAttemptedAtMs: now });
+    // The provider watermark also fences older runs after their temporary receipts expire.
+    tx.update(metaRef, { historyNotificationRunCreatedAtMs: expected.dateCreated });
     tx.set(stateRef, { expireAt: notificationExpiry(now), attempts: limited ? attempts : [...attempts, now],
       providers: { ...state?.providers, [expected.serviceName]: receipt } });
-    return { ...live, limited, attemptedAt: now };
+    return { ...live, limited };
   });
   if (!claim) return;
   if (claim.limited) { deps.outcome('limited'); return; }
   let outcome: HistoryPushOutcome = 'cancelled';
   // A replacement registration, connection, run or deletion can win while the claim commits.
   const ready = await db.runTransaction(async tx => {
-    const live = await current(tx, claim.attemptedAt);
+    const live = await current(tx, true);
     const state = (await tx.get(stateRef)).data() as HistoryPushState | undefined;
     return !!live && state?.providers?.[expected.serviceName]?.runId === runId
       && state.providers[expected.serviceName].outcome === 'claimed';

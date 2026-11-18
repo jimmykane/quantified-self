@@ -158,15 +158,6 @@ describe('durable history coordinator', () => {
     expect(saved().garminHealthBackfillCutoffs).toEqual(cutoffs);
     expect(mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionHistoryImport.garminHealthBackfillCutoffs).toBeUndefined();
   });
-  it('preserves a notification attempt fence written while the coordinator holds an older snapshot', async () => {
-    mocks.execute.mockImplementationOnce(async () => {
-      mocks.rows.get(path()).notificationAttemptedAtMs = now;
-      return { count: 0, nextStartMs: now + 1000, nextPage: 1 };
-    });
-    await processConnectionHistoryRun(run.id, '0');
-    expect(saved().notificationAttemptedAtMs).toBe(now);
-    expect(mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionHistoryImport.notificationAttemptedAtMs).toBeUndefined();
-  });
   it('saves the same checkpoint when Firestore retries the completion transaction', async () => {
     mocks.replayFinalCommit = true;
     await processConnectionHistoryRun(run.id, '0');

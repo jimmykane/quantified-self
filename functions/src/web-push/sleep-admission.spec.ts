@@ -11,7 +11,7 @@ vi.mock('firebase-admin/remote-config', () => ({ getRemoteConfig: () => ({ getTe
 vi.mock('firebase-functions/logger', () => ({ error: mocks.error }));
 vi.mock('../connection-history/context', () => ({ currentHistoryExecution: mocks.history }));
 vi.mock('./sleep-service', () => ({ admitSleepNotification: vi.fn(), sendSleepNotification: vi.fn() }));
-beforeEach(() => { vi.clearAllMocks(); mocks.history.mockReturnValue(undefined); vi.mocked(admitSleepNotification).mockResolvedValue(); vi.mocked(sendSleepNotification).mockResolvedValue(); });
+beforeEach(() => { vi.clearAllMocks(); mocks.history.mockReturnValue(undefined); vi.mocked(admitSleepNotification).mockResolvedValue('claim'); vi.mocked(sendSleepNotification).mockResolvedValue(); });
 function input() {
   const now = Date.now();
   const queue = { id: 'queue', type: 'garmin_push', sleepNotificationOrigin: 'live', dateCreated: now } as SleepSyncQueueItemInterface;
@@ -36,8 +36,14 @@ describe('post-persistence sleep admission', () => {
     const { queue, session } = input();
     await notifyNewSleepAfterPersistence('owner', queue, [{ ...session, id: 'older', endTimeMs: session.endTimeMs - 3600000 }, session]);
     expect(admitSleepNotification).toHaveBeenCalledOnce();
-    expect(sendSleepNotification).toHaveBeenCalledOnce();
+    expect(sendSleepNotification).toHaveBeenCalledExactlyOnceWith('owner', expect.anything(), 'claim');
     expect(admitSleepNotification).toHaveBeenCalledWith('owner', expect.objectContaining({ sessionId: 'canonical' }), queue, expect.anything());
+  });
+  it('skips the send transaction when the import did not admit a notification', async () => {
+    const { queue, session } = input();
+    vi.mocked(admitSleepNotification).mockResolvedValueOnce(undefined);
+    await notifyNewSleepAfterPersistence('owner', queue, [session]);
+    expect(sendSleepNotification).not.toHaveBeenCalled();
   });
   it('keeps the successful import successful if notification preparation fails', async () => {
     const { queue, session } = input(); vi.mocked(admitSleepNotification).mockRejectedValue(new Error('private-canary'));

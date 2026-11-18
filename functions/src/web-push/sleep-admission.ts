@@ -17,7 +17,7 @@ export async function notifyNewSleepAfterPersistence(uid: string, queue: SleepSy
   try {
     // One operation per queue, even when polling returns many nights or several provider fragments.
     const deps = pushDependencies('sleep', getFirestore());
-    await admitSleepNotification(uid, candidates[0], queue, deps);
-    await sendSleepNotification(uid, deps);
+    const admittedId = await admitSleepNotification(uid, candidates[0], queue, deps);
+    if (admittedId) await sendSleepNotification(uid, deps, admittedId);
   } catch { logger.error('[SleepSyncPush]', { telemetryVersion: 1, phase: 'admission', outcome: 'failed' }); }
 }

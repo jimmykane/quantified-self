@@ -53,9 +53,26 @@ function harness() {
 describe('history completion notification policy', () => {
   it('cannot replay an already-attempted run after temporary notification receipts are deleted', async () => {
     const h = harness(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
-    expect(h.rows.get(`connectionHistoryImports/${runId}`).notificationAttemptedAtMs).toBe(now);
+    expect(h.rows.get(`users/owner/meta/${h.run.serviceName}`).historyNotificationRunCreatedAtMs).toBe(h.run.dateCreated);
     h.rows.delete('users/owner/pushState/historyCompletion');
     await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
+  });
+  it('keeps superseded imports silent after TTL and allows a newer consented run', async () => {
+    const h = harness();
+    await h.send();
+    h.rows.delete('users/owner/pushState/historyCompletion');
+    const meta = h.rows.get(`users/owner/meta/${h.run.serviceName}`);
+    const retry = { ...h.run, id, dateCreated: h.run.dateCreated - 1 };
+    meta.connectionHistoryImport = historyProjection(retry);
+    h.rows.set(`connectionHistoryImports/${id}`, retry);
+    await sendHistoryCompletion(id, retry, h.deps);
+    expect(h.deps.send).toHaveBeenCalledOnce();
+
+    const newer = { ...h.run, id: generation, dateCreated: h.run.dateCreated + 1 };
+    meta.connectionHistoryImport = historyProjection(newer);
+    h.rows.set(`connectionHistoryImports/${generation}`, newer);
+    await sendHistoryCompletion(generation, newer, h.deps);
+    expect(h.deps.send).toHaveBeenCalledTimes(2);
   });
   it('accepts beta import consent and sends its result back to beta', async () => {
     const h = harness(), beta = 'https://beta.quantified-self.io';

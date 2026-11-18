@@ -37,6 +37,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('activity delivery notific
     return { seed, deps, advance: () => { clock += DELIVERY_PUSH.groupMs; }, state: db.doc('users/owner/pushState/activityDelivery'),
       admit: (candidate: DeliveryCandidate) => admitDeliveryNotification('owner', candidate, deps), send: () => sendDeliveryNotification('owner', deps) };
   }
+  it('clears the deadline left by an older worker that already claimed the batch', async () => {
+    const h = await setup();
+    await h.state.set({ attempts: [now], seen: [], dueAt: now });
+    await h.send();
+    const state = await h.state.get();
+    expect(state.get('dueAt')).toBeUndefined();
+    expect(state.get('attempts')).toEqual([now]);
+    expect(h.deps.send).not.toHaveBeenCalled();
+  });
   it('sends a manual batch directly with an atomic receipt and no scheduled work', async () => {
     const h = await setup(), candidate = await h.seed();
     await Promise.all([sendManualDeliveryNotification('owner', candidate, h.deps), sendManualDeliveryNotification('owner', candidate, h.deps)]);

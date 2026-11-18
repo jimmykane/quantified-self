@@ -52,14 +52,14 @@ async function currentSleep(db: Firestore, tx: Transaction, uid: string, candida
 
 /** First canonical saves only. A single bounded account receipt suppresses other providers and replays. */
 export async function admitSleepNotification(uid: string, candidate: SleepPushCandidate, queue: SleepSyncQueueItemInterface,
-  deps: Pick<SleepPushDependencies, 'db' | 'now' | 'configuration'>): Promise<void> {
+  deps: Pick<SleepPushDependencies, 'db' | 'now' | 'configuration'>): Promise<string | undefined> {
   if (![uid, candidate.sessionId, queue.id].every(documentId) || queue.sleepNotificationOrigin !== 'live' || !liveSleepQueue(queue)) return;
   const config = await deps.configuration();
   if (!config.enabled) return;
   const { db } = deps; const now = deps.now(); const ref = db.doc(statePath(uid));
   if (!Number.isFinite(queue.dateCreated) || queue.dateCreated > now || queue.dateCreated < now - SLEEP_PUSH.recentMs
     || !Number.isFinite(candidate.createdAtMs) || candidate.createdAtMs > now || candidate.createdAtMs < now - SLEEP_PUSH.expiryMs) return;
-  await db.runTransaction(async tx => {
+  return db.runTransaction(async tx => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, now);
     if (guard.shouldSkip) return;
     const [snapshot, preferenceSnapshot] = await Promise.all([
@@ -86,11 +86,12 @@ export async function admitSleepNotification(uid: string, candidate: SleepPushCa
     const pending: Batch = { id: randomUUID(), candidate, connectionGeneration: generation,
       categoryRevision: preference.revision, dueAt: now, targets };
     tx.set(ref, { sleepDate: candidate.sleepDate, endMs: candidate.endMs, admittedAt: now, pending, expireAt: notificationExpiry(now) });
+    return pending.id;
   });
 }
 
 /** Sends in the import handler after persistence. Claims before transport are never replayed. */
-export async function sendSleepNotification(uid: string, deps: SleepPushDependencies): Promise<void> {
+export async function sendSleepNotification(uid: string, deps: SleepPushDependencies, admittedId?: string): Promise<void> {
   const config = await deps.configuration(); const { db } = deps; const ref = db.doc(statePath(uid));
   const claim = await db.runTransaction(async tx => {
     const now = deps.now();
@@ -100,7 +101,7 @@ export async function sendSleepNotification(uid: string, deps: SleepPushDependen
     ]);
     const state = readState(snapshot.data() as State | undefined); const batch = state?.pending;
     if (guard.shouldSkip) { if (snapshot.exists) tx.delete(ref); return null; }
-    if (!state || !batch || batch.dueAt > now) return null;
+    if (!state || !batch || batch.dueAt > now || (admittedId !== undefined && batch.id !== admittedId)) return null;
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
     const valid = config.enabled && preference?.enabled && preference.revision === batch.categoryRevision
       && now <= batch.dueAt + SLEEP_PUSH.expiryMs

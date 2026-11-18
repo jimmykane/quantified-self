@@ -3111,7 +3111,7 @@ leaf's presence is used; no recording data is read and no completion is inferred
 the provider ledger acknowledges workout/settings changes, not the plan title's unrelated update timestamp.
 
 `users/{uid}/pushState/trainingSync` owns a two-minute first-event batch of at most 25 references and ten destinations,
-an indexed `trainingDueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
+an indexed `dueAt`, and at most two attempt timestamps per rolling 24 hours, at least one hour apart. Beta and
 production share preferences, receipts and limits. Capped/overflowed problems are suppressed, never a later backlog.
 Private `issues/{issueId}` descendants retain unresolved workout episodes through retries until a confirmed healthy
 delivery closes them. Connection problems share one receipt per provider/destination/reconnect episode, including
@@ -3128,7 +3128,7 @@ path. Once Training owns the shared receipt, repeated affected-workout observati
 without rewriting it. This changes notification deduplication only; MCP plan/workout reads, public statuses, provider consent,
 prescriptions, retries and delivery mutations are unchanged. See [Connection issues](web-push-notifications.md#connection-issues).
 
-`sendTrainingSyncNotifications` runs each minute with a bounded masked due-state query, claims before network I/O,
+The shared `sendActivitySyncNotifications` worker runs each minute with a bounded masked due-state query, claims before network I/O,
 rechecks sources per device and deduplicates aliased endpoints. It never replays an ambiguous send. Delivery is best
 effort, at most one attempt per batch/destination; a crash after claim can lose an alert. The generic standard/declarative
 payload contains no workout names, metrics, provider IDs or errors. It opens `/training/plans?sync=attention` on the
@@ -3141,9 +3141,9 @@ The automatic redirect to a remembered Standalone view preserves incoming query 
 notification, so it can open the same history after that redirect without changing the saved view preference.
 
 The new unconditional `web_push_training_sync_enabled` parameter defaults false. Shared `web_push_enabled` and the
-matching VAPID key remain required; only the sender binds the existing secret. Under separate approval, deploy Rules
-and the `trainingDueAt` index, wait for index readiness, then deploy both new Functions, the frontend and updated Web Push monitoring using the existing
-alert channel. Verify index readiness, scheduler/heartbeat and devices before enabling the new flag. Switching it off
+matching VAPID key remain required. Both the shared worker and the Training observer bind the key. Follow the
+[notification rollout](web-push-notifications.md#current-sending-queue-and-retention-model) for worker order,
+the shared `dueAt` index, TTL migration and monitoring on the existing channel. Verify index readiness, scheduler/heartbeat and devices before enabling the new flag. Switching it off
 discards pending alerts without affecting sync. Accepted pushes cannot be recalled; never clear receipts or replay.
 
 Monitoring is **covered in source** by `tools/web-push-monitoring/`: admission/send failures, both native runtimes,
@@ -3165,8 +3165,8 @@ failures captured by an explicit result do not also create per-workout attention
 issue receipts. Connection issue alerts keep their existing account-wide policy.
 
 The existing confirmation receipt binds the request; private bounded counters/members live in one pushState leaf
-per scope/service. The existing status observer and indexed dueAt minute sweep own delivery; no extra Function,
-provider request, scheduler or index is introduced. Newer explicit requests supersede an unsent request for the same
+per scope/service. The status observer sends the result directly when the last captured workout finishes.
+The tracking leaf expires two days after the original request. Newer explicit requests supersede an unsent request for the same
 scope/service. Current sources, consent, category/device generations, completion and deletion/restore fences are
 rechecked before claim; device preparation also rechecks authority and the schedule revision. Private state is excluded
 from public statuses and MCP reads. MCP confirmed delivery uses the same internal admission without a wire change.

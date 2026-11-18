@@ -58,6 +58,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
     expect(JSON.parse(vi.mocked(h.deps.send).mock.calls[0][1]).notification.navigate).toBe(origin + '/training/plans?sync=attention');
     expect(vi.mocked(h.deps.send).mock.calls[0][1]).not.toMatch(/private-canary|"workout"|destination/);
   }, 30000);
+  it('leaves repeated issue receipts untouched and only extends them for a later workout', async () => {
+    const h = await setup(), candidate = await h.seed('first', 'reconnect_required');
+    await h.observe(candidate);
+    const [receipt] = (await h.state.collection('issues').get()).docs;
+    const later = await h.seed('second', 'reconnect_required');
+    await db.doc(`${h.root}/scheduledWorkouts/second`).update({ localDate: '2027-11-18' });
+    await h.observe(later);
+    const extended = await receipt.ref.get();
+    expect(extended.get('expireAt').toMillis()).toBeGreaterThan(receipt.get('expireAt').toMillis());
+    await h.observe(candidate);
+    expect((await receipt.ref.get()).updateTime).toEqual(extended.updateTime);
+  });
+  it('clears the deadline left by an older worker that already claimed the batch', async () => {
+    const h = await setup();
+    await h.state.set({ attempts: [now], dueAt: now });
+    await h.send();
+    const state = await h.state.get();
+    expect(state.get('dueAt')).toBeUndefined();
+    expect(state.get('attempts')).toEqual([now]);
+    expect(h.deps.send).not.toHaveBeenCalled();
+  });
   it('notifies standalone workouts too', async () => {
     const h = await setup(); await h.observe(await h.seed('standalone', 'failed', null)); h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
   });
@@ -91,7 +112,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
       writes.push(...set.mock.calls.map(([ref]) => ref.path).filter(path => path === connectionStatePath('owner')));
       return result;
     }));
+    h.advance(60000);
     await h.observe(await h.seed('first', 'reconnect_required'));
+    const receipt = await db.doc(connectionStatePath('owner')).get();
+    expect(receipt.get('expireAt').toMillis()).toBe(h.deps.now() + 31 * TRAINING_PUSH.dayMs);
     expect(writes).toHaveLength(1); writes.length = 0;
     await h.observe(await h.seed('second', 'reconnect_required'));
     await h.observe(await h.seed('first', 'reconnect_required'));
@@ -156,6 +180,13 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('training notification tra
     if (reason === 'midnight') h.advance(2 * TRAINING_PUSH.dayMs);
     if (reason === 'restore') await db.doc(`${h.root}/trainingPlanState/current/planDeletionLocks/_bulk_restore`).set({});
     h.advance(); await h.send(); expect(h.deps.send).not.toHaveBeenCalled();
+    if (reason === 'deletion') {
+      const root = await h.state.get();
+      expect(root.exists).toBe(true);
+      expect(root.get('dueAt')).toBeUndefined();
+      expect(root.get('pending')).toBeUndefined();
+      expect((await h.state.collection('issues').get()).size).toBe(1);
+    }
   });
   it('delivers to beta and prod and deduplicates aliases with one shared daily budget', async () => {
     const h = await setup(); await db.doc(`${h.root}/pushSubscriptions/${randomUUID()}`).set(h.registration);

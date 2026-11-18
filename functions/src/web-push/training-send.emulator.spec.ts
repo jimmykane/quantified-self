@@ -39,7 +39,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
   };
   const drain = async () => { for (let i = 0; i < 150; i++) if (!await reconcileTrainingDeliveryPage(runtime, uid)) return; throw new Error('Unbounded scan.'); };
   const ledgers = async () => (await db.collection(`${root}/trainingDeliveryLedger`).get()).docs.map(doc => doc.data() as DeliveryLedgerV1);
-  const observe = async (id: string) => observeTrainingSend(uid, (await db.doc(`${root}/trainingDeliveryStatuses/${id}`).get()).data(), { db, now: () => now });
+  // Tests using flush() pause after observation so they can change the source before the claim.
+  const observe = async (id: string) => observeTrainingSend(uid, (await db.doc(`${root}/trainingDeliveryStatuses/${id}`).get()).data(),
+    { db, now: () => now, sendReady: async () => {} });
   const deliver = async () => {
     now += 1000;
     for (const ledger of await ledgers()) { await processTrainingDelivery(runtime, uid, ledger.id); await observe(ledger.id); }
@@ -228,6 +230,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('explicit Training send no
     await flush(); expect(deps.send).not.toHaveBeenCalled(); expect((await stateRef().get()).get('finished')).not.toBe(true);
     await db.doc(`${root}/trainingDeliveryLedger/${row.id}`).update({ lastAcceptedAtMs: now, contentDigest: 'changed' });
     expect(await observe(row.id)).toBe(false); expect((await stateRef().get()).get('finished')).toBe(true);
+  });
+  it('starts a fresh ready window when an explicit result becomes terminal again after a retry', async () => {
+    await command(); await drain(); await deliver();
+    const [row] = await ledgers();
+    const ledger = db.doc(`${root}/trainingDeliveryLedger/${row.id}`);
+    await ledger.update({ status: 'retrying' });
+    await flush();
+    expect(deps.send).not.toHaveBeenCalled();
+    expect((await stateRef().get()).get('readyAt')).toBeUndefined();
+
+    now += TRAINING_SEND.expiryMs + 1;
+    await ledger.update({ status: 'delivered', updatedAtMs: now });
+    const status = db.doc(`${root}/trainingDeliveryStatuses/${row.id}`);
+    await status.update({ updatedAtMs: now });
+    await observeTrainingSend(uid, (await status.get()).data(), { db, now: () => now, sendReady: id => sendTrainingSendResult(uid, id, deps) });
+    expect(deps.send).toHaveBeenCalledOnce();
   });
   it('silences a request when reconciliation proves every captured workout was already accepted before it', async () => {
     await command(); await drain(); const row = (await ledgers())[0];

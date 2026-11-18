@@ -18,7 +18,7 @@ describe('training notification status observer', () => {
     await queueTrainingSyncNotification.run(event('delivered') as never); expect(observeTrainingNotification).toHaveBeenCalledOnce();
   });
   it('sends a ready explicit result in the existing status handler', async () => {
-    vi.mocked(observeTrainingSend).mockImplementation(async (_uid, _status, deps) => { await deps.sendReady!('request'); return true; });
+    vi.mocked(observeTrainingSend).mockImplementation(async (_uid, _status, deps) => { await deps.sendReady('request'); return true; });
     await queueTrainingSyncNotification.run(event() as never);
     expect(sendTrainingSendResult).toHaveBeenCalledWith('owner', 'request', expect.any(Object));
   });

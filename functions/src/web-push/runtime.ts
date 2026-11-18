@@ -4,6 +4,7 @@ import webpush from 'web-push';
 import { SECRET_PARAMS } from '../secrets';
 import { automaticPushConfiguration } from './history-consent';
 import { parseVapidKeyPair } from './vapid';
+import { notificationConfigurationFailureDetails, notificationSweepErrorCode } from './sweep-diagnostics';
 import type { ActivityPushDependencies } from './activity-service';
 
 const TYPES = {
@@ -22,7 +23,12 @@ export function pushDependencies(type: PushType, db = getFirestore()): ActivityP
   let config: ReturnType<typeof automaticPushConfiguration> | undefined;
   let pair: ReturnType<typeof parseVapidKeyPair> | undefined;
   const configuration = () => config ??= (async () => {
-    const setting = await automaticPushConfiguration(flag);
+    const started = Date.now();
+    const setting = await automaticPushConfiguration(flag).catch(error => {
+      logger.warn('[WebPushConfiguration]', { category: type, errorCode: notificationSweepErrorCode(error),
+        ...notificationConfigurationFailureDetails(error, Date.now() - started) });
+      throw error;
+    });
     if (setting.enabled) {
       pair = parseVapidKeyPair(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR.value());
       if (pair.publicKey !== setting.publicKey) throw new Error('Notification key mismatch.');
