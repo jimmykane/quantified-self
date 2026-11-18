@@ -3,7 +3,8 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal, 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
-import { Firestore, doc, getDocFromServer, setDoc, updateDoc, writeBatch, serverTimestamp } from 'app/firebase/firestore';
+import { Firestore, doc, getDocFromServer, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'app/firebase/firestore';
+import { logBrowserPushRemoval } from '../helpers/push-removal-log.helper';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { AppWindowService } from './app.window.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
@@ -17,7 +18,7 @@ import type { DeliveryNotificationTarget } from '../../../shared/activity-delive
 import type { HistoryNotificationTarget } from '../../../shared/history-import-notifications';
 import { AppNotificationPreferencesService } from './app.notification-preferences.service';
 import { pushDeviceInfo } from '../helpers/push-device.helper';
-import { isPushDeviceInfo, pushRemovalPath, pushRemovalRecord, type PushClientRemovalReason } from '@shared/web-push';
+import { isPushDeviceInfo, type PushClientRemovalReason, type PushRemovalEvent } from '@shared/web-push';
 import { AppNotificationInvitationService } from './app.notification-invitation.service';
 
 type PushState = 'loading' | 'signed-out' | 'unsupported' | 'install-required' | 'unavailable' | 'impersonating' | 'denied' | 'disabled' | 'enabled';
@@ -141,7 +142,7 @@ export class AppPushService {
           if (this.epoch !== epoch) return;
           if (!manager) throw new Error('Browser cleanup unavailable.');
           this.manager = manager;
-          if (!await this.revokeBrowser()) return;
+          if (!await this.revokeBrowser('signed_out')) return;
         }
         if (this.epoch === epoch) this.state.set('signed-out');
         return;
@@ -172,7 +173,7 @@ export class AppPushService {
       this.subscription = subscription;
       const local = this.readLocal();
       if (local && local.uid !== owner.uid) {
-        if (!await this.revokeBrowser(local, subscription) || !this.current(owner, epoch)) return;
+        if (!await this.revokeBrowser('account_changed', local, subscription) || !this.current(owner, epoch)) return;
         subscription = null;
       }
       this.registered.set(!!subscription);
@@ -192,7 +193,7 @@ export class AppPushService {
       }
       if (!subscription || !local || local.uid !== owner.uid) {
         // A browser permission is not account consent. Orphan subscriptions must not cross accounts.
-        if (subscription && !await this.revokeBrowser(local, subscription)) return;
+        if (subscription && !await this.revokeBrowser('account_changed', local, subscription)) return;
         if (this.current(owner, epoch)) { this.registered.set(false); this.state.set('disabled'); }
         return;
       }
@@ -207,7 +208,7 @@ export class AppPushService {
       if (!this.sameInstallation(local)) { void this.refresh(); return; }
       const saved = snapshot.data();
       if (!snapshot.exists()) {
-        if (await this.revokeBrowser(local, subscription) && this.current(owner, epoch)) {
+        if (await this.revokeBrowser('registration_already_missing', local, subscription) && this.current(owner, epoch)) {
           this.registered.set(false); this.state.set('disabled');
         }
         return;
@@ -298,7 +299,7 @@ export class AppPushService {
         const actualKey = observed?.options.applicationServerKey;
         if (local && local.uid !== owner.uid
           || observed && (local?.uid !== owner.uid || !actualKey || this.encodeKey(actualKey) !== key)) {
-          if (!await this.revokeBrowser(local, observed)) throw new Error('Browser cleanup superseded.');
+          if (!await this.revokeBrowser(local?.uid !== owner.uid ? 'account_changed' : 'signing_key_changed', local, observed)) throw new Error('Browser cleanup superseded.');
           local = null;
         }
       }
@@ -363,7 +364,7 @@ export class AppPushService {
       }
     }
   }
-  private async revokeBrowser(local = this.readLocal(), observed?: PushSubscription | null): Promise<boolean> {
+  private async revokeBrowser(reason: PushRemovalEvent['reason'], local = this.readLocal(), observed?: PushSubscription | null): Promise<boolean> {
     const owner = this.owner; const epoch = this.epoch; const cached = this.subscription;
     const current = () => this.current(owner, epoch) && this.sameInstallation(local);
     const superseded = () => {
@@ -386,32 +387,23 @@ export class AppPushService {
       return false;
     }
     this.subscription = null; this.storage.removeItem(STORAGE_KEY);
+    if (local) await logBrowserPushRemoval({ ...local, reason, action: 'browser_detached', origin: this.origin(),
+      device: pushDeviceInfo(this.windows.windowRef.navigator) });
     return true;
-  }
-  private async removeRegistration(local: LocalInstallation, reason: PushClientRemovalReason): Promise<void> {
-    const ref = doc(this.firestore, `users/${local.uid}/pushSubscriptions/${local.installationId}`);
-    const batch = writeBatch(this.firestore);
-    batch.delete(ref);
-    batch.set(doc(this.firestore, pushRemovalPath(local.uid, local.installationId)),
-      pushRemovalRecord(reason, this.origin(), pushDeviceInfo(this.windows.windowRef.navigator), serverTimestamp(), Date.now()));
-    try { await batch.commit(); }
-    catch (error) {
-      // Another tab or the sender may already have removed it. Keep the original cause.
-      if ((error as { code?: string })?.code === 'permission-denied' && !(await getDocFromServer(ref)).exists()) return;
-      throw error;
-    }
   }
   private async detach(reason: PushClientRemovalReason): Promise<number> {
     const epoch = ++this.epoch; const owner = this.owner;
     const local = this.readLocal();
     // Start the owner-authorized delete while Auth is still valid; revoke the browser even if it fails.
-    const deletion = local && local.uid === this.auth.currentUser?.uid
-      ? this.removeRegistration(local, reason) : Promise.resolve();
+    const owned = local && local.uid === this.auth.currentUser?.uid ? local : null;
+    const deletion = owned ? deleteDoc(doc(this.firestore, `users/${owned.uid}/pushSubscriptions/${owned.installationId}`)) : Promise.resolve();
     // Attach a rejection handler immediately, even while browser revocation is pending.
     const deleted = deletion.then(() => true, () => false);
-    const revoked = await this.revokeBrowser(local).catch(() => false);
+    const revoked = await this.revokeBrowser(reason, local).catch(() => false);
     if (revoked && this.current(owner, epoch)) { this.registered.set(false); this.state.set('disabled'); }
     const removed = await deleted;
+    if (!revoked && owned && removed) await logBrowserPushRemoval({ ...owned, reason, action: 'registration_delete_acknowledged',
+      origin: this.origin(), device: pushDeviceInfo(this.windows.windowRef.navigator) });
     if (!revoked || !removed) throw new Error('Registration cleanup failed.');
     return epoch;
   }

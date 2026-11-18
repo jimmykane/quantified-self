@@ -12,6 +12,7 @@ import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type'
 import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
 import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 import { scrubSentryOAuthEvent } from './app/helpers/sentry-oauth-url.helper';
+import { filterPushRemovalLog } from './app/helpers/push-removal-log.helper';
 import { getSentryBuildTags } from './app/helpers/sentry-build-tags.helper';
 
 // Navigation is asynchronous: do not start App Check on the alias while leaving it.
@@ -24,6 +25,8 @@ if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)
       release: environment.appVersion,
       initialScope: { tags: getSentryBuildTags() },
       debug: false,
+      enableLogs: true,
+      beforeSendLog: filterPushRemovalLog,
       beforeBreadcrumb: appCheckBeforeBreadcrumb,
       beforeSend: appCheckBeforeSend,
       beforeSendTransaction: scrubSentryOAuthEvent,

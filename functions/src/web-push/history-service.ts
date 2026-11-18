@@ -1,4 +1,4 @@
-import { recordExpiredDevice } from './device-removal';
+import { deleteExpiredGeneration, logExpiredDevice } from './device-removal';
 import { notificationExpiry } from './retention';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -108,7 +108,7 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     }
   }
   deps.outcome(outcome);
-  await db.runTransaction(async tx => {
+  const removed = await db.runTransaction(async tx => {
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, expected.userID);
     const [stateSnapshot, registrationSnapshot] = await Promise.all([tx.get(stateRef), tx.get(registrationRef)]);
     if (guard.shouldSkip) return;
@@ -116,9 +116,7 @@ export async function sendHistoryCompletion(runId: string, expected: ConnectionH
     if (state?.providers?.[expected.serviceName]?.runId === runId) {
       tx.update(stateRef, { providers: { ...state.providers, [expected.serviceName]: { ...state.providers[expected.serviceName], outcome } } });
     }
-    const registration = registrationSnapshot.data();
-    if (outcome === 'expired' && registration && registration.generation === consent.generation) {
-      recordExpiredDevice(db, tx, expected.userID, consent.installationId, registrationRef, registration, 'history_import', deps.now());
-    }
+    return outcome === 'expired' ? deleteExpiredGeneration(tx, registrationRef, registrationSnapshot.data(), consent.generation) : null;
   });
+  if (removed) await logExpiredDevice(expected.userID, consent.installationId, removed, 'history_import');
 }

@@ -7,6 +7,8 @@ import { Firestore, Timestamp, getDocsFromServer, runTransaction } from 'app/fir
 import { AppPushService } from './app.push.service';
 import { AppNotificationDevicesService } from './app.notification-devices.service';
 
+const logRemoval = vi.hoisted(() => vi.fn());
+vi.mock('../helpers/push-removal-log.helper', () => ({ logBrowserPushRemoval: logRemoval }));
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), user: vi.fn() }));
 vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof import('app/firebase/firestore')>(),
   collection: vi.fn((_db, path) => ({ path })), doc: vi.fn((_db, path) => ({ path })),
@@ -109,9 +111,9 @@ describe('notification device management', () => {
   it('does not change local browser permission when disabling another device', async () => {
     const service = setup(); await tick(); await service.disable(service.devices()[0]);
     expect(push.refreshRegistration).not.toHaveBeenCalled();
-    expect(tx.set).toHaveBeenCalledWith({ path: `users/owner/pushState/removed_${id}` }, {
-      reason: 'disabled_from_device_list', origin, device: data.device, removedAt: expect.anything(), expireAt: expect.any(Date),
-    });
+    expect(logRemoval).toHaveBeenCalledExactlyOnceWith({ uid: owner.uid, installationId: id,
+      reason: 'disabled_from_device_list', action: 'registration_removed', origin, device: data.device });
+    expect(tx.set).toHaveBeenCalledTimes(1);
     expect(tx.set).toHaveBeenCalledWith({ path: 'users/owner/config/settings' },
       { appSettings: { notificationInvitation: { version: 1, choice: 'disabled' } } }, { merge: true });
   });
@@ -124,7 +126,7 @@ describe('notification device management', () => {
   it('handles a registration already removed elsewhere without claiming a new mutation', async () => {
     const service = setup(); await tick(); tx.get.mockResolvedValue({ exists: () => false });
     expect(await service.disable(service.devices()[0])).toBe(false); expect(tx.delete).not.toHaveBeenCalled();
-    expect(service.devices()).toEqual([]); expect(service.message()).toContain('already disabled');
+    expect(service.devices()).toEqual([]); expect(service.message()).toContain('already disabled'); expect(logRemoval).not.toHaveBeenCalled();
   });
   it('does not recreate invitation settings after account deletion', async () => {
     const service = setup(); await tick();

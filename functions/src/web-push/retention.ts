@@ -1,6 +1,6 @@
-import { NOTIFICATION_RETENTION_MS } from '../../../shared/web-push';
-export { NOTIFICATION_RETENTION_MS };
 const DAY = 86400000;
+// Keep duplicate/rate fences beyond the longest notification replay window (30 days).
+export const NOTIFICATION_RETENTION_MS = 31 * DAY;
 export const TRAINING_RESULT_RETENTION_MS = 2 * DAY;
 /** Firestore serializes Date as Timestamp, the type required by its expireAt TTL policy. */
 export const notificationExpiry = (now: number) => new Date(now + NOTIFICATION_RETENTION_MS);

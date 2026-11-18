@@ -201,32 +201,6 @@ describe('Firestore Security Rules', () => {
             await assertFails(owner.doc('users/push-owner/pushState/testRateLimit').get());
             await assertSucceeds(owner.doc(path).delete());
         });
-        it('allows a private removal diagnostic only alongside deletion of that device', async () => {
-            const { serverTimestamp } = await import('firebase/firestore');
-            const owner = testEnv.authenticatedContext('push-owner').firestore();
-            const receipt = `users/push-owner/pushState/removed_${id}`;
-            const details = { origin: base.origin, device: { browser: 'Chrome', platform: 'macOS' }, reason: 'signed_out',
-                removedAt: serverTimestamp(), expireAt: new Date(Date.now() + 31 * 86400000) };
-            const remove = (db: typeof owner, extra = {}) => {
-                const batch = db.batch();
-                batch.delete(db.doc(path)); batch.set(db.doc(receipt), { ...details, ...extra });
-                return batch.commit();
-            };
-            await assertSucceeds(owner.doc(path).set({ ...base, updatedAt: serverTimestamp() }));
-            await assertFails(owner.doc(receipt).set(details));
-            for (const patch of [{ endpoint: base.endpoint }, { reason: 'push_service_expired' },
-                { device: { ...details.device, token: 'private' } }, { expireAt: new Date(Date.now() + 60 * 86400000) }]) {
-                await assertFails(remove(owner, patch));
-            }
-            await assertFails(remove(testEnv.authenticatedContext('other').firestore()));
-            await assertFails(remove(testEnv.authenticatedContext('push-owner', { impersonatedBy: 'admin' }).firestore()));
-            await assertSucceeds(remove(owner));
-            await assertFails(owner.doc(receipt).get());
-            await assertFails(remove(owner, { reason: 'disabled_on_device' }));
-            await testEnv.withSecurityRulesDisabled(async ctx => {
-                expect((await ctx.firestore().doc(receipt).get()).get('reason')).toBe('signed_out');
-            });
-        });
         it.each(['historyCompletion', 'trainingSync', 'trainingSync/issues/issue'])('keeps %s send receipts server-only for owners, other accounts and impersonation', async receipt => {
             const receiptPath = `users/push-owner/pushState/${receipt}`;
             await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(receiptPath).set({ attempts: [], providers: {} }); });
