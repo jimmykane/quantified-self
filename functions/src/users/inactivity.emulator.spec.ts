@@ -30,10 +30,13 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
     const config = () => db.doc(INACTIVITY_CONTROL);
     const refreshRun = () => config().set({ mode: run.mode, leaseToken: run.token, leaseUntil: Timestamp.fromMillis(now + 540_000) }, { merge: true });
     const process = () => processInactiveAccount(ctx, uid, run);
-    async function acceptWarning() {
+    async function recordSmtpAcceptance() {
         const episode = (await inactivityRef(db, uid).get()).data()!;
         await db.doc(`mail/${episode.mailId}`).update({ delivery: { state: 'SUCCESS', endTime: Timestamp.fromMillis(now),
             info: { accepted: [authUser.email], rejected: [], pending: [] } } });
+    }
+    async function acceptWarning() {
+        await recordSmtpAcceptance();
         expect(await process()).toBe('accepted');
     }
     async function dueWarning() {
@@ -167,12 +170,91 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         const deadline = (await inactivityRef(db, uid).get()).get('deleteAfter');
         await config().update({ budgetDay: new Date(now).toISOString().slice(0, 10), warnings: 100 });
         expect(await process()).toBe('capped');
-        expect((await inactivityRef(db, uid).get()).get('nextCheckAt').toMillis()).toBe(now + INACTIVITY_DAY_MS);
+        const midnight = new Date(now);
+        midnight.setUTCHours(24, 0, 0, 0);
+        expect((await inactivityRef(db, uid).get()).get('nextCheckAt').toMillis()).toBe(midnight.getTime());
         expect((await inactivityRef(db, uid).get()).get('reminderMailId')).toBeUndefined();
-        now += 2 * INACTIVITY_DAY_MS; await refreshRun(); expect(await process()).toBe('queued');
+        now = midnight.getTime();
+        expect((await runInactivitySweep(ctx)).counts.queued).toBe(1);
+        expect((await config().get()).get('warnings')).toBe(1);
         const episode = (await inactivityRef(db, uid).get()).data()!;
         expect(episode.deleteAfter).toEqual(deadline);
         expect((await db.doc(`mail/${episode.reminderMailId}`).get()).get('template.data.deletion_deadline')).toBe(formatEmailDateTime(deadline));
+    });
+    it('processes a reminder on the first daily sweep in its window after a slightly later prior sweep', async () => {
+        await reminderWindow();
+        const opens = now;
+        now = opens - INACTIVITY_DAY_MS + 1000;
+        await config().set({ mode: 'warnings-only' });
+        expect((await runInactivitySweep(ctx)).counts.waiting).toBe(1);
+        now = opens;
+        expect((await runInactivitySweep(ctx)).counts.queued).toBe(1);
+        expect((await inactivityRef(db, uid).get()).get('reminderQueuedAt').toMillis()).toBe(opens);
+    });
+    it.each(['enforce', 'warnings-only'])('processes a reminder when the first receipt is observed on the last day in %s', async mode => {
+        expect(await process()).toBe('queued');
+        const ref = inactivityRef(db, uid);
+        await recordSmtpAcceptance();
+        const deadline = now + INACTIVITY_NOTICE_MS;
+        now = deadline - 60_000;
+        await config().set({ mode });
+        const sweep = await runInactivitySweep(ctx);
+        expect(sweep.counts.accepted).toBe(1);
+        expect(sweep.counts.queued).toBe(1);
+        expect((await ref.get()).get('reminderQueuedAt').toMillis()).toBe(now);
+        expect((await ref.get()).get('deleteAfter').toMillis()).toBe(deadline);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        expect((await runInactivitySweep(ctx)).counts.queued).toBeUndefined();
+    });
+    it('only records the receipt when the sweep first observes it at the deadline', async () => {
+        expect(await process()).toBe('queued');
+        await recordSmtpAcceptance();
+        now += INACTIVITY_NOTICE_MS;
+        const sweep = await runInactivitySweep(ctx);
+        expect(sweep.counts.accepted).toBe(1);
+        expect(sweep.counts.queued).toBeUndefined();
+        expect((await inactivityRef(db, uid).get()).get('state')).toBe('warned');
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        now += INACTIVITY_DAY_MS;
+        expect((await runInactivitySweep(ctx)).counts.deletion_requested).toBe(1);
+    });
+    it('cancels a late reminder when the user signs in after receipt observation', async () => {
+        expect(await process()).toBe('queued');
+        await recordSmtpAcceptance();
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_DAY_MS;
+        const returned = { ...authUser, metadata: { ...authUser.metadata, lastSignInTime: new Date(now).toUTCString() } };
+        auth.getUser.mockResolvedValueOnce(authUser).mockResolvedValue(returned);
+        const sweep = await runInactivitySweep(ctx);
+        expect(sweep.counts).toMatchObject({ accepted: 1, cancelled: 1 });
+        expect((await inactivityRef(db, uid).get()).get('state')).toBe('cancelled');
+        expect((await db.collection('mail').where('uid', '==', uid).get()).size).toBe(1);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+    it.each(['reminder', 'deletion'])('requires the original queue time for billing history before %s', async action => {
+        if (action === 'reminder') await reminderWindow(); else await dueWarning();
+        const ref = inactivityRef(db, uid);
+        await ref.update({ queuedAt: admin.firestore.FieldValue.delete() });
+        const view = await readInactivityAdmin(db, { getUsers: vi.fn().mockResolvedValue({ users: [authUser] }) }, { view: 'warned' }, now);
+        expect(view.accounts[0].detail).toContain('A new warning is required before deletion');
+        await process();
+        expect((await ref.get()).get('state')).toBe('cancelled');
+        expect((await ref.get()).get('reminderMailId')).toBeUndefined();
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(false);
+    });
+    it('cancels a prepared deletion if the original queue time changes after the billing check', async () => {
+        await dueWarning();
+        const ref = inactivityRef(db, uid);
+        const marker = db.doc(`userDeletionTombstones/${uid}`);
+        const queued = (await ref.get()).get('queuedAt').toMillis();
+        auth.getUser.mockImplementation(async () => {
+            if ((await marker.get()).exists) await ref.update({ queuedAt: Timestamp.fromMillis(queued - 1) });
+            return authUser;
+        });
+        expect(await process()).toBe('cancelled');
+        expect((await ref.get()).get('state')).toBe('cancelled');
+        expect((await marker.get()).exists).toBe(false);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
     });
     it('observes reminder queues in the existing daily warning counters', async () => {
         await reminderWindow(); await config().set({ mode: 'warnings-only' });

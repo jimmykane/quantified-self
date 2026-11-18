@@ -14,7 +14,7 @@
     <section aria-labelledby="retention-settings" class="section">
       <div class="section-heading"><h2 id="retention-settings">Retention settings</h2><span>Current mode: <strong>{{ currentModeLabel() }}</strong></span></div>
       <p>Free accounts qualify after more than six calendar months without an app sign-in or session refresh. Confirmed warning delivery starts a full 30-day return period. Basic, Pro, trials, gifts and active grace periods are protected.</p>
-      <p>One final reminder is queued during the last seven days if the account still qualifies. It includes the original deadline and does not extend it.</p>
+      <p>The daily check can queue one final reminder during the last seven days if the account still qualifies. The reminder uses the original deletion deadline.</p>
       @if (!snapshot.settingsValid) { <p class="feedback error" role="alert">Stored settings are invalid. An operator must review them before this form can save changes.</p> }
       @if (conflict()) { <p class="feedback error" role="alert">Settings changed while you were editing. Reset changes to load the current values.</p> }
       <app-compact-select label="Processing mode" [value]="mode()" [options]="modes" [disabled]="loading() || saving()" (selectionChange)="changeMode($event)" />

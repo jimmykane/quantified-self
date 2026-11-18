@@ -24,6 +24,8 @@ The warning goes to the current Auth email and is transactional, independent of 
 alone does not start the countdown. Matching UID, generation, template and recipient, `delivery.state=SUCCESS`, a single
 accepted address, empty rejected/pending recipients and a valid extension `endTime` are required. That time starts a
 full 30 days. SMTP acceptance does not establish inbox placement or opens. Missing/error/ambiguous mail prevents deletion.
+After acceptance, the worker checks that the original queue time precedes or equals acceptance and that the stored
+deadline allows at least 30 days. A missing or inconsistent timestamp invalidates that notice and requires a fresh warning.
 
 Returning, an email change or restored entitlement invalidates the notice. Subscription events invalidate active
 notices even if a short membership ends between daily scans. Old redeliveries cannot invalidate a newer notice.
@@ -31,6 +33,8 @@ Unchanged daily claims signals do not reset warnings. A later eligible episode r
 There is no hourly requirement or exact deletion-time promise: caps, outages and daily scheduling can delay processing.
 
 The daily due lane also attempts **one final reminder during the last seven days before the original deadline**.
+The worker schedules the next check by the opening of that window. If a sweep first observes SMTP acceptance during
+the final week, it can recheck the account and queue the reminder in the same sweep.
 It requires a still-valid accepted notice and repeats the Auth, billing, deletion-guard and lease checks used for
 initial warnings. A delayed scan sends the exact existing deadline, including UTC time, rather than promising
 another seven days. No reminder is queued at or after that deadline. The reminder is supplemental: its delivery failure,
@@ -72,8 +76,9 @@ lease; it creates no warning, episode or deletion fence. `warnings-only` queues/
 deletion. Switching to `enforce` can act on already elapsed warnings, so inspect their ages before changing mode.
 `off` stops new scans and is rechecked inside mutation transactions. It does not recall queued mail or undo an Auth
 deletion already attempted; existing cleanup must continue.
-Final reminders run in both `warnings-only` and `enforce`, subject to the shared warning cap. A capped reminder yields
-its due position until the next daily check. `dry-run` checks eligibility without queuing a reminder or changing its episode.
+Final reminders run in both `warnings-only` and `enforce`, subject to the shared warning cap. After the cap is reached,
+the reminder becomes due for another check at the next UTC midnight or the original deadline, whichever comes first.
+`dry-run` checks eligibility without queuing a reminder or changing its episode.
 
 Native billing ownership and a valid handover timestamp are required. The scanner holds the same customer lease as
 native billing, rechecks guarded Firestore state transactionally and reads Stripe without mutating or linking customers.

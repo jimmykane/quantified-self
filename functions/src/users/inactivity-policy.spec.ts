@@ -16,7 +16,8 @@ it('retains submillisecond server timestamp precision without accepting malforme
 const now = Date.parse('2026-11-13T12:00:00Z');
 describe('final reminder window', () => {
     const deadline = now + INACTIVITY_REMINDER_MS;
-    const episode = () => ({ state: 'warned', acceptedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS),
+    const episode = () => ({ state: 'warned', queuedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS - 1000),
+        acceptedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS),
         deleteAfter: Timestamp.fromMillis(deadline), expireAt: Timestamp.fromMillis(deadline + INACTIVITY_DAY_MS) });
     it('opens at seven days remaining and closes at the original deadline', () => {
         expect(finalReminderDue(episode(), now - 1)).toBe(false);
@@ -26,12 +27,18 @@ describe('final reminder window', () => {
         expect(finalReminderDue(episode(), deadline + 1)).toBe(false);
     });
     it.each([{ state: 'queued' }, { state: 'cancelled' }, { state: 'deletion_requested' },
+        { queuedAt: null }, { queuedAt: Timestamp.fromMillis(now) }, { deleteAfter: Timestamp.fromMillis(deadline - 1) },
         { acceptedAt: null }, { acceptedAt: Timestamp.fromMillis(now + 1) },
         { acceptedAt: Timestamp.fromMillis(deadline - INACTIVITY_NOTICE_MS + 1) },
         { deleteAfter: null }, { expireAt: null }, { expireAt: Timestamp.fromMillis(now) },
         { reminderMailId: 'already-queued' }, { reminderQueuedAt: Timestamp.fromMillis(now - 1) },
         { reminderQueuedAt: null }])('rejects invalid evidence or an already attempted reminder: %j', patch => {
         expect(finalReminderDue({ ...episode(), ...patch }, now)).toBe(false);
+    });
+    it('honors a notice with a later stored deadline', () => {
+        const extended = { ...episode(), deleteAfter: Timestamp.fromMillis(deadline + INACTIVITY_DAY_MS) };
+        expect(finalReminderDue(extended, now)).toBe(false);
+        expect(finalReminderDue(extended, now + INACTIVITY_DAY_MS)).toBe(true);
     });
 });
 const user = (patch: Record<string, unknown> = {}) => ({ uid: 'synthetic', email: 'synthetic@example.com',

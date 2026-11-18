@@ -38,13 +38,20 @@ export function timestampMillis(value: unknown): number | null {
     } catch { return null; }
 }
 
-/** Supplemental reminder only: never create or extend the original notice deadline. */
-export function finalReminderDue(episode: Record<string, unknown> | undefined, now: number): boolean {
-    if (episode?.state !== 'warned' || episode.reminderMailId !== undefined || episode.reminderQueuedAt !== undefined) return false;
+/** The queue time anchors the billing-history check. Acceptance anchors the grace period. */
+export function acceptedNoticeDeadline(episode: Record<string, unknown>, now: number): number | null {
+    const queued = timestampMillis(episode.queuedAt);
     const accepted = timestampMillis(episode.acceptedAt);
     const deadline = timestampMillis(episode.deleteAfter);
-    return accepted !== null && accepted <= now && deadline !== null
-        && deadline >= accepted + INACTIVITY_NOTICE_MS && deadline > now && deadline - now <= INACTIVITY_REMINDER_MS
+    if (queued === null || accepted === null || queued > accepted || accepted > now
+        || deadline === null || deadline < accepted + INACTIVITY_NOTICE_MS) return null;
+    return deadline;
+}
+
+export function finalReminderDue(episode: Record<string, unknown> | undefined, now: number): boolean {
+    if (episode?.state !== 'warned' || episode.reminderMailId !== undefined || episode.reminderQueuedAt !== undefined) return false;
+    const deadline = acceptedNoticeDeadline(episode, now);
+    return deadline !== null && deadline > now && deadline - now <= INACTIVITY_REMINDER_MS
         && (timestampMillis(episode.expireAt) ?? 0) > now;
 }
 

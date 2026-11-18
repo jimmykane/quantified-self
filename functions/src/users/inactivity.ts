@@ -12,11 +12,13 @@ import { TTL_CONFIG } from '../shared/ttl-config';
 import { deleteAuthAccountAndNotify, pendingAccountDeletionMarker } from './initiate-deletion';
 import { readInactivityBilling, stripeAllowsInactivity, type InactivityBilling } from './inactivity-billing';
 import { INACTIVITY_BUDGET_MS, INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS,
-    INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_TEMPLATE, INACTIVITY_REMINDER_TEMPLATE, finalReminderDue, inactiveIdentity, inactivityMode,
-    timestampMillis, warningAcceptedAt, type InactiveIdentity, type InactivityMode } from './inactivity-policy';
+    INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_REMINDER_MS, INACTIVITY_TEMPLATE, INACTIVITY_REMINDER_TEMPLATE,
+    acceptedNoticeDeadline, finalReminderDue, inactiveIdentity, inactivityMode, timestampMillis, warningAcceptedAt,
+    type InactiveIdentity, type InactivityMode } from './inactivity-policy';
 
 export interface InactivityContext { db: Firestore; auth: Auth; stripe: () => Promise<Stripe>; now?: () => number }
 export interface InactivityRun { token: string; mode: InactivityMode }
+interface InactivityProcessOptions { discoveryOnly?: boolean; reminderFor?: string }
 export type InactivityOutcome = 'skipped' | 'eligible' | 'queued' | 'accepted' | 'cancelled' | 'waiting'
     | 'blocked' | 'notice_unconfirmed' | 'capped' | 'contended' | 'deletion_requested' | 'review_required' | 'failed';
 const clock = (ctx: InactivityContext) => ctx.now?.() ?? Date.now();
@@ -24,6 +26,14 @@ export const inactivityRef = (db: Firestore, uid: string) => db.doc(`users/${uid
 const activeEpisode = (data?: DocumentData) => data?.state === 'queued' || data?.state === 'warned';
 const currentEvidence = (data: DocumentData | undefined, now: number) => (timestampMillis(data?.expireAt) ?? 0) > now;
 const expiry = (time: number) => Timestamp.fromMillis(time + TTL_CONFIG.MAIL_IN_DAYS * INACTIVITY_DAY_MS);
+
+// A sweep selects work due at its start. A late check on the preceding day
+// must not put the reminder opening or the deletion deadline beyond that cutoff.
+function nextNoticeCheck(now: number, deadline: number): Timestamp {
+    const opens = deadline - INACTIVITY_REMINDER_MS;
+    const next = opens > now ? opens : deadline;
+    return Timestamp.fromMillis(next > now ? Math.min(next, now + INACTIVITY_DAY_MS) : now + INACTIVITY_DAY_MS);
+}
 
 async function validRun(ctx: InactivityContext, tx: Transaction, run: InactivityRun): Promise<DocumentSnapshot | null> {
     const config = await tx.get(ctx.db.doc(INACTIVITY_CONTROL));
@@ -96,23 +106,31 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
             || currentBilling.revision !== billing.revision
             || (current.exists !== previous.exists)
             || (current.exists && !current.updateTime!.isEqual(previous.updateTime!))) return 'skipped';
-        if (deleting && (run.mode !== 'enforce' || current.get('state') !== 'warned'
-            || !currentEvidence(current.data(), clock(ctx))
-            || timestampMillis(current.get('deleteAfter')) === null || timestampMillis(current.get('deleteAfter'))! > clock(ctx)
-            || timestampMillis(current.get('acceptedAt')) === null
-            || timestampMillis(current.get('deleteAfter'))! < timestampMillis(current.get('acceptedAt'))! + INACTIVITY_NOTICE_MS)) return 'blocked';
-        if (reminding && !finalReminderDue(current.data(), clock(ctx))) return 'skipped';
         // Guard reads or a transaction retry can cross UTC midnight. Charge the
         // current attempt's day and use that same time for its persisted timestamps.
         const now = clock(ctx);
-        if (!consumeBudget(tx, config, deleting ? 'deletions' : 'warnings', now)) return 'capped';
+        const episode = current.data();
+        const deadline = episode ? acceptedNoticeDeadline(episode, now) : null;
+        if (deleting && (run.mode !== 'enforce' || episode?.state !== 'warned' || !currentEvidence(episode, now)
+            || deadline === null || deadline > now)) return 'blocked';
+        if (reminding && !finalReminderDue(episode, now)) return 'skipped';
+        if (!consumeBudget(tx, config, deleting ? 'deletions' : 'warnings', now)) {
+            // Yield the due position so newer receipts can be observed. Reminders
+            // become eligible again when the UTC warning allowance resets.
+            if (reminding || deleting) {
+                const nextDay = (Math.floor(now / INACTIVITY_DAY_MS) + 1) * INACTIVITY_DAY_MS;
+                const retry = reminding ? Math.min(deadline!, nextDay) : now + INACTIVITY_DAY_MS;
+                tx.update(current.ref, { nextCheckAt: Timestamp.fromMillis(retry) });
+            }
+            return 'capped';
+        }
         if (deleting) {
             tx.set(marker.ref, { ...pendingAccountDeletionMarker('inactivity'), inactivityGeneration: generation, authDeleteStatus: 'prepared' }, { merge: true });
             tx.update(current.ref, { state: 'deletion_requested', requestedAt: Timestamp.fromMillis(now), nextCheckAt: FieldValue.delete() });
             return 'deletion_requested';
         }
         if (reminding) tx.update(current.ref, { reminderMailId: mailRef.id, reminderQueuedAt: Timestamp.fromMillis(now),
-            nextCheckAt: Timestamp.fromMillis(now + INACTIVITY_DAY_MS) });
+            nextCheckAt: nextNoticeCheck(now, deadline!) });
         else tx.set(inactivityRef(ctx.db, uid), { uid, generation, state: 'queued', activityAt: identity.activityAt,
             authCreatedAt: identity.createdAt, emailHash: identity.emailHash, billingRevision: billing.revision,
             mailId: mailRef.id, queuedAt: Timestamp.fromMillis(now), nextCheckAt: Timestamp.fromMillis(now + INACTIVITY_DAY_MS), expireAt: expiry(now) });
@@ -120,25 +138,28 @@ async function prepareMutation(ctx: InactivityContext, uid: string, run: Inactiv
             from: TRANSACTIONAL_EMAIL_FROM, replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
             template: { name: reminding ? INACTIVITY_REMINDER_TEMPLATE : INACTIVITY_TEMPLATE,
                 data: { login_url: 'https://quantified-self.io/login', support_email: TRANSACTIONAL_EMAIL_REPLY_TO,
-                    ...(reminding ? { deletion_deadline: formatEmailDateTime(new Date(timestampMillis(current.get('deleteAfter'))!)) } : {}) } },
+                    ...(reminding ? { deletion_deadline: formatEmailDateTime(new Date(deadline!)) } : {}) } },
             inactivity: { generation }, expireAt: expiry(now) });
         return 'queued';
     });
 }
 
 export async function processInactiveAccount(ctx: InactivityContext, uid: string, run: InactivityRun,
-    options: { discoveryOnly?: boolean } = {}): Promise<InactivityOutcome> {
+    options: InactivityProcessOptions = {}): Promise<InactivityOutcome> {
     if (run.mode === 'off') return 'skipped';
     const episodeRef = inactivityRef(ctx.db, uid);
     const previous = await episodeRef.get();
     const episode = previous.data();
+    if (options.reminderFor !== undefined && (episode?.generation !== options.reminderFor || !finalReminderDue(episode, clock(ctx)))) return 'skipped';
     if (episode?.state === 'deletion_requested') return 'review_required'; // Never repeat an uncertain destructive call.
     // Existing notices belong to the due lane. Revisiting them during Auth discovery
     // could exhaust its time/budget and hide new candidates behind capped deletions.
     if (options.discoveryOnly && activeEpisode(episode)) return 'skipped';
     const identity = inactiveIdentity(await ctx.auth.getUser(uid), clock(ctx));
     const local = await readInactivityBilling(ctx.db, uid, clock(ctx));
-    const changed = !identity || !local.eligible || activeEpisode(episode) && (!currentEvidence(episode, clock(ctx)) ||
+    const deadline = episode?.state === 'warned' ? acceptedNoticeDeadline(episode, clock(ctx)) : null;
+    const changed = !identity || !local.eligible || (episode?.state === 'warned' && deadline === null)
+        || activeEpisode(episode) && (!currentEvidence(episode, clock(ctx)) ||
         identity.activityAt !== episode!.activityAt || identity.createdAt !== episode!.authCreatedAt
         || identity.emailHash !== episode!.emailHash || local.revision !== episode!.billingRevision);
     if (changed) {
@@ -161,18 +182,22 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
             const [guard, config, current, latestMail] = await Promise.all([
                 getUserDeletionGuardStateInTransaction(ctx.db, tx, uid, clock(ctx)), validRun(ctx, tx, run), tx.get(episodeRef), tx.get(mailRef),
             ]);
-            if (guard.shouldSkip || !config || current.get('generation') !== episode.generation || current.get('state') !== 'queued'
+            if (guard.shouldSkip || !config || !current.updateTime?.isEqual(previous.updateTime!) || current.get('state') !== 'queued'
                 || !currentEvidence(current.data(), clock(ctx))
                 || warningAcceptedAt(latestMail.data() ?? {}, uid, episode.generation, identity.email, queued!, clock(ctx)) !== accepted) return 'skipped';
-            tx.update(episodeRef, { state: 'warned', acceptedAt: Timestamp.fromMillis(accepted), deleteAfter: Timestamp.fromMillis(accepted + INACTIVITY_NOTICE_MS),
-                nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS), expireAt: expiry(clock(ctx)) });
+            const now = clock(ctx);
+            const deadline = accepted + INACTIVITY_NOTICE_MS;
+            const inReminderWindow = deadline - INACTIVITY_REMINDER_MS <= now && now < deadline;
+            tx.update(episodeRef, { state: 'warned', acceptedAt: Timestamp.fromMillis(accepted), deleteAfter: Timestamp.fromMillis(deadline),
+                nextCheckAt: inReminderWindow ? Timestamp.fromMillis(now) : nextNoticeCheck(now, deadline), expireAt: expiry(now) });
             return 'accepted';
         });
     }
-    const deleting = episode?.state === 'warned';
+    const warned = episode?.state === 'warned';
     const reminding = finalReminderDue(episode, clock(ctx));
-    if (deleting && !reminding && (timestampMillis(episode.deleteAfter) === null || timestampMillis(episode.deleteAfter)! > clock(ctx) || run.mode === 'warnings-only')) {
-        if (run.mode !== 'dry-run') await updateEpisode(ctx, uid, episode.generation, run, { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
+    if (options.reminderFor !== undefined && !reminding) return 'skipped';
+    if (warned && !reminding && (deadline! > clock(ctx) || run.mode === 'warnings-only')) {
+        if (run.mode !== 'dry-run') await updateEpisode(ctx, uid, episode.generation, run, { nextCheckAt: nextNoticeCheck(clock(ctx), deadline!) });
         return 'waiting';
     }
     const lease = await acquireBillingLease(ctx.db, `customer:${uid}`, clock(ctx));
@@ -180,7 +205,7 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
         // Refresh after acquiring the same lease used by native checkout/portal/webhook workers.
         const billing = await readInactivityBilling(ctx.db, uid, clock(ctx));
         if (!billing.eligible || billing.revision !== local.revision
-            || !await stripeAllowsInactivity(await ctx.stripe(), uid, identity.email, billing.customerId, deleting ? timestampMillis(episode?.queuedAt) ?? undefined : undefined)) {
+            || !await stripeAllowsInactivity(await ctx.stripe(), uid, identity.email, billing.customerId, warned ? timestampMillis(episode.queuedAt)! : undefined)) {
             if (run.mode !== 'dry-run' && activeEpisode(episode)) await updateEpisode(ctx, uid, episode!.generation, run, cancellation());
             return 'blocked';
         }
@@ -191,11 +216,7 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
             return 'cancelled';
         }
         const result = await prepareMutation(ctx, uid, run, lease, billing, identity, previous,
-            reminding ? 'reminder' : deleting ? 'deletion' : 'warning');
-        // Capped deletions and reminders must yield their old queue position so a
-        // backlog cannot exhaust the due lane before newer mail receipts are observed.
-        if (result === 'capped' && deleting) await updateEpisode(ctx, uid, episode!.generation, run,
-            { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
+            reminding ? 'reminder' : warned ? 'deletion' : 'warning');
         if (result !== 'deletion_requested') return result;
         // Fence first, then one final Auth observation. A return before the RPC cancels
         // only our unattempted fence; an RPC error is ambiguous and needs operator review.
@@ -210,6 +231,9 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
                     || marker.get('source') !== 'inactivity' || marker.get('inactivityGeneration') !== episode!.generation
                     || marker.get('authDeleteStatus') !== 'prepared' || marker.get('cleanupAttemptId')
                     || !currentEvidence(current.data(), clock(ctx))
+                    || acceptedNoticeDeadline(current.data() ?? {}, clock(ctx)) !== deadline
+                    || timestampMillis(current.get('queuedAt')) !== timestampMillis(episode!.queuedAt)
+                    || timestampMillis(current.get('acceptedAt')) !== timestampMillis(episode!.acceptedAt)
                     || current.get('generation') !== episode!.generation || current.get('state') !== 'deletion_requested') return false;
                 tx.update(marker.ref, { authDeleteStatus: 'attempted', authDeleteAttemptedAt: Timestamp.fromMillis(clock(ctx)) });
                 return true;
@@ -246,9 +270,9 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         counts: {}, scanned: 0, capped: false, overdue: 0, reviewRequired: 0, scanAgeMs: Math.max(0, start - (acquired.scanStartedAt ?? start)) };
     if (acquired.status !== 'started') return summary;
     const run = { token, mode: acquired.mode };
-    const process = async (uid: string, discoveryOnly = false) => {
+    const process = async (uid: string, options: InactivityProcessOptions = {}) => {
         let outcome: InactivityOutcome;
-        try { outcome = await processInactiveAccount(ctx, uid, run, { discoveryOnly }); }
+        try { outcome = await processInactiveAccount(ctx, uid, run, options); }
         catch (error) {
             outcome = error instanceof BillingContention ? 'contended' : 'failed';
             // Keep errors private; only fixed outcome counts reach telemetry. A failed
@@ -273,6 +297,16 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                 const uid = doc.ref.parent.parent?.id;
                 if (!uid || doc.ref.path !== inactivityRef(ctx.db, uid).path || doc.get('uid') !== uid) throw new Error('invalid_inactivity_owner');
                 const outcome = await process(uid);
+                // A previously unobserved SMTP receipt may already be in its final
+                // week. Give that episode a guarded reminder attempt in this sweep.
+                if (outcome === 'accepted') {
+                    const queued = timestampMillis(doc.get('queuedAt'));
+                    const generation = doc.get('generation');
+                    if (queued !== null && clock(ctx) >= queued + INACTIVITY_NOTICE_MS - INACTIVITY_REMINDER_MS
+                        && typeof generation === 'string' && clock(ctx) < start + INACTIVITY_BUDGET_MS / 2) {
+                        await process(uid, { reminderFor: generation });
+                    }
+                }
                 if (run.mode === 'enforce' && doc.get('state') === 'warned'
                     && timestampMillis(doc.get('deleteAfter'))! + 2 * INACTIVITY_DAY_MS < start
                     && ['capped', 'failed', 'waiting'].includes(outcome)) summary.overdue++;
@@ -293,7 +327,7 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                 if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) { complete = false; summary.capped = true; break; }
                 summary.scanned++;
                 if (!inactiveIdentity(user, clock(ctx))) continue;
-                if (await process(user.uid, true) === 'capped') { complete = false; summary.capped = true; break; }
+                if (await process(user.uid, { discoveryOnly: true }) === 'capped') { complete = false; summary.capped = true; break; }
             }
             if (!complete) break; // Revisit the unfinished page; per-episode dedupe makes this safe.
             cursor = page.pageToken;

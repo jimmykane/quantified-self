@@ -3,7 +3,7 @@ import { FieldPath, type DocumentSnapshot, type Firestore } from 'firebase-admin
 import { HttpsError } from 'firebase-functions/v2/https';
 import { INACTIVITY_ADMIN_PAGE_SIZE, INACTIVITY_ADMIN_VIEWS, INACTIVITY_DELETION_LIMIT,
     INACTIVITY_MODES, INACTIVITY_WARNING_LIMIT, type InactivityAdminRequest, type InactivityAdminResponse } from '../../../shared/admin-inactivity';
-import { INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, inactivityMode, timestampMillis, warningAcceptedAt } from './inactivity-policy';
+import { INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, acceptedNoticeDeadline, inactivityMode, timestampMillis, warningAcceptedAt } from './inactivity-policy';
 
 export function inactivityAdminRequest(value: unknown): InactivityAdminRequest {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpsError('invalid-argument', 'Choose an account view.');
@@ -50,6 +50,8 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             if (doc.get('authDeleteStatus') === 'prepared') detail = created === null || created + INACTIVITY_DAY_MS < now
                 ? 'Deletion prepared but not attempted; operator review required.' : 'Deletion prepared; awaiting Auth deletion.';
         } else if ((date(doc, 'expireAt') ?? 0) <= now) detail = 'Evidence expired; a new warning is required.';
+        else if (request.view === 'warned' && acceptedNoticeDeadline(doc.data(), now) === null)
+            detail = 'The original warning has invalid timing. A new warning is required before deletion.';
         else if (request.view === 'warned' && date(doc, 'reminderQueuedAt') !== null)
             detail = 'Final reminder queued; the original deletion deadline is unchanged.';
         else if (request.view === 'queued') {

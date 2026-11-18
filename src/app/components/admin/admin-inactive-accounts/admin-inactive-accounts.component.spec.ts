@@ -41,7 +41,8 @@ describe('Admin inactive accounts route', () => {
     expect(fixture.nativeElement.textContent).toContain('synthetic@example.invalid');
     expect(fixture.nativeElement.textContent).toContain('No run summary recorded yet');
     expect(fixture.nativeElement.textContent).toContain('Initial warnings and final reminders share the warning limit');
-    expect(fixture.nativeElement.textContent).toContain('original deadline and does not extend it');
+    expect(fixture.nativeElement.textContent).toContain('can queue one final reminder');
+    expect(fixture.nativeElement.textContent).toContain('uses the original deletion deadline');
     expect(component.mode()).toBe('off'); expect(component.canSave()).toBeFalsy();
     expect(service.save).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
   });
