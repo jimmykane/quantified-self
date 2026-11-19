@@ -1292,6 +1292,12 @@ measures 3118.9 KiB within the existing 3120 KiB combined limit; the preview add
 limit. Both builds verify 601 service-worker assets, and production verifies all 41 prerendered pages and public
 dependency exclusions. These are compiled-output measurements, not runtime performance claims.
 
+After structured Web Push removal diagnostics enabled Sentry browser logs, production output at develop
+`3fb1f155e` measures 3123.3 KiB for Home plus its signal preview, exceeding the 3120 KiB combined cap. The
+combined cap is now 3150 KiB. The preview's separate 192 KiB limit, 1474 kB initial-bundle limit, 15.20 MB
+total-script limit and public dependency exclusions remain unchanged. This allowance covers measured startup
+code growth; it does not change what the browser loads or claim a runtime speed improvement.
+
 The DOM regression spec exercises the actual browser SDK through synthetic XHR responses, including empty
 and HTML 504s, truncated error JSON, successful filtered counts, permission failures, and subsequent recovery.
 Run it when upgrading Firebase; remove the guard once upstream rejects malformed HTTP responses itself.
