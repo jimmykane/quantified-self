@@ -178,7 +178,7 @@ describe('EventCardMapComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('uses the in-map menu to toggle only mapped tracks and keeps at least one visible', () => {
+  it('uses the toolbar menu to toggle only mapped tracks and keeps at least one visible', () => {
     const activities = [
       makeActivity('a', 'Coros PACE 4'),
       makeActivity('b', 'Suunto Run'),
@@ -193,7 +193,8 @@ describe('EventCardMapComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    const trigger = host.querySelector<HTMLButtonElement>('.mapbox-stage .map-tracks-trigger');
+    const trigger = host.querySelector<HTMLButtonElement>('app-event-section-header .map-tracks-trigger');
+    expect(host.querySelector('app-event-section-header .map-tracks-trigger ~ app-map-layers-actions')).not.toBeNull();
     expect(trigger?.getAttribute('aria-label')).toBe('Tracks, 2 visible');
     expect(trigger?.getAttribute('aria-expanded')).toBe('false');
     expect(mockHaptics.selection).not.toHaveBeenCalled();

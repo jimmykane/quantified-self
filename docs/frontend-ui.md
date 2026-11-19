@@ -968,9 +968,9 @@ Time and pace differences under one second use Sports Lib's fractional stopwatch
 differences retain direction, while exact equality reads **Same**.
 A single selected recording shows its readings alone. Ordinary activities, single-source events and explicit
 sequential (`multi`) merges use the standard summary.
-Activity maps with multiple renderable GPS tracks put the **Tracks** menu in the upper-left of the map,
-including in fullscreen. Its swatches use the rendered track colors. The menu filters the prepared tracks,
-markers, and chart-driven map cursors without refitting the viewport or changing the page-level selection.
+Activity maps with multiple renderable GPS tracks put the **Tracks** menu beside **Layers** in the toolbar above
+the map. The toolbar remains available in fullscreen. The menu shows the rendered track colors and filters the
+prepared tracks, markers, and chart-driven map cursors without refitting the viewport or changing the page-level selection.
 At least one track stays visible. Temporarily narrowing the page-level selection preserves the map's hidden-track
 choices. A new event starts with all of its selected tracks visible.
 The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to

@@ -383,7 +383,7 @@ describe('Firebase Hosting configuration', () => {
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
     // Benchmark Help covers metric accordions on desktop and mobile (2026-11-19).
     // Benchmark Help covers grouped Min, Avg, and Max ranges and per-device readings (2026-11-19).
-    // Activity Help covers map-local visibility in the Tracks menu (2026-11-19).
+    // Activity Help locates the Tracks menu beside Layers above the map (2026-11-19).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
   });
 
