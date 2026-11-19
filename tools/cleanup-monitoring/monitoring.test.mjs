@@ -275,6 +275,10 @@ test('inactivity filters cover the exact daily owner while excluding protected a
   const log = entry({ message: '[AccountInactivity]', outcome: 'completed', mode: 'enforce', counts: { blocked: 10 }, overdue: 0, reviewRequired: 0 });
   log.resource.labels.service_name = 'processinactiveaccounts';
   assert.equal(matches(metric('inactivity_heartbeat').filter, log), true);
+  log.jsonPayload.outcome = 'stale';
+  assert.equal(matches(metric('inactivity_heartbeat').filter, log), true);
+  assert.equal(matches(metric('inactivity_failures').filter, log), false);
+  log.jsonPayload.outcome = 'completed';
   for (const key of ['failures', 'notice', 'review', 'overdue', 'scan_stalled']) assert.equal(matches(metric(`inactivity_${key}`).filter, log), false);
   log.jsonPayload.counts.notice_unconfirmed = 1; assert.equal(matches(metric('inactivity_notice').filter, log), true);
   log.jsonPayload.counts.failed = 1; assert.equal(matches(metric('inactivity_failures').filter, log), true);

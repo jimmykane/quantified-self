@@ -36,11 +36,16 @@ function nextNoticeCheck(now: number, deadline: number): Timestamp {
     return Timestamp.fromMillis(next > now ? Math.min(next, now + INACTIVITY_DAY_MS) : now + INACTIVITY_DAY_MS);
 }
 
+function matchesRun(config: DocumentSnapshot, run: InactivityRun): boolean {
+    return config.get('leaseToken') === run.token && inactivityMode(config.get('mode')) === run.mode
+        && (run.revision === undefined || (config.get('settingsRevision') ?? 0) === run.revision);
+}
+function leaseActive(config: DocumentSnapshot, now: number): boolean {
+    return (timestampMillis(config.get('leaseUntil')) ?? 0) > now;
+}
 async function validRun(ctx: InactivityContext, tx: Transaction, run: InactivityRun): Promise<DocumentSnapshot | null> {
     const config = await tx.get(ctx.db.doc(INACTIVITY_CONTROL));
-    return config.get('leaseToken') === run.token && timestampMillis(config.get('leaseUntil'))! > clock(ctx)
-        && inactivityMode(config.get('mode')) === run.mode
-        && (run.revision === undefined || (config.get('settingsRevision') ?? 0) === run.revision) ? config : null;
+    return matchesRun(config, run) && leaseActive(config, clock(ctx)) ? config : null;
 }
 function consumeBudget(tx: Transaction, config: DocumentSnapshot, kind: 'warnings' | 'deletions', now: number): boolean {
     const maximum = kind === 'warnings' ? INACTIVITY_WARNING_LIMIT : INACTIVITY_DELETION_LIMIT;
@@ -251,10 +256,22 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
     }
 }
 
-export interface InactivitySummary { mode: InactivityMode; outcome: 'off' | 'contended' | 'stale' | 'completed' | 'failed'; counts: Partial<Record<InactivityOutcome, number>>; scanned: number; capped: boolean; overdue: number; reviewRequired: number; scanAgeMs: number; continuationAgeMs?: number }
+export interface InactivitySummary {
+    mode: InactivityMode;
+    outcome: 'off' | 'contended' | 'stale' | 'completed' | 'failed';
+    counts: Partial<Record<InactivityOutcome, number>>;
+    scanned: number;
+    capped: boolean;
+    overdue: number;
+    reviewRequired: number;
+    scanAgeMs: number;
+    continuationAgeMs?: number;
+    continuationStalled?: true;
+}
 interface DueWork {
     cutoff: Timestamp;
     after: { at: Timestamp; path: string } | null;
+    reminder?: { uid: string; generation: string };
 }
 interface RemainingWork {
     due: DueWork | null;
@@ -264,6 +281,7 @@ interface InactivityContinuation extends RemainingWork {
     id: string;
     mode: InactivityMode;
     revision: number;
+    retryingSameWork?: true;
 }
 export async function runInactivitySweep(ctx: InactivityContext, continuationId?: string): Promise<InactivitySummary> {
     const start = clock(ctx);
@@ -284,8 +302,12 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
             }
             work = ticket;
         }
-        if (mode === 'off') return { mode, status: 'off' as const };
-        if (timestampMillis(config.get('leaseUntil'))! > start) return { mode, status: 'contended' as const };
+        if (mode === 'off') {
+            // The private request is a leaf. All cursor and reminder data lives in this one document.
+            if (pending.exists) tx.delete(continuationRef);
+            return { mode, status: 'off' as const };
+        }
+        if (leaseActive(config, start)) return { mode, status: 'contended' as const };
         // Consuming the single-use ticket and claiming the shared lease are one operation.
         // An old delivery or a redelivery after a worker failure cannot start another sweep.
         if (pending.exists) tx.delete(continuationRef);
@@ -300,7 +322,7 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
             ...(restart ? { scanCursor: FieldValue.delete() } : {}),
         }, { merge: true });
         return { mode, status: 'started' as const, cursor: restart ? undefined : config.get('scanCursor') as string | undefined,
-            scanStartedAt, draft, work, revision,
+            scanStartedAt, draft, work, revision, retryingSameWork: continuationId !== undefined && ticket?.retryingSameWork === true,
             continuationAgeMs: ticket?.mode === mode && ticket.revision === revision && pending.createTime
                 ? Math.max(0, start - pending.createTime.toMillis()) : undefined };
     });
@@ -317,24 +339,39 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
             // Keep errors private; only fixed outcome counts reach telemetry. A failed
             // account is retried by its due state or the next complete discovery pass.
             const episode = await inactivityRef(ctx.db, uid).get();
-            if (run.mode !== 'dry-run' && activeEpisode(episode.data())) await updateEpisode(ctx, uid, episode.get('generation'), run,
-                { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
+            if (run.mode !== 'dry-run' && activeEpisode(episode.data())
+                && (options.reminderFor === undefined || options.reminderFor === episode.get('generation'))) {
+                await updateEpisode(ctx, uid, episode.get('generation'), run, { nextCheckAt: Timestamp.fromMillis(clock(ctx) + INACTIVITY_DAY_MS) });
+            }
         }
         summary.counts[outcome] = (summary.counts[outcome] ?? 0) + 1;
         if (outcome === 'capped') summary.capped = true;
         return outcome;
     };
     const remaining: RemainingWork = { due: null, authPageSize: null };
+    let retrySameWork = false;
     try {
         // Existing episodes get a separate half of the budget, independently of the Auth cursor.
         let due = acquired.work.due;
+        let advancedDue = false;
+        const dueEnd = start + INACTIVITY_BUDGET_MS / 2;
         duePages: while (due) {
+            if (due.reminder) {
+                if (clock(ctx) >= dueEnd) {
+                    remaining.due = due;
+                    summary.capped = true;
+                    break;
+                }
+                await process(due.reminder.uid, { reminderFor: due.reminder.generation });
+                due = { cutoff: due.cutoff, after: due.after };
+                advancedDue = true;
+            }
             let query = ctx.db.collectionGroup(INACTIVITY_COLLECTION).where('nextCheckAt', '<=', due.cutoff)
                 .orderBy('nextCheckAt').orderBy(FieldPath.documentId()).limit(INACTIVITY_PAGE_SIZE);
             if (due.after) query = query.startAfter(due.after.at, ctx.db.doc(due.after.path));
             const page = await query.get();
             for (const doc of page.docs) {
-                if (clock(ctx) >= start + INACTIVITY_BUDGET_MS / 2) {
+                if (clock(ctx) >= dueEnd) {
                     remaining.due = due;
                     summary.capped = true;
                     break duePages;
@@ -342,6 +379,7 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
                 const uid = doc.ref.parent.parent?.id;
                 if (!uid || doc.ref.path !== inactivityRef(ctx.db, uid).path || doc.get('uid') !== uid) throw new Error('invalid_inactivity_owner');
                 const outcome = await process(uid);
+                advancedDue = true;
                 due = { cutoff: due.cutoff, after: { at: doc.get('nextCheckAt'), path: doc.ref.path } };
                 // A previously unobserved SMTP receipt may already be in its final
                 // week. Give that episode a guarded reminder attempt in this sweep.
@@ -350,10 +388,9 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
                     const generation = doc.get('generation');
                     if (queued !== null && clock(ctx) >= queued + INACTIVITY_NOTICE_MS - INACTIVITY_REMINDER_MS
                         && typeof generation === 'string') {
-                        if (clock(ctx) >= start + INACTIVITY_BUDGET_MS / 2) {
-                            // Recording a late receipt makes its reminder due at the observation time.
-                            // Include that newly due row in the continuation even if it was last on this page.
-                            remaining.due = { ...due, cutoff: Timestamp.fromMillis(clock(ctx)) };
+                        if (clock(ctx) >= dueEnd) {
+                            // Resume the same guarded reminder attempt, even if its deadline or generation changes.
+                            remaining.due = { ...due, reminder: { uid, generation } };
                             summary.capped = true;
                             break duePages;
                         }
@@ -364,7 +401,10 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
                     && timestampMillis(doc.get('deleteAfter'))! + 2 * INACTIVITY_DAY_MS < start
                     && ['capped', 'failed', 'waiting'].includes(outcome)) summary.overdue++;
             }
-            if (page.size < INACTIVITY_PAGE_SIZE) break;
+            if (page.size < INACTIVITY_PAGE_SIZE) {
+                advancedDue = true;
+                break;
+            }
         }
         // A stalled initiation survives user-root cleanup in the existing non-expiring fence.
         const pending = await ctx.db.collection('userDeletionTombstones').where('source', '==', 'inactivity')
@@ -400,34 +440,56 @@ export async function runInactivitySweep(ctx: InactivityContext, continuationId?
             }
             if (!complete) break; // Revisit the unfinished page; per-episode dedupe makes this safe.
             cursor = page.pageToken;
-            await ctx.db.runTransaction(async tx => {
-                const config = await validRun(ctx, tx, run);
-                if (!config) throw new Error('inactivity_run_superseded');
+            const saved = await ctx.db.runTransaction(async tx => {
+                const config = await tx.get(configRef);
+                if (!matchesRun(config, run)) return false;
+                if (!leaseActive(config, clock(ctx))) throw new Error('inactivity_lease_expired');
                 const finishedAt = cursor ? null : Timestamp.fromMillis(clock(ctx));
                 if (acquired.draft) await recordDryRunPage(ctx.db, tx, config, acquired.draft, eligibleUids, finishedAt);
                 tx.update(configRef, { scanCursor: cursor ?? FieldValue.delete(),
                     ...(finishedAt ? { lastScanCompletedAt: finishedAt } : {}) });
+                return true;
             });
+            if (!saved) { summary.outcome = 'stale'; break; }
             pagesSaved++;
             if (!cursor) { summary.scanAgeMs = 0; break; }
         }
-        return summary;
+        // A smaller page or a finished lane is progress. Repeating exactly the same timed-out
+        // work without advancing either cursor would otherwise create an endless event chain.
+        if ((remaining.due || remaining.authPageSize !== null) && !advancedDue && pagesSaved === 0 && remaining.authPageSize === pageSize) {
+            if (acquired.retryingSameWork) {
+                summary.continuationStalled = true;
+                summary.outcome = 'failed';
+            } else {
+                retrySameWork = true;
+            }
+        }
     } catch (error) {
         summary.outcome = 'failed';
         throw error;
     } finally {
-        await ctx.db.runTransaction(async tx => {
+        summary.outcome = await ctx.db.runTransaction(async tx => {
             const config = await tx.get(configRef);
-            if (config.get('leaseToken') !== token) return;
-            if (summary.outcome === 'completed' && (remaining.due || remaining.authPageSize !== null)
-                && config.get('mode') === run.mode && (config.get('settingsRevision') ?? 0) === acquired.revision) {
-                const next: InactivityContinuation = { id: token, mode: run.mode, revision: acquired.revision, ...remaining };
-                tx.create(continuationRef, next);
+            if (config.get('leaseToken') !== token) return 'stale' as const;
+            const now = clock(ctx);
+            let outcome = summary.outcome;
+            if (!matchesRun(config, run)) outcome = 'stale';
+            if (outcome === 'completed' && (remaining.due || remaining.authPageSize !== null)) {
+                if (leaseActive(config, now)) {
+                    const next: InactivityContinuation = { id: token, mode: run.mode, revision: acquired.revision, ...remaining,
+                        ...(retrySameWork ? { retryingSameWork: true } : {}) };
+                    tx.create(continuationRef, next);
+                } else {
+                    outcome = 'failed';
+                }
             }
+            const finishedAt = Timestamp.fromMillis(now);
             tx.update(configRef, {
-                leaseToken: FieldValue.delete(), leaseUntil: FieldValue.delete(), lastFinishedAt: Timestamp.fromMillis(clock(ctx)),
-                lastRun: { ...summary, finishedAt: Timestamp.fromMillis(clock(ctx)) },
+                leaseToken: FieldValue.delete(), leaseUntil: FieldValue.delete(), lastFinishedAt: finishedAt,
+                ...(outcome === 'stale' ? {} : { lastRun: { ...summary, outcome, finishedAt } }),
             });
+            return outcome;
         });
     }
+    return summary;
 }

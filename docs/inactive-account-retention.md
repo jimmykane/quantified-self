@@ -68,11 +68,13 @@ Returning or losing eligibility cancels a reminder that has not yet been queued.
 
 State proceeds queued → warned → deletion_requested; cancellation permits a later new episode. Auth scanning uses
 pages of up to 100 and a durable cursor. Within each four-minute batch, the first two minutes are available for due
-notices. A continuation resumes after the last notice's time and document path. It keeps the due-time cutoff unless
-recording a late delivery receipt makes a final reminder due during the handoff.
+notices. A continuation resumes after the last notice's time and document path. It keeps the original due-time cutoff.
+If recording a delivery receipt uses the remaining time, the continuation retries the final reminder only for that
+notice generation and only while its reminder window is open.
 It can finish checking notices after Auth discovery is complete. Discovery resumes at the last fully committed page.
-If no page fit before timeout, the next batch tries a smaller page down to one account. Discovery skips existing
-active notices, so an exhausted deletion budget cannot block new warnings. Capped deletions yield their due-queue position until the next daily check so an older backlog
+If no page fit before timeout, the next batch tries a smaller page down to one account. When a batch makes no progress and has identical work left,
+it schedules one retry at that position. If that retry also makes no progress, the worker records a failed run with
+`continuationStalled` and leaves recovery to the daily job. Discovery skips existing active notices, so an exhausted deletion budget cannot block new warnings. Capped deletions yield their due-queue position until the next daily check so an older backlog
 cannot repeatedly starve newer warning receipts. A global lease prevents overlap. UTC caps are 100 warning emails
 (initial warnings and final reminders combined) and 25 deletion
 initiations per day across retries; `warningDailyLimit`/`deletionDailyLimit` may lower these, including zero, but cannot
@@ -196,6 +198,8 @@ The enabled policy can open an initial absence incident until the new service re
 Verify the application heartbeat metric separately after the scheduled run.
 
 After a worker failure, the daily job recovers from the durable Auth cursor and due notices once the lease expires.
+A worker whose lease has expired cannot issue another continuation. Changing the retention settings during a batch
+supersedes its work and preserves the previous run summary. The off-mode heartbeat clears any undelivered request.
 A redelivered event for an already claimed request does not repeat a batch. An ambiguous Auth deletion remains fenced
 for operator review.
 

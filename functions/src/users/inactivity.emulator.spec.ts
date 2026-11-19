@@ -226,6 +226,48 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(auth.listUsers).toHaveBeenCalledTimes(1);
         expect(auth.deleteUser).not.toHaveBeenCalled();
     });
+    it('keeps delayed reminder work scoped to the original notice even after its deadline', async () => {
+        await process(); await recordSmtpAcceptance();
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_DAY_MS;
+        await config().set({ mode: 'enforce' });
+        auth.getUser.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS / 2;
+            return authUser;
+        });
+        expect((await runInactivitySweep(ctx)).counts.accepted).toBe(1);
+        const id = (await pendingBatch()).get('id');
+        now += INACTIVITY_DAY_MS;
+        await runInactivitySweep(ctx, id);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+        expect((await inactivityRef(db, uid).get()).get('state')).toBe('warned');
+        expect((await pendingBatch()).exists).toBe(false);
+        // Ordinary daily enforcement still owns the elapsed deadline.
+        expect((await runInactivitySweep(ctx)).counts.deletion_requested).toBe(1);
+    });
+
+    it('skips a replaced reminder and leaves notices newly due after the original cutoff for the daily job', async () => {
+        await process(); await recordSmtpAcceptance();
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_DAY_MS;
+        await config().set({ mode: 'warnings-only' });
+        const other = uid + '-later';
+        owners.push(other);
+        await inactivityRef(db, other).set({ uid: other, state: 'queued', generation: 'other-notice',
+            nextCheckAt: Timestamp.fromMillis(now + 1) });
+        auth.getUser.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS / 2;
+            return authUser;
+        });
+        await runInactivitySweep(ctx);
+        const id = (await pendingBatch()).get('id');
+        await inactivityRef(db, uid).update({ generation: 'replacement' });
+        auth.getUser.mockClear();
+        const resumed = await runInactivitySweep(ctx, id);
+        expect(resumed.counts).toEqual({ skipped: 1 });
+        expect(auth.getUser).not.toHaveBeenCalled();
+        expect((await inactivityRef(db, uid).get()).get('reminderQueuedAt')).toBeUndefined();
+        expect((await pendingBatch()).exists).toBe(false);
+    });
+
     it('only records the receipt when the sweep first observes it at the deadline', async () => {
         expect(await process()).toBe('queued');
         await recordSmtpAcceptance();
@@ -580,6 +622,108 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await runInactivitySweep(ctx, ticket.id)).outcome).toBe('stale');
         expect(auth.listUsers).toHaveBeenCalledTimes(2);
         expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it('stops a continuation chain that still cannot inspect even one Auth account', async () => {
+        await config().set({ mode: 'dry-run' });
+        auth.listUsers.mockImplementation(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [authUser] };
+        });
+        await runInactivitySweep(ctx);
+        let request = (await pendingBatch()).data()!;
+        while (request.authPageSize > 1) {
+            const previousSize = request.authPageSize;
+            await runInactivitySweep(ctx, request.id);
+            request = (await pendingBatch()).data()!;
+            expect(request.authPageSize).toBeLessThan(previousSize);
+        }
+        expect((await runInactivitySweep(ctx, request.id)).outcome).toBe('completed');
+        const retry = (await pendingBatch()).data()!;
+        expect(retry).toMatchObject({ authPageSize: 1, retryingSameWork: true });
+        const stalled = await runInactivitySweep(ctx, retry.id);
+        expect(stalled).toMatchObject({ outcome: 'failed', continuationStalled: true });
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await config().get()).get('lastCompletedDryRun')).toBeUndefined();
+        auth.listUsers.mockResolvedValue({ users: [authUser] });
+        now += INACTIVITY_DAY_MS;
+        expect((await runInactivitySweep(ctx)).counts.eligible).toBe(1);
+        expect((await config().get()).get('lastCompletedDryRun.eligibleCount')).toBe(1);
+    });
+
+    it('stops a claimed continuation quietly when an admin edits settings during the page', async () => {
+        await config().set({ mode: 'warnings-only' });
+        auth.listUsers.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [], pageToken: 'next' };
+        });
+        await runInactivitySweep(ctx);
+        const id = (await pendingBatch()).get('id');
+        const previous = (await config().get()).get('lastRun');
+        auth.listUsers.mockImplementationOnce(async () => {
+            await config().update({ settingsRevision: 1, warningDailyLimit: 0 });
+            return { users: [authUser] };
+        });
+        expect((await runInactivitySweep(ctx, id)).outcome).toBe('stale');
+        expect((await pendingBatch()).exists).toBe(false);
+        const saved = await config().get();
+        expect(saved.get('leaseToken')).toBeUndefined();
+        expect(saved.get('lastRun')).toEqual(previous);
+        expect(saved.get('scanCursor')).toBe('next');
+        expect((await inactivityRef(db, uid).get()).exists).toBe(false);
+    });
+
+    it('recovers from a slow due-notice read without reopening Auth discovery', async () => {
+        await dueWarning();
+        await config().set({ mode: 'enforce' });
+        auth.listUsers.mockResolvedValue({ users: [] });
+        const collectionGroup = db.collectionGroup.bind(db);
+        const delayed = vi.spyOn(db, 'collectionGroup').mockImplementation(name => {
+            if (name === 'inactivityRetention') now += INACTIVITY_BUDGET_MS / 2;
+            return collectionGroup(name);
+        });
+        try {
+            await runInactivitySweep(ctx);
+            const request = (await pendingBatch()).data()!;
+            expect(request.authPageSize).toBeNull();
+            expect((await runInactivitySweep(ctx, request.id)).outcome).toBe('completed');
+            expect((await pendingBatch()).get('retryingSameWork')).toBe(true);
+            expect(auth.deleteUser).not.toHaveBeenCalled();
+        } finally {
+            delayed.mockRestore();
+        }
+        const retryId = (await pendingBatch()).get('id');
+        expect((await runInactivitySweep(ctx, retryId)).counts.deletion_requested).toBe(1);
+        expect((await pendingBatch()).exists).toBe(false);
+        expect(auth.listUsers).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to hand off work after losing the lease to a slow read', async () => {
+        await config().set({ mode: 'enforce' });
+        auth.listUsers.mockImplementationOnce(async () => {
+            now = (await config().get()).get('leaseUntil').toMillis();
+            return { users: [authUser] };
+        });
+        expect((await runInactivitySweep(ctx)).outcome).toBe('failed');
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await config().get()).get('leaseToken')).toBeUndefined();
+        expect((await inactivityRef(db, uid).get()).exists).toBe(false);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it('removes an undelivered request on the daily off heartbeat', async () => {
+        await config().set({ mode: 'dry-run' });
+        auth.listUsers.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [], pageToken: 'resume' };
+        });
+        await runInactivitySweep(ctx);
+        const id = (await pendingBatch()).get('id');
+        await config().update({ mode: 'off', settingsRevision: 1 });
+        expect((await runInactivitySweep(ctx)).outcome).toBe('off');
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await runInactivitySweep(ctx, id)).outcome).toBe('stale');
+        expect(auth.listUsers).toHaveBeenCalledTimes(1);
     });
 
     it('claims concurrent deliveries once and leaves a failed claimed batch for the daily recovery', async () => {

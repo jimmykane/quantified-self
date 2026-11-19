@@ -11,7 +11,7 @@ export function buildInactivityMonitoring(project, channel, owner) {
       metricDescriptor: { metricKind: 'DELTA', valueType: field ? 'DISTRIBUTION' : 'INT64', unit: '1', labels: [] }, labelExtractors: {},
       ...(field ? { valueExtractor: `EXTRACT(jsonPayload.${field})`, bucketOptions: { explicitBuckets: { bounds: [0, 1, 5, 25, 100, 500] } } } : {}) });
   }
-  metric('heartbeat', 'jsonPayload.outcome=("off" OR "completed" OR "contended" OR "failed")', 'Daily scheduler observation, including off/idle; not proof of cleanup.');
+  metric('heartbeat', 'jsonPayload.outcome=("off" OR "completed" OR "contended" OR "stale" OR "failed")', 'Daily scheduler observation, including off/idle; not proof of cleanup.');
   metric('failures', '(jsonPayload.outcome="failed" OR jsonPayload.counts.failed>0)', 'Actual scan, provider-read or persistence failures; protective billing holds and contention excluded.');
   metric('notice', 'jsonPayload.counts.notice_unconfirmed>0', 'Missing, malformed, failed or more than one day unconfirmed warning delivery; no deletion can proceed.');
   metric('review', 'jsonPayload.reviewRequired>0', 'Bounded pending inactivity deletion fences older than 24 hours; completed receipts excluded.');
