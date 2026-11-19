@@ -162,6 +162,34 @@ describe('ActivitySendService owner and upload boundaries', () => {
     service.closeBatch(); expect(processing.removeJob).not.toHaveBeenCalled();
     streams.reads[1].next([]); expect(processing.removeJob).toHaveBeenCalledWith('job');
   });
+  it('keeps a draft opened before owner initialization completes', () => {
+    user.user.set(null); TestBed.flushEffects();
+    user.user.set({ uid: 'owner' }); service.watchBatch('startup-draft');
+    const firstRead = streams.reads.at(-2)!;
+    TestBed.flushEffects();
+    expect(service.requestedBatchId()).toBe('startup-draft');
+    expect(service.loadingBatch()).toBe(true);
+    expect(firstRead.observed).toBe(false);
+    streams.reads.at(-2)!.next({ id: 'startup-draft', state: 'draft' });
+    expect(service.batch()?.id).toBe('startup-draft'); expect(service.loadingBatch()).toBe(false);
+  });
+  it.each(['owner', 'another'])('clears an opening draft when Auth changes during profile initialization: %s', profileUid => {
+    user.user.set(null); TestBed.flushEffects();
+    service.watchBatch('previous-owner-draft');
+    auth.currentUser.uid = 'another'; user.user.set({ uid: profileUid }); TestBed.flushEffects();
+    expect(service.requestedBatchId()).toBeNull(); expect(service.batch()).toBeNull();
+  });
+  it('keeps an owner-matched table selection set before initial owner effects flush', () => {
+    user.user.set(null); TestBed.flushEffects();
+    user.user.set({ uid: 'owner' }); service.setSelection(['event-one', 'event-two']); TestBed.flushEffects();
+    expect(service.selection()).toEqual(['event-one', 'event-two']);
+  });
+  it('validates, deduplicates and bounds selection restored from navigation state', () => {
+    service.setSelection(['event-one', 'event-one', null, 123, '../private', '', ...Array.from({ length: 60 }, (_, i) => `event-${i}`)]);
+    expect(service.selection().length).toBe(50);
+    expect(service.selection().slice(0, 2)).toEqual(['event-one', 'event-0']);
+    user.user.set(null); service.setSelection(['event-one']); expect(service.selection()).toEqual([]);
+  });
   it('clears account-scoped selections, results and notifications on owner change', () => {
     service.setSelection(['event']); streams.reads[1].next([{ id: 'batch', provider: 'suunto', state: 'confirmed', total: 1, finished: 0 }]);
     user.user.set({ uid: 'another' }); auth.currentUser.uid = 'another'; TestBed.flushEffects();

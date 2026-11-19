@@ -770,6 +770,8 @@ describe('EventTableComponent', () => {
         expect(mainRow.querySelector('.selection-actions')).toBeNull();
         expect(actionButtons.length).toBe(8);
         expect(actionButtons.item(5).getAttribute('aria-label')).toBe('Send to service: review 1 selected activity');
+        expect(actionButtons.item(5).querySelector('.bulk-action-label').textContent).toBe('Send');
+        expect(actionButtons.item(5).querySelector('.bulk-action-button-content')).toBeTruthy();
     });
 
     it('should keep selected-event actions accessible without hover tooltip overlays', () => {
