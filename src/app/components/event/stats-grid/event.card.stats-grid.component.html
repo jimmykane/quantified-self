@@ -33,19 +33,19 @@
                     [expanded]="expandedMetric() === metricKey" (expandedChange)="onMetricExpanded(metricKey, $event)">
                     <mat-expansion-panel-header class="comparison-metric-header" collapsedHeight="auto" expandedHeight="auto"
                       appHapticTap (keydown)="onMetricHeaderKeydown($event)">
-                      <span class="comparison-metric-title" [class.cadence-title]="card.kind === 'cadence'">
+                      <span class="comparison-metric-title" [class.family-title]="card.kind === 'family'">
                         <app-data-type-icon [dataType]="type" size="18px" />
                         <span class="comparison-metric-label">
                           {{ card.label }}
-                          @if (card.kind === 'cadence') {
-                            <span class="cadence-context">Ranges@if (card.unit) { · {{ card.unit }}}</span>
+                          @if (card.kind === 'family') {
+                            <span class="family-context">Ranges@if (card.unit) { · {{ card.unit }}}</span>
                           }
                         </span>
-                        @if (card.kind === 'cadence') {
-                          <span class="cadence-ranges">
+                        @if (card.kind === 'family') {
+                          <span class="family-ranges">
                             @for (column of card.columns; track column.type) {
-                              <span class="cadence-range">
-                                <span class="cadence-range-label">{{ column.label }}</span>
+                              <span class="family-range">
+                                <span class="family-range-label">{{ column.label }}</span>
                                 @if (column.range !== null) { {{ column.range }} }
                                 @else {
                                   <span aria-hidden="true">—</span><span class="cdk-visually-hidden">Not recorded</span>
@@ -59,8 +59,8 @@
                       </span>
                     </mat-expansion-panel-header>
                     @if (panel.expanded) {
-                      @if (card.kind === 'cadence') {
-                        <ng-container [ngTemplateOutlet]="cadenceTable" [ngTemplateOutletContext]="{ $implicit: card }" />
+                      @if (card.kind === 'family') {
+                        <ng-container [ngTemplateOutlet]="familyTable" [ngTemplateOutletContext]="{ $implicit: card }" />
                       } @else {
                         <ng-container [ngTemplateOutlet]="deviceTable" [ngTemplateOutletContext]="{ $implicit: card }" />
                       }
@@ -171,9 +171,9 @@
   }
 </ng-template>
 
-<ng-template #cadenceTable let-card>
+<ng-template #familyTable let-card>
   @let comparing = sources().length > 1;
-  <table class="cadence-table" aria-label="Cadence by device">
+  <table class="family-table" [attr.aria-label]="card.label + ' by device'">
     <thead>
       <tr>
         <th scope="col" class="device-column">Device</th>
@@ -185,7 +185,7 @@
     <tbody>
       @for (row of card.rows; track row.key) {
         @let isReference = comparing && row.key === referenceKey();
-        <tr class="comparison-row" [class.cadence-reference]="isReference">
+        <tr class="comparison-row" [class.family-reference]="isReference">
           <th scope="row">
             <span class="device-name"><span aria-hidden="true" class="device-mark" [style.background-color]="row.color"></span>
               <span>{{ row.label }}</span>
@@ -197,7 +197,7 @@
               @if (cell.value !== null) {
                 <span class="reading">{{ cell.value }}</span>
                 @if (cell.delta) {
-                  <span class="difference cadence-difference">
+                  <span class="difference family-difference">
                     <span class="cdk-visually-hidden">Difference from reference </span>{{ cell.delta }}
                   </span>
                 }
@@ -211,6 +211,6 @@
     </tbody>
   </table>
   @if (comparing && card.missingReference) {
-    <p class="comparison-note">The reference device has no cadence reading for {{ card.missingReference }}.</p>
+    <p class="comparison-note">The reference device has no reading for {{ card.missingReference }}.</p>
   }
 </ng-template>

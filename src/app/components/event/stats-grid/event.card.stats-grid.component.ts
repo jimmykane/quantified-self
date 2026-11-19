@@ -39,7 +39,7 @@ import { isBenchmarkEvent } from '@shared/event-classification';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 import {
-  buildBenchmarkSummaryPanels, getBenchmarkComparisonMetricType, getBenchmarkSummarySources, type BenchmarkSummarySource,
+  buildBenchmarkSummaryPanels, getBenchmarkComparisonMetricTypes, getBenchmarkSummarySources, type BenchmarkSummarySource,
 } from '../../../helpers/benchmark-summary-rows.helper';
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 
@@ -386,7 +386,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   private updateTabs() {
     const availableStatTypes = new Set(this.compareRecordings
-      ? this.sources().flatMap(source => [...source.stats.keys()].map(getBenchmarkComparisonMetricType))
+      ? this.comparisonPanels().keys()
       : this.stats.map(stat => stat.getType()));
     const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
       ? ['diving']
@@ -394,17 +394,18 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (this.rrRecordings.length) includeEmptyGroupIds.push('rr');
     const rrTypes = new Set(this.rrRecordings.flatMap(recording => recording.stats.map(stat => stat.getType())));
 
-    const summaryTypes = this.compareRecordings
-      ? this.displayedStatsToShow.map(getBenchmarkComparisonMetricType)
-      : this.displayedStatsToShow;
-    this.metricTabs = buildSummaryMetricTabs(summaryTypes, { includeEmptyGroupIds })
+    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, {
+      includeEmptyGroupIds,
+      resolveMetricTypes: this.compareRecordings ? getBenchmarkComparisonMetricTypes : undefined,
+    })
       .map(tab => {
         const available = tab.id === 'rr' && !this.compareRecordings ? rrTypes : availableStatTypes;
         const metricTypes = tab.metricTypes.filter(type => available.has(type));
         if (!this.compareRecordings || tab.id === EVENT_SUMMARY_DEFAULT_GROUP_ID) return { ...tab, metricTypes };
         // Detail tabs previously showed recorded min/max siblings inside composite cards.
         const families = metricTypes.filter(type => !tab.singleValueTypes?.includes(type));
-        const siblings = expandStatsTypesForCompositeDiff(families).filter(type => available.has(type));
+        const siblings = expandStatsTypesForCompositeDiff(families).flatMap(getBenchmarkComparisonMetricTypes)
+          .filter(type => available.has(type));
         return { ...tab, metricTypes: [...new Set([...metricTypes, ...siblings])] };
       })
       .filter((tab) => tab.metricTypes.length > 0 || includeEmptyGroupIds.includes(tab.id));

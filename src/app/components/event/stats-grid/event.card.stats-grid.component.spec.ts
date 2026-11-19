@@ -39,6 +39,8 @@ import {
     DataStaminaAvg,
     DataStaminaMin,
     DataTemperatureMax,
+    DataVerticalSpeedAvg,
+    DataVerticalSpeedMax,
     DataRRRMSSD,
     DataRRArtifactPercentage,
     DataRRArtifactCount,
@@ -259,18 +261,20 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.rrRecordings).toEqual([]);
     });
 
-    it('preserves recorded min/max readings in benchmark detail tabs while Overall shows the chosen metric', () => {
+    it('groups power in both benchmark tabs and preserves the tab of a family configured by its maximum', () => {
         const readings = [new DataPowerAvg(120), new DataPowerMin(0), new DataPowerMax(200)];
         const all = ['A', 'B'].map(name => ({ getID: () => name, type: ActivityTypes.Running,
             getStat: (type: string) => readings.find(stat => stat.getType() === type) }));
         component.compareRecordings = true;
-        component.statsToShow = [DataPowerAvg.type];
+        const verticalSpeed = new DataVerticalSpeedMax(2);
+        readings.push(verticalSpeed);
+        component.statsToShow = [DataPowerAvg.type, DataVerticalSpeedMax.type];
         component.selectedActivities = all as any;
         component.event = { getActivities: () => all } as any;
         component.ngOnChanges({});
         expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([DataPowerAvg.type]);
         expect(component.metricTabs.find(tab => tab.id === 'performance')?.metricTypes).toEqual([
-            DataPowerAvg.type, DataPowerMin.type, DataPowerMax.type,
+            DataVerticalSpeedAvg.type, DataPowerAvg.type,
         ]);
     });
 
@@ -329,7 +333,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(mockHaptics.selection).not.toHaveBeenCalled();
         const openMetric = (label: string) => {
             const header = [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')]
-                .find(element => element.querySelector('.comparison-metric-label')?.textContent?.trim() === label);
+                .find(element => element.querySelector('.comparison-metric-label')?.firstChild?.textContent?.trim() === label);
             header!.click();
             fixture.detectChanges();
         };
@@ -343,11 +347,12 @@ describe('EventCardStatsGridComponent', () => {
         expect(rows()[0]).toContain('−100.0 m');
         expect(rows()[1]).toContain('Reference');
         expect(rows()[2]).toContain('+100.0 m');
-        openMetric('Average Heart Rate');
-        const heartRate = grid.querySelector('table[aria-label="Average Heart Rate"]')!;
-        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(2);
+        openMetric('Heart Rate');
+        const heartRate = grid.querySelector('table[aria-label="Heart Rate by device"]')!;
+        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(4);
         expect(heartRate.querySelector('.reference-label')?.textContent).toContain('Reference');
-        expect(heartRate.closest('.comparison-metric')?.querySelectorAll('.comparison-note')).toHaveLength(1);
+        expect(heartRate.closest('.comparison-metric')?.querySelector('.comparison-note')?.textContent)
+            .toContain('has no reading for Avg');
         expect(heartRate.textContent).toContain('Not recorded');
         component.selectReference('id:B');
         component.selectReference('invalid');
@@ -420,7 +425,7 @@ describe('EventCardStatsGridComponent', () => {
         const [duration, distance, cadence] = headers();
         expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false', 'false']);
         expect(distance.textContent).toContain('9.25–9.27 Km');
-        expect([...cadence.querySelectorAll('.cadence-range')].map(range => range.textContent.trim().replace(/\s+/g, ' ')))
+        expect([...cadence.querySelectorAll('.family-range')].map(range => range.textContent.trim().replace(/\s+/g, ' ')))
             .toEqual(['Min 112–116', 'Avg 169–170', 'Max 185']);
         expect(tables()).toHaveLength(0);
         expect(mockHaptics.selection).not.toHaveBeenCalled();
@@ -465,15 +470,15 @@ describe('EventCardStatsGridComponent', () => {
         expect(distance.getAttribute('aria-expanded')).toBe('false');
         expect(tables()).toHaveLength(1);
         expect(tables()[0].getAttribute('aria-label')).toBe('Cadence by device');
-        expect(tables()[0].querySelector('.cadence-reference th').textContent).toContain('Suunto Run');
+        expect(tables()[0].querySelector('.family-reference th').textContent).toContain('Suunto Run');
         expect(tables()[0].querySelector<HTMLElement>('.device-mark').style.backgroundColor).toBe('rgb(33, 150, 243)');
-        expect(tables()[0].querySelector('.cadence-difference').textContent).toContain('−4');
+        expect(tables()[0].querySelector('.family-difference').textContent).toContain('−4');
         fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance.select('id:a');
         fixture.detectChanges();
         expect(cadence.getAttribute('aria-expanded')).toBe('true');
-        expect(tables()[0].querySelector('.cadence-reference th').textContent).toContain('Coros PACE 4');
-        expect(tables()[0].querySelector('.cadence-difference').textContent).toContain('+4');
-        expect(grid.querySelector('.comparison-note').textContent).toContain('no cadence reading for Max');
+        expect(tables()[0].querySelector('.family-reference th').textContent).toContain('Coros PACE 4');
+        expect(tables()[0].querySelector('.family-difference').textContent).toContain('+4');
+        expect(grid.querySelector('.comparison-note').textContent).toContain('no reading for Max');
 
         fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
         fixture.detectChanges();

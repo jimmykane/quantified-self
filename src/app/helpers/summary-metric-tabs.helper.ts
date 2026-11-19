@@ -13,6 +13,7 @@ export interface SummaryMetricTab {
 
 export interface BuildSummaryMetricTabsOptions {
   includeEmptyGroupIds?: readonly EventSummaryMetricGroupId[];
+  resolveMetricTypes?: (type: string) => string[];
 }
 
 const OTHER_GROUP_ID: EventSummaryMetricGroupId = 'other';
@@ -27,16 +28,18 @@ export const buildSummaryMetricTabs = (
     return [];
   }
 
-  const uniqueMetricTypes = [...new Set(resolvedMetricTypes).values()];
+  const resolveMetricTypes = options.resolveMetricTypes ?? ((type: string) => [type]);
+  const uniqueMetricTypes = [...new Set(resolvedMetricTypes.flatMap(resolveMetricTypes))];
   const uniqueMetricTypeSet = new Set(uniqueMetricTypes);
 
-  const configuredGroups = EVENT_SUMMARY_METRIC_GROUPS.filter((group) => group.id !== OTHER_GROUP_ID);
+  const configuredGroups = EVENT_SUMMARY_METRIC_GROUPS.filter((group) => group.id !== OTHER_GROUP_ID)
+    .map(group => ({ ...group, metricTypes: [...new Set(group.metricTypes.flatMap(resolveMetricTypes))] }));
   const knownConfiguredMetricTypes = new Set<string>();
   configuredGroups.forEach((group) => {
     group.metricTypes.forEach((metricType) => knownConfiguredMetricTypes.add(metricType));
   });
 
-  const overallGroup = EVENT_SUMMARY_METRIC_GROUPS.find((group) => group.id === OVERALL_GROUP_ID);
+  const overallGroup = configuredGroups.find((group) => group.id === OVERALL_GROUP_ID);
   const tabsMap = new Map<EventSummaryMetricGroupId, SummaryMetricTab>();
   EVENT_SUMMARY_METRIC_GROUPS.forEach((group) => {
     tabsMap.set(group.id, {
@@ -58,8 +61,8 @@ export const buildSummaryMetricTabs = (
     }
   }
 
-  EVENT_SUMMARY_METRIC_GROUPS.forEach((group: EventSummaryMetricGroupConfig) => {
-    if (group.id === OVERALL_GROUP_ID || group.id === OTHER_GROUP_ID) {
+  configuredGroups.forEach((group: EventSummaryMetricGroupConfig) => {
+    if (group.id === OVERALL_GROUP_ID) {
       return;
     }
     const tab = tabsMap.get(group.id);

@@ -1,5 +1,5 @@
 import {
-  type ActivityInterface, type DataInterface, DataCadenceAvg, DataCadenceMax, DataCadenceMin,
+  type ActivityInterface, type DataInterface,
   DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -9,7 +9,7 @@ import {
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 import { RR_STAT_LABELS } from '../constants/rr-metrics';
 import { getBenchmarkRRLabels } from './benchmark-rr.helper';
-import { normalizeUnitDerivedStatLabel } from './stat-label.helper';
+import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolvePrimaryUnitAwareDisplayStat, resolveSummaryDisplayStat } from './summary-display.helper';
 
 export interface BenchmarkSummarySource {
@@ -20,14 +20,31 @@ export interface BenchmarkSummarySource {
   stats: Map<string, DataInterface>;
 }
 
-const cadenceColumns = [
-  { type: DataCadenceMin.type, label: 'Min' },
-  { type: DataCadenceAvg.type, label: 'Avg' },
-  { type: DataCadenceMax.type, label: 'Max' },
-];
+interface BenchmarkMetricFamily {
+  type: string;
+  avgType: string;
+  columns: { type: string; label: string }[];
+}
 
-export function getBenchmarkComparisonMetricType(type: string): string {
-  return cadenceColumns.some(column => column.type === type) ? DataCadenceAvg.type : type;
+const metricFamilies = new Map<string, BenchmarkMetricFamily>();
+for (const [type, avgType] of Object.entries(DynamicDataLoader.dataTypeAvgDataType)) {
+  const minType = DynamicDataLoader.dataTypeMinDataType[type];
+  const maxType = DynamicDataLoader.dataTypeMaxDataType[type];
+  if (!minType || !maxType) continue;
+  const family = { type, avgType, columns: [
+    { type: minType, label: 'Min' },
+    { type: avgType, label: 'Avg' },
+    { type: maxType, label: 'Max' },
+  ] };
+  metricFamilies.set(type, family);
+  for (const column of family.columns) metricFamilies.set(column.type, family);
+}
+
+export function getBenchmarkComparisonMetricTypes(type: string): string[] {
+  const family = metricFamilies.get(type);
+  if (!family) return [type];
+  // Preserve independently saved values for the unqualified stat, for example Power.
+  return type === family.type ? [type, family.avgType] : [family.avgType];
 }
 
 export function getBenchmarkSummarySources(all: ActivityInterface[], selected: ActivityInterface[], types: string[],
@@ -70,8 +87,8 @@ interface BenchmarkSummaryCard {
   rows: BenchmarkSummaryRow[];
 }
 
-interface BenchmarkCadenceComparison {
-  kind: 'cadence';
+interface BenchmarkFamilyComparison {
+  kind: 'family';
   label: string;
   unit: string;
   columns: { type: string; label: string; range: string | null }[];
@@ -198,7 +215,7 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
         type: displayType,
         hasReferenceReading: !!reference,
         label: variants.size > 1 && unit ? `${label} (${unit})` : label,
-        unit: sample.display.unit,
+        unit: [...readings.values()].every(reading => reading.display.unit === sample.display.unit) ? sample.display.unit : '',
         range: formatReadingRange(readings, sample),
         rows,
       };
@@ -209,20 +226,42 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
 
 export function buildBenchmarkSummaryPanels(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
   const cards = buildBenchmarkSummaryCards(sources, referenceKey, units);
-  const panels = new Map<string, (BenchmarkSummaryCard | BenchmarkCadenceComparison)[]>(cards);
-  const columns = cadenceColumns.map(column => ({ ...column, card: cards.get(column.type)?.[0] }));
-  const first = columns.find(column => column.card)?.card;
-  if (!first) return panels;
+  const panels = new Map<string, (BenchmarkSummaryCard | BenchmarkFamilyComparison)[]>(cards);
+  const families = new Set([...cards.keys()].map(type => metricFamilies.get(type)).filter(Boolean));
+  const manufacturer = getCommonMetricManufacturer(sources.map(source => source.activity));
+  for (const family of families) {
+    const variants = new Set(family.columns.flatMap(({ type }) => cards.get(type)?.map(getFamilyVariant) ?? []));
+    if (!variants.size) continue;
+    for (const { type } of family.columns) panels.delete(type);
+    const label = normalizeUnitDerivedTypeLabel(family.type, family.type, { manufacturer, surface: 'stream' });
+    panels.set(family.avgType, [...variants].map(variant => buildFamilyComparison(family, label, variant, cards, sources, referenceKey)));
+    const base = panels.get(family.type);
+    if (base) {
+      panels.set(family.type, base.map(card => ({ ...card, label: `${card.label} (recorded value)` })));
+    }
+  }
+  return panels;
+}
 
-  // The cadence panel shows the canonical unit once for all three columns.
-  const unit = first.unit;
+function getFamilyVariant(card: BenchmarkSummaryCard): string {
+  return metricFamilies.get(card.type)?.type ?? card.type;
+}
+
+function buildFamilyComparison(family: BenchmarkMetricFamily, label: string, variant: string,
+  cards: ReadonlyMap<string, BenchmarkSummaryCard[]>, sources: BenchmarkSummarySource[], referenceKey: string): BenchmarkFamilyComparison {
+  const columns = family.columns.map(column => ({
+    ...column,
+    card: cards.get(column.type)?.find(card => getFamilyVariant(card) === variant),
+  }));
+  // A distance family can contain both metres and kilometres within one unit preference.
+  const displayUnits = new Set(columns.flatMap(({ card }) => card ? [card.unit] : []));
+  const unit = displayUnits.size === 1 ? displayUnits.values().next().value : '';
   const suffix = unit ? ` ${unit}` : '';
   const compact = (text: string | null): string | null =>
     suffix && text?.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
-  for (const { type } of columns) panels.delete(type);
-  panels.set(DataCadenceAvg.type, [{
-    kind: 'cadence',
-    label: 'Cadence',
+  return {
+    kind: 'family',
+    label,
     unit,
     columns: columns.map(({ type, label, card }) => ({
       type, label, range: compact(card?.range ?? null),
@@ -240,6 +279,5 @@ export function buildBenchmarkSummaryPanels(sources: BenchmarkSummarySource[], r
       }),
     })),
     missingReference: columns.filter(({ card }) => card && !card.hasReferenceReading).map(({ label }) => label).join(', '),
-  }]);
-  return panels;
+  };
 }

@@ -960,10 +960,10 @@ A chosen reference follows its recording ID across refreshes. Deselecting it or 
 selects the first available recording. One picker above the tabs controls all metric tables. Each metric starts as a
 collapsed accordion row on desktop and mobile. The header shows the range of available readings in the selected units. Opening a row reveals
 the device table and closes the previous row. References and units refresh the open table in place.
-Cadence groups the available Min, Avg, and Max ranges into one row in Overall and Performance. The expanded
-table shows a column for each, with device colors and differences below each reading. A missing reference
-reading gets one explanation and the other devices' readings remain visible. Differences use device minus
-reference in the user's preferred units.
+Metrics with a defined Min, Avg, and Max group the available ranges within their existing categories in
+one row per selected unit. The expanded table shows a column for each reading, with device colors and
+differences below each reading. The app displays a dash for missing values. If the reference is missing a
+reading, the other devices' readings remain visible. Differences use device minus reference in the user's preferred units.
 Time and pace differences under one second use Sports Lib's fractional stopwatch display. Smaller-than-display
 differences retain direction, while exact equality reads **Same**.
 A single selected recording shows its readings alone. Ordinary activities, single-source events and explicit

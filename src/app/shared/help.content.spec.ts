@@ -2551,7 +2551,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
     expect(gettingStartedSection?.content).toContain('**Device stats** starts with the metric rows collapsed');
     expect(gettingStartedSection?.content).toContain('available range in your preferred units');
-    expect(gettingStartedSection?.content).toContain('**Cadence** shows the device ranges for Min, Avg, and Max in one row');
+    expect(gettingStartedSection?.content).toContain('Metrics with Min, Avg, and Max group those ranges in one expandable row per unit');
     expect(gettingStartedSection?.content).toContain('**Slightly higher** and **Slightly lower**');
     expect(gettingStartedSection?.content).toContain('If the reference has no reading for a metric');
     expect(gettingStartedSection?.content).not.toContain('**Combined totals**');
