@@ -3,13 +3,27 @@
     <a pageHeaderActions mat-button routerLink="/services" appHapticTap><mat-icon>hub</mat-icon>Manage connections</a>
   </app-page-header>
   <p class="page-intro">Send recorded activities to Suunto, COROS, or Wahoo. Confirmed sends continue after you leave this page.</p>
+  @if (source() === 'saved' && sends.selection().length && !sends.requestedBatchId()) {
+    <section class="selected-activities" aria-label="Selected activities">
+      <mat-icon aria-hidden="true">checklist</mat-icon>
+      <div>
+        <strong>{{ sends.selection().length }} {{ sends.selection().length === 1 ? 'activity selected' : 'activities selected' }}</strong>
+        <p>Your table selection is kept when you change the destination. Preview it before sending.</p>
+      </div>
+      <button mat-button [disabled]="busy()" (click)="clearSelection()">Choose dates instead</button>
+    </section>
+  }
   <section class="send-setup" aria-label="Choose destination and source">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Destination</mat-label>
-      <mat-select [value]="provider()" (selectionChange)="chooseProvider($event.value)" [disabled]="busy()">
-        @for (option of providerOptions; track option) { <mat-option [value]="option">{{ option === 'coros' ? 'COROS' : option === 'suunto' ? 'Suunto' : 'Wahoo' }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
+    <div class="destination-choice">
+      <span id="activity-destination-label">Destination</span>
+      <mat-radio-group class="provider-options" aria-labelledby="activity-destination-label" [value]="provider()" (change)="chooseProvider($event.value)" [disabled]="busy()">
+        @for (option of providerOptions; track option) {
+          <mat-radio-button class="provider-option" [class.provider-option-selected]="provider() === option" [value]="option">
+            {{ option === 'coros' ? 'COROS' : option === 'suunto' ? 'Suunto app' : 'Wahoo' }}
+          </mat-radio-button>
+        }
+      </mat-radio-group>
+    </div>
     @if (provider()) {
       <div class="source-choice">
         <span id="activity-source-label">Activity source</span>
@@ -35,18 +49,19 @@
           <p class="retention-note">Drafts expire after 24 hours. Confirmed files are held privately for up to seven days for delivery and retries. They are not added to your QS activity archive.</p>
         </section>
       } @else if (sends.batch()?.savedSelectionReady || sends.batch()?.total) {
-        <p>This draft keeps your original saved-activity selection. Continue the preview if checking was interrupted, or start a new send to choose different dates or sources.</p>
+        <p class="retention-note">{{ sends.batch()?.reviewed
+          ? 'This draft keeps the reviewed selection. Start a new send to choose different activities.'
+          : 'Your selection is saved in this draft. Continue the preview to finish checking it.' }}</p>
       } @else {
         <section aria-label="Choose saved activities" class="saved-selection">
-          @if (sends.selection().length) { <p>{{ sends.selection().length }} selected activities will be checked.</p><button mat-button [disabled]="busy()" (click)="clearSelection()">Choose a date range instead</button> }
-          @else {
+          @if (!sends.selection().length) {
             <mat-form-field appearance="outline"><mat-label>From</mat-label><input matInput type="date" [(ngModel)]="startDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>To</mat-label><input matInput type="date" [(ngModel)]="endDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Activity sources</mat-label><mat-select multiple [value]="savedSources" (selectionChange)="changeSavedSources($event.value)" [disabled]="busy()">
+              @for (option of sourceOptions; track option) { <mat-option [value]="option">{{ option === 'manualUpload' ? 'Uploaded to QS' : option }}</mat-option> }
+            </mat-select><mat-hint>All sources when empty. Choose Uploaded to QS for files you imported, even if recorded on a Garmin device.</mat-hint></mat-form-field>
           }
-          <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Activity sources</mat-label><mat-select multiple [value]="savedSources" (selectionChange)="changeSavedSources($event.value)" [disabled]="busy()">
-            @for (option of sourceOptions; track option) { <mat-option [value]="option">{{ option === 'manualUpload' ? 'Uploaded to QS' : option }}</mat-option> }
-          </mat-select><mat-hint>All sources when empty. Choose Uploaded to QS for files you imported, even if recorded on a Garmin device.</mat-hint></mat-form-field>
-          <button mat-stroked-button (click)="previewSaved()" [disabled]="busy()">Preview saved activities</button>
+          <button mat-stroked-button (click)="previewSaved()" [disabled]="busy()">{{ sends.selection().length ? 'Preview selected activities' : 'Preview saved activities' }}</button>
           <p>Retained FIT originals are eligible. Merged activities, unsupported originals, and previous deliveries are excluded.</p>
         </section>
       }
@@ -82,7 +97,7 @@
             <div><strong>{{ row.name }}</strong><p>{{ row.sport || 'Recorded activity' }} @if (row.startDate) { · {{ row.startDate | date:'medium' }} } @if (row.size) { · {{ row.size / 1048576 | number:'1.1-1' }} MiB }</p>
               @for (warning of row.warnings; track warning) { <p>{{ warning }}</p> }
             </div>
-            <div class="row-status" role="status" aria-live="polite"><strong>{{ statusLabels[row.status] }}</strong><p>{{ row.message }}</p></div>
+            <div class="row-status" [attr.data-status]="row.status" role="status" aria-live="polite"><strong>{{ statusLabels[row.status] }}</strong><p>{{ row.message }}</p></div>
             <div class="row-actions">
               @if (batch.state === 'draft') { <button mat-button [attr.aria-label]="'Remove ' + row.name + ' from this draft'" (click)="rowAction(row, 'remove')" [disabled]="busy()">Remove</button> }
               @if (row.recovery === 'check_status') { <button mat-button [attr.aria-label]="'Check status for ' + row.name" (click)="rowAction(row, 'check')" [disabled]="busy()">Check status</button> }

@@ -2,9 +2,9 @@ import { AppPushService } from '../../services/app.push.service';
 import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import dayjs from 'dayjs';
-import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialModule } from '../../modules/material.module';
@@ -26,6 +26,7 @@ export class ActivitySendPageComponent {
   readonly users = inject(AppUserService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly location = inject(Location);
   private readonly haptics = inject(AppHapticsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly browser = inject(BrowserCompatibilityService);
@@ -73,8 +74,15 @@ export class ActivitySendPageComponent {
       // A saved batch owns its destination and source, including copied deep links.
       void this.router.navigate(['/send-activities', batch.provider], { queryParams: { batch: batch.id, source: batch.source }, replaceUrl: true });
     });
-    const navigationState = this.router.getCurrentNavigation()?.extras.state;
-    if (navigationState?.['activitySendOwner'] === this.users.user()?.uid && Array.isArray(navigationState?.['activitySendSelection'])) this.sends.setSelection(navigationState['activitySendSelection']);
+    const navigationState = this.router.getCurrentNavigation()?.extras.state ?? this.location.getState() as Record<string, unknown>;
+    let selectionRestored = false;
+    effect(() => {
+      const uid = this.users.user()?.uid;
+      if (!uid || selectionRestored) return;
+      selectionRestored = true;
+      const ids = navigationState?.['activitySendSelection'];
+      untracked(() => this.sends.setSelection(navigationState?.['activitySendOwner'] === uid && Array.isArray(ids) ? ids : []));
+    });
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(params => {
       const value = params.get('provider');
       const provider = isActivitySendProvider(value) ? value : null;
@@ -105,18 +113,18 @@ export class ActivitySendPageComponent {
     this.destroyRef.onDestroy(() => { this.destroyed = true; this.sends.closeBatch(); });
   }
   async chooseProvider(provider: ActivitySendProvider): Promise<void> {
-    if (provider === this.provider()) return;
-    if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() } })) { this.selectionChanged.set(false); this.haptics.selection(); }
+    if (this.busy() || provider === this.provider()) return;
+    if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async chooseSource(source: 'files' | 'saved'): Promise<void> {
-    if (source === this.source()) return;
-    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source } })) { this.selectionChanged.set(false); this.haptics.selection(); }
+    if (this.busy() || source === this.source()) return;
+    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async openBatch(id: string, provider: ActivitySendProvider): Promise<void> {
     if (await this.router.navigate(['/send-activities', provider], { queryParams: { batch: id, source: this.sends.recent().find(batch => batch.id === id)?.source || 'files' } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async newDraft(): Promise<void> {
-    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() } })) { this.selectionChanged.set(false); this.haptics.selection(); }
+    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   private async ensureDraft(): Promise<string> {
     this.assertActive();
@@ -131,7 +139,7 @@ export class ActivitySendPageComponent {
     if (!id) throw new Error('This browser cannot create a safe send reference. Please update your browser.');
     await this.command({ version: 1, action: 'create', batchId: id, provider, source: this.source() });
     this.assertActive(); this.activeBatch = id;
-    const opened = await this.router.navigate([], { relativeTo: this.route, queryParams: { batch: id, source: this.source() }, replaceUrl: true });
+    const opened = await this.router.navigate([], { relativeTo: this.route, queryParams: { batch: id, source: this.source() }, replaceUrl: true, ...this.selectionNavigation() });
     this.assertActive();
     if (!opened) throw new Error('This draft could not be opened. Reopen it from Recent sends before preparing activities.');
     return id;
@@ -161,7 +169,16 @@ export class ActivitySendPageComponent {
     if (JSON.stringify([...sources].sort()) === JSON.stringify([...this.savedSources].sort())) return;
     this.savedSources = sources; this.haptics.selection(); this.invalidateSaved();
   }
-  clearSelection(): void { this.sends.setSelection([]); this.haptics.selection(); this.invalidateSaved(); }
+  private selectionNavigation(): { state?: Record<string, unknown> } {
+    return this.sends.selection().length ? { state: { activitySendOwner: this.users.user()?.uid, activitySendSelection: this.sends.selection() } } : {};
+  }
+  clearSelection(): void {
+    if (this.busy() || !this.sends.selection().length) return;
+    this.sends.setSelection([]);
+    // Remove the table selection from this history entry as well as the live view.
+    this.location.replaceState(this.location.path(true), '', { ...this.location.getState() as Record<string, unknown>, activitySendSelection: [] });
+    this.haptics.selection(); this.invalidateSaved();
+  }
   invalidateSaved(): void {
     const batch = this.sends.batch();
     if (batch?.source === 'saved' && !batch.savedSelectionReady && !batch.total) return;
@@ -175,7 +192,7 @@ export class ActivitySendPageComponent {
       const id = await this.ensureDraft(); let cursor: string | undefined;
       do {
         this.assertActive();
-        const result = await this.command({ version: 1, action: 'prepare', batchId: id, ...(ids.length ? { eventIds: ids } : { startDate: dayjs(this.startDate).startOf('day').toISOString(), endDate: dayjs(this.endDate).endOf('day').toISOString() }), ...(this.savedSources.length ? { sources: this.savedSources } : {}), ...(cursor ? { cursor } : {}) });
+        const result = await this.command({ version: 1, action: 'prepare', batchId: id, ...(ids.length ? { eventIds: ids } : { startDate: dayjs(this.startDate).startOf('day').toISOString(), endDate: dayjs(this.endDate).endOf('day').toISOString() }), ...(!ids.length && this.savedSources.length ? { sources: this.savedSources } : {}), ...(cursor ? { cursor } : {}) });
         this.assertActive();
         cursor = result.nextCursor || undefined;
       } while (cursor);

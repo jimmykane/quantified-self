@@ -101,7 +101,15 @@
             </span>
           </button>
 
-          @if (canSendOwnedActivities) { <button mat-button class="bulk-action-button" [attr.aria-label]="'Send to service: review ' + selection.selected.length + ' selected ' + (selection.selected.length === 1 ? 'activity' : 'activities')" (click)="$event.preventDefault(); $event.stopPropagation(); sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
+          @if (canSendOwnedActivities) {
+            <button mat-button class="bulk-action-button"
+              [attr.aria-label]="'Send to service: review ' + selection.selected.length + ' selected ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
+              (click)="$event.preventDefault(); $event.stopPropagation(); sendToService()">
+              <span class="bulk-action-button-content">
+                <mat-icon>send</mat-icon><span class="bulk-action-label">Send</span>
+              </span>
+            </button>
+          }
 
           <button mat-button color="warn"
             class="bulk-action-button"

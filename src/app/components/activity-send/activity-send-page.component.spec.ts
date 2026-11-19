@@ -2,6 +2,7 @@ import { AppPushService } from '../../services/app.push.service';
 import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { Location } from '@angular/common';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { BehaviorSubject, of } from 'rxjs';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -25,6 +26,7 @@ describe('activity sending workspace', () => {
     push = { deliveryNotificationsAvailable: signal(false), canNotifyDelivery: signal(false), state: signal('disabled'), operation: signal(null), canEnable: signal(true), enable: vi.fn(), deliveryNotificationTarget: vi.fn() };
     preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), saving: signal(null), setEnabled: vi.fn() };
     sends = { summary: signal(null), summaryError: signal(null), loadingSummary: signal(false), refreshSummary: vi.fn(), batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
+    sends.setSelection.mockImplementation((ids: string[]) => sends.selection.set(ids));
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
     TestBed.configureTestingModule({ imports: [ActivitySendPageComponent, NoopAnimationsModule], providers: [provideRouter([]), { provide: AppPushService, useValue: push }, { provide: AppNotificationPreferencesService, useValue: preferences }, { provide: ActivitySendService, useValue: sends }, { provide: AppUserService, useValue: users }, { provide: AppHapticsService, useValue: haptics }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => 'batch-1' } }] });
@@ -286,11 +288,70 @@ describe('activity sending workspace', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true'); expect(details.hidden).toBe(false);
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
-  it('applies the chosen source filter to explicit saved-activity selections', async () => {
+  it('previews exactly the selected IDs without stale date or source filters', async () => {
     const fixture = render(); sends.batch.set({ ...batchValue, source: 'saved' }); sends.selection.set(['event-one']);
     fixture.componentInstance.source.set('saved'); fixture.componentInstance.savedSources = ['COROS API'];
     await fixture.componentInstance.previewSaved();
-    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'prepare', batchId: 'batch-1', eventIds: ['event-one'], sources: ['COROS API'] }, 'owner');
+    expect(sends.command).toHaveBeenCalledWith({ version: 1, action: 'prepare', batchId: 'batch-1', eventIds: ['event-one'] }, 'owner');
+  });
+  it('restores the table selection after the profile loads and carries it across destination navigation', async () => {
+    const selection = { activitySendOwner: 'owner', activitySendSelection: ['event-one', 'event-two'] };
+    vi.spyOn(TestBed.inject(Router), 'getCurrentNavigation').mockReturnValue({ extras: { state: selection } } as any);
+    users.user.set(null);
+    const fixture = render();
+    expect(sends.selection()).toEqual([]);
+    users.user.set({ uid: 'owner' }); fixture.detectChanges();
+    expect(sends.selection()).toEqual(selection.activitySendSelection);
+    fixture.componentInstance.source.set('saved');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await fixture.componentInstance.chooseProvider('coros');
+    expect(navigate).toHaveBeenCalledWith(['/send-activities', 'coros'], { queryParams: { source: 'saved' }, state: selection });
+    expect(sends.command).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it.each(['owner', 'other-owner'])('restores only owner-matched browser history on reload: %s', owner => {
+    vi.spyOn(TestBed.inject(Location), 'getState').mockReturnValue({ activitySendOwner: owner, activitySendSelection: ['event-one'] });
+    const fixture = render(); fixture.componentInstance.source.set('saved'); fixture.detectChanges();
+    expect(sends.selection()).toEqual(owner === 'owner' ? ['event-one'] : []);
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('shows the selected count before a destination is chosen and hides date/source controls', () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved'); fixture.componentInstance.provider.set(null);
+    sends.selection.set(['event-one', 'event-two']); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.selected-activities').textContent).toContain('2 activities selected');
+    fixture.componentInstance.provider.set('coros'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type=date]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preview selected activities');
+    expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('keeps selection and navigation unchanged while preparation is busy', async () => {
+    const fixture = render(); sends.selection.set(['event-one']); fixture.componentInstance.busy.set(true);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await fixture.componentInstance.chooseProvider('wahoo');
+    await fixture.componentInstance.chooseSource('saved'); fixture.componentInstance.clearSelection();
+    expect(navigate).not.toHaveBeenCalled(); expect(sends.selection()).toEqual(['event-one']);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('clears the selection in history when choosing dates, while preserving router history metadata', () => {
+    const fixture = render(); sends.selection.set(['event-one']); fixture.componentInstance.source.set('saved');
+    const location = TestBed.inject(Location);
+    vi.spyOn(location, 'getState').mockReturnValue({ navigationId: 9, activitySendOwner: 'owner', activitySendSelection: ['event-one'] });
+    const replace = vi.spyOn(location, 'replaceState');
+    fixture.componentInstance.clearSelection(); fixture.detectChanges();
+    expect(sends.selection()).toEqual([]);
+    expect(replace).toHaveBeenCalledWith(location.path(true), '', { navigationId: 9, activitySendOwner: 'owner', activitySendSelection: [] });
+    expect(fixture.nativeElement.querySelectorAll('input[type=date]').length).toBe(2);
+    fixture.componentInstance.clearSelection();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('keeps date-range source filters for sends that do not come from the table selection', async () => {
+    const fixture = render(); fixture.componentInstance.source.set('saved'); sends.batch.set({ ...batchValue, source: 'saved' });
+    fixture.componentInstance.startDate = '2026-11-01'; fixture.componentInstance.endDate = '2026-11-02';
+    fixture.componentInstance.savedSources = ['manualUpload'];
+    await fixture.componentInstance.previewSaved();
+    expect(sends.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'prepare', sources: ['manualUpload'], startDate: expect.any(String), endDate: expect.any(String) }), 'owner');
+    expect(sends.command.mock.calls[0][0]).not.toHaveProperty('eventIds');
   });
   it('restores the batch destination and source from a mismatched deep link without sending or feedback', () => {
     const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
