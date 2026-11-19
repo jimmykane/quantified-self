@@ -2,11 +2,11 @@ import type { Auth } from 'firebase-admin/auth';
 import { FieldPath, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { INACTIVITY_ADMIN_PAGE_SIZE, INACTIVITY_ADMIN_VIEWS, INACTIVITY_DELETION_LIMIT,
-    INACTIVITY_MODES, INACTIVITY_WARNING_LIMIT, type InactivityAdminRequest, type InactivityAdminResponse } from '../../../shared/admin-inactivity';
+    INACTIVITY_MODES, INACTIVITY_WARNING_LIMIT, type InactivityAdminRequest, type InactivityAdminResponse, type InactivityScanStatus } from '../../../shared/admin-inactivity';
 import { toEpochMillis } from '../admin/shared/date.utils';
 import { getUserSubcollectionCountStats } from '../admin/shared/user-collection-count';
 import { DRY_RUN_MATCHES } from './inactivity-dry-run';
-import { INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, acceptedNoticeDeadline, inactivityMode, timestampMillis, warningAcceptedAt } from './inactivity-policy';
+import { INACTIVITY_COLLECTION, INACTIVITY_CONTINUATION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, acceptedNoticeDeadline, inactivityMode, timestampMillis, warningAcceptedAt } from './inactivity-policy';
 
 const validUid = (uid: unknown): uid is string => typeof uid === 'string' && uid.length > 0 && uid.length <= 128
     && !uid.includes('/') && uid !== '.' && uid !== '..';
@@ -32,6 +32,47 @@ const count = (value: unknown): number => Number.isSafeInteger(value) && (value 
 const bounded = (value: unknown, maximum: number): boolean => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= maximum;
 const date = (snapshot: DocumentSnapshot, key: string) => timestampMillis(snapshot.get(key));
 
+function dailyLimitReached(config: DocumentSnapshot, today: string): boolean {
+    const mode = inactivityMode(config.get('mode'));
+    if (mode !== 'warnings-only' && mode !== 'enforce') return false;
+    if (config.get('lastDailyLimit')) {
+        return config.get('lastDailyLimit.day') === today && config.get('lastDailyLimit.mode') === mode
+            && config.get('lastDailyLimit.revision') === (config.get('settingsRevision') ?? 0);
+    }
+    // Earlier workers recorded a denied reservation only in the most recent batch.
+    const started = date(config, 'lastStartedAt');
+    const finished = date(config, 'lastRun.finishedAt');
+    return config.get('lastRun.mode') === mode && count(config.get('lastRun.counts.capped')) > 0
+        && started !== null && finished !== null && started >= (date(config, 'settingsUpdatedAt') ?? 0)
+        && finished >= started
+        && new Date(started).toISOString().slice(0, 10) === today && new Date(finished).toISOString().slice(0, 10) === today;
+}
+
+function scanStatus(config: DocumentSnapshot, pending: DocumentSnapshot, now: number, limitReached: boolean): InactivityScanStatus {
+    const mode = inactivityMode(config.get('mode'));
+    if (mode === 'off') return 'off';
+    const settingsChanged = date(config, 'settingsUpdatedAt') ?? 0;
+    const started = date(config, 'lastStartedAt') ?? 0;
+    if ((date(config, 'leaseUntil') ?? 0) > now) return started >= settingsChanged ? 'scanning' : 'waiting';
+    const revision = config.get('settingsRevision') ?? 0;
+    const ticketId = pending.get('id');
+    if (typeof ticketId === 'string' && ticketId.length && pending.get('mode') === mode && pending.get('revision') === revision)
+        return 'continuation-pending';
+
+    const finished = date(config, 'lastRun.finishedAt');
+    const currentBatch = finished !== null && finished >= settingsChanged && config.get('lastRun.mode') === mode;
+    if (started >= settingsChanged && started > (date(config, 'lastFinishedAt') ?? 0)) return 'incomplete';
+    if (currentBatch && config.get('lastRun.outcome') === 'failed') return 'failed';
+
+    const completed = date(config, 'lastScanCompletedAt');
+    const scanStarted = date(config, 'scanStartedAt');
+    if (completed !== null && completed >= settingsChanged && completed >= (scanStarted ?? 0)
+        && !config.get('scanCursor') && !config.get('dryRunDraft')) return 'complete';
+    if (limitReached) return 'daily-limit';
+    // An active mode can inherit an unfinished inventory from an earlier settings revision.
+    return scanStarted !== null && (scanStarted >= settingsChanged || currentBatch) ? 'incomplete' : 'waiting';
+}
+
 /** Privileged, bounded projection: Auth supplies current emails; private evidence, leases,
  * mail payloads and billing identities never enter the browser response. No writes. */
 export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUsers'>,
@@ -40,20 +81,20 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
     const eligible = request.view === 'eligible';
     const indexing = request.projection === 'login-order';
     const limit = indexing ? 100 : INACTIVITY_ADMIN_PAGE_SIZE; // Firebase Auth getUsers accepts up to 100 identifiers.
-    const { config, docs } = await db.runTransaction(async tx => {
-        const config = await tx.get(db.doc(INACTIVITY_CONTROL));
+    const { config, pendingWork, docs } = await db.runTransaction(async tx => {
+        const [config, pendingWork] = await tx.getAll(db.doc(INACTIVITY_CONTROL), db.doc(INACTIVITY_CONTINUATION));
         const report = config.get('lastCompletedDryRun');
-        if (eligible && !report) return { config, docs: [] };
+        if (eligible && !report) return { config, pendingWork, docs: [] };
         const collection = eligible ? DRY_RUN_MATCHES : INACTIVITY_COLLECTION;
         const pathFor = (uid: string) => pending ? `userDeletionTombstones/${uid}` : `users/${uid}/${collection}/${eligible ? report.slot : 'state'}`;
         if (request.accountUids) {
-            if (!request.accountUids.length || (eligible && request.dryRunId !== report.id)) return { config, docs: [] };
+            if (!request.accountUids.length || (eligible && request.dryRunId !== report.id)) return { config, pendingWork, docs: [] };
             const snapshots = await tx.getAll(...request.accountUids.map(uid => db.doc(pathFor(uid))));
             // The browser's sorted list is a hint. Check current membership before reading Auth or event counts.
             const docs = snapshots.filter(doc => doc.exists && (pending
                 ? doc.get('source') === 'inactivity' && doc.get('cleanupStatus') === 'pending'
                 : eligible ? doc.get('scanId') === report.id : doc.get('state') === request.view));
-            return { config, docs };
+            return { config, pendingWork, docs };
         }
         let query = pending
             ? db.collection('userDeletionTombstones').where('source', '==', 'inactivity').where('cleanupStatus', '==', 'pending')
@@ -65,7 +106,7 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             const path = pending ? request.afterUid : `users/${request.afterUid}/${collection}/${eligible ? report.slot : 'state'}`;
             query = query.startAfter(path);
         }
-        return { config, docs: (await tx.get(query)).docs };
+        return { config, pendingWork, docs: (await tx.get(query)).docs };
     }, { readOnly: true });
     const report = config.get('lastCompletedDryRun');
     const selected = docs.slice(0, limit).map(doc => {
@@ -114,12 +155,14 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
     const lastRunOutcome = config.get('lastRun.outcome');
     const last = (key: string) => count(config.get(`lastRun.${key}`));
     const today = new Date(now).toISOString().slice(0, 10);
+    const limitReached = dailyLimitReached(config, today);
 
     return {
         settings: { mode: inactivityMode(config.get('mode')), warningDailyLimit: bounded(warningDailyLimit, INACTIVITY_WARNING_LIMIT) ? warningDailyLimit : 0,
             deletionDailyLimit: bounded(deletionDailyLimit, INACTIVITY_DELETION_LIMIT) ? deletionDailyLimit : 0, revision: count(revision) },
         settingsValid: (config.get('mode') === undefined || INACTIVITY_MODES.includes(config.get('mode')))
             && bounded(warningDailyLimit, INACTIVITY_WARNING_LIMIT) && bounded(deletionDailyLimit, INACTIVITY_DELETION_LIMIT) && bounded(revision, Number.MAX_SAFE_INTEGER - 1),
+        scanStatus: scanStatus(config, pendingWork, now, limitReached), dailyLimitReached: limitReached,
         running: (date(config, 'leaseUntil') ?? 0) > now,
         lastStartedAt: date(config, 'lastStartedAt'), lastFinishedAt: date(config, 'lastFinishedAt'), lastScanCompletedAt: date(config, 'lastScanCompletedAt'),
         lastCompletedDryRun: report ? { id: report.id, finishedAt: report.finishedAt.toMillis(), eligibleCount: report.eligibleCount } : null,

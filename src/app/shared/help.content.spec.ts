@@ -2551,9 +2551,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
     expect(gettingStartedSection?.content).toContain('**Device stats** starts with the metric rows collapsed');
     expect(gettingStartedSection?.content).toContain('available range in your preferred units');
+    expect(gettingStartedSection?.content).toContain('Metrics with Min, Avg, and Max group those ranges in one expandable row per unit');
     expect(gettingStartedSection?.content).toContain('**Slightly higher** and **Slightly lower**');
     expect(gettingStartedSection?.content).toContain('If the reference has no reading for a metric');
-    expect(gettingStartedSection?.content).toContain('On larger screens, expand **Combined totals** below the metrics');
+    expect(gettingStartedSection?.content).not.toContain('**Combined totals**');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
     expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');
@@ -3297,6 +3298,11 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('Temporary Suunto initialization errors are retried automatically, within a limited retry budget, before any recording bytes are sent');
   expect(content).toContain('unknown acceptance never triggers an automatic replacement upload');
   expect(content).toContain('Previewing does not send activities');
+  expect(content).toContain('select activities in the events table and choose **Send**');
+  expect(content).toContain('The table selection is kept when changing destinations or reloading with the same account');
+  expect(content).toContain('**Choose dates instead**');
+  expect(content).toContain('Back and Forward restore the selection for that page');
+  expect(content).toContain('Sending stays disabled while destination or source options are updating');
   expect(content).toContain('**checked**, **ready**, and **excluded** recordings, not successful deliveries');
   expect(content).toContain('completed checks are retained');
   expect(content).toContain('Choose **Uploaded to QS** for FIT files you imported yourself');

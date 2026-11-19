@@ -154,6 +154,81 @@
   text-align: end;
 }
 
+.family-title {
+  max-width: 732px;
+  gap: 6px;
+}
+
+.family-context, .family-range-label {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.family-context {
+  display: block;
+}
+
+.family-ranges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 0 0 62%;
+  gap: 4px;
+  text-align: end;
+}
+
+.family-range {
+  font: var(--mat-sys-body-small);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.family-range-label, .family-difference {
+  display: block;
+}
+
+.family-reference {
+  background: var(--mat-sys-surface-container);
+}
+
+@include bp.xsmall {
+  .family-title {
+    flex-wrap: wrap;
+  }
+
+  .family-title .comparison-metric-label {
+    flex-basis: min-content;
+    overflow-wrap: normal;
+  }
+
+  .family-ranges {
+    flex-grow: 1;
+    flex-basis: 65%;
+  }
+
+  .family-table th + th, .family-table th + td, .family-table td + td {
+    padding-inline-start: 4px;
+  }
+}
+
+@media (max-width: 345px) {
+  .family-title app-data-type-icon {
+    display: none;
+  }
+
+  .family-ranges {
+    flex-basis: 70%;
+    gap: 2px;
+  }
+
+  .family-table .device-column {
+    width: 32%;
+  }
+
+  .family-table .reference-label {
+    margin-inline-start: 0;
+  }
+}
+
 .comparison-row {
   th, td { padding-block: 7px; border-top: 1px solid var(--mat-sys-outline-variant); }
   td { font-variant-numeric: tabular-nums; }

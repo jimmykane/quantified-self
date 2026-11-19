@@ -381,7 +381,8 @@ describe('Firebase Hosting configuration', () => {
     // Same-day chart help adds automatic Trail Running Heart Rate and preserves custom selections (2026-11-16).
     // Benchmark help covers device rows, mobile metric accordions, and performance chart availability (2026-11-18).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    // Benchmark Help covers desktop metric accordions and locates combined totals on larger screens (2026-11-19).
+    // Benchmark Help covers metric accordions on desktop and mobile (2026-11-19).
+    // Benchmark Help covers grouped Min, Avg, and Max ranges and per-device readings (2026-11-19).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
   });
 

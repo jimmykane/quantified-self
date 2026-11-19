@@ -11,6 +11,9 @@ import {
     DataAltitudeMin,
     DataAscent,
     DataBeginningPotentialStamina,
+    DataCadenceAvg,
+    DataCadenceMax,
+    DataCadenceMin,
     DataContactTimeToFlightTimeRatioAvg,
     DataContactTimeToFlightTimeRatioMax,
     DataContactTimeToFlightTimeRatioMin,
@@ -36,6 +39,8 @@ import {
     DataStaminaAvg,
     DataStaminaMin,
     DataTemperatureMax,
+    DataVerticalSpeedAvg,
+    DataVerticalSpeedMax,
     DataRRRMSSD,
     DataRRArtifactPercentage,
     DataRRArtifactCount,
@@ -256,19 +261,34 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.rrRecordings).toEqual([]);
     });
 
-    it('preserves recorded min/max readings in benchmark detail tabs while Overall shows the chosen metric', () => {
+    it('groups power in both benchmark tabs and preserves the tab of a family configured by its maximum', () => {
         const readings = [new DataPowerAvg(120), new DataPowerMin(0), new DataPowerMax(200)];
         const all = ['A', 'B'].map(name => ({ getID: () => name, type: ActivityTypes.Running,
             getStat: (type: string) => readings.find(stat => stat.getType() === type) }));
         component.compareRecordings = true;
-        component.statsToShow = [DataPowerAvg.type];
+        const verticalSpeed = new DataVerticalSpeedMax(2);
+        readings.push(verticalSpeed);
+        component.statsToShow = [DataPowerAvg.type, DataVerticalSpeedMax.type];
         component.selectedActivities = all as any;
         component.event = { getActivities: () => all } as any;
         component.ngOnChanges({});
         expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([DataPowerAvg.type]);
         expect(component.metricTabs.find(tab => tab.id === 'performance')?.metricTypes).toEqual([
-            DataPowerAvg.type, DataPowerMin.type, DataPowerMax.type,
+            DataVerticalSpeedAvg.type, DataPowerAvg.type,
         ]);
+    });
+
+    it('includes the grouped cadence row when only a maximum cadence was recorded', () => {
+        const peak = new DataCadenceMax(185);
+        const all = ['A', 'B'].map(name => ({ getID: () => name, type: ActivityTypes.Running,
+            getStat: (type: string) => type === peak.getType() ? peak : undefined }));
+        component.compareRecordings = true;
+        component.statsToShow = [DataCadenceMax.type];
+        component.selectedActivities = all as any;
+        component.event = { getActivities: () => all } as any;
+        component.ngOnChanges({});
+        expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([DataCadenceAvg.type]);
+        expect(component.metricTabs.find(tab => tab.id === 'performance')?.metricTypes).toEqual([DataCadenceAvg.type]);
     });
 
     it('keeps a chosen reference across hydration, falls back on deselection and resets for a new benchmark', async () => {
@@ -313,7 +333,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(mockHaptics.selection).not.toHaveBeenCalled();
         const openMetric = (label: string) => {
             const header = [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')]
-                .find(element => element.querySelector('.comparison-metric-label')?.textContent?.trim() === label);
+                .find(element => element.querySelector('.comparison-metric-label')?.firstChild?.textContent?.trim() === label);
             header!.click();
             fixture.detectChanges();
         };
@@ -327,11 +347,12 @@ describe('EventCardStatsGridComponent', () => {
         expect(rows()[0]).toContain('−100.0 m');
         expect(rows()[1]).toContain('Reference');
         expect(rows()[2]).toContain('+100.0 m');
-        openMetric('Average Heart Rate');
-        const heartRate = grid.querySelector('table[aria-label="Average Heart Rate"]')!;
-        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(2);
+        openMetric('Heart Rate');
+        const heartRate = grid.querySelector('table[aria-label="Heart Rate by device"]')!;
+        expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(4);
         expect(heartRate.querySelector('.reference-label')?.textContent).toContain('Reference');
-        expect(heartRate.closest('.comparison-metric')?.querySelectorAll('.comparison-note')).toHaveLength(1);
+        expect(heartRate.closest('.comparison-metric')?.querySelector('.comparison-note')?.textContent)
+            .toContain('has no reading for Avg');
         expect(heartRate.textContent).toContain('Not recorded');
         component.selectReference('id:B');
         component.selectReference('invalid');
@@ -379,8 +400,10 @@ describe('EventCardStatsGridComponent', () => {
         }).compileComponents();
         fixture = TestBed.createComponent(EventCardStatsGridComponent);
         const devices = [
-            { id: 'a', name: 'Coros PACE 4', stats: [new DataDuration(4125), new DataDistance(9270)] },
-            { id: 'b', name: 'Suunto Run', stats: [new DataDuration(4119), new DataDistance(9250)] },
+            { id: 'a', name: 'Coros PACE 4',
+                stats: [new DataDuration(4125), new DataDistance(9270), new DataCadenceMin(112), new DataCadenceAvg(170)] },
+            { id: 'b', name: 'Suunto Run',
+                stats: [new DataDuration(4119), new DataDistance(9250), new DataCadenceMin(116), new DataCadenceAvg(169), new DataCadenceMax(185)] },
         ].map(device => ({
             type: ActivityTypes.Running,
             getID: () => device.id,
@@ -390,7 +413,7 @@ describe('EventCardStatsGridComponent', () => {
         const event = { getID: () => 'run', isMerge: true, getActivities: () => devices };
         fixture.componentRef.setInput('event', event);
         fixture.componentRef.setInput('selectedActivities', devices);
-        fixture.componentRef.setInput('statsToShow', [DataDuration.type, DataDistance.type]);
+        fixture.componentRef.setInput('statsToShow', [DataDuration.type, DataDistance.type, DataCadenceAvg.type, DataCadenceMin.type, DataCadenceMax.type]);
         fixture.componentRef.setInput('compareRecordings', true);
         fixture.detectChanges();
         await fixture.whenStable();
@@ -399,9 +422,11 @@ describe('EventCardStatsGridComponent', () => {
         const grid = fixture.nativeElement as HTMLElement;
         const headers = () => [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')];
         const tables = () => [...grid.querySelectorAll('table')];
-        const [duration, distance] = headers();
-        expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
+        const [duration, distance, cadence] = headers();
+        expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false', 'false']);
         expect(distance.textContent).toContain('9.25–9.27 Km');
+        expect([...cadence.querySelectorAll('.family-range')].map(range => range.textContent.trim().replace(/\s+/g, ' ')))
+            .toEqual(['Min 112–116', 'Avg 169–170', 'Max 185']);
         expect(tables()).toHaveLength(0);
         expect(mockHaptics.selection).not.toHaveBeenCalled();
 
@@ -430,7 +455,7 @@ describe('EventCardStatsGridComponent', () => {
         viewport.matches = false;
         viewport.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        expect(headers()).toHaveLength(2);
+        expect(headers()).toHaveLength(3);
         expect(distance.getAttribute('aria-expanded')).toBe('true');
         expect(tables()).toHaveLength(1);
 
@@ -440,10 +465,25 @@ describe('EventCardStatsGridComponent', () => {
         expect(distance.getAttribute('aria-expanded')).toBe('true');
         expect(tables()).toHaveLength(1);
 
+        cadence.click();
+        fixture.detectChanges();
+        expect(distance.getAttribute('aria-expanded')).toBe('false');
+        expect(tables()).toHaveLength(1);
+        expect(tables()[0].getAttribute('aria-label')).toBe('Cadence by device');
+        expect(tables()[0].querySelector('.family-reference th').textContent).toContain('Suunto Run');
+        expect(tables()[0].querySelector<HTMLElement>('.device-mark').style.backgroundColor).toBe('rgb(33, 150, 243)');
+        expect(tables()[0].querySelector('.family-difference').textContent).toContain('−4');
+        fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance.select('id:a');
+        fixture.detectChanges();
+        expect(cadence.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()[0].querySelector('.family-reference th').textContent).toContain('Coros PACE 4');
+        expect(tables()[0].querySelector('.family-difference').textContent).toContain('+4');
+        expect(grid.querySelector('.comparison-note').textContent).toContain('no reading for Max');
+
         fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
         fixture.detectChanges();
         expect(tables()).toHaveLength(0);
-        expect(mockHaptics.selection).toHaveBeenCalledTimes(3);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(5);
     });
 
     it.each([

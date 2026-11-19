@@ -31,7 +31,11 @@ export interface InactivityAdminAccount {
     requestedAt: number | null;
     detail: string;
 }
+export type InactivityScanStatus = 'off' | 'waiting' | 'scanning' | 'continuation-pending' | 'daily-limit'
+    | 'complete' | 'incomplete' | 'failed';
 export interface InactivityAdminResponse {
+    scanStatus: InactivityScanStatus;
+    dailyLimitReached: boolean;
     settings: InactivitySettings;
     settingsValid: boolean;
     running: boolean;

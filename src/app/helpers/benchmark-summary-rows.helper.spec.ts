@@ -1,9 +1,10 @@
 import {
-  type ActivityInterface, ActivityTypes, DataAltitudeAvg, DataDistance, DataDuration, DataFeeling, DataHeartRateAvg,
-  type DataInterface, DataPaceAvg, DistanceUnits, ElevationUnits, PaceUnits, SwimPaceUnits,
+  type ActivityInterface, ActivityTypes, DataAltitudeAvg, DataAltitudeMax, DataAltitudeMin, DataCadenceAvg, DataCadenceMax, DataCadenceMin,
+  DataDistance, DataDuration, DataFeeling, DataHeartRateAvg, DataJumpDistanceAvg, DataJumpDistanceMax, DataJumpDistanceMin,
+  type DataInterface, DataPaceAvg, DataPaceMax, DataPaceMin, DataPower, DataPowerAvg, DistanceUnits, ElevationUnits, PaceUnits, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { buildBenchmarkSummaryCards, getBenchmarkSummarySources } from './benchmark-summary-rows.helper';
+import { buildBenchmarkSummaryCards, buildBenchmarkSummaryPanels, getBenchmarkSummarySources } from './benchmark-summary-rows.helper';
 
 function recording(id: string, stats: DataInterface[], name = id, type = ActivityTypes.Running) {
   const byType = new Map(stats.map(stat => [stat.getType(), stat]));
@@ -14,6 +15,103 @@ const settings = normalizeUserUnitSettings({});
 const sourcesFor = (all: ActivityInterface[], types: string[]) => getBenchmarkSummarySources(all, all, types, () => '#123456');
 
 describe('benchmark summary device rows', () => {
+  it.each([
+    {},
+    { distanceUnits: DistanceUnits.Miles, elevationUnits: ElevationUnits.Feet },
+  ])('groups cadence ranges and reference differences with unit settings %j', (unitSettings) => {
+    const all = [
+      recording('a', [new DataCadenceMin(0), new DataCadenceAvg(170)]),
+      recording('b', [new DataCadenceMin(116), new DataCadenceAvg(169), new DataCadenceMax(185)]),
+      recording('c', [new DataCadenceAvg(168), new DataCadenceMax(191)]),
+    ];
+    const units = normalizeUserUnitSettings(unitSettings);
+    const sources = sourcesFor(all, [DataCadenceMin.type, DataCadenceAvg.type, DataCadenceMax.type]);
+    const panels = buildBenchmarkSummaryPanels(sources, 'id:a', units);
+    expect([...panels.keys()]).toEqual([DataCadenceAvg.type]);
+    expect(panels.get(DataCadenceAvg.type)[0]).toMatchObject({
+      kind: 'family',
+      unit: 'rpm',
+      columns: [{ label: 'Min', range: '0–116' }, { label: 'Avg', range: '168–170' }, { label: 'Max', range: '185–191' }],
+      rows: [
+        { color: '#123456', cells: [{ value: '0', delta: null }, { value: '170', delta: null }, { value: null, delta: null }] },
+        { cells: [{ value: '116', delta: '+116' }, { value: '169', delta: '−1' }, { value: '185', delta: null }] },
+        { cells: [{ value: null, delta: null }, { value: '168', delta: '−2' }, { value: '191', delta: null }] },
+      ],
+      missingReference: 'Max',
+    });
+    expect(buildBenchmarkSummaryPanels(sources, 'id:b', units).get(DataCadenceAvg.type)[0]).toMatchObject({
+      missingReference: '',
+      rows: [
+        { cells: [{ value: '0', delta: '−116' }, { value: '170', delta: '+1' }, { value: null, delta: null }] },
+        { cells: [{ value: '116', delta: null }, { value: '169', delta: null }, { value: '185', delta: null }] },
+        { cells: [{ value: null, delta: null }, { value: '168', delta: '−1' }, { value: '191', delta: '+6' }] },
+      ],
+    });
+    expect(buildBenchmarkSummaryPanels(sources.slice(0, 1), 'id:a', units).get(DataCadenceAvg.type)[0]).toMatchObject({
+      columns: [{ range: '0' }, { range: '170' }, { range: null }],
+      missingReference: '',
+    });
+  });
+
+  it.each([
+    { elevationUnits: ElevationUnits.Meters, unit: 'm', minRange: '30–61', maxDelta: '+30' },
+    { elevationUnits: ElevationUnits.Feet, unit: 'ft', minRange: '100–200', maxDelta: '+100' },
+  ])('groups altitude with $unit display units', ({ elevationUnits, unit, minRange, maxDelta }) => {
+    const sources = sourcesFor([
+      recording('a', [new DataAltitudeMin(30.48), new DataAltitudeAvg(60.96), new DataAltitudeMax(91.44)]),
+      recording('b', [new DataAltitudeMin(60.96), new DataAltitudeAvg(91.44), new DataAltitudeMax(121.92)]),
+    ], [DataAltitudeMin.type, DataAltitudeAvg.type, DataAltitudeMax.type]);
+    const panels = buildBenchmarkSummaryPanels(sources, 'id:a', normalizeUserUnitSettings({ elevationUnits }));
+    expect([...panels.keys()]).toEqual([DataAltitudeAvg.type]);
+    expect(panels.get(DataAltitudeAvg.type)).toMatchObject([{
+      label: 'Altitude',
+      unit,
+      columns: [{ range: minRange }, { label: 'Avg' }, { label: 'Max' }],
+      rows: [{}, { cells: [{}, {}, { delta: maxDelta }] }],
+    }]);
+  });
+
+  it('pairs pace columns in each selected unit', () => {
+    const sources = sourcesFor([
+      recording('a', [new DataPaceMin(240), new DataPaceAvg(300), new DataPaceMax(420)]),
+      recording('b', [new DataPaceMin(250), new DataPaceAvg(310), new DataPaceMax(440)]),
+    ], [DataPaceMin.type, DataPaceAvg.type, DataPaceMax.type]);
+    const units = normalizeUserUnitSettings({ paceUnits: [PaceUnits.MinutesPerKilometer, PaceUnits.MinutesPerMile] });
+    const panels = buildBenchmarkSummaryPanels(sources, 'id:a', units).get(DataPaceAvg.type);
+    expect(panels).toHaveLength(2);
+    expect(panels.map(panel => panel.unit)).toEqual(['min/km', 'min/m']);
+    for (const panel of panels) {
+      expect(panel.kind).toBe('family');
+      if (panel.kind !== 'family') continue;
+      expect(panel.columns.every(column => column.range && !column.range.includes(panel.unit))).toBe(true);
+      expect(panel.rows[1].cells.every(cell => cell.value && cell.delta?.startsWith('+'))).toBe(true);
+    }
+  });
+
+  it('keeps scaled distance readings in the same family and shows their actual units', () => {
+    const sources = sourcesFor([
+      recording('a', [new DataJumpDistanceMin(900), new DataJumpDistanceAvg(980), new DataJumpDistanceMax(1100)]),
+      recording('b', [new DataJumpDistanceMin(950), new DataJumpDistanceAvg(1050), new DataJumpDistanceMax(1500)]),
+    ], [DataJumpDistanceMin.type, DataJumpDistanceAvg.type, DataJumpDistanceMax.type]);
+    expect(buildBenchmarkSummaryPanels(sources, 'id:a', settings).get(DataJumpDistanceAvg.type)).toMatchObject([{
+      unit: '',
+      columns: [{ range: '900.0–950.0 m' }, { range: '980.0 m–1.05 Km' }, { range: '1.10–1.50 Km' }],
+      rows: [{}, { cells: [{ value: '950.0 m' }, { value: '1.05 Km' }, { value: '1.50 Km' }] }],
+    }]);
+    const imperial = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect(buildBenchmarkSummaryPanels(sources, 'id:a', imperial).get(DataJumpDistanceAvg.type)).toMatchObject([{
+      unit: 'ft',
+    }]);
+  });
+
+  it('retains a separately stored value alongside its metric family', () => {
+    const sources = sourcesFor([recording('a', [new DataPower(150), new DataPowerAvg(180)])],
+      [DataPower.type, DataPowerAvg.type]);
+    const panels = buildBenchmarkSummaryPanels(sources, 'id:a', settings);
+    expect(panels.get(DataPower.type)[0]).toMatchObject({ kind: 'metric', label: 'Power (recorded value)', rows: [{ value: '150 watt' }] });
+    expect(panels.get(DataPowerAvg.type)[0]).toMatchObject({ kind: 'family', label: 'Power', columns: [{ range: null }, { range: '180' }, { range: null }] });
+  });
+
   it('compares four original readings, with signed differences, zeroes, ties and missing values', () => {
     const all = [
       recording('a', [new DataDistance(9270), new DataHeartRateAvg(0)]),

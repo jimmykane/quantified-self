@@ -172,7 +172,7 @@
 
 .bulk-action-button-content {
   align-items: center;
-  display: inline-flex;
+  display: flex;
   gap: 6px;
   justify-content: center;
   min-width: 0;
@@ -293,11 +293,12 @@
 
   .selection-actions {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
     width: 100%;
   }
 
   .bulk-action-button {
+    min-height: 44px;
     padding: 0;
   }
 

@@ -1,5 +1,5 @@
 <div class="event-summary-content">
-  @let totalsHeading = comparisonTotalsHeading;
+  @let benchmarkComparison = compareRecordings;
   <!-- Primary Info Section -->
   <app-summary-primary-info
     [activityType]="mainActivityType"
@@ -8,7 +8,7 @@
     [startDate]="event.startDate"
     [iconTooltip]="'Event is ' + event.privacy"
     [iconClickable]="false"
-    [metrics]="totalsHeading ? null : heroSummaryMetrics">
+    [metrics]="benchmarkComparison ? null : heroSummaryMetrics">
     <div summary-icon-badge class="privacy-mini-wrapper">
       <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
     </div>
@@ -108,27 +108,10 @@
   <div class="summary-stats-area">
     <div class="summary-stats-layout">
       <div class="stats-container">
-        <app-event-card-stats-grid [compareRecordings]="!!totalsHeading" [event]="event" [selectedActivities]="selectedActivities"></app-event-card-stats-grid>
+        <app-event-card-stats-grid [compareRecordings]="benchmarkComparison" [event]="event" [selectedActivities]="selectedActivities"></app-event-card-stats-grid>
       </div>
     </div>
 
-    @if (totalsHeading) {
-    <section class="combined-totals">
-      <button mat-button type="button" [attr.aria-expanded]="totalsExpanded" [attr.aria-controls]="totalsId" (click)="toggleTotals()">
-        {{ totalsHeading }}<mat-icon iconPositionEnd aria-hidden="true">{{ totalsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
-      </button>
-      <div [id]="totalsId" [hidden]="!totalsExpanded">
-        @if (totalsExpanded) {
-          <p>Duration and distance include every recording, even when they overlap.</p>
-          <dl>
-            @for (total of combinedTotals; track total.type) {
-              <div><dt>{{ total.type }}</dt><dd>{{ total.text }}</dd></div>
-            }
-          </dl>
-        }
-      </div>
-    </section>
-    }
     <ng-content select="[after-stats]"></ng-content>
   </div>
 

@@ -957,18 +957,17 @@ identity and place the hero metrics below them, rather than creating a third hea
 Saved benchmark comparisons with multiple recordings use device rows in the existing summary tabs. Each row
 reads the selected metric from its source activity. The reference menu lists selected recordings in event order.
 A chosen reference follows its recording ID across refreshes. Deselecting it or opening a different benchmark
-selects the first available recording. One picker above the tabs controls all metric tables. Each table labels
-its device, reading and difference columns. Each metric starts as a collapsed accordion row on desktop and
-mobile. The header shows the range of available readings in the selected units. Opening a row reveals
+selects the first available recording. One picker above the tabs controls all metric tables. Each metric starts as a
+collapsed accordion row on desktop and mobile. The header shows the range of available readings in the selected units. Opening a row reveals
 the device table and closes the previous row. References and units refresh the open table in place.
-A metric missing from the reference gets one explanation and a
-two-column table of available readings. Differences use device minus reference in the user's preferred units.
+Metrics with a defined Min, Avg, and Max group the available ranges within their existing categories in
+one row per selected unit. The expanded table shows a column for each reading, with device colors and
+differences below each reading. The app displays a dash for missing values. If the reference is missing a
+reading, the other devices' readings remain visible. Differences use device minus reference in the user's preferred units.
 Time and pace differences under one second use Sports Lib's fractional stopwatch display. Smaller-than-display
 differences retain direction, while exact equality reads **Same**.
-A single selected recording shows its readings alone. At widths of 600 px and above,
-**Combined totals · N recordings** starts collapsed below the summary. Its duration and distance come from the
-saved parent event and include every recording, even when recordings overlap. Ordinary activities, single-source
-events and explicit sequential (`multi`) merges use the standard summary.
+A single selected recording shows its readings alone. Ordinary activities, single-source events and explicit
+sequential (`multi`) merges use the standard summary.
 The activity chart shell uses a `minmax(0, 1fr)` column so a previously rendered canvas cannot force its grid back to
 desktop width when the viewport narrows. The shared chart host then resizes to the available content width.
 

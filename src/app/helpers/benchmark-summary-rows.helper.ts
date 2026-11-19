@@ -1,5 +1,6 @@
 import {
-  type ActivityInterface, type DataInterface, DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
+  type ActivityInterface, type DataInterface,
+  DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
@@ -8,7 +9,8 @@ import {
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 import { RR_STAT_LABELS } from '../constants/rr-metrics';
 import { getBenchmarkRRLabels } from './benchmark-rr.helper';
-import { normalizeUnitDerivedStatLabel } from './stat-label.helper';
+import { resolveMetricFamilyTypes } from './header-stats-composite.helper';
+import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolvePrimaryUnitAwareDisplayStat, resolveSummaryDisplayStat } from './summary-display.helper';
 
 export interface BenchmarkSummarySource {
@@ -17,6 +19,19 @@ export interface BenchmarkSummarySource {
   color: string;
   activity: ActivityInterface;
   stats: Map<string, DataInterface>;
+}
+
+function resolveBenchmarkMetricFamily(type: string) {
+  const family = resolveMetricFamilyTypes(type);
+  if (!family?.avgType || !family.minType || !family.maxType) return null;
+  return [family.familyType, family.avgType, family.minType, family.maxType].includes(type) ? family : null;
+}
+
+export function getBenchmarkComparisonMetricTypes(type: string): string[] {
+  const family = resolveBenchmarkMetricFamily(type);
+  if (!family) return [type];
+  // Preserve independently saved values for the unqualified stat, for example Power.
+  return type === family.familyType ? [type, family.avgType] : [family.avgType];
 }
 
 export function getBenchmarkSummarySources(all: ActivityInterface[], selected: ActivityInterface[], types: string[],
@@ -50,11 +65,27 @@ interface BenchmarkSummaryRow {
 }
 
 interface BenchmarkSummaryCard {
+  kind: 'metric';
   type: string;
   label: string;
+  unit: string;
   hasReferenceReading: boolean;
   range: string | null;
   rows: BenchmarkSummaryRow[];
+}
+
+interface BenchmarkFamilyComparison {
+  kind: 'family';
+  label: string;
+  unit: string;
+  columns: { type: string; label: string; range: string | null }[];
+  rows: {
+    key: string;
+    label: string;
+    color: string;
+    cells: { value: string | null; delta: string | null }[];
+  }[];
+  missingReference: string;
 }
 
 interface BenchmarkReading {
@@ -167,13 +198,78 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
       const label = RR_STAT_LABELS[type] ?? normalizeUnitDerivedStatLabel(sample.stat, { manufacturer });
       const unit = sample.stat.getDisplayUnit();
       return {
+        kind: 'metric',
         type: displayType,
         hasReferenceReading: !!reference,
         label: variants.size > 1 && unit ? `${label} (${unit})` : label,
+        unit: [...readings.values()].every(reading => reading.display.unit === sample.display.unit) ? sample.display.unit : '',
         range: formatReadingRange(readings, sample),
         rows,
       };
     }));
   }
   return cards;
+}
+
+export function buildBenchmarkSummaryPanels(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
+  const cards = buildBenchmarkSummaryCards(sources, referenceKey, units);
+  const panels = new Map<string, (BenchmarkSummaryCard | BenchmarkFamilyComparison)[]>(cards);
+  const families = new Set([...cards.keys()].map(resolveBenchmarkMetricFamily).filter(Boolean));
+  const manufacturer = getCommonMetricManufacturer(sources.map(source => source.activity));
+  for (const { familyType, minType, avgType, maxType } of families) {
+    const columns = [
+      { type: minType, label: 'Min' },
+      { type: avgType, label: 'Avg' },
+      { type: maxType, label: 'Max' },
+    ];
+    const variants = new Set(columns.flatMap(({ type }) => cards.get(type)?.map(getFamilyVariant) ?? []));
+    if (!variants.size) continue;
+    for (const { type } of columns) panels.delete(type);
+    const label = normalizeUnitDerivedTypeLabel(familyType, familyType, { manufacturer, surface: 'stream' });
+    panels.set(avgType, [...variants].map(variant => buildFamilyComparison(columns, label, variant, cards, sources, referenceKey)));
+    const base = panels.get(familyType);
+    if (base) {
+      panels.set(familyType, base.map(card => ({ ...card, label: `${card.label} (recorded value)` })));
+    }
+  }
+  return panels;
+}
+
+function getFamilyVariant(card: BenchmarkSummaryCard): string {
+  return resolveBenchmarkMetricFamily(card.type)?.familyType ?? card.type;
+}
+
+function buildFamilyComparison(familyColumns: { type: string; label: string }[], label: string, variant: string,
+  cards: ReadonlyMap<string, BenchmarkSummaryCard[]>, sources: BenchmarkSummarySource[], referenceKey: string): BenchmarkFamilyComparison {
+  const columns = familyColumns.map(column => ({
+    ...column,
+    card: cards.get(column.type)?.find(card => getFamilyVariant(card) === variant),
+  }));
+  // A distance family can contain both metres and kilometres within one unit preference.
+  const displayUnits = new Set(columns.flatMap(({ card }) => card ? [card.unit] : []));
+  const unit = displayUnits.size === 1 ? displayUnits.values().next().value : '';
+  const suffix = unit ? ` ${unit}` : '';
+  const compact = (text: string | null): string | null =>
+    suffix && text?.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
+  return {
+    kind: 'family',
+    label,
+    unit,
+    columns: columns.map(({ type, label, card }) => ({
+      type, label, range: compact(card?.range ?? null),
+    })),
+    rows: sources.map((source, index) => ({
+      key: source.value,
+      label: source.label,
+      color: source.color,
+      cells: columns.map(({ card }) => {
+        const row = card?.rows[index];
+        return {
+          value: compact(row?.value ?? null),
+          delta: source.value === referenceKey ? null : compact(row?.delta || null),
+        };
+      }),
+    })),
+    missingReference: columns.filter(({ card }) => card && !card.hasReferenceReading).map(({ label }) => label).join(', '),
+  };
 }
