@@ -3300,6 +3300,7 @@ it('documents durable activity sending, explicit review, Pro and retention', () 
   expect(content).toContain('select activities in the events table and choose **Send**');
   expect(content).toContain('The table selection is kept when changing destinations or reloading with the same account');
   expect(content).toContain('**Choose dates instead**');
+  expect(content).toContain('Back and Forward restore the selection for that page');
   expect(content).toContain('**checked**, **ready**, and **excluded** recordings, not successful deliveries');
   expect(content).toContain('completed checks are retained');
   expect(content).toContain('Choose **Uploaded to QS** for FIT files you imported yourself');

@@ -3,8 +3,8 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
-import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
-import { BehaviorSubject, of } from 'rxjs';
+import { ActivatedRoute, convertToParamMap, NavigationEnd, provideRouter, Router } from '@angular/router';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivitySendPageComponent } from './activity-send-page.component';
@@ -313,6 +313,33 @@ describe('activity sending workspace', () => {
     vi.spyOn(TestBed.inject(Location), 'getState').mockReturnValue({ activitySendOwner: owner, activitySendSelection: ['event-one'] });
     const fixture = render(); fixture.componentInstance.source.set('saved'); fixture.detectChanges();
     expect(sends.selection()).toEqual(owner === 'owner' ? ['event-one'] : []);
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('restores the current history entry when navigation reuses the sending component', () => {
+    const navigation = new Subject<NavigationEnd>();
+    vi.spyOn(TestBed.inject(Router), 'events', 'get').mockReturnValue(navigation);
+    const history = vi.spyOn(TestBed.inject(Location), 'getState').mockReturnValue({ activitySendOwner: 'owner', activitySendSelection: ['event-one'] });
+    const fixture = render();
+    expect(sends.selection()).toEqual(['event-one']);
+    history.mockReturnValue({ activitySendOwner: 'owner', activitySendSelection: ['event-two'] });
+    navigation.next(new NavigationEnd(2, '/send-activities/coros?source=saved', '/send-activities/coros?source=saved'));
+    fixture.detectChanges();
+    expect(sends.selection()).toEqual(['event-two']);
+    history.mockReturnValue({ activitySendOwner: 'another-owner', activitySendSelection: ['private-event'] });
+    navigation.next(new NavigationEnd(3, '/send-activities/suunto?source=saved', '/send-activities/suunto?source=saved'));
+    fixture.detectChanges();
+    expect(sends.selection()).toEqual([]);
+    expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('clears unrelated table IDs when opening a recent send in the reused component', () => {
+    const navigation = new Subject<NavigationEnd>();
+    vi.spyOn(TestBed.inject(Router), 'events', 'get').mockReturnValue(navigation);
+    const history = vi.spyOn(TestBed.inject(Location), 'getState').mockReturnValue({ activitySendOwner: 'owner', activitySendSelection: ['event-one'] });
+    const fixture = render();
+    history.mockReturnValue({ navigationId: 2 });
+    navigation.next(new NavigationEnd(2, '/send-activities/suunto?batch=recent&source=saved', '/send-activities/suunto?batch=recent&source=saved'));
+    fixture.detectChanges();
+    expect(sends.selection()).toEqual([]);
     expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('shows the selected count before a destination is chosen and hides date/source controls', () => {

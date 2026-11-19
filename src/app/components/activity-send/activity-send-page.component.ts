@@ -3,7 +3,7 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import dayjs from 'dayjs';
 import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterModule } from '@angular/router';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -31,6 +31,7 @@ export class ActivitySendPageComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly browser = inject(BrowserCompatibilityService);
   private destroyed = false;
+  private readonly navigationSelection = signal(this.router.getCurrentNavigation()?.extras.state ?? this.location.getState() as Record<string, unknown>);
   readonly selectionChanged = signal(false);
   readonly provider = signal<ActivitySendProvider | null>(null);
   readonly source = signal<'files' | 'saved'>('files');
@@ -74,14 +75,15 @@ export class ActivitySendPageComponent {
       // A saved batch owns its destination and source, including copied deep links.
       void this.router.navigate(['/send-activities', batch.provider], { queryParams: { batch: batch.id, source: batch.source }, replaceUrl: true });
     });
-    const navigationState = this.router.getCurrentNavigation()?.extras.state ?? this.location.getState() as Record<string, unknown>;
-    let selectionRestored = false;
     effect(() => {
       const uid = this.users.user()?.uid;
-      if (!uid || selectionRestored) return;
-      selectionRestored = true;
-      const ids = navigationState?.['activitySendSelection'];
-      untracked(() => this.sends.setSelection(navigationState?.['activitySendOwner'] === uid && Array.isArray(ids) ? ids : []));
+      const state = this.navigationSelection();
+      if (!uid) return;
+      const ids = state?.['activitySendSelection'];
+      untracked(() => this.sends.setSelection(state?.['activitySendOwner'] === uid && Array.isArray(ids) ? ids : []));
+    });
+    this.router.events.pipe(takeUntilDestroyed()).subscribe(event => {
+      if (event instanceof NavigationEnd) this.navigationSelection.set(this.location.getState() as Record<string, unknown>);
     });
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(params => {
       const value = params.get('provider');
@@ -176,7 +178,9 @@ export class ActivitySendPageComponent {
     if (this.busy() || !this.sends.selection().length) return;
     this.sends.setSelection([]);
     // Remove the table selection from this history entry as well as the live view.
-    this.location.replaceState(this.location.path(true), '', { ...this.location.getState() as Record<string, unknown>, activitySendSelection: [] });
+    const state = { ...this.location.getState() as Record<string, unknown>, activitySendSelection: [] };
+    this.navigationSelection.set(state);
+    this.location.replaceState(this.location.path(true), '', state);
     this.haptics.selection(); this.invalidateSaved();
   }
   invalidateSaved(): void {

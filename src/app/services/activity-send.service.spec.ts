@@ -162,6 +162,23 @@ describe('ActivitySendService owner and upload boundaries', () => {
     service.closeBatch(); expect(processing.removeJob).not.toHaveBeenCalled();
     streams.reads[1].next([]); expect(processing.removeJob).toHaveBeenCalledWith('job');
   });
+  it('keeps a draft opened before owner initialization completes', () => {
+    user.user.set(null); TestBed.flushEffects();
+    user.user.set({ uid: 'owner' }); service.watchBatch('startup-draft');
+    const firstRead = streams.reads.at(-2)!;
+    TestBed.flushEffects();
+    expect(service.requestedBatchId()).toBe('startup-draft');
+    expect(service.loadingBatch()).toBe(true);
+    expect(firstRead.observed).toBe(false);
+    streams.reads.at(-2)!.next({ id: 'startup-draft', state: 'draft' });
+    expect(service.batch()?.id).toBe('startup-draft'); expect(service.loadingBatch()).toBe(false);
+  });
+  it.each(['owner', 'another'])('clears an opening draft when Auth changes during profile initialization: %s', profileUid => {
+    user.user.set(null); TestBed.flushEffects();
+    service.watchBatch('previous-owner-draft');
+    auth.currentUser.uid = 'another'; user.user.set({ uid: profileUid }); TestBed.flushEffects();
+    expect(service.requestedBatchId()).toBeNull(); expect(service.batch()).toBeNull();
+  });
   it('keeps an owner-matched table selection set before initial owner effects flush', () => {
     user.user.set(null); TestBed.flushEffects();
     user.user.set({ uid: 'owner' }); service.setSelection(['event-one', 'event-two']); TestBed.flushEffects();

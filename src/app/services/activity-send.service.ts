@@ -51,6 +51,7 @@ export class ActivitySendService {
   private uid: string | null = null;
   private selectionOwner: string | null = null;
   private selectedId: string | null = null;
+  private batchOwner: string | null = null;
   private rowLimit = 50;
 
   constructor() {
@@ -63,6 +64,8 @@ export class ActivitySendService {
     effect(() => {
       const uid = this.user.user()?.uid || null;
       if (this.uid === uid) return;
+      // A route can open its draft before the initial profile effect runs.
+      const pendingBatch = this.batchOwner === uid && this.auth.currentUser?.uid === uid ? this.selectedId : null;
       this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); this.closeBatch();
       for (const job of this.jobs.values()) this.processing.removeJob(job);
       this.jobs.clear(); this.recent.set([]);
@@ -77,6 +80,7 @@ export class ActivitySendService {
 
         }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Could not load recent sends. Check your connection and refresh the page.'); } });
       this.activeSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), where('state', '==', 'confirmed'), limit(100))).subscribe({ next: records => { if (this.isCurrentOwner(uid)) this.syncJobs(records as unknown as ActivitySendBatch[]); }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Delivery status is unavailable. Refresh the page to check your results.'); } });
+      if (pendingBatch) this.watchBatch(pendingBatch);
     });
   }
   setSelection(eventIds: unknown[]): void {
@@ -87,6 +91,7 @@ export class ActivitySendService {
   watchBatch(id: string): void {
     this.closeBatch(); this.selectedId = id; this.requestedBatchId.set(id); this.loadingBatch.set(true); this.rowLimit = 50;
     const uid = this.auth.currentUser?.uid;
+    this.batchOwner = uid || null;
     if (!uid) return;
     this.batchSubscription = docData(doc(this.firestore, `users/${uid}/activitySends/${id}`)).subscribe({
       next: record => { if (this.isCurrentOwner(uid) && this.selectedId === id) {
@@ -106,7 +111,7 @@ export class ActivitySendService {
     this.summaryInFlight = false; this.summaryNextReadAt = 0;
     this.summary.set(null); this.loadingSummary.set(false); this.summaryError.set(null);
     this.batchSubscription?.unsubscribe(); this.rowSubscription?.unsubscribe();
-    this.selectedId = null; this.requestedBatchId.set(null); this.batch.set(null); this.rows.set([]); this.loadingBatch.set(false); this.loadingRows.set(false); this.batchReadError.set(null); this.rowReadError.set(null);
+    this.selectedId = null; this.batchOwner = null; this.requestedBatchId.set(null); this.batch.set(null); this.rows.set([]); this.loadingBatch.set(false); this.loadingRows.set(false); this.batchReadError.set(null); this.rowReadError.set(null);
   }
   refreshSummary(): void {
     if (this.summaryInFlight || !this.selectedId) return;
