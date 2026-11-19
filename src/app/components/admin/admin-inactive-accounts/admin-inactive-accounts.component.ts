@@ -147,8 +147,8 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
       void this.loadAccounts(userAction);
     } catch {
       if (!current()) return;
+      this.data.set(null); this.baseline.set(null); this.editing.set(false);
       this.error.set('Unable to load account retention. Refresh to try again.');
-      if (this.data()) this.accountsError.set('The account list could not be refreshed.');
       if (userAction) this.haptics.error();
     } finally {
       if (current()) this.overviewLoading.set(false);
@@ -157,7 +157,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   private async loadAccounts(userAction = false): Promise<void> {
     const sequence = ++this.sequence;
     const current = () => !this.destroyed && sequence === this.sequence;
-    this.accountsLoading.set(true); this.rows.set([]); this.accountsError.set('');
+    this.accountsLoading.set(true); this.rows.set([]); this.accountsError.set(''); this.accountNotice.set('');
     try {
       const view = this.view();
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -174,7 +174,6 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
         if (!current()) return;
         if (view === 'eligible' && directory.dryRunId !== result.lastCompletedDryRun?.id) {
           this.directory.set(null); this.page.set(1);
-          this.accountNotice.set('A newer dry run finished. Showing its first page.');
           continue;
         }
         const accounts = new Map(result.accounts.map(row => [row.uid, row]));
@@ -183,6 +182,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
           return account ? [{ ...account, ...entry }] : [];
         }));
         this.observe(result);
+        if (attempt > 0) this.accountNotice.set('A newer dry run finished. Showing its first page.');
         const defaultView = result.settings.mode === 'dry-run' ? 'eligible' : 'queued';
         if (!this.viewSelected && view !== defaultView) {
           this.view.set(defaultView); this.directory.set(null); this.page.set(1);
@@ -222,7 +222,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   }
   changeView(view: InactivityAdminView): void {
     if (view === this.view() || this.accountsLoading() || this.overviewLoading() || this.saving()) return;
-    this.viewSelected = true; this.accountNotice.set(''); this.view.set(view); this.directory.set(null); this.page.set(1); this.haptics.selection(); void this.loadAccounts(true);
+    this.viewSelected = true; this.view.set(view); this.directory.set(null); this.page.set(1); this.haptics.selection(); void this.loadAccounts(true);
   }
   sortByLogin(direction: SortDirection): void {
     if (!direction || direction === this.direction() || this.accountsLoading() || this.overviewLoading() || this.saving()) return;

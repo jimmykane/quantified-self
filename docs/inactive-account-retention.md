@@ -128,8 +128,9 @@ client-rendered and noindexed, and links directly from the Admin dashboard. The 
   completion requires a finished Auth inventory. Failures and unfinished scans without a handoff have distinct labels.
   A denied warning or deletion reservation records its UTC day, mode and settings revision on the control document
   once per day and configuration. This keeps a confirmed cap visible across batches until midnight or a settings
-  change. Earlier workers supply cap evidence through the last batch's denied reservation count.
-- **Processing details** holds the latest batch counters, scan timestamps and current UTC-day reservations. Cloud
+  change. A completed inventory can still have deferred warnings or deletions. The page shows both outcomes.
+  Earlier workers supply cap evidence through the last batch's denied reservation count.
+- **Processing details** holds the latest batch outcome and counters, scan timestamps and current UTC-day reservations. Cloud
   Monitoring remains authoritative for missed invocations and timeouts.
 - Every account view shows email, UID, last login and event count in pages of 25. The default order is oldest login first.
   Select **Last login** to reverse the order. Missing login dates stay last in both directions, with UID breaking ties.

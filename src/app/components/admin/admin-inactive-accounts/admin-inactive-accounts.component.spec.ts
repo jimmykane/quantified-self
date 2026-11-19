@@ -11,7 +11,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 
 function response(): InactivityAdminResponse {
   return { settings: { mode: 'off', warningDailyLimit: 100, deletionDailyLimit: 25, revision: 2 }, settingsValid: true,
-    scanStatus: 'off', running: false, lastStartedAt: null, lastFinishedAt: null, lastScanCompletedAt: null, budgetDay: '2026-11-14',
+    scanStatus: 'off', dailyLimitReached: false, running: false, lastStartedAt: null, lastFinishedAt: null, lastScanCompletedAt: null, budgetDay: '2026-11-14',
     warningsReserved: 0, deletionsReserved: 0, lastCompletedDryRun: null, lastRun: null, nextUid: 'synthetic',
     accounts: [{ uid: 'synthetic', email: 'synthetic@example.invalid', authPresent: true, eventCount: 0,
       queuedAt: Date.UTC(2026, 10, 14), acceptedAt: null, deleteAfter: null, requestedAt: null, detail: 'Awaiting confirmed warning delivery.' }] };
@@ -103,6 +103,20 @@ describe('Admin inactive accounts route', () => {
     expect(component.editing()).toBe(false); expect(component.view()).toBe('eligible'); expect(component.page()).toBe(1);
     expect(component.accountsError()).toBe('');
   });
+  it('shows an action limit alongside scan progress and retains the last batch outcome', async () => {
+    const { fixture, component, service } = await setup();
+    const snapshot = response();
+    snapshot.settings.mode = 'enforce'; snapshot.scanStatus = 'scanning'; snapshot.dailyLimitReached = true;
+    snapshot.lastRun = { finishedAt: Date.UTC(2026, 10, 13), outcome: 'failed', queued: 0, accepted: 0,
+      deletionRequested: 0, blocked: 0, failed: 0, noticeUnconfirmed: 0, overdue: 0, reviewRequired: 0, capped: false };
+    service.read.mockResolvedValue(snapshot);
+    fixture.detectChanges(); await vi.waitFor(() => expect(component.rows()).toHaveLength(1)); fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector('.scan-summary');
+    expect(summary.querySelector('[role=status]').textContent).toContain('Scanning');
+    expect(summary.textContent).toContain('A daily limit deferred');
+    summary.querySelector('mat-expansion-panel-header').click(); fixture.detectChanges();
+    expect(summary.textContent).toContain('Last batch failed at');
+  });
   it('isolates a page error and retries the same page without discarding the mode draft', async () => {
     const { component, fixture, service } = await render();
     component.toggleEditing(); component.changeMode('warnings-only');
@@ -127,6 +141,16 @@ describe('Admin inactive accounts route', () => {
     expect(fixture.nativeElement.querySelector('td.mat-column-lastLogin').textContent.trim()).toBe('No recorded login');
     expect(fixture.nativeElement.querySelector('td.mat-column-events').textContent.trim()).toBe('Unavailable');
     expect(fixture.nativeElement.querySelector('td.mat-column-retention').textContent).toContain('Warning queued');
+  });
+  it('can return to a working page after a detail read fails', async () => {
+    const { component, fixture, service, firstPage } = await render();
+    service.read.mockRejectedValueOnce(new Error('page unavailable'));
+    component.next(); await vi.waitFor(() => expect(component.accountsError()).toBeTruthy()); fixture.detectChanges();
+    const previous: HTMLButtonElement = fixture.nativeElement.querySelector('.pagination button');
+    expect(previous.disabled).toBe(false);
+    previous.click(); await vi.waitFor(() => expect(component.rows()).toHaveLength(1));
+    expect(component.page()).toBe(1); expect(component.accountsError()).toBe('');
+    expect(service.read.mock.lastCall?.[0]).toEqual({ view: 'queued', accountUids: firstPage });
   });
   it('binds numeric controls, validates caps and resets edits', async () => {
     const { fixture, component, haptics } = await render();
@@ -204,21 +228,29 @@ describe('Admin inactive accounts route', () => {
     expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: ['user-25'], dryRunId: 'first' });
     const replacement = { ...first, lastCompletedDryRun: { ...first.lastCompletedDryRun, id: 'replacement' } };
     service.read.mockResolvedValue(replacement);
-    service.loadLoginOrder.mockResolvedValue({ entries: [entries[0]], snapshot: replacement, dryRunId: 'replacement' });
+    service.loadLoginOrder.mockResolvedValue({ entries, snapshot: replacement, dryRunId: 'replacement' });
     component.previous(); await vi.waitFor(() => expect((component.overviewLoading() || component.accountsLoading())).toBe(false)); await fixture.whenStable();
     expect(component.page()).toBe(1);
-    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: ['synthetic'], dryRunId: 'replacement' });
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: firstPage, dryRunId: 'replacement' });
     expect(component.accountNotice()).toContain('Showing its first page');
+    component.next(); await fixture.whenStable();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: ['user-25'], dryRunId: 'replacement' });
+    expect(component.accountNotice()).toBe('');
     expect(service.save).not.toHaveBeenCalled();
   });
   it('distinguishes an older scan without a report from a completed empty report', async () => {
     const { fixture, component, service } = await render();
-    expect(fixture.nativeElement.textContent).toContain('first full dry run with account reporting');
+    const waitingForReport = 'The eligible account list will appear';
+    expect(fixture.nativeElement.textContent).not.toContain(waitingForReport);
+    service.loadLoginOrder.mockResolvedValue({ entries: [], dryRunId: undefined, snapshot: response() });
+    component.changeView('eligible'); await vi.waitFor(() => expect(component.accountsLoading()).toBe(false)); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain(waitingForReport);
+    expect(fixture.nativeElement.textContent).not.toContain('No accounts in this view');
     service.loadLoginOrder.mockResolvedValue({ entries: [], dryRunId: 'empty', snapshot: { ...response(), accounts: [], nextUid: null,
       lastCompletedDryRun: { id: 'empty', eligibleCount: 0, finishedAt: Date.UTC(2026, 10, 18) } } });
-    component.changeView('eligible'); await fixture.whenStable(); fixture.detectChanges();
+    component.refresh(); await vi.waitFor(() => expect(component.data()?.lastCompletedDryRun?.id).toBe('empty')); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No accounts qualified for a first warning');
-    expect(fixture.nativeElement.textContent).not.toContain('first full dry run with account reporting');
+    expect(fixture.nativeElement.textContent).not.toContain(waitingForReport);
   });
   it('shows read failures without implying an empty queue and permits refresh', async () => {
     const { fixture, component, service, haptics } = await setup();
@@ -240,6 +272,23 @@ describe('Admin inactive accounts route', () => {
     service.loadLoginOrder.mockResolvedValue({ entries: [], snapshot: updated, dryRunId: undefined });
     component.refresh(); await vi.waitFor(() => expect(component.view()).toBe('eligible'));
     expect(component.currentModeLabel()).toBe('Dry run'); expect(component.error()).toBe('');
+  });
+  it('clears stale settings on a failed refresh and restores the editor from the next successful read', async () => {
+    const { component, fixture, service } = await render();
+    component.toggleEditing();
+    service.read.mockRejectedValueOnce(new Error('overview unavailable'));
+    component.refresh(); await vi.waitFor(() => expect(component.error()).toContain('Refresh')); fixture.detectChanges();
+    expect(component.baseline()).toBeNull(); expect(component.editing()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Current mode');
+    expect(fixture.nativeElement.textContent).not.toContain('Retry accounts');
+    const updated = response(); updated.settings.mode = 'dry-run'; updated.settings.revision++;
+    service.read.mockResolvedValue(updated);
+    service.loadLoginOrder.mockResolvedValue({ entries: [], snapshot: updated, dryRunId: undefined });
+    fixture.nativeElement.querySelector('.mode-toolbar button').click();
+    await vi.waitFor(() => expect(component.view()).toBe('eligible')); fixture.detectChanges();
+    expect(component.currentModeLabel()).toBe('Dry run'); expect(component.error()).toBe('');
+    fixture.nativeElement.querySelector('.mode-toolbar button').click(); component.changeMode('warnings-only');
+    expect(component.canSave()).toBe(true);
   });
   it('reports a rejected save without retrying or claiming success', async () => {
     const { component, service, haptics } = await render();

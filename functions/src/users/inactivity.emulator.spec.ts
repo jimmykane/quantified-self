@@ -550,6 +550,7 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(result.capped).toBe(true);
         expect((await inactivityRef(db, newcomer.uid).get()).get('state')).toBe('queued');
         expect((await config().get()).get('lastScanCompletedAt')).toBeDefined();
+        expect(await overview()).toMatchObject({ scanStatus: 'complete', dailyLimitReached: true });
         expect(auth.deleteUser).not.toHaveBeenCalled();
     });
     it('keeps an observed daily limit visible across later batches, including a configured zero', async () => {
@@ -562,10 +563,22 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         await config().update({ 'lastRun.counts': {} });
         expect((await overview()).scanStatus).toBe('daily-limit');
         now += INACTIVITY_DAY_MS;
-        expect((await overview()).scanStatus).toBe('incomplete');
+        expect(await overview()).toMatchObject({ scanStatus: 'incomplete', dailyLimitReached: false });
         now -= INACTIVITY_DAY_MS;
         await config().update({ settingsRevision: 1, settingsUpdatedAt: Timestamp.fromMillis(now + 1) });
+        expect(await overview()).toMatchObject({ scanStatus: 'waiting', dailyLimitReached: false });
+    });
+    it('recognizes an unfinished scan resumed under new settings after the daily limit resets', async () => {
+        const scanStartedAt = Timestamp.fromMillis(now - 2 * INACTIVITY_DAY_MS);
+        await config().set({ mode: 'warnings-only', warningDailyLimit: 0, settingsRevision: 1,
+            settingsUpdatedAt: Timestamp.fromMillis(now - 1), scanStartedAt, scanCursor: 'resume-here' });
         expect((await overview()).scanStatus).toBe('waiting');
+        await runInactivitySweep(ctx);
+        expect(auth.listUsers).toHaveBeenCalledWith(100, 'resume-here');
+        expect((await config().get()).get('scanStartedAt')).toEqual(scanStartedAt);
+        expect((await overview()).scanStatus).toBe('daily-limit');
+        now += INACTIVITY_DAY_MS;
+        expect(await overview()).toMatchObject({ scanStatus: 'incomplete', dailyLimitReached: false });
     });
     it('uses live scan evidence and never exposes a pending ticket, cursor or lease in the overview', async () => {
         await config().set({ mode: 'dry-run', settingsRevision: 2, lastScanCompletedAt: Timestamp.fromMillis(now - 10) });
@@ -594,6 +607,18 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await overview()).scanStatus).toBe('daily-limit');
         await config().update({ 'lastRun.counts': {} });
         expect((await overview()).scanStatus).toBe('incomplete');
+    });
+    it('does not carry a cap across midnight when a later batch has already started', async () => {
+        const midnight = Date.parse('2026-11-14T00:00:00Z');
+        now = midnight + 3000;
+        await config().set({ mode: 'enforce', lastStartedAt: Timestamp.fromMillis(midnight - 1000),
+            lastRun: { mode: 'enforce', outcome: 'completed', finishedAt: Timestamp.fromMillis(midnight + 1000), counts: { capped: 1 } } });
+        expect((await overview()).dailyLimitReached).toBe(false);
+        await config().update({ lastStartedAt: Timestamp.fromMillis(now), leaseUntil: Timestamp.fromMillis(now + 1000) });
+        expect(await overview()).toMatchObject({ scanStatus: 'scanning', dailyLimitReached: false });
+        // A worker that recorded the specific day can disambiguate a batch that spanned midnight.
+        await config().update({ lastDailyLimit: { day: '2026-11-14', mode: 'enforce', revision: 0 } });
+        expect(await overview()).toMatchObject({ scanStatus: 'scanning', dailyLimitReached: true });
     });
     it('lets newer warning receipts progress past capped deletions across daily scan windows', async () => {
         await dueWarning();

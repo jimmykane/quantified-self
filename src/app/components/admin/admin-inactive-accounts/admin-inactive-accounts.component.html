@@ -48,6 +48,9 @@
         <span>{{ scanDescriptions[snapshot.scanStatus] }}</span>
         @if (snapshot.scanStatus === 'complete' && snapshot.lastScanCompletedAt !== null) { {{ snapshot.lastScanCompletedAt | date:'medium' }} }
       </p>
+      @if (snapshot.dailyLimitReached && snapshot.scanStatus !== 'daily-limit') {
+        <p class="secondary">{{ scanDescriptions['daily-limit'] }}</p>
+      }
       <mat-expansion-panel (opened)="feedbackForDetails()" (closed)="feedbackForDetails()">
         <mat-expansion-panel-header><mat-panel-title>Processing details</mat-panel-title></mat-expansion-panel-header>
         <dl class="status-grid">
@@ -58,7 +61,7 @@
           <div><dt>Deletions reserved today</dt><dd class="number">{{ snapshot.deletionsReserved | number }} / {{ snapshot.settings.deletionDailyLimit | number }}</dd></div>
         </dl>
         @if (snapshot.lastRun; as run) {
-          <p>Batch results for {{ run.finishedAt | date:'medium' }}</p>
+          <p>Last batch {{ run.outcome }} at {{ run.finishedAt | date:'medium' }}</p>
           <dl class="status-grid run-counts">
             <div><dt>Warnings queued</dt><dd class="number">{{ run.queued | number }}</dd></div>
             <div><dt>Initial warnings accepted</dt><dd class="number">{{ run.accepted | number }}</dd></div>
@@ -70,7 +73,7 @@
             <div><dt>Deletion needs review</dt><dd class="number">{{ run.reviewRequired | number }}</dd></div>
           </dl>
           <p class="secondary">These counts cover the most recent batch. Eligibility holds protect accounts when activity, warning evidence, access or billing checks do not pass. Initiating deletion does not mean background cleanup has finished.</p>
-        } @else { <p class="secondary">No run summary recorded yet. Off mode does not scan accounts.</p> }
+        } @else { <p class="secondary">No run summary recorded yet.</p> }
         <p>Free accounts qualify after more than six calendar months without an app sign-in or session refresh. Confirmed warning delivery starts a full 30-day return period. Basic, Pro, trials, gifts and active grace periods are protected.</p>
         <p>The daily check can queue one final reminder during the last seven days if the account still qualifies. The reminder uses the original deletion deadline.</p>
       </mat-expansion-panel>
@@ -86,8 +89,8 @@
             <button mat-button type="button" (click)="changeView('eligible')" [disabled]="accountsLoading() || overviewLoading() || saving()">Review eligible accounts</button>
           }
         </div>
-      } @else {
-        <p class="secondary">The first full dry run with account reporting will populate this list.</p>
+      } @else if (view() === 'eligible') {
+        <p class="secondary">The eligible account list will appear when the first dry-run report is published.</p>
       }
       @if (view() === 'eligible' && snapshot.lastCompletedDryRun) {
         <p class="secondary">Eligibility is recorded at scan time and checked again before sending a warning.</p>
@@ -142,9 +145,9 @@
       }
       @if (totalPages() > 1) {
         <div class="toolbar pagination">
-          <button mat-stroked-button type="button" (click)="previous()" [disabled]="page() <= 1 || accountsLoading() || overviewLoading() || saving() || !!accountsError() && !overviewLoading()">Previous</button>
+          <button mat-stroked-button type="button" (click)="previous()" [disabled]="page() <= 1 || accountsLoading() || overviewLoading() || saving()">Previous</button>
           <span>Page {{ page() | number }} of {{ totalPages() | number }}</span>
-          <button mat-stroked-button type="button" (click)="next()" [disabled]="page() >= totalPages() || accountsLoading() || overviewLoading() || saving() || !!accountsError() && !overviewLoading()">Next</button>
+          <button mat-stroked-button type="button" (click)="next()" [disabled]="page() >= totalPages() || accountsLoading() || overviewLoading() || saving()">Next</button>
         </div>
       }
       @if (rows().length) { <p class="secondary">Last login is the most recent Firebase sign-in recorded when you opened or refreshed this list. Session refreshes also count toward retention eligibility. Event counts are read when you open each page.</p> }

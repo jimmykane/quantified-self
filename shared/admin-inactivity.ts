@@ -35,6 +35,7 @@ export type InactivityScanStatus = 'off' | 'waiting' | 'scanning' | 'continuatio
     | 'complete' | 'incomplete' | 'failed';
 export interface InactivityAdminResponse {
     scanStatus: InactivityScanStatus;
+    dailyLimitReached: boolean;
     settings: InactivitySettings;
     settingsValid: boolean;
     running: boolean;

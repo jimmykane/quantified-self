@@ -32,7 +32,23 @@ const count = (value: unknown): number => Number.isSafeInteger(value) && (value 
 const bounded = (value: unknown, maximum: number): boolean => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= maximum;
 const date = (snapshot: DocumentSnapshot, key: string) => timestampMillis(snapshot.get(key));
 
-function scanStatus(config: DocumentSnapshot, pending: DocumentSnapshot, now: number): InactivityScanStatus {
+function dailyLimitReached(config: DocumentSnapshot, today: string): boolean {
+    const mode = inactivityMode(config.get('mode'));
+    if (mode !== 'warnings-only' && mode !== 'enforce') return false;
+    if (config.get('lastDailyLimit')) {
+        return config.get('lastDailyLimit.day') === today && config.get('lastDailyLimit.mode') === mode
+            && config.get('lastDailyLimit.revision') === (config.get('settingsRevision') ?? 0);
+    }
+    // Earlier workers recorded a denied reservation only in the most recent batch.
+    const started = date(config, 'lastStartedAt');
+    const finished = date(config, 'lastRun.finishedAt');
+    return config.get('lastRun.mode') === mode && count(config.get('lastRun.counts.capped')) > 0
+        && started !== null && finished !== null && started >= (date(config, 'settingsUpdatedAt') ?? 0)
+        && finished >= started
+        && new Date(started).toISOString().slice(0, 10) === today && new Date(finished).toISOString().slice(0, 10) === today;
+}
+
+function scanStatus(config: DocumentSnapshot, pending: DocumentSnapshot, now: number, limitReached: boolean): InactivityScanStatus {
     const mode = inactivityMode(config.get('mode'));
     if (mode === 'off') return 'off';
     const settingsChanged = date(config, 'settingsUpdatedAt') ?? 0;
@@ -43,23 +59,18 @@ function scanStatus(config: DocumentSnapshot, pending: DocumentSnapshot, now: nu
     if (typeof ticketId === 'string' && ticketId.length && pending.get('mode') === mode && pending.get('revision') === revision)
         return 'continuation-pending';
 
-    const finished = date(config, 'lastRun.finishedAt') ?? 0;
-    const currentBatch = finished >= settingsChanged && config.get('lastRun.mode') === mode;
+    const finished = date(config, 'lastRun.finishedAt');
+    const currentBatch = finished !== null && finished >= settingsChanged && config.get('lastRun.mode') === mode;
     if (started >= settingsChanged && started > (date(config, 'lastFinishedAt') ?? 0)) return 'incomplete';
     if (currentBatch && config.get('lastRun.outcome') === 'failed') return 'failed';
-
-    const today = new Date(now).toISOString().slice(0, 10);
-    // Earlier workers recorded a denied reservation only in the most recent batch.
-    const lastBatchHitLimit = currentBatch && count(config.get('lastRun.counts.capped')) > 0
-        && new Date(started).toISOString().slice(0, 10) === today && new Date(finished).toISOString().slice(0, 10) === today;
-    if (mode !== 'dry-run' && (lastBatchHitLimit || (config.get('lastDailyLimit.day') === today
-        && config.get('lastDailyLimit.revision') === revision && config.get('lastDailyLimit.mode') === mode))) return 'daily-limit';
 
     const completed = date(config, 'lastScanCompletedAt');
     const scanStarted = date(config, 'scanStartedAt');
     if (completed !== null && completed >= settingsChanged && completed >= (scanStarted ?? 0)
         && !config.get('scanCursor') && !config.get('dryRunDraft')) return 'complete';
-    return scanStarted !== null && scanStarted >= settingsChanged ? 'incomplete' : 'waiting';
+    if (limitReached) return 'daily-limit';
+    // An active mode can inherit an unfinished inventory from an earlier settings revision.
+    return scanStarted !== null && (scanStarted >= settingsChanged || currentBatch) ? 'incomplete' : 'waiting';
 }
 
 /** Privileged, bounded projection: Auth supplies current emails; private evidence, leases,
@@ -144,13 +155,14 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
     const lastRunOutcome = config.get('lastRun.outcome');
     const last = (key: string) => count(config.get(`lastRun.${key}`));
     const today = new Date(now).toISOString().slice(0, 10);
+    const limitReached = dailyLimitReached(config, today);
 
     return {
         settings: { mode: inactivityMode(config.get('mode')), warningDailyLimit: bounded(warningDailyLimit, INACTIVITY_WARNING_LIMIT) ? warningDailyLimit : 0,
             deletionDailyLimit: bounded(deletionDailyLimit, INACTIVITY_DELETION_LIMIT) ? deletionDailyLimit : 0, revision: count(revision) },
         settingsValid: (config.get('mode') === undefined || INACTIVITY_MODES.includes(config.get('mode')))
             && bounded(warningDailyLimit, INACTIVITY_WARNING_LIMIT) && bounded(deletionDailyLimit, INACTIVITY_DELETION_LIMIT) && bounded(revision, Number.MAX_SAFE_INTEGER - 1),
-        scanStatus: scanStatus(config, pendingWork, now),
+        scanStatus: scanStatus(config, pendingWork, now, limitReached), dailyLimitReached: limitReached,
         running: (date(config, 'leaseUntil') ?? 0) > now,
         lastStartedAt: date(config, 'lastStartedAt'), lastFinishedAt: date(config, 'lastFinishedAt'), lastScanCompletedAt: date(config, 'lastScanCompletedAt'),
         lastCompletedDryRun: report ? { id: report.id, finishedAt: report.finishedAt.toMillis(), eligibleCount: report.eligibleCount } : null,
