@@ -78,7 +78,7 @@
   }
 }
 
-.comparison-toolbar, .comparison-card h4, .device-name {
+.comparison-toolbar, .device-name {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -93,57 +93,33 @@
   app-compact-select { max-width: 100%; }
 }
 
-.comparison-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  gap: 12px;
-  padding-top: 12px;
+.comparison-metrics {
+  display: block;
 }
 
-.comparison-card {
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
-  background: var(--mat-sys-surface-container-low);
+.comparison-list {
+  padding-top: 4px;
 }
 
-.comparison-card, .comparison-metric {
-  table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-  caption { text-align: start; }
-  h4 { margin: 0 0 8px; font: var(--mat-sys-title-small); }
+.comparison-metric {
+  --mat-expansion-container-background-color: transparent;
+  --mat-expansion-container-elevation-shadow: none;
+  --mat-expansion-header-text-color: var(--mat-sys-on-surface);
+  --mat-expansion-header-indicator-color: var(--mat-sys-on-surface-variant);
+
+  border-radius: 0;
+  margin: 0;
+  box-shadow: none;
+
+  & + & { border-block-start: 1px solid var(--mat-sys-outline-variant); }
+  table { width: 100%; max-width: 720px; table-layout: fixed; border-collapse: collapse; }
   th, td { font: var(--mat-sys-body-small); text-align: end; overflow-wrap: anywhere; vertical-align: middle; }
   thead th, .difference, .missing-reading, .reference-label, .comparison-note { color: var(--mat-sys-on-surface-variant); }
   thead th { padding-bottom: 4px; }
   th:first-child { text-align: start; }
   th + th, th + td, td + td { padding-inline-start: 8px; }
-  .device-column { width: 41%; }
-  .difference-column { width: 26%; }
-}
-
-.comparison-metrics {
-  display: block;
-}
-
-.comparison-metrics-mobile {
-  .comparison-grid {
-    display: block;
-    padding-top: 4px;
-  }
-
-  .comparison-metric {
-    border-radius: 0;
-    margin: 0;
-    box-shadow: none;
-    --mat-expansion-container-background-color: transparent;
-    --mat-expansion-container-elevation-shadow: none;
-    --mat-expansion-header-text-color: var(--mat-sys-on-surface);
-    --mat-expansion-header-indicator-color: var(--mat-sys-on-surface-variant);
-
-    & + .comparison-metric { border-block-start: 1px solid var(--mat-sys-outline-variant); }
-    .device-column { width: 38%; }
-    .difference-column { width: 30%; }
-  }
+  .device-column { width: 38%; }
+  .difference-column { width: 30%; }
 }
 
 .comparison-metric-header {

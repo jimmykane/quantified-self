@@ -309,24 +309,34 @@ describe('EventCardStatsGridComponent', () => {
         const grid = fixture.nativeElement as HTMLElement;
         expect(grid.querySelectorAll('app-compact-select')).toHaveLength(1);
         expect(grid.querySelector('mat-tab-group app-compact-select')).toBeNull();
+        expect(grid.querySelectorAll('table')).toHaveLength(0);
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        const openMetric = (label: string) => {
+            const header = [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')]
+                .find(element => element.querySelector('.comparison-metric-label')?.textContent?.trim() === label);
+            header!.click();
+            fixture.detectChanges();
+        };
+        openMetric('Distance');
         expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="col"]')).toHaveLength(3);
         expect(grid.querySelectorAll('table[aria-label="Distance"] th[scope="row"]')).toHaveLength(4);
         expect(rows()).toHaveLength(4);
         expect(rows()[0]).toContain('Reference');
-        expect(mockHaptics.selection).not.toHaveBeenCalled();
         const picker = fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance;
         picker.select('id:B'); fixture.detectChanges();
         expect(rows()[0]).toContain('−100.0 m');
         expect(rows()[1]).toContain('Reference');
         expect(rows()[2]).toContain('+100.0 m');
+        openMetric('Average Heart Rate');
         const heartRate = grid.querySelector('table[aria-label="Average Heart Rate"]')!;
         expect(heartRate.querySelectorAll('th[scope="col"]')).toHaveLength(2);
         expect(heartRate.querySelector('.reference-label')?.textContent).toContain('Reference');
-        expect(heartRate.closest('.comparison-card')?.querySelectorAll('.comparison-note')).toHaveLength(1);
+        expect(heartRate.closest('.comparison-metric')?.querySelectorAll('.comparison-note')).toHaveLength(1);
         expect(heartRate.textContent).toContain('Not recorded');
         component.selectReference('id:B');
         component.selectReference('invalid');
-        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(3);
+        openMetric('Distance');
         await load('run', devices.map(device => ({ ...device })), [devices[3], devices[1]]);
         expect(rows()[0].replace(/\s+/g, '')).toContain('B1.10KmReference');
         expect(rows()[1]).toContain('+200.0 m');
@@ -342,14 +352,14 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.reference()?.label).toBe('D');
         await load('another');
         expect(component.reference()?.label).toBe('A');
-        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(4);
         fixture.componentRef.setInput('statsToShow', []);
         fixture.detectChanges();
         expect(grid.querySelector('.comparison-empty')?.textContent).toContain('No summary readings');
         expect(grid.querySelector('app-compact-select')).toBeNull();
     });
 
-    it('opens only one phone metric, keeps reference changes live, and resets on event and viewport changes', async () => {
+    it('keeps one metric open across viewport and reference changes and collapses it for a new event', async () => {
         TestBed.resetTestingModule();
         const viewport = Object.assign(new EventTarget(), { matches: true });
         vi.spyOn(window, 'matchMedia').mockReturnValue(viewport as MediaQueryList);
@@ -417,20 +427,21 @@ describe('EventCardStatsGridComponent', () => {
         expect(distance.getAttribute('aria-expanded')).toBe('true');
         expect(tables()[0].textContent).toContain('5.75 mi');
 
-        fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
-        fixture.detectChanges();
-        expect(tables()).toHaveLength(0);
-
         viewport.matches = false;
         viewport.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        expect(headers()).toHaveLength(0);
-        expect(tables()).toHaveLength(2);
+        expect(headers()).toHaveLength(2);
+        expect(distance.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()).toHaveLength(1);
 
         viewport.matches = true;
         viewport.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        expect(headers()).toHaveLength(2);
+        expect(distance.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()).toHaveLength(1);
+
+        fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
+        fixture.detectChanges();
         expect(tables()).toHaveLength(0);
         expect(mockHaptics.selection).toHaveBeenCalledTimes(3);
     });
@@ -516,10 +527,14 @@ describe('EventCardStatsGridComponent', () => {
         if (benchmark) {
             fixture.componentRef.setInput('compareRecordings', true);
             fixture.detectChanges();
+            expect(host.querySelector('table[aria-label="RMSSD"]')).toBeNull();
+            const metric = host.querySelector<HTMLElement>('.comparison-metric-header')!;
+            metric.click();
+            fixture.detectChanges();
             const overview = host.querySelector('table[aria-label="RMSSD"]')!;
             expect(overview.querySelectorAll('.comparison-row')).toHaveLength(2);
             expect(overview.textContent).toContain('+9.1 ms');
-            const detailsButton = host.querySelector<HTMLButtonElement>('.comparison-grid .summary-disclosure-control')!;
+            const detailsButton = host.querySelector<HTMLButtonElement>('.comparison-list .summary-disclosure-control')!;
             const detailRegion = document.getElementById(detailsButton.getAttribute('aria-controls')!)!;
             expect(detailRegion.hidden).toBe(true);
             detailsButton.click(); fixture.detectChanges();
