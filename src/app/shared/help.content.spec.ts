@@ -45,7 +45,7 @@ describe('help.content', () => {
   it('explains remembered performance chart visibility without hiding other event sections', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     for (const text of ['**Intensity**, **Power Curve**, **Durability**, and **Cadence vs Power**',
-      '**Hide performance charts**', 'collapses the plot and its tabs', '**Show performance charts**',
+      'on ordinary activities and sequential multisport events', '**Hide performance charts**', 'collapses the plot and its tabs', '**Show performance charts**',
       'beside the chart tabs', 'beside the chart title', 'row appears only while collapsed',
       'selected chart is kept', 'compact chart picker beside **Hide**',
       'remembered across activities and devices', 'Charts start visible until you hide them',
@@ -576,7 +576,7 @@ describe('help.content', () => {
     expect(copy).toContain('differences appear only when both recordings have a valid value');
     expect(copy).toContain('cover each entire recording, not only the aligned overlap');
     expect(copy).toContain('do not affect the hardware agreement grade');
-    expect(copy).toContain('On **Event Details**, **R–R & HRV** appears after the performance charts');
+    expect(copy).toContain('On **Event Details**, **R–R & HRV** appears above the regular activity charts');
     expect(copy).toContain('ordinary workouts, multisport legs and benchmarks');
     expect(copy).toContain('Events without beat intervals or valid saved HRV statistics do not show this section');
     expect(copy).toContain('all 20 recorded R–R metrics');
@@ -2429,7 +2429,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('apnea diving and apnea hunting');
     expect(gettingStartedSection?.content).toContain('**Altitude Minimum**, **Altitude Maximum**, **Average Altitude**, ascent/descent timing, grade and grade-adjusted values, VAM, and vertical speed');
     expect(gettingStartedSection?.content).toContain('mixed Event is regenerated, its ascent, descent, altitude, and grade summaries use only non-Diving activities');
-    expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
+    expect(gettingStartedSection?.content).toContain('**Dive Profile** above the normal Event Details charts');
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
     expect(gettingStartedSection?.content).toContain('no-decompression limit');
@@ -2549,6 +2549,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
     expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
+    expect(gettingStartedSection?.content).toContain('**Device stats** starts with the metric rows collapsed');
+    expect(gettingStartedSection?.content).toContain('available range in your preferred units');
     expect(gettingStartedSection?.content).toContain('**Slightly higher** and **Slightly lower**');
     expect(gettingStartedSection?.content).toContain('If the reference has no reading for a metric');
     expect(gettingStartedSection?.content).toContain('Expand **Combined totals** below the metrics');

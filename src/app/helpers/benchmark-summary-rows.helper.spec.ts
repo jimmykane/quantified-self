@@ -23,6 +23,8 @@ describe('benchmark summary device rows', () => {
     ];
     const sources = sourcesFor(all, [DataDistance.type, DataHeartRateAvg.type, DataDuration.type]);
     const cards = buildBenchmarkSummaryCards(sources, 'id:a', settings);
+    expect(cards.get(DataDistance.type)[0].range).toBe('9.25–9.90 Km');
+    expect(cards.get(DataHeartRateAvg.type)[0].range).toBe('0–120 bpm');
     expect(cards.get(DataDistance.type)[0].rows.map(row => [row.value, row.delta])).toEqual([
       ['9.27 Km', 'Reference'], ['9.25 Km', '−20.0 m'], ['9.90 Km', '+630.0 m'], ['9.27 Km', 'Same'],
     ]);
@@ -43,6 +45,8 @@ describe('benchmark summary device rows', () => {
     ];
     const cards = buildBenchmarkSummaryCards(sourcesFor(activities, [DataDistance.type, DataAltitudeAvg.type, DataPaceAvg.type]), 'id:a', units);
     expect(cards.get(DataDistance.type)[0].rows[1]).toMatchObject({ value: '2.00 mi', delta: '+1.00 mi' });
+    expect(cards.get(DataDistance.type)[0].range).toBe('1.00–2.00 mi');
+    expect(cards.get(DataAltitudeAvg.type)[0].range).toBe('100–200 ft');
     expect(cards.get(DataAltitudeAvg.type)[0].rows[1]).toMatchObject({ value: '200 ft', delta: '+100 ft' });
     expect(cards.get(DataPaceAvg.type)[0].rows[1].delta).toMatch(/^\+01:36 /);
   });
@@ -80,6 +84,20 @@ describe('benchmark summary device rows', () => {
     const cards = buildBenchmarkSummaryCards(sourcesFor(selected, [DataDistance.type, DataFeeling.type]), 'id:a', units);
     expect(cards.get(DataDistance.type)[0].rows[1]).toMatchObject({ value: '200 yd', delta: '+100 yd' });
     expect(cards.get(DataFeeling.type)[0].rows[1].delta).toBe('Different');
+    expect(cards.get(DataFeeling.type)[0].range).toBeNull();
+  });
+
+  it('uses compact clock values and keeps both units when the distance scale changes', () => {
+    const selected = [
+      recording('a', [new DataDuration(4125), new DataDistance(1230)]),
+      recording('b', [new DataDuration(4119), new DataDistance(950)]),
+      recording('c', []),
+    ];
+    const sources = sourcesFor(selected, [DataDuration.type, DataDistance.type]);
+    const cards = buildBenchmarkSummaryCards(sources, 'id:c', settings);
+    expect(cards.get(DataDuration.type)[0].range).toBe('1:08:39–1:08:45');
+    expect(cards.get(DataDistance.type)[0].range).toBe('950.0 m–1.23 Km');
+    expect(buildBenchmarkSummaryCards(sources.slice(0, 1), 'id:a', settings).get(DataDuration.type)[0].range).toBe('1:08:45');
   });
 
   it('keeps original source order and disambiguates repeated names and IDs after filtering', () => {

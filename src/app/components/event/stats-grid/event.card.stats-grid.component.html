@@ -1,7 +1,7 @@
 @if (metricTabs.length > 0) {
 @if (compareRecordings) {
 <div class="comparison-toolbar">
-    <h3>Readings by device</h3>
+    <h3>{{ mobileViewport() ? 'Device stats' : 'Readings by device' }}</h3>
     @if (sources().length > 1) {
       <app-compact-select label="Reference device" [value]="referenceKey()" [options]="sources()"
         (selectionChange)="selectReference($event)" />
@@ -24,24 +24,53 @@
             </span>
         </ng-template>
         @if (compareRecordings) {
-        @if (tab.id === 'rr') {
-          <app-summary-disclosure variant="plain" title="R–R & HRV" [summaryId]="rrRegionId"
-            [scopeKey]="event.getID() || rrRegionId" [detailsAvailable]="rrComparison().details.length > 0" [plainOverviewTemplate]="rrDeviceOverview">
-            <ng-template #rrDeviceOverview let-detailsControl="detailsControl">
-              <div class="comparison-grid">
-                <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: rrComparison().primary }" />
-                @if (rrComparison().details.length) { <ng-container [ngTemplateOutlet]="detailsControl" /> }
-              </div>
+          <mat-accordion displayMode="flat" class="comparison-metrics" [class.comparison-metrics-mobile]="mobileViewport()">
+            <ng-template #deviceCards let-metricTypes>
+              @for (type of metricTypes; track type) {
+                @for (card of comparisonCards().get(type); track $index; let variant = $index) {
+                  @if (mobileViewport()) {
+                    @let metricKey = tab.id + '/' + type + '/' + variant;
+                    <mat-expansion-panel class="comparison-metric mat-elevation-z0" #panel
+                      [expanded]="expandedMetric() === metricKey" (expandedChange)="onMetricExpanded(metricKey, $event)">
+                      <mat-expansion-panel-header class="comparison-metric-header" collapsedHeight="auto" expandedHeight="auto"
+                        appHapticTap (keydown)="onMetricHeaderKeydown($event)">
+                        <span class="comparison-metric-title">
+                          <app-data-type-icon [dataType]="type" size="18px" />
+                          <span class="comparison-metric-label">{{ card.label }}</span>
+                          @if (card.range) { <span class="comparison-metric-range">{{ card.range }}</span> }
+                        </span>
+                      </mat-expansion-panel-header>
+                      @if (panel.expanded) {
+                        <ng-container [ngTemplateOutlet]="deviceTable" [ngTemplateOutletContext]="{ $implicit: card }" />
+                      }
+                    </mat-expansion-panel>
+                  } @else {
+                    <div class="comparison-card">
+                      <ng-container [ngTemplateOutlet]="deviceTable" [ngTemplateOutletContext]="{ $implicit: card, captionType: type }" />
+                    </div>
+                  }
+                }
+              }
             </ng-template>
-            <div summaryDetails class="comparison-grid">
-              <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: rrComparison().details }" />
-            </div>
-          </app-summary-disclosure>
-        } @else {
-          <div class="comparison-grid">
-            <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: tab.metricTypes }" />
-          </div>
-        }
+            @if (tab.id === 'rr') {
+              <app-summary-disclosure variant="plain" title="R–R & HRV" [summaryId]="rrRegionId"
+                [scopeKey]="event.getID() || rrRegionId" [detailsAvailable]="rrComparison().details.length > 0" [plainOverviewTemplate]="rrDeviceOverview">
+                <ng-template #rrDeviceOverview let-detailsControl="detailsControl">
+                  <div class="comparison-grid">
+                    <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: rrComparison().primary }" />
+                    @if (rrComparison().details.length) { <ng-container [ngTemplateOutlet]="detailsControl" /> }
+                  </div>
+                </ng-template>
+                <div summaryDetails class="comparison-grid">
+                  <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: rrComparison().details }" />
+                </div>
+              </app-summary-disclosure>
+            } @else {
+              <div class="comparison-grid">
+                <ng-container [ngTemplateOutlet]="deviceCards" [ngTemplateOutletContext]="{ $implicit: tab.metricTypes }" />
+              </div>
+            }
+          </mat-accordion>
         } @else if (tab.id !== 'rr' && tab.metricTypes.length > 0) {
         <app-header-stats [statsToShow]="tab.metricTypes" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
             [activityTypes]="activityTypes" [metricManufacturer]="metricManufacturer" [showDiff]="showDiff" [diffByType]="diffByType"
@@ -90,44 +119,40 @@
   <p class="comparison-empty">No summary readings are available for the current selection.</p>
 }
 
-<ng-template #deviceCards let-metricTypes>
-  @for (type of metricTypes; track type) {
-    @for (card of comparisonCards().get(type); track card.type) {
-      @let comparing = sources().length > 1;
-      @let showDifference = comparing && card.hasReferenceReading;
-      <div class="comparison-card">
-        <table [attr.aria-label]="card.label">
-          <caption><h4><app-data-type-icon [dataType]="type" size="18px" />{{ card.label }}</h4></caption>
-          <thead>
-            <tr>
-              <th scope="col" class="device-column">Device</th>
-              <th scope="col">Reading</th>
-              @if (showDifference) {
-                <th scope="col" class="difference-column">Difference<span class="cdk-visually-hidden"> from {{ reference()?.label }}</span></th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of card.rows; track row.key) {
-              <tr class="comparison-row">
-                <th scope="row">
-                  <span class="device-name"><span aria-hidden="true" class="device-mark" [style.background-color]="row.color"></span>
-                    <span>{{ row.label }}</span>
-                  </span>
-                  @if (comparing && !card.hasReferenceReading && row.key === referenceKey()) {
-                    <span class="reference-label">Reference</span>
-                  }
-                </th>
-                <td class="reading" [class.missing-reading]="row.value === null">{{ row.value ?? 'Not recorded' }}</td>
-                @if (showDifference) { <td class="difference">{{ row.delta || '—' }}</td> }
-              </tr>
-            }
-          </tbody>
-        </table>
-        @if (comparing && !card.hasReferenceReading) {
-          <p class="comparison-note">The reference device did not record this metric.</p>
-        }
-      </div>
+<ng-template #deviceTable let-card let-captionType="captionType">
+  @let comparing = sources().length > 1;
+  @let showDifference = comparing && card.hasReferenceReading;
+  <table [attr.aria-label]="card.label">
+    @if (captionType) {
+      <caption><h4><app-data-type-icon [dataType]="captionType" size="18px" />{{ card.label }}</h4></caption>
     }
+    <thead>
+      <tr>
+        <th scope="col" class="device-column">Device</th>
+        <th scope="col">Reading</th>
+        @if (showDifference) {
+          <th scope="col" class="difference-column">Difference<span class="cdk-visually-hidden"> from {{ reference()?.label }}</span></th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of card.rows; track row.key) {
+        <tr class="comparison-row">
+          <th scope="row">
+            <span class="device-name"><span aria-hidden="true" class="device-mark" [style.background-color]="row.color"></span>
+              <span>{{ row.label }}</span>
+            </span>
+            @if (comparing && !card.hasReferenceReading && row.key === referenceKey()) {
+              <span class="reference-label">Reference</span>
+            }
+          </th>
+          <td class="reading" [class.missing-reading]="row.value === null">{{ row.value ?? 'Not recorded' }}</td>
+          @if (showDifference) { <td class="difference">{{ row.delta || '—' }}</td> }
+        </tr>
+      }
+    </tbody>
+  </table>
+  @if (comparing && !card.hasReferenceReading) {
+    <p class="comparison-note">The reference device did not record this metric.</p>
   }
 </ng-template>

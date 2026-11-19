@@ -75,6 +75,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   @Input() compareRecordings = false;
   readonly sources = signal<BenchmarkSummarySource[]>([]);
   readonly referenceKey = signal('');
+  readonly expandedMetric = signal<string | null>(null);
   readonly reference = computed(() => this.sources().find(source => source.value === this.referenceKey()));
   readonly comparisonCards = computed(() => buildBenchmarkSummaryCards(this.sources(), this.referenceKey(), this.unitSettings));
   private comparisonEvent?: string | EventInterface;
@@ -117,6 +118,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private isPrewarmingTabs = false;
   private isDestroyed = false;
   private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
+  readonly mobileViewport = signal(this.isMobileViewport());
   private readonly mobileViewportListener = () => this.onMobileViewportChange();
   private readonly windowResizeListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
   private readonly windowLoadListener = () => this.scheduleTabBodyHeightSync('allow_shrink', true);
@@ -170,6 +172,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (!this.compareRecordings || !this.selectedActivities.length) {
       this.sources.set([]);
       this.referenceKey.set('');
+      this.expandedMetric.set(null);
       this.comparisonEvent = undefined;
     }
     if (!this.selectedActivities.length) {
@@ -208,7 +211,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         activity => this.eventColorService.getActivityColor(all, activity));
       this.sources.set(sources);
       const scope = this.event.getID?.() || this.event;
-      if (scope !== this.comparisonEvent || !sources.some(source => source.value === this.referenceKey())) {
+      const eventChanged = scope !== this.comparisonEvent;
+      if (eventChanged) this.expandedMetric.set(null);
+      if (eventChanged || !sources.some(source => source.value === this.referenceKey())) {
         this.referenceKey.set(sources[0]?.value ?? '');
       }
       this.comparisonEvent = scope;
@@ -230,6 +235,22 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     this.referenceKey.set(key);
     this.haptics.selection();
     this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  public onMetricExpanded(key: string, expanded: boolean): void {
+    if (expanded) {
+      this.expandedMetric.set(key);
+    } else if (this.expandedMetric() === key) {
+      this.expandedMetric.set(null);
+    }
+  }
+
+  public onMetricHeaderKeydown(event: KeyboardEvent): void {
+    if ((event.key === 'Enter' || event.key === ' ')
+      && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      // Material handles these keys without emitting a click for the haptic directive.
+      this.haptics.selection();
+    }
   }
 
   private buildActivityStats(): void {
@@ -273,7 +294,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (this.isPrewarmingTabs) {
       return;
     }
-    if (changed) this.haptics.selection();
+    if (changed) {
+      this.expandedMetric.set(null);
+      this.haptics.selection();
+    }
     const selectedTabId = this.metricTabs[index]?.id;
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
@@ -734,6 +758,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private onMobileViewportChange() {
+    this.mobileViewport.set(this.isMobileViewport());
+    this.expandedMetric.set(null);
     this.cancelScheduledTabBodyHeightSync();
     this.lastAppliedMinHeightPx = 0;
     this.invalidateTabBodyLayoutSignature();

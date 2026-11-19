@@ -349,6 +349,92 @@ describe('EventCardStatsGridComponent', () => {
         expect(grid.querySelector('app-compact-select')).toBeNull();
     });
 
+    it('opens only one phone metric, keeps reference changes live, and resets on event and viewport changes', async () => {
+        TestBed.resetTestingModule();
+        const viewport = Object.assign(new EventTarget(), { matches: true });
+        vi.spyOn(window, 'matchMedia').mockReturnValue(viewport as MediaQueryList);
+        await TestBed.configureTestingModule({
+            declarations: [EventCardStatsGridComponent],
+            imports: [MaterialModule, SharedModule, CompactSelectComponent, NoopAnimationsModule],
+            providers: [
+                { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
+                { provide: AppEventColorService, useValue: { getActivityColor: () => '#2196f3' } },
+                { provide: AppHapticsService, useValue: mockHaptics },
+                { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
+                { provide: BreakpointObserver, useValue: {
+                    observe: () => of({ matches: false, breakpoints: {} }), isMatched: () => false,
+                } },
+            ],
+            schemas: [NO_ERRORS_SCHEMA],
+        }).compileComponents();
+        fixture = TestBed.createComponent(EventCardStatsGridComponent);
+        const devices = [
+            { id: 'a', name: 'Coros PACE 4', stats: [new DataDuration(4125), new DataDistance(9270)] },
+            { id: 'b', name: 'Suunto Run', stats: [new DataDuration(4119), new DataDistance(9250)] },
+        ].map(device => ({
+            type: ActivityTypes.Running,
+            getID: () => device.id,
+            creator: { name: device.name },
+            getStat: (type: string) => device.stats.find(stat => stat.getType() === type),
+        }));
+        const event = { getID: () => 'run', isMerge: true, getActivities: () => devices };
+        fixture.componentRef.setInput('event', event);
+        fixture.componentRef.setInput('selectedActivities', devices);
+        fixture.componentRef.setInput('statsToShow', [DataDuration.type, DataDistance.type]);
+        fixture.componentRef.setInput('compareRecordings', true);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const grid = fixture.nativeElement as HTMLElement;
+        const headers = () => [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')];
+        const tables = () => [...grid.querySelectorAll('table')];
+        const [duration, distance] = headers();
+        expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
+        expect(distance.textContent).toContain('9.25–9.27 Km');
+        expect(tables()).toHaveLength(0);
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+        duration.click();
+        fixture.detectChanges();
+        expect(duration.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()[0].getAttribute('aria-label')).toBe('Duration');
+        distance.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        fixture.detectChanges();
+        expect(duration.getAttribute('aria-expanded')).toBe('false');
+        expect(distance.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()).toHaveLength(1);
+        expect(tables()[0].getAttribute('aria-label')).toBe('Distance');
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(2);
+
+        fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance.select('id:b');
+        fixture.detectChanges();
+        expect(tables()[0].textContent).toContain('+20.0 m');
+        expect(distance.textContent).toContain('9.25–9.27 Km');
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+        fixture.detectChanges();
+        expect(distance.textContent).toContain('5.75–5.76 mi');
+        expect(distance.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()[0].textContent).toContain('5.75 mi');
+
+        fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
+        fixture.detectChanges();
+        expect(tables()).toHaveLength(0);
+
+        viewport.matches = false;
+        viewport.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+        expect(headers()).toHaveLength(0);
+        expect(tables()).toHaveLength(2);
+
+        viewport.matches = true;
+        viewport.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+        expect(headers()).toHaveLength(2);
+        expect(tables()).toHaveLength(0);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(3);
+    });
+
     it.each([
         { distanceUnits: DistanceUnits.Kilometers, benchmark: false },
         { distanceUnits: DistanceUnits.Miles, benchmark: false },
