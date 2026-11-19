@@ -10,15 +10,15 @@
         <strong>{{ sends.selection().length }} {{ sends.selection().length === 1 ? 'activity selected' : 'activities selected' }}</strong>
         <p>Your table selection is kept when you change the destination. Preview it before sending.</p>
       </div>
-      <button mat-button [disabled]="busy()" (click)="clearSelection()">Choose dates instead</button>
+      <button mat-button [disabled]="actionPending()" (click)="clearSelection()">Choose dates instead</button>
     </section>
   }
-  <section class="send-setup" aria-label="Choose destination and source">
+  <section class="send-setup" aria-label="Choose destination and source" [attr.aria-busy]="changingSetup()">
     <div class="destination-choice">
-      <span id="activity-destination-label">Destination</span>
-      <mat-radio-group class="provider-options" aria-labelledby="activity-destination-label" [value]="provider()" (change)="chooseProvider($event.value)" [disabled]="busy()">
+      <span id="activity-destination-label">Destination @if (changingSetup()) { <span role="status">· Updating options…</span> }</span>
+      <mat-radio-group #destinationChoices="matRadioGroup" class="provider-options" aria-labelledby="activity-destination-label" [value]="provider()" (change)="chooseProvider($event.value)" [disabled]="actionPending()">
         @for (option of providerOptions; track option) {
-          <mat-radio-button class="provider-option" [class.provider-option-selected]="provider() === option" [value]="option">
+          <mat-radio-button class="provider-option" [class.provider-option-selected]="destinationChoices.value === option" [value]="option">
             {{ option === 'coros' ? 'COROS' : option === 'suunto' ? 'Suunto app' : 'Wahoo' }}
           </mat-radio-button>
         }
@@ -27,7 +27,7 @@
     @if (provider()) {
       <div class="source-choice">
         <span id="activity-source-label">Activity source</span>
-        <mat-button-toggle-group aria-labelledby="activity-source-label" [value]="source()" (change)="chooseSource($event.value)" [disabled]="busy() || sends.batch()?.state === 'confirmed'">
+        <mat-button-toggle-group aria-labelledby="activity-source-label" [value]="source()" (change)="chooseSource($event.value)" [disabled]="actionPending() || sends.batch()?.state === 'confirmed'">
           <mat-button-toggle value="files">Local files</mat-button-toggle><mat-button-toggle value="saved">Saved activities</mat-button-toggle>
         </mat-button-toggle-group>
       </div>
@@ -37,13 +37,13 @@
     <section class="pro-callout" aria-label="Pro required"><p>Sending activities is a Pro feature. Your previous results remain available.</p><a mat-flat-button routerLink="/subscriptions" appHapticTap>Explore Pro</a></section>
   }
   @if (sends.loadingBatch()) { <div role="status"><mat-progress-bar mode="indeterminate"></mat-progress-bar><p>Loading this send…</p></div> }
-  @if (sends.requestedBatchId() && !sends.batch() && !sends.loadingBatch()) { <button mat-button [disabled]="busy()" (click)="newDraft()">Start a new send</button> }
+  @if (sends.requestedBatchId() && !sends.batch() && !sends.loadingBatch()) { <button mat-button [disabled]="actionPending()" (click)="newDraft()">Start a new send</button> }
   @if (error() || sends.readError()) { <p class="error" role="alert">{{ error() || sends.readError() }}</p> }
   @if (provider()) {
     @if (users.hasProAccessSignal() && canEditSelection() && !sendingClosed() && (!sends.batch() || sends.batch()?.state === 'draft')) {
       @if (source() === 'files') {
         <section class="dropzone" (dragover)="preventDrop($event)" (drop)="addFiles($event)">
-          <button mat-flat-button class="qs-mat-primary" (click)="filePicker.click()" [disabled]="busy()" appHapticTap>Choose FIT files</button>
+          <button mat-flat-button class="qs-mat-primary" (click)="filePicker.click()" [disabled]="actionPending()" appHapticTap>Choose FIT files</button>
           <input #filePicker type="file" accept=".fit,.fit.gz" multiple hidden (change)="addFiles($event)">
           <p>Or drop FIT / FIT.gz files here. Up to 50 files per batch; 20 MiB per expanded file.</p>
           <p class="retention-note">Drafts expire after 24 hours. Confirmed files are held privately for up to seven days for delivery and retries. They are not added to your QS activity archive.</p>
@@ -55,13 +55,13 @@
       } @else {
         <section aria-label="Choose saved activities" class="saved-selection">
           @if (!sends.selection().length) {
-            <mat-form-field appearance="outline"><mat-label>From</mat-label><input matInput type="date" [(ngModel)]="startDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
-            <mat-form-field appearance="outline"><mat-label>To</mat-label><input matInput type="date" [(ngModel)]="endDate" (ngModelChange)="invalidateSaved()" [disabled]="busy()"></mat-form-field>
-            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Activity sources</mat-label><mat-select multiple [value]="savedSources" (selectionChange)="changeSavedSources($event.value)" [disabled]="busy()">
+            <mat-form-field appearance="outline"><mat-label>From</mat-label><input matInput type="date" [(ngModel)]="startDate" (ngModelChange)="invalidateSaved()" [disabled]="actionPending()"></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>To</mat-label><input matInput type="date" [(ngModel)]="endDate" (ngModelChange)="invalidateSaved()" [disabled]="actionPending()"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Activity sources</mat-label><mat-select multiple [value]="savedSources" (selectionChange)="changeSavedSources($event.value)" [disabled]="actionPending()">
               @for (option of sourceOptions; track option) { <mat-option [value]="option">{{ option === 'manualUpload' ? 'Uploaded to QS' : option }}</mat-option> }
             </mat-select><mat-hint>All sources when empty. Choose Uploaded to QS for files you imported, even if recorded on a Garmin device.</mat-hint></mat-form-field>
           }
-          <button mat-stroked-button (click)="previewSaved()" [disabled]="busy()">{{ sends.selection().length ? 'Preview selected activities' : 'Preview saved activities' }}</button>
+          <button mat-stroked-button (click)="previewSaved()" [disabled]="actionPending()">{{ sends.selection().length ? 'Preview selected activities' : 'Preview saved activities' }}</button>
           <p>Retained FIT originals are eligible. Merged activities, unsupported originals, and previous deliveries are excluded.</p>
         </section>
       }
@@ -99,16 +99,16 @@
             </div>
             <div class="row-status" [attr.data-status]="row.status" role="status" aria-live="polite"><strong>{{ statusLabels[row.status] }}</strong><p>{{ row.message }}</p></div>
             <div class="row-actions">
-              @if (batch.state === 'draft') { <button mat-button [attr.aria-label]="'Remove ' + row.name + ' from this draft'" (click)="rowAction(row, 'remove')" [disabled]="busy()">Remove</button> }
-              @if (row.recovery === 'check_status') { <button mat-button [attr.aria-label]="'Check status for ' + row.name" (click)="rowAction(row, 'check')" [disabled]="busy()">Check status</button> }
-              @if (row.recovery === 'retry_send' && canRetry()) { <button mat-button [attr.aria-label]="'Retry sending ' + row.name" (click)="rowAction(row, 'retry')" [disabled]="busy()">Retry sending</button> }
-              @if ((row.recovery === 'reconnect' || row.recovery === 'upgrade') && canRetry()) { <button mat-button [attr.aria-label]="'Resume sending ' + row.name" (click)="rowAction(row, 'retry')" [disabled]="busy()">Resume sending</button> }
+              @if (batch.state === 'draft') { <button mat-button [attr.aria-label]="'Remove ' + row.name + ' from this draft'" (click)="rowAction(row, 'remove')" [disabled]="actionPending()">Remove</button> }
+              @if (row.recovery === 'check_status') { <button mat-button [attr.aria-label]="'Check status for ' + row.name" (click)="rowAction(row, 'check')" [disabled]="actionPending()">Check status</button> }
+              @if (row.recovery === 'retry_send' && canRetry()) { <button mat-button [attr.aria-label]="'Retry sending ' + row.name" (click)="rowAction(row, 'retry')" [disabled]="actionPending()">Retry sending</button> }
+              @if ((row.recovery === 'reconnect' || row.recovery === 'upgrade') && canRetry()) { <button mat-button [attr.aria-label]="'Resume sending ' + row.name" (click)="rowAction(row, 'retry')" [disabled]="actionPending()">Resume sending</button> }
               @if (row.recovery === 'reconnect') { <a mat-button routerLink="/services" appHapticTap>Review connection</a> }
               @if (row.recovery === 'review_provider') { <p>Check {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} before sending another copy.</p> }
             </div>
           </article>
         }
-        @if (sends.rows().length < batch.total) { <button mat-button [disabled]="busy() || sends.loadingRows()" (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
+        @if (sends.rows().length < batch.total) { <button mat-button [disabled]="actionPending() || sends.loadingRows()" (click)="sends.loadMoreRows()" appHapticTap>Show more activities</button> }
         @if (batch.state === 'draft' && !sendingClosed() && (push.deliveryNotificationsAvailable() || notifyWhenFinished())) {
           <section class="delivery-notification-choice" aria-labelledby="delivery-notification-title">
             <mat-icon aria-hidden="true">notifications_active</mat-icon>
@@ -116,16 +116,16 @@
               <h3 id="delivery-notification-title">Know when your send finishes</h3>
               <p>Get one result for this batch on this device. You can leave this page while activities are sent.</p>
               @if (push.canNotifyDelivery() || notifyWhenFinished()) {
-                <mat-checkbox [checked]="notifyWhenFinished()" [disabled]="busy()" (change)="chooseNotification($event.checked)">Notify me when this send finishes</mat-checkbox>
+                <mat-checkbox [checked]="notifyWhenFinished()" [disabled]="actionPending()" (change)="chooseNotification($event.checked)">Notify me when this send finishes</mat-checkbox>
               }
               @if (!push.canNotifyDelivery() || notificationPreferences.saving() === 'activity_delivery') {
                 @if (push.state() === 'disabled' || push.operation() === 'enable') {
-                  <button mat-stroked-button type="button" [disabled]="busy() || !push.canEnable()" (click)="enableNotifications()">
+                  <button mat-stroked-button type="button" [disabled]="actionPending() || !push.canEnable()" (click)="enableNotifications()">
                     <span class="notification-button-content">@if (push.operation() === 'enable') { <mat-spinner diameter="20" aria-label="Enabling notifications" /> } @else { <mat-icon aria-hidden="true">notifications</mat-icon> }<span>Enable notifications on this device</span></span>
                   </button>
                 }
                 @if (push.state() === 'enabled' && ((!deliveryCategoryEnabled() && notificationPreferences.canEdit()) || notificationPreferences.saving() === 'activity_delivery')) {
-                  <button mat-stroked-button type="button" [disabled]="busy() || !notificationPreferences.canEdit()" (click)="enableDeliveryCategory()">
+                  <button mat-stroked-button type="button" [disabled]="actionPending() || !notificationPreferences.canEdit()" (click)="enableDeliveryCategory()">
                     <span class="notification-button-content">@if (notificationPreferences.saving() === 'activity_delivery') { <mat-spinner diameter="20" aria-label="Turning on Activity delivery" /> } @else { <mat-icon aria-hidden="true">notifications</mat-icon> }<span>Turn on Activity delivery</span></span>
                   </button>
                 }
@@ -141,11 +141,11 @@
         }
         @if (batch.state !== 'draft' && batch.notificationRequested) { <p class="retention-note">A notification was requested for this batch. Delivery is best-effort; results remain available here.</p> }
         <div class="batch-actions">
-          @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="busy()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
+          @if (!sendingClosed() && batch.state === 'draft' && !batch.reviewed && (batch.source === 'saved' ? batch.savedSelectionReady || batch.total : readyCount()) && users.hasProAccessSignal()) { <button mat-stroked-button [disabled]="actionPending()" (click)="reviewFiles()">{{ batch.source === 'saved' ? 'Continue saved-activity preview' : 'Review prepared activities' }}</button> }
           @if (batch.state === 'draft' && batch.reviewed && !readyCount()) { <p>No eligible activities in this selection. Start a new send to choose other recordings.</p> }
           @if (!sendingClosed() && batch.state === 'draft') { <button mat-flat-button class="qs-mat-primary" [disabled]="!canConfirm()" (click)="confirm()">Send {{ readyCount() }} {{ readyCount() === 1 ? 'activity' : 'activities' }} to {{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }}</button> }
-          @if (!sendingClosed() && (batch.state === 'confirmed' || hasRetryableRows())) { <button mat-stroked-button [disabled]="busy()" (click)="stop()">Stop unsent activities</button> }
-          <button mat-button (click)="newDraft()" [disabled]="busy()">Start a new send</button>
+          @if (!sendingClosed() && (batch.state === 'confirmed' || hasRetryableRows())) { <button mat-stroked-button [disabled]="actionPending()" (click)="stop()">Stop unsent activities</button> }
+          <button mat-button (click)="newDraft()" [disabled]="actionPending()">Start a new send</button>
         </div>
         <button class="details-toggle" mat-button [attr.aria-expanded]="showDetails()" aria-controls="activity-send-details" (click)="toggleDetails()">{{ showDetails() ? 'Hide' : 'Show' }} delivery details</button>
         <div id="activity-send-details" class="delivery-details" [hidden]="!showDetails()"><p>Files are processed individually. Processed includes deliveries, exclusions, stopped items, and items needing attention. Only Delivered confirms a successful transfer.</p>@for (row of sends.rows(); track row.id) { <p>{{ row.name }} · {{ row.attempts }} recorded sending/status attempts</p> }</div>
@@ -155,7 +155,7 @@
   }
   <section aria-label="Recent sends"><h2>Recent sends</h2>
     @for (batch of recentForProvider(); track batch.id) {
-      <button mat-button class="recent-send" [disabled]="busy()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · @if (batch.state === 'draft') { Draft · {{ batch.total }} activities } @else { {{ batch.finished }}/{{ batch.total }} processed }</button>
+      <button mat-button class="recent-send" [disabled]="actionPending()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · @if (batch.state === 'draft') { Draft · {{ batch.total }} activities } @else { {{ batch.finished }}/{{ batch.total }} processed }</button>
     } @empty { <p>No recent sends yet. Your drafts and delivery results will appear here.</p> }
   </section>
 </main>

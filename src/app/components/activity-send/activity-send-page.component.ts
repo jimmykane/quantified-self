@@ -2,11 +2,13 @@ import { AppPushService } from '../../services/app.push.service';
 import { AppNotificationPreferencesService } from '../../services/app.notification-preferences.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import dayjs from 'dayjs';
-import { afterNextRender, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { afterNextRender, ChangeDetectorRef, Component, DestroyRef, computed, effect, inject, signal, untracked, ViewChild } from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router, RouterModule } from '@angular/router';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MatRadioGroup } from '@angular/material/radio';
+import { MatButtonToggleGroup } from '@angular/material/button-toggle';
 import { MaterialModule } from '../../modules/material.module';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { ActivitySendService } from '../../services/activity-send.service';
@@ -29,6 +31,7 @@ export class ActivitySendPageComponent {
   private readonly location = inject(Location);
   private readonly haptics = inject(AppHapticsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly browser = inject(BrowserCompatibilityService);
   private destroyed = false;
   private readonly navigationSelection = signal(this.router.getCurrentNavigation()?.extras.state ?? this.location.getState() as Record<string, unknown>);
@@ -36,6 +39,10 @@ export class ActivitySendPageComponent {
   readonly provider = signal<ActivitySendProvider | null>(null);
   readonly source = signal<'files' | 'saved'>('files');
   readonly busy = signal(false);
+  readonly changingSetup = signal(false);
+  readonly actionPending = computed(() => this.busy() || this.changingSetup());
+  @ViewChild(MatRadioGroup) private destinationControl?: MatRadioGroup;
+  @ViewChild(MatButtonToggleGroup) private sourceControl?: MatButtonToggleGroup;
   readonly error = signal<string | null>(null);
   readonly transfer = signal<{ name: string; progress: number } | null>(null);
   readonly nowMs = signal(Date.now());
@@ -47,7 +54,7 @@ export class ActivitySendPageComponent {
   readonly canRetry = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed());
   readonly canEditSelection = computed(() => !this.sends.requestedBatchId() || !!this.sends.batch());
   readonly readyCount = computed(() => this.sends.batch()?.state === 'draft' ? Math.max(0, this.sends.batch()!.total - this.sends.batch()!.finished) : 0);
-  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.busy() && !this.sends.loadingBatch() && !this.sends.loadingRows() && !this.sends.batchReadError() && !this.sends.rowReadError() && this.sends.rows().length > 0 && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
+  readonly canConfirm = computed(() => this.users.hasProAccessSignal() && !this.sendingClosed() && !this.actionPending() && !this.sends.loadingBatch() && !this.sends.loadingRows() && !this.sends.batchReadError() && !this.sends.rowReadError() && this.sends.rows().length > 0 && this.sends.batch()?.state === 'draft' && !!this.sends.batch()?.reviewed && !this.selectionChanged() && this.readyCount() > 0);
   readonly hasRetryableRows = computed(() => this.sends.rows().some(row => ['upgrade', 'reconnect', 'retry_send'].includes(row.recovery)));
   readonly recentForProvider = computed(() => this.sends.recent().filter(batch => !this.provider() || batch.provider === this.provider()));
   readonly statusLabels = { preparing: 'Preparing', ready: 'Ready', queued: 'Queued', sending: 'Sending', processing: 'Waiting for provider', retrying: 'Retrying automatically', delivered: 'Delivered', duplicate: 'Already exists or queued', needs_action: 'Needs action', stopped: 'Stopped' };
@@ -115,17 +122,43 @@ export class ActivitySendPageComponent {
     this.destroyRef.onDestroy(() => { this.destroyed = true; this.sends.closeBatch(); });
   }
   async chooseProvider(provider: ActivitySendProvider): Promise<void> {
-    if (this.busy() || provider === this.provider()) return;
-    if (await this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
+    if (provider === this.provider()) return;
+    await this.changeSetup(() => this.router.navigate(['/send-activities', provider], { queryParams: { source: this.source() }, ...this.selectionNavigation() }));
   }
   async chooseSource(source: 'files' | 'saved'): Promise<void> {
-    if (this.busy() || source === this.source()) return;
-    if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
+    if (source === this.source()) return;
+    await this.changeSetup(() => this.router.navigate([], { relativeTo: this.route, queryParams: { source }, ...this.selectionNavigation() }));
+  }
+  private async changeSetup(navigate: () => Promise<boolean>): Promise<void> {
+    if (this.actionPending()) return;
+    const owner = this.users.user()?.uid;
+    this.changingSetup.set(true);
+    try {
+      if (await navigate() && owner && owner === this.users.user()?.uid) {
+        this.selectionChanged.set(false); this.error.set(null); this.haptics.selection();
+      }
+    } catch {
+      if (!this.destroyed && owner && owner === this.users.user()?.uid) {
+        this.error.set('Could not update sending options. Try again.'); this.haptics.error();
+      }
+    } finally {
+      this.changingSetup.set(false);
+      // Material changes its controls before route guards accept navigation.
+      if (!this.destroyed) {
+        // A native radio click already changed DOM checked properties. Record the
+        // optimistic Material value before rollback so Angular rewrites them.
+        if (this.destinationControl && this.destinationControl.value !== this.provider()) this.changeDetector.detectChanges();
+        if (this.destinationControl) this.destinationControl.value = this.provider();
+        if (this.sourceControl) this.sourceControl.value = this.source();
+      }
+    }
   }
   async openBatch(id: string, provider: ActivitySendProvider): Promise<void> {
+    if (this.actionPending()) return;
     if (await this.router.navigate(['/send-activities', provider], { queryParams: { batch: id, source: this.sends.recent().find(batch => batch.id === id)?.source || 'files' } })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   async newDraft(): Promise<void> {
+    if (this.actionPending()) return;
     if (await this.router.navigate([], { relativeTo: this.route, queryParams: { source: this.source() }, ...this.selectionNavigation() })) { this.selectionChanged.set(false); this.haptics.selection(); }
   }
   private async ensureDraft(): Promise<string> {
@@ -149,7 +182,8 @@ export class ActivitySendPageComponent {
   preventDrop(event: DragEvent): void { event.preventDefault(); }
   async addFiles(event: Event | DragEvent): Promise<void> {
     event.preventDefault();
-    if (this.busy() || !this.users.hasProAccessSignal()) { this.error.set('Wait for file preparation to finish before adding more files.'); return; }
+    if (!this.users.hasProAccessSignal()) { this.error.set('Sending activities requires Pro.'); return; }
+    if (this.actionPending()) { this.error.set(this.changingSetup() ? 'Wait for sending options to finish updating before adding files.' : 'Wait for file preparation to finish before adding more files.'); return; }
     const files = Array.from((event as DragEvent).dataTransfer?.files || (event.target as HTMLInputElement)?.files || []);
     if (!files.length) return;
     await this.run(async () => {
@@ -175,7 +209,7 @@ export class ActivitySendPageComponent {
     return this.sends.selection().length ? { state: { activitySendOwner: this.users.user()?.uid, activitySendSelection: this.sends.selection() } } : {};
   }
   clearSelection(): void {
-    if (this.busy() || !this.sends.selection().length) return;
+    if (this.actionPending() || !this.sends.selection().length) return;
     this.sends.setSelection([]);
     // Remove the table selection from this history entry as well as the live view.
     const state = { ...this.location.getState() as Record<string, unknown>, activitySendSelection: [] };
@@ -273,7 +307,7 @@ export class ActivitySendPageComponent {
   }
   private assertActive(): void { if (!this.isActive()) throw new Error('This sending view or signed-in account changed. Reopen your draft to continue.'); }
   private async run(action: () => Promise<unknown>): Promise<void> {
-    if (this.busy() || !this.users.user()?.uid) return;
+    if (this.actionPending() || !this.users.user()?.uid) return;
     this.activeOwner = this.users.user()!.uid; this.activeProvider = this.provider(); this.activeSource = this.source(); this.activeBatch = this.sends.batch()?.id || null;
     this.busy.set(true); this.error.set(null); this.haptics.selection();
     try { const accepted = await action(); if (accepted !== false && this.isActive()) this.haptics.success(); }

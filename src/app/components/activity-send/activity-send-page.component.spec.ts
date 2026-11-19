@@ -234,6 +234,50 @@ describe('activity sending workspace', () => {
     const fixture = render(); fixture.destroy();
     expect(sends.closeBatch).toHaveBeenCalled(); expect(sends.command).not.toHaveBeenCalled();
   });
+  it('restores the destination radio after cancelled navigation', async () => {
+    const fixture = render();
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(false);
+    const coros = fixture.nativeElement.querySelector('mat-radio-button input[value="coros"]') as HTMLInputElement;
+    coros.click(); await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('mat-radio-button input[value="suunto"]') as HTMLInputElement).checked).toBe(true);
+    expect(coros.checked).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('restores the source toggle after cancelled navigation', async () => {
+    const fixture = render();
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(false);
+    (fixture.nativeElement.querySelector('mat-button-toggle[value="saved"] button') as HTMLButtonElement).click();
+    await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-button-toggle[value="files"] button').getAttribute('aria-checked')).toBe('true');
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(sends.command).not.toHaveBeenCalled();
+  });
+  it('blocks confirmation and selection changes while destination navigation is pending', async () => {
+    const fixture = render(); sends.batch.set(batchValue); sends.rows.set([row]); sends.selection.set(['event-one']); fixture.detectChanges();
+    let finish!: (opened: boolean) => void;
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    const navigation = fixture.componentInstance.chooseProvider('coros'); fixture.detectChanges();
+    try {
+      expect(fixture.componentInstance.canConfirm()).toBe(false);
+      expect(fixture.nativeElement.querySelector('mat-radio-button input[value="wahoo"]').disabled).toBe(true);
+      await fixture.componentInstance.confirm(); fixture.componentInstance.clearSelection();
+      await fixture.componentInstance.chooseSource('saved');
+      expect(navigate).toHaveBeenCalledOnce(); expect(sends.selection()).toEqual(['event-one']);
+      expect(sends.command).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    } finally { finish(false); await navigation; }
+    fixture.detectChanges(); expect(fixture.componentInstance.canConfirm()).toBe(true);
+  });
+  it.each([false, true])('settles navigation errors with owner-bound feedback: account changed %s', async changed => {
+    const fixture = render();
+    let reject!: (error: Error) => void;
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(() => new Promise<boolean>((_resolve, fail) => { reject = fail; }));
+    const navigation = fixture.componentInstance.chooseProvider('coros');
+    if (changed) users.user.set({ uid: 'another-owner' });
+    reject(new Error('offline')); await navigation; fixture.detectChanges();
+    expect(fixture.componentInstance.changingSetup()).toBe(false);
+    expect(fixture.componentInstance.error()).toBe(changed ? null : 'Could not update sending options. Try again.');
+    expect(haptics.error).toHaveBeenCalledTimes(Number(!changed));
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(sends.command).not.toHaveBeenCalled();
+  });
   it('repeated destination selection is silent', async () => {
     const fixture = render(); const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     await fixture.componentInstance.chooseProvider('suunto');
