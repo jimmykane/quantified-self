@@ -1,5 +1,6 @@
 import {
-  type ActivityInterface, type DataInterface, DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
+  type ActivityInterface, type DataInterface, DataCadenceAvg, DataCadenceMax, DataCadenceMin,
+  DataDistance, DataDuration, DataFeeling, DataRPE, DynamicDataLoader,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
@@ -17,6 +18,16 @@ export interface BenchmarkSummarySource {
   color: string;
   activity: ActivityInterface;
   stats: Map<string, DataInterface>;
+}
+
+const cadenceColumns = [
+  { type: DataCadenceMin.type, label: 'Min' },
+  { type: DataCadenceAvg.type, label: 'Avg' },
+  { type: DataCadenceMax.type, label: 'Max' },
+];
+
+export function getBenchmarkComparisonMetricType(type: string): string {
+  return cadenceColumns.some(column => column.type === type) ? DataCadenceAvg.type : type;
 }
 
 export function getBenchmarkSummarySources(all: ActivityInterface[], selected: ActivityInterface[], types: string[],
@@ -50,11 +61,27 @@ interface BenchmarkSummaryRow {
 }
 
 interface BenchmarkSummaryCard {
+  kind: 'metric';
   type: string;
   label: string;
+  unit: string;
   hasReferenceReading: boolean;
   range: string | null;
   rows: BenchmarkSummaryRow[];
+}
+
+interface BenchmarkCadenceComparison {
+  kind: 'cadence';
+  label: string;
+  unit: string;
+  columns: { type: string; label: string; range: string | null }[];
+  rows: {
+    key: string;
+    label: string;
+    color: string;
+    cells: { value: string | null; delta: string | null }[];
+  }[];
+  missingReference: string;
 }
 
 interface BenchmarkReading {
@@ -167,13 +194,52 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
       const label = RR_STAT_LABELS[type] ?? normalizeUnitDerivedStatLabel(sample.stat, { manufacturer });
       const unit = sample.stat.getDisplayUnit();
       return {
+        kind: 'metric',
         type: displayType,
         hasReferenceReading: !!reference,
         label: variants.size > 1 && unit ? `${label} (${unit})` : label,
+        unit: sample.display.unit,
         range: formatReadingRange(readings, sample),
         rows,
       };
     }));
   }
   return cards;
+}
+
+export function buildBenchmarkSummaryPanels(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
+  const cards = buildBenchmarkSummaryCards(sources, referenceKey, units);
+  const panels = new Map<string, (BenchmarkSummaryCard | BenchmarkCadenceComparison)[]>(cards);
+  const columns = cadenceColumns.map(column => ({ ...column, card: cards.get(column.type)?.[0] }));
+  const first = columns.find(column => column.card)?.card;
+  if (!first) return panels;
+
+  // The cadence panel shows the canonical unit once for all three columns.
+  const unit = first.unit;
+  const suffix = unit ? ` ${unit}` : '';
+  const compact = (text: string | null): string | null =>
+    suffix && text?.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
+  for (const { type } of columns) panels.delete(type);
+  panels.set(DataCadenceAvg.type, [{
+    kind: 'cadence',
+    label: 'Cadence',
+    unit,
+    columns: columns.map(({ type, label, card }) => ({
+      type, label, range: compact(card?.range ?? null),
+    })),
+    rows: sources.map((source, index) => ({
+      key: source.value,
+      label: source.label,
+      color: source.color,
+      cells: columns.map(({ card }) => {
+        const row = card?.rows[index];
+        return {
+          value: compact(row?.value ?? null),
+          delta: source.value === referenceKey ? null : compact(row?.delta || null),
+        };
+      }),
+    })),
+    missingReference: columns.filter(({ card }) => card && !card.hasReferenceReading).map(({ label }) => label).join(', '),
+  }]);
+  return panels;
 }

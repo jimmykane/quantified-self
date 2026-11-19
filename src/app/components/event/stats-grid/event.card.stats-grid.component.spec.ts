@@ -11,6 +11,9 @@ import {
     DataAltitudeMin,
     DataAscent,
     DataBeginningPotentialStamina,
+    DataCadenceAvg,
+    DataCadenceMax,
+    DataCadenceMin,
     DataContactTimeToFlightTimeRatioAvg,
     DataContactTimeToFlightTimeRatioMax,
     DataContactTimeToFlightTimeRatioMin,
@@ -271,6 +274,19 @@ describe('EventCardStatsGridComponent', () => {
         ]);
     });
 
+    it('includes the grouped cadence row when only a maximum cadence was recorded', () => {
+        const peak = new DataCadenceMax(185);
+        const all = ['A', 'B'].map(name => ({ getID: () => name, type: ActivityTypes.Running,
+            getStat: (type: string) => type === peak.getType() ? peak : undefined }));
+        component.compareRecordings = true;
+        component.statsToShow = [DataCadenceMax.type];
+        component.selectedActivities = all as any;
+        component.event = { getActivities: () => all } as any;
+        component.ngOnChanges({});
+        expect(component.metricTabs.find(tab => tab.id === 'overall')?.metricTypes).toEqual([DataCadenceAvg.type]);
+        expect(component.metricTabs.find(tab => tab.id === 'performance')?.metricTypes).toEqual([DataCadenceAvg.type]);
+    });
+
     it('keeps a chosen reference across hydration, falls back on deselection and resets for a new benchmark', async () => {
         TestBed.resetTestingModule();
         await TestBed.configureTestingModule({
@@ -379,8 +395,10 @@ describe('EventCardStatsGridComponent', () => {
         }).compileComponents();
         fixture = TestBed.createComponent(EventCardStatsGridComponent);
         const devices = [
-            { id: 'a', name: 'Coros PACE 4', stats: [new DataDuration(4125), new DataDistance(9270)] },
-            { id: 'b', name: 'Suunto Run', stats: [new DataDuration(4119), new DataDistance(9250)] },
+            { id: 'a', name: 'Coros PACE 4',
+                stats: [new DataDuration(4125), new DataDistance(9270), new DataCadenceMin(112), new DataCadenceAvg(170)] },
+            { id: 'b', name: 'Suunto Run',
+                stats: [new DataDuration(4119), new DataDistance(9250), new DataCadenceMin(116), new DataCadenceAvg(169), new DataCadenceMax(185)] },
         ].map(device => ({
             type: ActivityTypes.Running,
             getID: () => device.id,
@@ -390,7 +408,7 @@ describe('EventCardStatsGridComponent', () => {
         const event = { getID: () => 'run', isMerge: true, getActivities: () => devices };
         fixture.componentRef.setInput('event', event);
         fixture.componentRef.setInput('selectedActivities', devices);
-        fixture.componentRef.setInput('statsToShow', [DataDuration.type, DataDistance.type]);
+        fixture.componentRef.setInput('statsToShow', [DataDuration.type, DataDistance.type, DataCadenceAvg.type, DataCadenceMin.type, DataCadenceMax.type]);
         fixture.componentRef.setInput('compareRecordings', true);
         fixture.detectChanges();
         await fixture.whenStable();
@@ -399,9 +417,11 @@ describe('EventCardStatsGridComponent', () => {
         const grid = fixture.nativeElement as HTMLElement;
         const headers = () => [...grid.querySelectorAll<HTMLElement>('.comparison-metric-header')];
         const tables = () => [...grid.querySelectorAll('table')];
-        const [duration, distance] = headers();
-        expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
+        const [duration, distance, cadence] = headers();
+        expect(headers().map(header => header.getAttribute('aria-expanded'))).toEqual(['false', 'false', 'false']);
         expect(distance.textContent).toContain('9.25–9.27 Km');
+        expect([...cadence.querySelectorAll('.cadence-range')].map(range => range.textContent.trim().replace(/\s+/g, ' ')))
+            .toEqual(['Min 112–116', 'Avg 169–170', 'Max 185']);
         expect(tables()).toHaveLength(0);
         expect(mockHaptics.selection).not.toHaveBeenCalled();
 
@@ -430,7 +450,7 @@ describe('EventCardStatsGridComponent', () => {
         viewport.matches = false;
         viewport.dispatchEvent(new Event('change'));
         fixture.detectChanges();
-        expect(headers()).toHaveLength(2);
+        expect(headers()).toHaveLength(3);
         expect(distance.getAttribute('aria-expanded')).toBe('true');
         expect(tables()).toHaveLength(1);
 
@@ -440,10 +460,25 @@ describe('EventCardStatsGridComponent', () => {
         expect(distance.getAttribute('aria-expanded')).toBe('true');
         expect(tables()).toHaveLength(1);
 
+        cadence.click();
+        fixture.detectChanges();
+        expect(distance.getAttribute('aria-expanded')).toBe('false');
+        expect(tables()).toHaveLength(1);
+        expect(tables()[0].getAttribute('aria-label')).toBe('Cadence by device');
+        expect(tables()[0].querySelector('.cadence-reference th').textContent).toContain('Suunto Run');
+        expect(tables()[0].querySelector<HTMLElement>('.device-mark').style.backgroundColor).toBe('rgb(33, 150, 243)');
+        expect(tables()[0].querySelector('.cadence-difference').textContent).toContain('−4');
+        fixture.debugElement.query(By.directive(CompactSelectComponent)).componentInstance.select('id:a');
+        fixture.detectChanges();
+        expect(cadence.getAttribute('aria-expanded')).toBe('true');
+        expect(tables()[0].querySelector('.cadence-reference th').textContent).toContain('Coros PACE 4');
+        expect(tables()[0].querySelector('.cadence-difference').textContent).toContain('+4');
+        expect(grid.querySelector('.comparison-note').textContent).toContain('no cadence reading for Max');
+
         fixture.componentRef.setInput('event', { ...event, getID: () => 'another-run' });
         fixture.detectChanges();
         expect(tables()).toHaveLength(0);
-        expect(mockHaptics.selection).toHaveBeenCalledTimes(3);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(5);
     });
 
     it.each([

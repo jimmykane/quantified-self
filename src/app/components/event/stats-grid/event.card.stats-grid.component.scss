@@ -154,6 +154,63 @@
   text-align: end;
 }
 
+.cadence-title {
+  max-width: 732px;
+  gap: 6px;
+}
+
+.cadence-context, .cadence-range-label {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.cadence-context {
+  display: block;
+}
+
+.cadence-ranges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 0 0 62%;
+  gap: 4px;
+  text-align: end;
+}
+
+.cadence-range {
+  font: var(--mat-sys-body-small);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cadence-range-label, .cadence-difference {
+  display: block;
+}
+
+.cadence-reference {
+  background: var(--mat-sys-surface-container);
+}
+
+@include bp.xsmall {
+  .cadence-ranges {
+    flex-basis: 65%;
+  }
+
+  .cadence-table th + th, .cadence-table th + td, .cadence-table td + td {
+    padding-inline-start: 4px;
+  }
+}
+
+@media (max-width: 345px) {
+  .cadence-title app-data-type-icon {
+    display: none;
+  }
+
+  .cadence-ranges {
+    flex-basis: 70%;
+    gap: 2px;
+  }
+}
+
 .comparison-row {
   th, td { padding-block: 7px; border-top: 1px solid var(--mat-sys-outline-variant); }
   td { font-variant-numeric: tabular-nums; }

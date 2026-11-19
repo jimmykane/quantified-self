@@ -1,9 +1,10 @@
 import {
-  type ActivityInterface, ActivityTypes, DataAltitudeAvg, DataDistance, DataDuration, DataFeeling, DataHeartRateAvg,
+  type ActivityInterface, ActivityTypes, DataAltitudeAvg, DataCadenceAvg, DataCadenceMax, DataCadenceMin,
+  DataDistance, DataDuration, DataFeeling, DataHeartRateAvg,
   type DataInterface, DataPaceAvg, DistanceUnits, ElevationUnits, PaceUnits, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { buildBenchmarkSummaryCards, getBenchmarkSummarySources } from './benchmark-summary-rows.helper';
+import { buildBenchmarkSummaryCards, buildBenchmarkSummaryPanels, getBenchmarkSummarySources } from './benchmark-summary-rows.helper';
 
 function recording(id: string, stats: DataInterface[], name = id, type = ActivityTypes.Running) {
   const byType = new Map(stats.map(stat => [stat.getType(), stat]));
@@ -14,6 +15,44 @@ const settings = normalizeUserUnitSettings({});
 const sourcesFor = (all: ActivityInterface[], types: string[]) => getBenchmarkSummarySources(all, all, types, () => '#123456');
 
 describe('benchmark summary device rows', () => {
+  it.each([
+    {},
+    { distanceUnits: DistanceUnits.Miles, elevationUnits: ElevationUnits.Feet },
+  ])('groups cadence ranges and reference differences with unit settings %j', (unitSettings) => {
+    const all = [
+      recording('a', [new DataCadenceMin(0), new DataCadenceAvg(170)]),
+      recording('b', [new DataCadenceMin(116), new DataCadenceAvg(169), new DataCadenceMax(185)]),
+      recording('c', [new DataCadenceAvg(168), new DataCadenceMax(191)]),
+    ];
+    const units = normalizeUserUnitSettings(unitSettings);
+    const sources = sourcesFor(all, [DataCadenceMin.type, DataCadenceAvg.type, DataCadenceMax.type]);
+    const panels = buildBenchmarkSummaryPanels(sources, 'id:a', units);
+    expect([...panels.keys()]).toEqual([DataCadenceAvg.type]);
+    expect(panels.get(DataCadenceAvg.type)[0]).toMatchObject({
+      kind: 'cadence',
+      unit: 'rpm',
+      columns: [{ label: 'Min', range: '0–116' }, { label: 'Avg', range: '168–170' }, { label: 'Max', range: '185–191' }],
+      rows: [
+        { color: '#123456', cells: [{ value: '0', delta: null }, { value: '170', delta: null }, { value: null, delta: null }] },
+        { cells: [{ value: '116', delta: '+116' }, { value: '169', delta: '−1' }, { value: '185', delta: null }] },
+        { cells: [{ value: null, delta: null }, { value: '168', delta: '−2' }, { value: '191', delta: null }] },
+      ],
+      missingReference: 'Max',
+    });
+    expect(buildBenchmarkSummaryPanels(sources, 'id:b', units).get(DataCadenceAvg.type)[0]).toMatchObject({
+      missingReference: '',
+      rows: [
+        { cells: [{ value: '0', delta: '−116' }, { value: '170', delta: '+1' }, { value: null, delta: null }] },
+        { cells: [{ value: '116', delta: null }, { value: '169', delta: null }, { value: '185', delta: null }] },
+        { cells: [{ value: null, delta: null }, { value: '168', delta: '−1' }, { value: '191', delta: '+6' }] },
+      ],
+    });
+    expect(buildBenchmarkSummaryPanels(sources.slice(0, 1), 'id:a', units).get(DataCadenceAvg.type)[0]).toMatchObject({
+      columns: [{ range: '0' }, { range: '170' }, { range: null }],
+      missingReference: '',
+    });
+  });
+
   it('compares four original readings, with signed differences, zeroes, ties and missing values', () => {
     const all = [
       recording('a', [new DataDistance(9270), new DataHeartRateAvg(0)]),

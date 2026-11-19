@@ -38,7 +38,9 @@ import { RR_METRICS, RR_STAT_LABELS } from '../../../constants/rr-metrics';
 import { isBenchmarkEvent } from '@shared/event-classification';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
-import { buildBenchmarkSummaryCards, getBenchmarkSummarySources, type BenchmarkSummarySource } from '../../../helpers/benchmark-summary-rows.helper';
+import {
+  buildBenchmarkSummaryPanels, getBenchmarkComparisonMetricType, getBenchmarkSummarySources, type BenchmarkSummarySource,
+} from '../../../helpers/benchmark-summary-rows.helper';
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 
 const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
@@ -77,12 +79,12 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   readonly referenceKey = signal('');
   readonly expandedMetric = signal<string | null>(null);
   readonly reference = computed(() => this.sources().find(source => source.value === this.referenceKey()));
-  readonly comparisonCards = computed(() => buildBenchmarkSummaryCards(this.sources(), this.referenceKey(), this.unitSettings));
+  readonly comparisonPanels = computed(() => buildBenchmarkSummaryPanels(this.sources(), this.referenceKey(), this.unitSettings));
   private comparisonEvent?: string | EventInterface;
   readonly rrComparison = computed(() => {
-    const cards = this.comparisonCards();
-    const primary = RR_METRICS.filter(metric => metric.primary && cards.get(metric.type)?.length).map(metric => metric.type);
-    const details = RR_METRICS.filter(metric => !metric.primary && cards.get(metric.type)?.length).map(metric => metric.type);
+    const panels = this.comparisonPanels();
+    const primary = RR_METRICS.filter(metric => metric.primary && panels.get(metric.type)?.length).map(metric => metric.type);
+    const details = RR_METRICS.filter(metric => !metric.primary && panels.get(metric.type)?.length).map(metric => metric.type);
     return primary.length ? { primary, details } : { primary: details, details: [] };
   });
 
@@ -384,7 +386,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   private updateTabs() {
     const availableStatTypes = new Set(this.compareRecordings
-      ? this.sources().flatMap(source => [...source.stats.keys()])
+      ? this.sources().flatMap(source => [...source.stats.keys()].map(getBenchmarkComparisonMetricType))
       : this.stats.map(stat => stat.getType()));
     const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
       ? ['diving']
@@ -392,7 +394,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (this.rrRecordings.length) includeEmptyGroupIds.push('rr');
     const rrTypes = new Set(this.rrRecordings.flatMap(recording => recording.stats.map(stat => stat.getType())));
 
-    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, { includeEmptyGroupIds })
+    const summaryTypes = this.compareRecordings
+      ? this.displayedStatsToShow.map(getBenchmarkComparisonMetricType)
+      : this.displayedStatsToShow;
+    this.metricTabs = buildSummaryMetricTabs(summaryTypes, { includeEmptyGroupIds })
       .map(tab => {
         const available = tab.id === 'rr' && !this.compareRecordings ? rrTypes : availableStatTypes;
         const metricTypes = tab.metricTypes.filter(type => available.has(type));
