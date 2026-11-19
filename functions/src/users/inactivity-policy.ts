@@ -8,6 +8,7 @@ export const INACTIVITY_CONTROL = 'configuration/inactiveAccounts';
 export const INACTIVITY_COLLECTION = 'inactivityRetention';
 export const INACTIVITY_TEMPLATE = 'account_inactivity_warning';
 export const INACTIVITY_REMINDER_TEMPLATE = 'account_inactivity_final_reminder';
+export const INACTIVITY_CONTINUATION = `${INACTIVITY_CONTROL}/work/continuation`;
 export const INACTIVITY_PAGE_SIZE = 100;
 export const INACTIVITY_BUDGET_MS = 240_000;
 export type { InactivityMode } from '../../../shared/admin-inactivity';

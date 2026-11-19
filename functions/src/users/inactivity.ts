@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
-import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Firestore, type Transaction } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import type Stripe from 'stripe';
 import { INACTIVITY_DELETION_LIMIT, INACTIVITY_WARNING_LIMIT } from '../../../shared/admin-inactivity';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
@@ -12,13 +12,13 @@ import { TTL_CONFIG } from '../shared/ttl-config';
 import { deleteAuthAccountAndNotify, pendingAccountDeletionMarker } from './initiate-deletion';
 import { dryRunDraft, recordDryRunPage } from './inactivity-dry-run';
 import { readInactivityBilling, stripeAllowsInactivity, type InactivityBilling } from './inactivity-billing';
-import { INACTIVITY_BUDGET_MS, INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS,
+import { INACTIVITY_BUDGET_MS, INACTIVITY_COLLECTION, INACTIVITY_CONTINUATION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS,
     INACTIVITY_NOTICE_MS, INACTIVITY_PAGE_SIZE, INACTIVITY_REMINDER_MS, INACTIVITY_TEMPLATE, INACTIVITY_REMINDER_TEMPLATE,
     acceptedNoticeDeadline, finalReminderDue, inactiveIdentity, inactivityMode, timestampMillis, warningAcceptedAt,
     type InactiveIdentity, type InactivityMode } from './inactivity-policy';
 
 export interface InactivityContext { db: Firestore; auth: Auth; stripe: () => Promise<Stripe>; now?: () => number }
-export interface InactivityRun { token: string; mode: InactivityMode }
+export interface InactivityRun { token: string; mode: InactivityMode; revision?: number }
 interface InactivityProcessOptions { discoveryOnly?: boolean; reminderFor?: string }
 export type InactivityOutcome = 'skipped' | 'eligible' | 'queued' | 'accepted' | 'cancelled' | 'waiting'
     | 'blocked' | 'notice_unconfirmed' | 'capped' | 'contended' | 'deletion_requested' | 'review_required' | 'failed';
@@ -39,7 +39,8 @@ function nextNoticeCheck(now: number, deadline: number): Timestamp {
 async function validRun(ctx: InactivityContext, tx: Transaction, run: InactivityRun): Promise<DocumentSnapshot | null> {
     const config = await tx.get(ctx.db.doc(INACTIVITY_CONTROL));
     return config.get('leaseToken') === run.token && timestampMillis(config.get('leaseUntil'))! > clock(ctx)
-        && inactivityMode(config.get('mode')) === run.mode ? config : null;
+        && inactivityMode(config.get('mode')) === run.mode
+        && (run.revision === undefined || (config.get('settingsRevision') ?? 0) === run.revision) ? config : null;
 }
 function consumeBudget(tx: Transaction, config: DocumentSnapshot, kind: 'warnings' | 'deletions', now: number): boolean {
     const maximum = kind === 'warnings' ? INACTIVITY_WARNING_LIMIT : INACTIVITY_DELETION_LIMIT;
@@ -250,33 +251,64 @@ export async function processInactiveAccount(ctx: InactivityContext, uid: string
     }
 }
 
-export interface InactivitySummary { mode: InactivityMode; outcome: 'off' | 'contended' | 'completed' | 'failed'; counts: Partial<Record<InactivityOutcome, number>>; scanned: number; capped: boolean; overdue: number; reviewRequired: number; scanAgeMs: number }
-export async function runInactivitySweep(ctx: InactivityContext): Promise<InactivitySummary> {
+export interface InactivitySummary { mode: InactivityMode; outcome: 'off' | 'contended' | 'stale' | 'completed' | 'failed'; counts: Partial<Record<InactivityOutcome, number>>; scanned: number; capped: boolean; overdue: number; reviewRequired: number; scanAgeMs: number; continuationAgeMs?: number }
+interface DueWork {
+    cutoff: Timestamp;
+    after: { at: Timestamp; path: string } | null;
+}
+interface RemainingWork {
+    due: DueWork | null;
+    authPageSize: number | null;
+}
+interface InactivityContinuation extends RemainingWork {
+    id: string;
+    mode: InactivityMode;
+    revision: number;
+}
+export async function runInactivitySweep(ctx: InactivityContext, continuationId?: string): Promise<InactivitySummary> {
     const start = clock(ctx);
     const configRef = ctx.db.doc(INACTIVITY_CONTROL);
+    const continuationRef = ctx.db.doc(INACTIVITY_CONTINUATION);
     const token = randomUUID();
     const acquired = await ctx.db.runTransaction(async tx => {
-        const config = await tx.get(configRef);
+        const [config, pending] = await tx.getAll(configRef, continuationRef);
         const mode = inactivityMode(config.get('mode'));
-        if (mode === 'off') return { mode, status: 'off' as const, cursor: undefined };
-        if (timestampMillis(config.get('leaseUntil'))! > start) return { mode, status: 'contended' as const, cursor: undefined };
+        const revision = config.get('settingsRevision') ?? 0;
+        const ticket = pending.data() as InactivityContinuation | undefined;
+        let work: RemainingWork = { due: { cutoff: Timestamp.fromMillis(start), after: null }, authPageSize: INACTIVITY_PAGE_SIZE };
+        if (continuationId !== undefined) {
+            if (!ticket || ticket.id !== continuationId) return { mode, status: 'stale' as const };
+            if (ticket.mode !== mode || ticket.revision !== revision) {
+                tx.delete(continuationRef);
+                return { mode, status: 'stale' as const };
+            }
+            work = ticket;
+        }
+        if (mode === 'off') return { mode, status: 'off' as const };
+        if (timestampMillis(config.get('leaseUntil'))! > start) return { mode, status: 'contended' as const };
+        // Consuming the single-use ticket and claiming the shared lease are one operation.
+        // An old delivery or a redelivery after a worker failure cannot start another sweep.
+        if (pending.exists) tx.delete(continuationRef);
         const priorStart = timestampMillis(config.get('scanStartedAt'));
         const completedAt = timestampMillis(config.get('lastScanCompletedAt'));
-        const draft = mode === 'dry-run' ? dryRunDraft(config) : undefined;
-        // Legacy cursors and cursors from other modes have no matching report pages.
+        const draft = work.authPageSize !== null && mode === 'dry-run' ? dryRunDraft(config) : undefined;
         const restart = draft !== undefined && draft.id !== config.get('dryRunDraft.id');
-        // A daily cap can stop the very first page, before any cursor is saved.
         const scanStartedAt = !restart && priorStart !== null && (completedAt === null || priorStart > completedAt) ? priorStart : start;
-        tx.set(configRef, { leaseToken: token, leaseUntil: Timestamp.fromMillis(start + 540_000), lastStartedAt: Timestamp.fromMillis(start), scanStartedAt: Timestamp.fromMillis(scanStartedAt),
+        tx.set(configRef, { leaseToken: token, leaseUntil: Timestamp.fromMillis(start + 540_000), lastStartedAt: Timestamp.fromMillis(start),
+            ...(work.authPageSize !== null ? { scanStartedAt: Timestamp.fromMillis(scanStartedAt),
+                dryRunDraft: draft ?? FieldValue.delete() } : {}),
             ...(restart ? { scanCursor: FieldValue.delete() } : {}),
-            dryRunDraft: draft ?? FieldValue.delete(),
         }, { merge: true });
-        return { mode, status: 'started' as const, cursor: restart ? undefined : config.get('scanCursor') as string | undefined, scanStartedAt, draft };
+        return { mode, status: 'started' as const, cursor: restart ? undefined : config.get('scanCursor') as string | undefined,
+            scanStartedAt, draft, work, revision,
+            continuationAgeMs: ticket?.mode === mode && ticket.revision === revision && pending.createTime
+                ? Math.max(0, start - pending.createTime.toMillis()) : undefined };
     });
     const summary: InactivitySummary = { mode: acquired.mode, outcome: acquired.status === 'started' ? 'completed' : acquired.status,
         counts: {}, scanned: 0, capped: false, overdue: 0, reviewRequired: 0, scanAgeMs: Math.max(0, start - (acquired.scanStartedAt ?? start)) };
     if (acquired.status !== 'started') return summary;
-    const run = { token, mode: acquired.mode };
+    if (acquired.continuationAgeMs !== undefined) summary.continuationAgeMs = acquired.continuationAgeMs;
+    const run = { token, mode: acquired.mode, revision: acquired.revision };
     const process = async (uid: string, options: InactivityProcessOptions = {}) => {
         let outcome: InactivityOutcome;
         try { outcome = await processInactiveAccount(ctx, uid, run, options); }
@@ -292,25 +324,39 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         if (outcome === 'capped') summary.capped = true;
         return outcome;
     };
+    const remaining: RemainingWork = { due: null, authPageSize: null };
     try {
         // Existing episodes get a separate half of the budget, independently of the Auth cursor.
-        let dueCursor: DocumentSnapshot | undefined;
-        while (clock(ctx) < start + INACTIVITY_BUDGET_MS / 2) {
-            let query = ctx.db.collectionGroup(INACTIVITY_COLLECTION).where('nextCheckAt', '<=', Timestamp.fromMillis(start)).orderBy('nextCheckAt').limit(INACTIVITY_PAGE_SIZE);
-            if (dueCursor) query = query.startAfter(dueCursor);
+        let due = acquired.work.due;
+        duePages: while (due) {
+            let query = ctx.db.collectionGroup(INACTIVITY_COLLECTION).where('nextCheckAt', '<=', due.cutoff)
+                .orderBy('nextCheckAt').orderBy(FieldPath.documentId()).limit(INACTIVITY_PAGE_SIZE);
+            if (due.after) query = query.startAfter(due.after.at, ctx.db.doc(due.after.path));
             const page = await query.get();
             for (const doc of page.docs) {
-                if (clock(ctx) >= start + INACTIVITY_BUDGET_MS / 2) { summary.capped = true; break; }
+                if (clock(ctx) >= start + INACTIVITY_BUDGET_MS / 2) {
+                    remaining.due = due;
+                    summary.capped = true;
+                    break duePages;
+                }
                 const uid = doc.ref.parent.parent?.id;
                 if (!uid || doc.ref.path !== inactivityRef(ctx.db, uid).path || doc.get('uid') !== uid) throw new Error('invalid_inactivity_owner');
                 const outcome = await process(uid);
+                due = { cutoff: due.cutoff, after: { at: doc.get('nextCheckAt'), path: doc.ref.path } };
                 // A previously unobserved SMTP receipt may already be in its final
                 // week. Give that episode a guarded reminder attempt in this sweep.
                 if (outcome === 'accepted') {
                     const queued = timestampMillis(doc.get('queuedAt'));
                     const generation = doc.get('generation');
                     if (queued !== null && clock(ctx) >= queued + INACTIVITY_NOTICE_MS - INACTIVITY_REMINDER_MS
-                        && typeof generation === 'string' && clock(ctx) < start + INACTIVITY_BUDGET_MS / 2) {
+                        && typeof generation === 'string') {
+                        if (clock(ctx) >= start + INACTIVITY_BUDGET_MS / 2) {
+                            // Recording a late receipt makes its reminder due at the observation time.
+                            // Include that newly due row in the continuation even if it was last on this page.
+                            remaining.due = { ...due, cutoff: Timestamp.fromMillis(clock(ctx)) };
+                            summary.capped = true;
+                            break duePages;
+                        }
                         await process(uid, { reminderFor: generation });
                     }
                 }
@@ -319,7 +365,6 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                     && ['capped', 'failed', 'waiting'].includes(outcome)) summary.overdue++;
             }
             if (page.size < INACTIVITY_PAGE_SIZE) break;
-            dueCursor = page.docs[page.size - 1];
         }
         // A stalled initiation survives user-root cleanup in the existing non-expiring fence.
         const pending = await ctx.db.collection('userDeletionTombstones').where('source', '==', 'inactivity')
@@ -327,12 +372,25 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
         summary.reviewRequired = pending.docs.filter(doc => timestampMillis(doc.get('createdAt')) === null
             || timestampMillis(doc.get('createdAt'))! + INACTIVITY_DAY_MS < start).length;
         let cursor = acquired.cursor;
-        while (clock(ctx) < start + INACTIVITY_BUDGET_MS) {
-            const page = await ctx.auth.listUsers(INACTIVITY_PAGE_SIZE, cursor);
+        const pageSize = acquired.work.authPageSize;
+        let pagesSaved = 0;
+        while (pageSize !== null) {
+            if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) {
+                remaining.authPageSize = pageSize;
+                summary.capped = true;
+                break;
+            }
+            const page = await ctx.auth.listUsers(pageSize, cursor);
             const eligibleUids: string[] = [];
             let complete = true;
             for (const user of page.users) {
-                if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) { complete = false; summary.capped = true; break; }
+                if (clock(ctx) >= start + INACTIVITY_BUDGET_MS) {
+                    // A slow page must eventually fit into one batch, including the first page of a scan.
+                    remaining.authPageSize = pagesSaved ? pageSize : Math.max(1, Math.floor(pageSize / 2));
+                    complete = false;
+                    summary.capped = true;
+                    break;
+                }
                 summary.scanned++;
                 if (!inactiveIdentity(user, clock(ctx))) continue;
                 const outcome = await process(user.uid, { discoveryOnly: true });
@@ -350,6 +408,7 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
                 tx.update(configRef, { scanCursor: cursor ?? FieldValue.delete(),
                     ...(finishedAt ? { lastScanCompletedAt: finishedAt } : {}) });
             });
+            pagesSaved++;
             if (!cursor) { summary.scanAgeMs = 0; break; }
         }
         return summary;
@@ -359,7 +418,13 @@ export async function runInactivitySweep(ctx: InactivityContext): Promise<Inacti
     } finally {
         await ctx.db.runTransaction(async tx => {
             const config = await tx.get(configRef);
-            if (config.get('leaseToken') === token) tx.update(configRef, {
+            if (config.get('leaseToken') !== token) return;
+            if (summary.outcome === 'completed' && (remaining.due || remaining.authPageSize !== null)
+                && config.get('mode') === run.mode && (config.get('settingsRevision') ?? 0) === acquired.revision) {
+                const next: InactivityContinuation = { id: token, mode: run.mode, revision: acquired.revision, ...remaining };
+                tx.create(continuationRef, next);
+            }
+            tx.update(configRef, {
                 leaseToken: FieldValue.delete(), leaseUntil: FieldValue.delete(), lastFinishedAt: Timestamp.fromMillis(clock(ctx)),
                 lastRun: { ...summary, finishedAt: Timestamp.fromMillis(clock(ctx)) },
             });

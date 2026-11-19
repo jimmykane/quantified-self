@@ -281,5 +281,5 @@ export { sendActivitySyncNotifications } from './web-push/activity';
 export { queueActivitySendNotification, queueAutomaticDeliveryNotification } from './web-push/delivery-admission';
 export { queueTrainingSyncNotification } from './web-push/training-admission';
 
-export { processInactiveAccounts } from './schedule/inactive-accounts';
+export { processInactiveAccounts, continueInactiveAccounts } from './schedule/inactive-accounts';
 export { getInactivityAdmin } from './admin/handlers/inactivity.handlers';

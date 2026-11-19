@@ -80,7 +80,8 @@ describe('Firestore Security Rules', () => {
     describe('Server-owned inactivity retention', () => {
         it('keeps episodes and raw runtime control private, and rejects incomplete activation writes', async () => {
             const paths = ['users/owner/inactivityRetention/state', 'users/owner/inactivityRetention/state/children/one',
-                'users/owner/inactivityDryRunMatches/a', 'configuration/inactiveAccounts'];
+                'users/owner/inactivityDryRunMatches/a', 'configuration/inactiveAccounts',
+                'configuration/inactiveAccounts/work/continuation'];
             await testEnv.withSecurityRulesDisabled(async context => {
                 await context.firestore().doc('users/owner').set({});
                 for (const path of paths) await context.firestore().doc(path).set({ state: 'warned', mode: 'off' });
@@ -92,6 +93,14 @@ describe('Firestore Security Rules', () => {
                     await assertFails(ref.get()); await assertFails(ref.set({ mode: 'enforce' }));
                     await assertFails(ref.update({ state: 'warned' })); await assertFails(ref.delete());
                 }
+            }
+        });
+        it('denies creating a continuation from the browser, including an admin session', async () => {
+            const path = 'configuration/inactiveAccounts/work/continuation';
+            const ticket = { id: 'synthetic', mode: 'enforce', revision: 1, due: null, authPageSize: 100 };
+            for (const context of [testEnv.unauthenticatedContext(), testEnv.authenticatedContext('owner'),
+                testEnv.authenticatedContext('admin', { admin: true })]) {
+                await assertFails(context.firestore().doc(path).set(ticket));
             }
         });
         it('allows only validated admin settings and preserves runtime counters, leases and evidence', async () => {

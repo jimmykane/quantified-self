@@ -282,9 +282,19 @@ test('inactivity filters cover the exact daily owner while excluding protected a
   log.jsonPayload.overdue = 1; assert.equal(matches(metric('inactivity_overdue').filter, log), true);
   log.jsonPayload.mode = 'warnings-only'; assert.equal(matches(metric('inactivity_overdue').filter, log), false);
   log.jsonPayload.scanAgeMs = 604800000; assert.equal(matches(metric('inactivity_scan_stalled').filter, log), true);
-  log.resource.labels.service_name = 'unrelated'; assert.equal(matches(metric('inactivity_heartbeat').filter, log), false);
+  log.resource.labels.service_name = 'continueinactiveaccounts';
+  assert.equal(matches(metric('inactivity_heartbeat').filter, log), false);
+  for (const key of ['failures', 'notice', 'review', 'scan_stalled']) assert.equal(matches(metric(`inactivity_${key}`).filter, log), true);
+  log.jsonPayload.scanAgeMs = 0;
+  log.jsonPayload.continuationAgeMs = 1799999; assert.equal(matches(metric('inactivity_scan_stalled').filter, log), false);
+  log.jsonPayload.continuationAgeMs++; assert.equal(matches(metric('inactivity_scan_stalled').filter, log), true);
+  log.resource.labels.service_name = 'unrelated';
+  assert.equal(matches(metric('inactivity_failures').filter, log), false);
+  assert.equal(matches(metric('inactivity_heartbeat').filter, log), false);
   const policy = bundle().policies.find(p => p.userLabels.policy_id === 'inactivity_failure');
-  assert.match(policy.conditions[1].conditionThreshold.filter, /request_count.*processinactiveaccounts.*5xx/);
+  assert.equal(policy.conditions[1].displayName, 'Native daily scheduler errors, including hard timeout');
+  assert.match(policy.conditions[1].conditionThreshold.filter, /request_count.*service_name="processinactiveaccounts".*5xx/);
+  assert.match(policy.conditions[2].conditionThreshold.filter, /request_count.*service_name="continueinactiveaccounts".*5xx/);
   assert.equal(policy.conditions[0].conditionThreshold.aggregations[0].alignmentPeriod, '86400s');
 });
 

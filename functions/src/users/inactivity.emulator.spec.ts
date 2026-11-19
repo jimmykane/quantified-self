@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { inactivityRef, processInactiveAccount, runInactivitySweep, type InactivityContext } from './inactivity';
-import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS, INACTIVITY_REMINDER_MS,
+import { INACTIVITY_BUDGET_MS, INACTIVITY_CONTINUATION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, INACTIVITY_NOTICE_MS, INACTIVITY_REMINDER_MS,
     INACTIVITY_REMINDER_TEMPLATE } from './inactivity-policy';
 import { formatEmailDateTime } from '../email/config';
 import { emailEligibility, emailSource } from '../email/monitoring';
@@ -28,6 +28,7 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         subscriptionSchedules: { list: vi.fn() }, checkout: { sessions: { list: vi.fn() } } };
     const run = { token: 'synthetic-run', mode: 'enforce' as const };
     const config = () => db.doc(INACTIVITY_CONTROL);
+    const pendingBatch = () => db.doc(INACTIVITY_CONTINUATION).get();
     const refreshRun = () => config().set({ mode: run.mode, leaseToken: run.token, leaseUntil: Timestamp.fromMillis(now + 540_000) }, { merge: true });
     const process = () => processInactiveAccount(ctx, uid, run);
     async function recordSmtpAcceptance() {
@@ -70,6 +71,7 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         await db.doc(`users/${uid}`).set({ synthetic: true });
     });
     afterEach(async () => {
+        await db.doc(INACTIVITY_CONTINUATION).delete();
         for (const owner of owners.splice(0)) {
             for (const root of ['users', 'customers', 'userDeletionTombstones', 'stripeBillingAccounts']) await db.recursiveDelete(db.doc(`${root}/${owner}`));
             for (const collection of ['mail', 'stripeBillingJobs']) {
@@ -205,6 +207,24 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await ref.get()).get('deleteAfter').toMillis()).toBe(deadline);
         expect(auth.deleteUser).not.toHaveBeenCalled();
         expect((await runInactivitySweep(ctx)).counts.queued).toBeUndefined();
+    });
+    it('hands off a late reminder when observing the receipt used the due-notice time allowance', async () => {
+        await process(); await recordSmtpAcceptance();
+        now += INACTIVITY_NOTICE_MS - INACTIVITY_DAY_MS;
+        await config().set({ mode: 'warnings-only' });
+        auth.getUser.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS / 2;
+            return authUser;
+        });
+        const first = await runInactivitySweep(ctx);
+        expect(first.counts.accepted).toBe(1);
+        expect(first.counts.queued).toBeUndefined();
+        const ticket = (await pendingBatch()).data()!;
+        expect(ticket.authPageSize).toBeNull();
+        expect((await runInactivitySweep(ctx, ticket.id)).counts.queued).toBe(1);
+        expect((await pendingBatch()).exists).toBe(false);
+        expect(auth.listUsers).toHaveBeenCalledTimes(1);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
     });
     it('only records the receipt when the sweep first observes it at the deadline', async () => {
         expect(await process()).toBe('queued');
@@ -536,6 +556,117 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(auth.deleteUser).not.toHaveBeenCalled();
         expect((await db.doc(`userDeletionTombstones/${uid}`).get()).exists).toBe(false);
     });
+    it.each(['dry-run', 'warnings-only', 'enforce'])('continues a timed-out %s inventory exactly once', async mode => {
+        await config().set({ mode });
+        // The first page finishes just as the time budget expires, before the next page starts.
+        auth.listUsers.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [], pageToken: 'resume-here' };
+        });
+        const first = await runInactivitySweep(ctx);
+        expect(first.capped).toBe(true);
+        const ticket = (await pendingBatch()).data()!;
+        expect(ticket).toMatchObject({ mode, due: null, authPageSize: 100 });
+        expect((await config().get()).get('leaseToken')).toBeUndefined();
+        expect((await runInactivitySweep(ctx, 'obsolete-ticket')).outcome).toBe('stale');
+        expect((await pendingBatch()).get('id')).toBe(ticket.id);
+
+        const next = await runInactivitySweep(ctx, ticket.id);
+        expect(auth.listUsers).toHaveBeenLastCalledWith(100, 'resume-here');
+        expect(next.continuationAgeMs).toBeGreaterThanOrEqual(0);
+        expect(next.counts).toMatchObject(mode === 'dry-run' ? { eligible: 1 } : { queued: 1 });
+        expect((await config().get()).get('lastScanCompletedAt')).toBeDefined();
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await runInactivitySweep(ctx, ticket.id)).outcome).toBe('stale');
+        expect(auth.listUsers).toHaveBeenCalledTimes(2);
+        expect(auth.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it('claims concurrent deliveries once and leaves a failed claimed batch for the daily recovery', async () => {
+        await config().set({ mode: 'warnings-only' });
+        auth.listUsers.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [], pageToken: 'recover' };
+        });
+        await runInactivitySweep(ctx);
+        const id = (await pendingBatch()).get('id');
+        auth.listUsers.mockRejectedValueOnce(new Error('synthetic Auth read failure'));
+        const outcomes = await Promise.allSettled([runInactivitySweep(ctx, id), runInactivitySweep(ctx, id)]);
+        expect(outcomes.filter(result => result.status === 'rejected')).toHaveLength(1);
+        expect(outcomes).toContainEqual(expect.objectContaining({ status: 'fulfilled', value: expect.objectContaining({ outcome: 'stale' }) }));
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await config().get()).get('lastRun.outcome')).toBe('failed');
+        expect((await runInactivitySweep(ctx, id)).outcome).toBe('stale');
+        expect(auth.listUsers).toHaveBeenCalledTimes(2);
+        now += INACTIVITY_DAY_MS;
+        expect((await runInactivitySweep(ctx)).counts.queued).toBe(1);
+        expect(auth.listUsers).toHaveBeenLastCalledWith(100, 'recover');
+    }, 30_000);
+
+    it('carries the warning allowance across a continuation and stops at the UTC cap', async () => {
+        await config().set({ mode: 'warnings-only', warningDailyLimit: 1 });
+        const other = { ...authUser, uid: uid + '-next' }; owners.push(other.uid);
+        await db.doc(`users/${other.uid}`).set({});
+        auth.getUser.mockImplementation(async id => id === other.uid ? other : authUser);
+        auth.listUsers.mockResolvedValueOnce({ users: [authUser], pageToken: 'resume' }).mockResolvedValue({ users: [other] });
+        stripe.customers.list.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { data: [], has_more: false };
+        });
+        expect((await runInactivitySweep(ctx)).counts.queued).toBe(1);
+        const id = (await pendingBatch()).get('id');
+        expect((await runInactivitySweep(ctx, id)).counts.capped).toBe(1);
+        expect((await pendingBatch()).exists).toBe(false);
+        expect((await config().get()).get('warnings')).toBe(1);
+        expect((await inactivityRef(db, other.uid).get()).exists).toBe(false);
+        now += INACTIVITY_DAY_MS;
+        expect((await runInactivitySweep(ctx)).counts.queued).toBe(1);
+        expect(auth.listUsers).toHaveBeenLastCalledWith(100, 'resume');
+    });
+
+    it.each(['off', 'enforce', 'dry-run'])('discards a pending dry run after settings change to %s', async mode => {
+        await config().set({ mode: 'dry-run' });
+        auth.listUsers.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS;
+            return { users: [authUser] };
+        });
+        await runInactivitySweep(ctx);
+        const ticket = (await pendingBatch()).data()!;
+        expect(ticket.authPageSize).toBe(50);
+        await config().update({ mode, settingsRevision: 1 });
+        expect((await runInactivitySweep(ctx, ticket.id)).outcome).toBe('stale');
+        expect((await pendingBatch()).exists).toBe(false);
+        expect(auth.listUsers).toHaveBeenCalledTimes(1);
+    });
+
+    it('finishes the due backlog without reopening Auth discovery or exceeding the deletion limit', async () => {
+        await dueWarning();
+        const original = inactivityRef(db, uid);
+        const other = { ...authUser, uid: uid + '-next' }; owners.push(other.uid);
+        await db.doc(`users/${other.uid}`).set({});
+        const otherBilling = await readInactivityBilling(db, other.uid, now);
+        await inactivityRef(db, other.uid).set({ ...(await original.get()).data(), uid: other.uid, billingRevision: otherBilling.revision });
+        auth.getUser.mockImplementation(async id => id === other.uid ? other : authUser);
+        await config().set({ mode: 'enforce', deletionDailyLimit: 1 });
+        auth.listUsers.mockResolvedValue({ users: [] });
+        stripe.customers.list.mockImplementationOnce(async () => {
+            now += INACTIVITY_BUDGET_MS / 2;
+            return { data: [], has_more: false };
+        });
+        const first = await runInactivitySweep(ctx);
+        expect(first.counts.deletion_requested).toBe(1);
+        const ticket = (await pendingBatch()).data()!;
+        expect(ticket.authPageSize).toBeNull();
+        expect(ticket.due.after.path).toBe(original.path);
+        const completed = (await config().get()).get('lastScanCompletedAt');
+        expect((await runInactivitySweep(ctx, ticket.id)).counts.capped).toBe(1);
+        expect((await pendingBatch()).exists).toBe(false);
+        expect(auth.listUsers).toHaveBeenCalledTimes(1);
+        expect((await config().get()).get('lastScanCompletedAt')).toEqual(completed);
+        expect((await config().get()).get('deletions')).toBe(1);
+        expect(auth.deleteUser).toHaveBeenCalledTimes(1);
+    });
+
     it('publishes only whole dry scans across batches, preserving the prior result and deduplicating replayed accounts', async () => {
         const review = () => readInactivityAdmin(db, { getUsers: vi.fn().mockResolvedValue({ users: [authUser] }) }, { view: 'eligible' }, now);
         await config().set({ mode: 'dry-run', scanCursor: 'pre-report-cursor', lastScanCompletedAt: Timestamp.fromMillis(now - 1) });
@@ -581,6 +712,7 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect((await runInactivitySweep(ctx)).counts.failed).toBe(1);
         const interrupted = (await config().get()).data()!;
         expect(interrupted.scanCursor).toBe('resume');
+        expect((await pendingBatch()).exists).toBe(false);
         expect(interrupted.lastCompletedDryRun).toBeUndefined();
         await config().update({ settingsRevision: 1 });
         auth.listUsers.mockResolvedValue({ users: [] });

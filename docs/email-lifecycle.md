@@ -6,7 +6,7 @@ This document is the source of truth for Quantified Self transactional and admin
 
 | Event | Delivery owner | Template ID | From | Reply-To |
 | --- | --- | --- | --- | --- |
-| Inactive Free account warning and final reminder | `processInactiveAccounts` + Trigger Email extension | `account_inactivity_warning`, `account_inactivity_final_reminder` | Standard transactional sender | Standard transactional reply address |
+| Inactive Free account warning and final reminder | `processInactiveAccounts` / `continueInactiveAccounts` + Trigger Email extension | `account_inactivity_warning`, `account_inactivity_final_reminder` | Standard transactional sender | Standard transactional reply address |
 | Onboarding first becomes complete | Cloud Function + Trigger Email extension | `registration_welcome` | `Dimitrios from Quantified Self <hello@quantified-self.io>` | `dimitrios@quantified-self.io` |
 | Subscription starts or trial starts | `onSubscriptionUpdated` + Trigger Email extension | `welcome_email` | `Quantified Self <hello@quantified-self.io>` | `support@quantified-self.io` |
 | Subscription upgrade | `onSubscriptionUpdated` + Trigger Email extension | `subscription_upgrade` | Standard transactional sender | Standard transactional reply address |
