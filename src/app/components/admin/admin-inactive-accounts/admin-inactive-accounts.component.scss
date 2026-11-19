@@ -10,12 +10,17 @@ mat-form-field { width: 100%; min-width: 0; }
 dt { font: var(--mat-sys-label-medium); margin-bottom: 6px; }
 dd { margin: 0; }
 .number { font-family: 'Barlow Condensed', sans-serif; font-size: 26px; }
-.account-list { list-style: none; margin: 0; padding: 0; }
-.account-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr); gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--mat-sys-outline-variant); }
-.account-identity, .account-dates { min-width: 0; overflow-wrap: anywhere; }
+.account-table-scroll { max-width: 100%; overflow-x: auto; }
+table { width: 100%; }
+.mat-column-account { min-width: 9rem; overflow-wrap: anywhere; }
+.mat-column-lastLogin { min-width: 8rem; }
+.mat-column-events { text-align: right; font-variant-numeric: tabular-nums; }
+.mat-column-retention { min-width: 13rem; }
+td.mat-mdc-cell { padding-block: 12px; }
 .account-id { display: block; font: var(--mat-sys-body-small); margin-top: 4px; }
-.account-identity p { margin-bottom: 0; }
-.account-dates { display: grid; gap: 12px; margin: 0; }
+.account-dates { display: grid; gap: 6px; margin: 0; }
+.account-dates div { margin-top: 4px; }
+.account-dates dt { margin: 0; }
 .pagination { margin-top: 18px; }
 .feedback { padding: 12px 16px; background: var(--mat-sys-tertiary-container); color: var(--mat-sys-on-tertiary-container); border-radius: 8px; }
 .feedback.error { background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
@@ -24,6 +29,6 @@ dd { margin: 0; }
 .button-icon { width: 18px; height: 18px; flex: 0 0 18px; }
 .button-icon mat-icon { width: 18px; height: 18px; font-size: 18px; }
 @media (max-width: 600px) {
-  .limits, .status-grid, .account-list li { grid-template-columns: minmax(0, 1fr); }
+  .limits, .status-grid { grid-template-columns: minmax(0, 1fr); }
   .toolbar { gap: 8px; }
 }

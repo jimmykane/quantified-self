@@ -254,6 +254,9 @@ app-summary-primary-info:has(+ .summary-primary-extension:not(:empty)) {
     padding-block: 4px;
   }
 
+  .combined-totals {
+    display: none;
+  }
 }
 
 .summary-stats-action-button {

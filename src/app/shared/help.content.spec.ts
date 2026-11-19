@@ -2553,7 +2553,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('available range in your preferred units');
     expect(gettingStartedSection?.content).toContain('**Slightly higher** and **Slightly lower**');
     expect(gettingStartedSection?.content).toContain('If the reference has no reading for a metric');
-    expect(gettingStartedSection?.content).toContain('Expand **Combined totals** below the metrics');
+    expect(gettingStartedSection?.content).toContain('On larger screens, expand **Combined totals** below the metrics');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
     expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');

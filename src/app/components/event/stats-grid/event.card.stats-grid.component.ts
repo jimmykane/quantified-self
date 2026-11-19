@@ -118,7 +118,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private isPrewarmingTabs = false;
   private isDestroyed = false;
   private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
-  readonly mobileViewport = signal(this.isMobileViewport());
   private readonly mobileViewportListener = () => this.onMobileViewportChange();
   private readonly windowResizeListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
   private readonly windowLoadListener = () => this.scheduleTabBodyHeightSync('allow_shrink', true);
@@ -416,7 +415,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    if (this.isMobileViewport()) {
+    if (this.usesNaturalTabHeight()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
       this.lastMeasuredTabBodyLayoutSignature = null;
@@ -596,7 +595,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private syncTabBodyHeight(mode: TabBodyHeightSyncMode = 'allow_shrink') {
-    if (this.isMobileViewport()) {
+    if (this.usesNaturalTabHeight()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
       this.lastMeasuredTabBodyLayoutSignature = null;
@@ -668,6 +667,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private applyHeightFromSelectedTab(selectedIndex: number) {
+    if (this.usesNaturalTabHeight()) return;
+
     const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
     if (!tabGroupElement || selectedIndex < 0) {
       return;
@@ -697,7 +698,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private setupTabBodyResizeObserver() {
     this.teardownTabBodyResizeObserver();
 
-    if (this.isMobileViewport()) {
+    if (this.usesNaturalTabHeight()) {
       return;
     }
 
@@ -758,14 +759,12 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private onMobileViewportChange() {
-    this.mobileViewport.set(this.isMobileViewport());
-    this.expandedMetric.set(null);
     this.cancelScheduledTabBodyHeightSync();
     this.lastAppliedMinHeightPx = 0;
     this.invalidateTabBodyLayoutSignature();
     this.pendingTabBodyHeightSyncMode = 'allow_shrink';
 
-    if (this.isMobileViewport()) {
+    if (this.usesNaturalTabHeight()) {
       this.teardownTabBodyResizeObserver();
       this.clearTabBodyMinHeight();
       return;
@@ -781,6 +780,11 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     return window.matchMedia(AppBreakpoints.XSmall);
+  }
+
+  private usesNaturalTabHeight(): boolean {
+    // Let the accordion body shrink when a benchmark metric closes.
+    return this.compareRecordings || this.isMobileViewport();
   }
 
   private isMobileViewport(): boolean {

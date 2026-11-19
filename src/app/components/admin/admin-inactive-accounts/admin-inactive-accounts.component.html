@@ -87,29 +87,53 @@
       } @else {
         <p class="secondary">Current sign-in addresses are shown. These are recorded states; activity and billing are checked again before deletion. Pending cleanup records remain visible even after the account is removed.</p>
       }
-      @if (!loading() && !error()) {
-        <ul class="account-list">
-          @for (account of snapshot.accounts; track account.uid) {
-            <li>
-              <div class="account-identity"><strong>{{ account.email || (account.authPresent ? 'No sign-in email' : 'Auth account no longer present') }}</strong><span class="secondary account-id">{{ account.uid }}</span>
-                @if (view() !== 'eligible') { <p>{{ account.detail }}</p> }
-              </div>
-              <dl class="account-dates">
-                @if (account.queuedAt !== null) { <div><dt>Warning queued</dt><dd>{{ account.queuedAt | date:'medium' }}</dd></div> }
-                @if (account.acceptedAt !== null) { <div><dt>Delivery accepted</dt><dd>{{ account.acceptedAt | date:'medium' }}</dd></div> }
-                @if (account.deleteAfter !== null) { <div><dt>Deletion no earlier than</dt><dd>{{ account.deleteAfter | date:'medium' }}</dd></div> }
-                @if (account.requestedAt !== null) { <div><dt>Deletion requested</dt><dd>{{ account.requestedAt | date:'medium' }}</dd></div> }
-              </dl>
-            </li>
-          } @empty { <li class="secondary">{{ view() === 'eligible' && snapshot.lastCompletedDryRun?.eligibleCount === 0 ? 'No accounts qualified for a first warning in this scan.' : 'No accounts in this view.' }}</li> }
-        </ul>
+      @if (!error()) {
+        @if (rows().length || loading()) {
+          <div class="account-table-scroll" tabindex="0" role="region" aria-label="Inactive account details">
+            <table mat-table [dataSource]="rows()" matSort matSortActive="lastLogin" [matSortDirection]="direction()"
+              matSortDisableClear [attr.aria-busy]="loading()" [matSortDisabled]="loading() || saving()" (matSortChange)="sortByLogin($event.direction)" aria-labelledby="retention-accounts">
+              <ng-container matColumnDef="account">
+                <th mat-header-cell *matHeaderCellDef>Account</th>
+                <td mat-cell *matCellDef="let account">
+                  <strong>{{ account.email || (account.authPresent ? 'No sign-in email' : 'Auth account no longer present') }}</strong>
+                  <span class="secondary account-id">{{ account.uid }}</span>
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="lastLogin">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header="lastLogin" sortActionDescription="Change last login order">Last login</th>
+                <td mat-cell *matCellDef="let account">{{ account.lastLoginAt === null ? 'No recorded login' : (account.lastLoginAt | date:'medium') }}</td>
+              </ng-container>
+              <ng-container matColumnDef="events">
+                <th mat-header-cell *matHeaderCellDef>Events</th>
+                <td mat-cell *matCellDef="let account">{{ account.eventCount === null ? 'Unavailable' : (account.eventCount | number) }}</td>
+              </ng-container>
+              <ng-container matColumnDef="retention">
+                <th mat-header-cell *matHeaderCellDef>Retention</th>
+                <td mat-cell *matCellDef="let account">{{ account.detail }}
+                  <dl class="account-dates">
+                    @if (account.queuedAt !== null) { <div><dt>Warning queued</dt><dd>{{ account.queuedAt | date:'medium' }}</dd></div> }
+                    @if (account.acceptedAt !== null) { <div><dt>Delivery accepted</dt><dd>{{ account.acceptedAt | date:'medium' }}</dd></div> }
+                    @if (account.deleteAfter !== null) { <div><dt>Deletion no earlier than</dt><dd>{{ account.deleteAfter | date:'medium' }}</dd></div> }
+                    @if (account.requestedAt !== null) { <div><dt>Deletion requested</dt><dd>{{ account.requestedAt | date:'medium' }}</dd></div> }
+                  </dl>
+                </td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+              <tr mat-row *matRowDef="let row; columns: columns()"></tr>
+            </table>
+          </div>
+        } @else {
+          <p class="secondary">{{ view() === 'eligible' && snapshot.lastCompletedDryRun?.eligibleCount === 0
+            ? 'No accounts qualified for a first warning in this scan.'
+            : totalPages() > 1 ? 'The accounts on this page have left this view. Refresh to update the list.' : 'No accounts in this view.' }}</p>
+        }
       }
       <div class="toolbar pagination">
         <button mat-stroked-button type="button" (click)="previous()" [disabled]="page() <= 1 || loading() || saving() || !!error()">Previous</button>
-        <span>Page {{ page() | number }}</span>
-        <button mat-stroked-button type="button" (click)="next()" [disabled]="!snapshot.nextUid || loading() || saving() || !!error()">Next</button>
+        <span>Page {{ page() | number }} of {{ totalPages() | number }}</span>
+        <button mat-stroked-button type="button" (click)="next()" [disabled]="page() >= totalPages() || loading() || saving() || !!error()">Next</button>
       </div>
-      <p class="secondary">Up to 25 accounts per page, ordered by account ID. Cases needing review require the existing operator recovery process.</p>
+      <p class="secondary">Last login is the most recent Firebase sign-in recorded when you opened or refreshed this list. Session refreshes also count toward retention eligibility. Event counts are read when you open each page.</p>
     </section>
   }
 </main>
