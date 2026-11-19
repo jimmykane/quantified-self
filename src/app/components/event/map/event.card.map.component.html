@@ -44,7 +44,7 @@
       <mat-menu #trackMenu="matMenu" class="qs-menu-panel" aria-label="Visible tracks">
         <div class="map-tracks-menu-heading" aria-hidden="true">Visible tracks</div>
         @for (track of mapTracks(); track track.id) {
-          @let visible = !hiddenMapTrackIds().has(track.id);
+          @let visible = visibleMapTrackIds().has(track.id);
           <button mat-menu-item type="button" role="menuitemcheckbox" [attr.aria-checked]="visible"
             [disabled]="visible && visibleTracks.length === 1"
             (click)="$event.stopPropagation(); toggleMapTrack(track.id)">

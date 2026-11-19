@@ -150,8 +150,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
   protected readonly mapTracks = signal<MapTrackOption[]>([]);
-  protected readonly hiddenMapTrackIds = signal<ReadonlySet<string>>(new Set());
-  protected readonly visibleMapTracks = computed(() => this.mapTracks().filter(track => !this.hiddenMapTrackIds().has(track.id)));
+  private readonly hiddenMapTrackIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly visibleMapTracks = computed(() => {
+    const tracks = this.mapTracks();
+    const hidden = this.hiddenMapTrackIds();
+    const visible = tracks.filter(track => !hidden.has(track.id));
+    return visible.length ? visible : tracks.slice(0, 1);
+  });
+  protected readonly visibleMapTrackIds = computed(() => new Set(this.visibleMapTracks().map(track => track.id)));
   private mapTracksEvent?: string | EventInterface;
   private readonly haptics = inject(AppHapticsService);
 
@@ -338,7 +344,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     const currentSelectedActivitiesIDs = (this.selectedActivities || []).map(a => a.getID()).sort().join(',');
     const currentEventID = this.event?.getID();
     const mapTracksEvent = currentEventID || this.event;
-    if (this.mapTracksEvent !== mapTracksEvent || simpleChanges['targetUserID']) {
+    const trackScopeChanged = this.mapTracksEvent !== mapTracksEvent || !!simpleChanges['targetUserID'];
+    if (trackScopeChanged) {
       this.mapTracksEvent = mapTracksEvent;
       this.hiddenMapTrackIds.set(new Set());
       this.mapTracks.set([]);
@@ -365,8 +372,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       }
     });
 
-    if (Object.keys(changes).length > 0) {
-      const shouldFitBounds = !!changes.selectedActivitiesIDs || !!changes.eventID;
+    const previousSelection = simpleChanges['selectedActivities']?.previousValue as ActivityInterface[] | undefined;
+    const selectionRebound = previousSelection?.some((activity, index) => activity !== this.selectedActivities?.[index]);
+    if (trackScopeChanged || selectionRebound || Object.keys(changes).length > 0) {
+      const shouldFitBounds = trackScopeChanged || !!changes.selectedActivitiesIDs || !!changes.eventID;
       this.previousState = { ...this.previousState, ...currentState };
       this.requestMapActivities(shouldFitBounds, 'ngOnChanges');
     } else if (simpleChanges['event'] || simpleChanges['selectedActivities']) {
@@ -380,23 +389,27 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   protected toggleMapTrack(id: string): void {
     if (!this.mapTracks().some(track => track.id === id)) return;
+    const visible = this.visibleMapTrackIds();
+    if (visible.has(id) && visible.size === 1) return;
     const hidden = new Set(this.hiddenMapTrackIds());
-    if (hidden.has(id)) {
-      hidden.delete(id);
-    } else {
-      if (this.visibleMapTracks().length <= 1) return;
-      hidden.add(id);
-    }
+    // Keep the temporarily shown track when the user adds another from the menu.
+    visible.forEach(trackId => hidden.delete(trackId));
+    if (visible.has(id)) hidden.add(id);
+    else hidden.delete(id);
     this.hiddenMapTrackIds.set(hidden);
     if (this.openedJumpMarkerInfoWindow) this.closeJumpPopup();
-    if (this.mapReady) this.renderMapData(false);
-    else this.deferMapActivitiesRequest(false, 'track-visibility');
+    this.renderPreparedMapData(false);
     this.haptics.selection();
   }
 
   private get visibleActivitiesMapData(): MapData[] {
     const hidden = this.hiddenMapTrackIds();
-    return hidden.size ? this.activitiesMapData.filter(data => !hidden.has(data.activity.getID())) : this.activitiesMapData;
+    if (!hidden.size) return this.activitiesMapData;
+    const visible = this.visibleMapTrackIds();
+    return this.activitiesMapData.filter(data => {
+      const id = data.activity.getID();
+      return !hidden.has(id) || visible.has(id);
+    });
   }
 
   private updateMapTrackOptions(): void {
@@ -411,12 +424,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       }
     }
     this.mapTracks.set([...options.values()]);
-    if (options.size && this.visibleMapTracks().length === 0) {
-      // The page-level selection can leave only a previously hidden track.
-      const hidden = new Set(this.hiddenMapTrackIds());
-      hidden.delete(options.keys().next().value);
-      this.hiddenMapTrackIds.set(hidden);
-    }
   }
 
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
@@ -797,7 +804,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private renderMapData(shouldFitBounds: boolean) {
-    const renderStartedAt = this.nowMs();
     const map = this.mapInstance();
     if (!this.mapReady || !map) {
       this.logger.log('[EventCardMapPerf] renderMapData:skipped', {
@@ -815,8 +821,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
       return;
     }
+    this.renderPreparedMapData(shouldFitBounds);
+  }
 
-    const tracksBuildStartedAt = this.nowMs();
+  private renderPreparedMapData(shouldFitBounds: boolean): void {
+    const renderStartedAt = this.nowMs();
     const tracks: EventTrackRenderData[] = this.visibleActivitiesMapData.map((activityMapData) => ({
       activityId: activityMapData.activity.getID() || '',
       strokeColor: activityMapData.strokeColor,
@@ -833,7 +842,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         markerSize: this.getJumpMarkerSize(jump.event),
       }))
     }));
-    const tracksBuildDuration = this.nowMs() - tracksBuildStartedAt;
+    const tracksBuildDuration = this.nowMs() - renderStartedAt;
 
     const managerRenderStartedAt = this.nowMs();
     this.mapManager.renderActivities(tracks, {
