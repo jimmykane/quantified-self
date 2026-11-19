@@ -5,15 +5,8 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants'
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../../wahoo/constants';
 import { toEpochMillis } from './date.utils';
-import { BasicUser, CountStats, EnrichedUser } from './types';
-
-function normalizeCount(value: unknown): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return 0;
-    }
-
-    return Math.max(0, Math.floor(value));
-}
+import { BasicUser, EnrichedUser } from './types';
+import { getUserSubcollectionCountStats } from './user-collection-count';
 
 function buildAssistantUsageDocIdForSubscriptionPeriod(
     periodStart: unknown,
@@ -45,24 +38,6 @@ function resolveAssistantRequestsUsedFromUsageData(value: unknown): number {
     return resolveAssistantSuccessfulRequestCount(
         (value as { successfulRequestCount?: unknown }).successfulRequestCount
     );
-}
-
-async function getUserSubcollectionCountStats(
-    db: admin.firestore.Firestore,
-    userUid: string,
-    subcollectionName: 'events' | 'routes'
-): Promise<CountStats> {
-    try {
-        const snapshot = await db.collection('users')
-            .doc(userUid)
-            .collection(subcollectionName)
-            .count()
-            .get();
-        return { total: normalizeCount(snapshot.data().count) };
-    } catch (e) {
-        logger.warn(`Failed to count ${subcollectionName} for ${userUid}`, e);
-        return { total: null };
-    }
 }
 
 /**

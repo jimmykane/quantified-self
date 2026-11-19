@@ -3,19 +3,27 @@ import { FieldPath, type DocumentSnapshot, type Firestore } from 'firebase-admin
 import { HttpsError } from 'firebase-functions/v2/https';
 import { INACTIVITY_ADMIN_PAGE_SIZE, INACTIVITY_ADMIN_VIEWS, INACTIVITY_DELETION_LIMIT,
     INACTIVITY_MODES, INACTIVITY_WARNING_LIMIT, type InactivityAdminRequest, type InactivityAdminResponse } from '../../../shared/admin-inactivity';
+import { toEpochMillis } from '../admin/shared/date.utils';
+import { getUserSubcollectionCountStats } from '../admin/shared/user-collection-count';
 import { DRY_RUN_MATCHES } from './inactivity-dry-run';
 import { INACTIVITY_COLLECTION, INACTIVITY_CONTROL, INACTIVITY_DAY_MS, acceptedNoticeDeadline, inactivityMode, timestampMillis, warningAcceptedAt } from './inactivity-policy';
+
+const validUid = (uid: unknown): uid is string => typeof uid === 'string' && uid.length > 0 && uid.length <= 128
+    && !uid.includes('/') && uid !== '.' && uid !== '..';
 
 export function inactivityAdminRequest(value: unknown): InactivityAdminRequest {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpsError('invalid-argument', 'Choose an account view.');
     const data = value as Record<string, unknown>;
-    if (Object.keys(data).some(key => !['view', 'afterUid', 'dryRunId'].includes(key))
+    if (Object.keys(data).some(key => !['view', 'afterUid', 'dryRunId', 'projection', 'accountUids'].includes(key))
         || !INACTIVITY_ADMIN_VIEWS.includes(data.view as InactivityAdminRequest['view'])
         || (data.dryRunId !== undefined && (data.view !== 'eligible' || typeof data.dryRunId !== 'string'
             || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(data.dryRunId)))
-        || (data.view === 'eligible' && data.afterUid !== undefined && !data.dryRunId)
-        || (data.afterUid !== undefined && (typeof data.afterUid !== 'string' || !data.afterUid.length
-            || data.afterUid.length > 128 || data.afterUid.includes('/') || ['.', '..'].includes(data.afterUid)))) {
+        || (data.projection !== undefined && data.projection !== 'login-order')
+        || (data.accountUids !== undefined && (!Array.isArray(data.accountUids) || data.accountUids.length > INACTIVITY_ADMIN_PAGE_SIZE
+            || !data.accountUids.every(validUid) || new Set(data.accountUids).size !== data.accountUids.length
+            || data.projection !== undefined || data.afterUid !== undefined))
+        || (data.view === 'eligible' && (data.afterUid !== undefined || (Array.isArray(data.accountUids) && data.accountUids.length > 0)) && !data.dryRunId)
+        || (data.afterUid !== undefined && !validUid(data.afterUid))) {
         throw new HttpsError('invalid-argument', 'Invalid account view or cursor.');
     }
     return data as unknown as InactivityAdminRequest;
@@ -30,15 +38,28 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
     request: InactivityAdminRequest, now = Date.now()): Promise<InactivityAdminResponse> {
     const pending = request.view === 'pending-deletion';
     const eligible = request.view === 'eligible';
+    const indexing = request.projection === 'login-order';
+    const limit = indexing ? 100 : INACTIVITY_ADMIN_PAGE_SIZE; // Firebase Auth getUsers accepts up to 100 identifiers.
     const { config, docs } = await db.runTransaction(async tx => {
         const config = await tx.get(db.doc(INACTIVITY_CONTROL));
         const report = config.get('lastCompletedDryRun');
         if (eligible && !report) return { config, docs: [] };
         const collection = eligible ? DRY_RUN_MATCHES : INACTIVITY_COLLECTION;
+        const pathFor = (uid: string) => pending ? `userDeletionTombstones/${uid}` : `users/${uid}/${collection}/${eligible ? report.slot : 'state'}`;
+        if (request.accountUids) {
+            if (!request.accountUids.length || (eligible && request.dryRunId !== report.id)) return { config, docs: [] };
+            const snapshots = await tx.getAll(...request.accountUids.map(uid => db.doc(pathFor(uid))));
+            // The browser's sorted list is a hint. Check current membership before reading Auth or event counts.
+            const docs = snapshots.filter(doc => doc.exists && (pending
+                ? doc.get('source') === 'inactivity' && doc.get('cleanupStatus') === 'pending'
+                : eligible ? doc.get('scanId') === report.id : doc.get('state') === request.view));
+            return { config, docs };
+        }
         let query = pending
             ? db.collection('userDeletionTombstones').where('source', '==', 'inactivity').where('cleanupStatus', '==', 'pending')
             : db.collectionGroup(collection).where(eligible ? 'scanId' : 'state', '==', eligible ? report.id : request.view);
-        query = query.orderBy(FieldPath.documentId()).limit(INACTIVITY_ADMIN_PAGE_SIZE + 1);
+        query = query.orderBy(FieldPath.documentId()).limit(limit + 1);
+        if (indexing) query = query.select('uid');
         // A replacement report starts on page one; never apply another report's cursor.
         if (request.afterUid && (!eligible || request.dryRunId === report.id)) {
             const path = pending ? request.afterUid : `users/${request.afterUid}/${collection}/${eligible ? report.slot : 'state'}`;
@@ -47,7 +68,7 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
         return { config, docs: (await tx.get(query)).docs };
     }, { readOnly: true });
     const report = config.get('lastCompletedDryRun');
-    const selected = docs.slice(0, INACTIVITY_ADMIN_PAGE_SIZE).map(doc => {
+    const selected = docs.slice(0, limit).map(doc => {
         const uid = pending ? doc.id : doc.ref.parent.parent?.id;
         if (!uid) throw new Error('invalid_inactivity_owner');
         if (eligible && doc.ref.path !== `users/${uid}/${DRY_RUN_MATCHES}/${report.slot}`)
@@ -58,7 +79,7 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
     });
     const identities = selected.length ? await auth.getUsers(selected.map(({ uid }) => ({ uid }))) : { users: [] };
     const users = new Map(identities.users.map(user => [user.uid, user]));
-    const accounts = await Promise.all(selected.map(async ({ uid, doc }) => {
+    const accounts = indexing ? [] : await Promise.all(selected.map(async ({ uid, doc }) => {
         const user = users.get(uid);
         const queuedAt = date(doc, 'queuedAt');
         let detail = request.view === 'cancelled' ? 'Notice cancelled after eligibility changed.'
@@ -70,7 +91,7 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             if (doc.get('authDeleteStatus') === 'prepared') detail = created === null || created + INACTIVITY_DAY_MS < now
                 ? 'Deletion prepared but not attempted; operator review required.' : 'Deletion prepared; awaiting Auth deletion.';
         } else if ((date(doc, 'expireAt') ?? 0) <= now) detail = 'Evidence expired; a new warning is required.';
-        else if (request.view === 'warned' && acceptedNoticeDeadline(doc.data(), now) === null)
+        else if (request.view === 'warned' && acceptedNoticeDeadline(doc.data()!, now) === null)
             detail = 'The original warning has invalid timing. A new warning is required before deletion.';
         else if (request.view === 'warned' && date(doc, 'reminderQueuedAt') !== null)
             detail = 'Final reminder queued; the original deletion deadline is unchanged.';
@@ -82,7 +103,8 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             else if (!mail?.exists || ['ERROR', 'SUCCESS'].includes(mail.get('delivery.state')) || queuedAt === null || queuedAt + INACTIVITY_DAY_MS < now)
                 detail = 'Warning delivery unconfirmed; deletion is blocked.';
         }
-        return { uid, email: user?.email ?? null, authPresent: !!user, queuedAt, acceptedAt: date(doc, 'acceptedAt'),
+        const eventCount = (await getUserSubcollectionCountStats(db, uid, 'events')).total;
+        return { uid, email: user?.email ?? null, authPresent: !!user, eventCount, queuedAt, acceptedAt: date(doc, 'acceptedAt'),
             deleteAfter: date(doc, 'deleteAfter'), requestedAt: pending ? date(doc, 'createdAt') : null, detail };
     }));
     const warningDailyLimit = config.get('warningDailyLimit') === undefined ? INACTIVITY_WARNING_LIMIT : config.get('warningDailyLimit');
@@ -108,6 +130,9 @@ export async function readInactivityAdmin(db: Firestore, auth: Pick<Auth, 'getUs
             deletionRequested: last('counts.deletion_requested'), blocked: last('counts.blocked'), failed: last('counts.failed'),
             noticeUnconfirmed: last('counts.notice_unconfirmed'), overdue: last('overdue'), reviewRequired: last('reviewRequired'), capped: config.get('lastRun.capped') === true,
         } : null,
-        accounts, nextUid: docs.length > INACTIVITY_ADMIN_PAGE_SIZE ? selected[selected.length - 1].uid : null,
+        ...(indexing ? { loginOrder: selected.map(({ uid }) => ({
+            uid, lastLoginAt: toEpochMillis(users.get(uid)?.metadata?.lastSignInTime),
+        })) } : {}),
+        accounts, nextUid: docs.length > limit ? selected[selected.length - 1].uid : null,
     };
 }

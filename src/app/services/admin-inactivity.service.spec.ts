@@ -26,6 +26,30 @@ describe('AdminInactivityService', () => {
     expect(await service.read({ view: 'warned', afterUid: 'synthetic' })).toEqual({ accounts: [] });
     expect(functions.call).toHaveBeenCalledWith('getInactivityAdmin', { view: 'warned', afterUid: 'synthetic' }, { canExecute: expect.any(Function) });
   });
+  it('collects bounded login batches and discards earlier memberships when publication changes', async () => {
+    const batch = (id: string, uid: string, nextUid: string | null) => ({ data: {
+      lastCompletedDryRun: { id }, loginOrder: [{ uid, lastLoginAt: null }], nextUid,
+    } });
+    functions.call.mockResolvedValueOnce(batch('old', 'removed', 'removed'))
+      .mockResolvedValueOnce(batch('new', 'one', 'one')).mockResolvedValueOnce(batch('new', 'two', null));
+    const directory = await service.loadLoginOrder('eligible', () => true);
+    expect(directory.entries.map(row => row.uid)).toEqual(['one', 'two']);
+    expect(directory.dryRunId).toBe('new');
+    expect(functions.call.mock.calls.map(call => call[1])).toEqual([
+      { view: 'eligible', projection: 'login-order' },
+      { view: 'eligible', projection: 'login-order', dryRunId: 'old', afterUid: 'removed' },
+      { view: 'eligible', projection: 'login-order', dryRunId: 'new', afterUid: 'one' },
+    ]);
+  });
+  it('stops fetching login batches when the view closes', async () => {
+    let active = true;
+    functions.call.mockImplementationOnce(async () => {
+      active = false;
+      return { data: { loginOrder: [], nextUid: 'cursor' } };
+    });
+    await expect(service.loadLoginOrder('warned', () => active)).rejects.toThrow('view changed');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+  });
   it('writes only validated settings, revision and attribution', async () => {
     await service.save(settings, 'admin');
     expect(reference).toHaveBeenCalledWith({}, 'configuration/inactiveAccounts');

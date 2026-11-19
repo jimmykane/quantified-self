@@ -4,7 +4,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatDialog } from '@angular/material/dialog';
 import { of, Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
-import type { InactivityAdminResponse } from '@shared/admin-inactivity';
+import type { InactivityAdminRequest, InactivityAdminResponse, InactivityAdminView, InactivityLoginEntry } from '@shared/admin-inactivity';
 import { AdminInactiveAccountsComponent } from './admin-inactive-accounts.component';
 import { AdminInactivityService } from '../../../services/admin-inactivity.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -13,14 +13,21 @@ function response(): InactivityAdminResponse {
   return { settings: { mode: 'off', warningDailyLimit: 100, deletionDailyLimit: 25, revision: 2 }, settingsValid: true,
     running: false, lastStartedAt: null, lastFinishedAt: null, lastScanCompletedAt: null, budgetDay: '2026-11-14',
     warningsReserved: 0, deletionsReserved: 0, lastCompletedDryRun: null, lastRun: null, nextUid: 'synthetic',
-    accounts: [{ uid: 'synthetic', email: 'synthetic@example.invalid', authPresent: true,
+    accounts: [{ uid: 'synthetic', email: 'synthetic@example.invalid', authPresent: true, eventCount: 0,
       queuedAt: Date.UTC(2026, 10, 14), acceptedAt: null, deleteAfter: null, requestedAt: null, detail: 'Awaiting confirmed warning delivery.' }] };
 }
 async function setup() {
   let ownerChanged!: (uid: string | null) => void;
   const unwatch = vi.fn();
+  const entries: InactivityLoginEntry[] = Array.from({ length: 26 }, (_, i) => ({
+    uid: i ? 'user-' + String(i).padStart(2, '0') : 'synthetic', lastLoginAt: Date.UTC(2024, 0, i + 1),
+  }));
+  const firstPage = entries.slice(0, 25).map(row => row.uid);
+  const loadLoginOrder = vi.fn(async (_view: InactivityAdminView) => ({
+    entries, snapshot: response(), dryRunId: undefined as string | undefined,
+  }));
   const service = { currentUid: () => 'admin', watchOwner: vi.fn(callback => { ownerChanged = callback; return unwatch; }),
-    read: vi.fn().mockResolvedValue(response()), save: vi.fn().mockResolvedValue(undefined) };
+    loadLoginOrder, read: vi.fn(async (_request: InactivityAdminRequest) => response()), save: vi.fn().mockResolvedValue(undefined) };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(true), close: vi.fn() }) };
   await TestBed.configureTestingModule({ imports: [AdminInactiveAccountsComponent, NoopAnimationsModule], providers: [provideRouter([]),
@@ -28,7 +35,7 @@ async function setup() {
     .overrideProvider(MatDialog, { useValue: dialog }).compileComponents();
   const fixture = TestBed.createComponent(AdminInactiveAccountsComponent);
   const component = fixture.componentInstance;
-  return { fixture, component, service, haptics, dialog, unwatch, ownerChanged: (uid: string | null) => ownerChanged(uid) };
+  return { fixture, component, service, haptics, dialog, unwatch, entries, firstPage, ownerChanged: (uid: string | null) => ownerChanged(uid) };
 }
 async function render() {
   const context = await setup(); context.fixture.detectChanges(); await context.fixture.whenStable(); context.fixture.detectChanges(); return context;
@@ -45,6 +52,19 @@ describe('Admin inactive accounts route', () => {
     expect(fixture.nativeElement.textContent).toContain('uses the original deletion deadline');
     expect(component.mode()).toBe('off'); expect(component.canSave()).toBeFalsy();
     expect(service.save).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('keeps unavailable counts and missing logins distinct from a genuine zero', async () => {
+    const { component, fixture, service } = await setup();
+    const snapshot = response();
+    snapshot.accounts[0].eventCount = null;
+    snapshot.accounts[0].authPresent = false; snapshot.accounts[0].email = null;
+    service.read.mockResolvedValue(snapshot);
+    service.loadLoginOrder.mockResolvedValue({ entries: [{ uid: 'synthetic', lastLoginAt: null }], snapshot, dryRunId: undefined });
+    fixture.detectChanges(); await vi.waitFor(() => expect(component.loading()).toBe(false)); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('td.mat-column-account').textContent).toContain('Auth account no longer present');
+    expect(fixture.nativeElement.querySelector('td.mat-column-lastLogin').textContent.trim()).toBe('No recorded login');
+    expect(fixture.nativeElement.querySelector('td.mat-column-events').textContent.trim()).toBe('Unavailable');
+    expect(fixture.nativeElement.querySelector('td.mat-column-retention').textContent).toContain('Warning queued');
   });
   it('binds numeric controls, validates caps and resets edits', async () => {
     const { fixture, component, haptics } = await render();
@@ -79,45 +99,65 @@ describe('Admin inactive accounts route', () => {
     expect(component.mode()).toBe('warnings-only'); expect(component.baseline()?.revision).toBe(2);
     expect(component.conflict()).toBe(true); expect(component.canSave()).toBeFalsy();
   });
-  it('paginates and resets the cursor when changing views', async () => {
-    const { fixture, component, service } = await render();
-    component.next(); await fixture.whenStable(); expect(service.read).toHaveBeenLastCalledWith({ view: 'queued', afterUid: 'synthetic' });
-    component.previous(); await fixture.whenStable(); expect(service.read).toHaveBeenLastCalledWith({ view: 'queued' });
+  it('orders the whole view before paging and reuses the login list until a view change', async () => {
+    const { fixture, component, service, haptics, entries } = await setup();
+    // The oldest and an unknown login come from the far end of the UID list.
+    entries[25].lastLoginAt = entries[0].lastLoginAt;
+    const unknown = { uid: 'unknown', lastLoginAt: null };
+    service.loadLoginOrder.mockResolvedValue({ entries: [unknown, ...entries].reverse(), snapshot: response(), dryRunId: undefined });
+    fixture.detectChanges(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable(); fixture.detectChanges();
+    expect(service.read.mock.lastCall?.[0].accountUids!.slice(0, 3)).toEqual(['synthetic', 'user-25', 'user-01']);
+    const header = fixture.nativeElement.querySelector('th.mat-column-lastLogin');
+    expect(header.getAttribute('aria-sort')).toBe('ascending');
+    expect(fixture.nativeElement.querySelector('td.mat-column-events').textContent.trim()).toBe('0');
+    expect(fixture.nativeElement.querySelector('td.mat-column-lastLogin').textContent).toContain('2024');
+    header.querySelector('[role="button"]').click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('th.mat-column-lastLogin').getAttribute('aria-sort')).toBe('descending');
+    expect(service.read.mock.lastCall?.[0].accountUids![0]).toBe('user-24');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.next(); await fixture.whenStable();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'queued', accountUids: ['user-25', 'unknown'] });
+    component.previous(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable();
+    expect(service.loadLoginOrder).toHaveBeenCalledTimes(1);
     component.changeView('pending-deletion'); await fixture.whenStable();
-    expect(service.read).toHaveBeenLastCalledWith({ view: 'pending-deletion' }); expect(component.page()).toBe(1);
+    expect(service.loadLoginOrder).toHaveBeenCalledTimes(2); expect(component.page()).toBe(1);
   });
-  it('shows the full scan total and pins subsequent pages to that report', async () => {
-    const { fixture, component, service, haptics } = await setup();
+  it('shows the full scan total and pins selected accounts to the published report', async () => {
+    const { fixture, component, service, haptics, entries, firstPage } = await setup();
     const first = response();
     first.lastCompletedDryRun = { id: 'first', eligibleCount: 31, finishedAt: Date.UTC(2026, 10, 18) };
     service.read.mockResolvedValue(first);
-    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    service.loadLoginOrder.mockImplementation(async view => ({ entries, snapshot: first, dryRunId: view === 'eligible' ? 'first' : undefined }));
+    fixture.detectChanges(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[aria-labelledby="dry-run-report"]').textContent).toContain('31');
     const review = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find(b => b.textContent.includes('Review eligible accounts'));
-    review!.click(); await fixture.whenStable();
-    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible' });
+    review!.click(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable(); fixture.detectChanges();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: firstPage, dryRunId: 'first' });
+    expect(fixture.nativeElement.querySelectorAll('th')).toHaveLength(3);
     expect(haptics.selection).toHaveBeenCalledTimes(1);
     component.next(); await fixture.whenStable();
-    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', afterUid: 'synthetic', dryRunId: 'first' });
-    expect(component.page()).toBe(2);
-    service.read.mockResolvedValue({ ...first, lastCompletedDryRun: { ...first.lastCompletedDryRun, id: 'replacement' } });
-    component.next(); await fixture.whenStable();
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: ['user-25'], dryRunId: 'first' });
+    const replacement = { ...first, lastCompletedDryRun: { ...first.lastCompletedDryRun, id: 'replacement' } };
+    service.read.mockResolvedValue(replacement);
+    service.loadLoginOrder.mockResolvedValue({ entries: [entries[0]], snapshot: replacement, dryRunId: 'replacement' });
+    component.previous(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable();
     expect(component.page()).toBe(1);
+    expect(service.read).toHaveBeenLastCalledWith({ view: 'eligible', accountUids: ['synthetic'], dryRunId: 'replacement' });
     expect(component.notice()).toContain('Showing its first page');
     expect(service.save).not.toHaveBeenCalled();
   });
   it('distinguishes an older scan without a report from a completed empty report', async () => {
     const { fixture, component, service } = await render();
     expect(fixture.nativeElement.textContent).toContain('first full dry run with account reporting');
-    service.read.mockResolvedValue({ ...response(), accounts: [], nextUid: null,
-      lastCompletedDryRun: { id: 'empty', eligibleCount: 0, finishedAt: Date.UTC(2026, 10, 18) } });
+    service.loadLoginOrder.mockResolvedValue({ entries: [], dryRunId: 'empty', snapshot: { ...response(), accounts: [], nextUid: null,
+      lastCompletedDryRun: { id: 'empty', eligibleCount: 0, finishedAt: Date.UTC(2026, 10, 18) } } });
     component.changeView('eligible'); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No accounts qualified for a first warning');
     expect(fixture.nativeElement.textContent).not.toContain('first full dry run with account reporting');
   });
   it('shows read failures without implying an empty queue and permits refresh', async () => {
     const { fixture, component, service, haptics } = await setup();
-    service.read.mockRejectedValueOnce(new Error('synthetic')); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    service.read.mockRejectedValueOnce(new Error('synthetic')); fixture.detectChanges(); await vi.waitFor(() => expect(component.loading()).toBe(false)); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Unable to load');
     expect(fixture.nativeElement.textContent).not.toContain('No accounts in this view'); expect(haptics.error).not.toHaveBeenCalled();
     component.refresh(); await fixture.whenStable(); expect(component.data()).not.toBeNull();

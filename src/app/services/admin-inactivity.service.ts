@@ -4,7 +4,13 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { Firestore, doc, serverTimestamp, setDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { INACTIVITY_DELETION_LIMIT, INACTIVITY_MODES, INACTIVITY_WARNING_LIMIT,
-  type InactivityAdminRequest, type InactivityAdminResponse, type InactivitySettings } from '@shared/admin-inactivity';
+  type InactivityAdminRequest, type InactivityAdminResponse, type InactivityAdminView, type InactivityLoginEntry, type InactivitySettings } from '@shared/admin-inactivity';
+
+export interface InactivityLoginDirectory {
+  entries: InactivityLoginEntry[];
+  snapshot: InactivityAdminResponse;
+  dryRunId?: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AdminInactivityService {
@@ -22,6 +28,26 @@ export class AdminInactivityService {
       { canExecute: () => this.auth.currentUser === owner });
     if (this.auth.currentUser !== owner) throw new Error('The signed-in account changed.');
     return result.data;
+  }
+  async loadLoginOrder(view: InactivityAdminView, isCurrent: () => boolean): Promise<InactivityLoginDirectory> {
+    const entries: InactivityLoginEntry[] = [];
+    let afterUid: string | undefined;
+    let dryRunId: string | undefined;
+    for (;;) {
+      if (!isCurrent()) throw new Error('Account view changed.');
+      const snapshot = await this.read({ view, projection: 'login-order', ...(afterUid && { afterUid }), ...(dryRunId && { dryRunId }) });
+      if (!isCurrent()) throw new Error('Account view changed.');
+      if (!snapshot.loginOrder) throw new Error('Account ordering is unavailable.');
+      if (view === 'eligible') {
+        const published = snapshot.lastCompletedDryRun?.id;
+        // A new publication resets the server cursor and returns its first batch.
+        if (dryRunId !== published) entries.length = 0;
+        dryRunId = published;
+      }
+      entries.push(...snapshot.loginOrder);
+      afterUid = snapshot.nextUid ?? undefined;
+      if (!afterUid) return { entries, snapshot, dryRunId };
+    }
   }
   async save(settings: InactivitySettings, expectedUid: string): Promise<void> {
     const owner = this.auth.currentUser;

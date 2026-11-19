@@ -125,15 +125,23 @@ client-rendered and noindexed, and links directly from the Admin dashboard. The 
 - Last scan start/finish, last complete Auth inventory, worker lease state and the most recent active run's bounded counters.
   The scheduler persists only one aggregate `lastRun` alongside its normal lease release. Failed active runs retain a failed
   summary; off/contended invocations do not replace it. Cloud Monitoring remains authoritative for missed invocations/timeouts.
-- Pages of 25 accounts for warning delivery, deletion deadlines, cancelled notices and pending deletion follow-up, ordered
-  by UID. Pending tombstones remain visible after user-root cleanup. Current email/absence comes from Firebase Auth;
-  an Auth lookup failure fails the request rather than claiming the account is gone. Hold counts are observations from the
+- Every account view shows email, UID, last login and event count in pages of 25. The default order is oldest login first.
+  Select **Last login** to reverse the order. Missing login dates stay last in both directions, with UID breaking ties.
+  Warning, deadline, cancellation and deletion follow-up views also show the notice or cleanup details. Pending tombstones
+  remain visible after user-root cleanup. Firebase Auth supplies the current email. A failed Auth lookup fails the read.
+  Hold counts are observations from the
   last run, not a complete per-account billing investigation or a global candidate inventory.
 
 **Last completed dry run.** On this route, **Review eligible accounts** opens the completed scan's list of
 first-warning candidates in pages of 25. The total counts distinct accounts at scan time. Account cleanup removes
 that account's row, and Firebase Auth supplies the current sign-in email when the page is viewed. Warning and deletion
 decisions always run their own eligibility checks.
+
+Opening or refreshing a view reads its membership in groups of up to 100. Each batch returns only the UID and
+Firebase Auth last sign-in time for ordering. The browser sorts the complete list once per sort direction and
+keeps it in memory for that view. Session refreshes can protect an account even when its last login is old.
+Each page read verifies that the selected accounts still belong to the view and uses the same Firestore event-count
+aggregation as Admin Users. A failed count appears as unavailable. This works with existing published memberships.
 
 During a dry run, each complete Auth page commits its cursor and eligible memberships in the same lease-checked
 transaction. A partial page is retried. A failed or contended discovery check also leaves that page for a later

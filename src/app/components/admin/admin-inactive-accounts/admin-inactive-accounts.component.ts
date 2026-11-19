@@ -9,10 +9,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSortModule, type SortDirection } from '@angular/material/sort';
+import { MatTableModule } from '@angular/material/table';
 import { firstValueFrom } from 'rxjs';
-import { INACTIVITY_DELETION_LIMIT, INACTIVITY_WARNING_LIMIT, type InactivityAdminResponse,
-  type InactivityAdminView, type InactivityMode, type InactivitySettings } from '@shared/admin-inactivity';
-import { AdminInactivityService } from '../../../services/admin-inactivity.service';
+import { INACTIVITY_ADMIN_PAGE_SIZE, INACTIVITY_DELETION_LIMIT, INACTIVITY_WARNING_LIMIT, type InactivityAdminResponse,
+  type InactivityAdminView, type InactivityLoginEntry, type InactivityAdminAccount, type InactivityMode, type InactivitySettings } from '@shared/admin-inactivity';
+import { AdminInactivityService, type InactivityLoginDirectory } from '../../../services/admin-inactivity.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { CompactSelectComponent, CompactSelectOption } from '../../shared/compact-select/compact-select.component';
@@ -20,7 +22,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confi
 
 @Component({ selector: 'app-admin-inactive-accounts', standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, MatButtonModule, MatCardModule, MatDialogModule,
-    MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, PageHeaderComponent, CompactSelectComponent],
+    MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatSortModule, MatTableModule, PageHeaderComponent, CompactSelectComponent],
   templateUrl: './admin-inactive-accounts.component.html', styleUrl: './admin-inactive-accounts.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
@@ -33,8 +35,25 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   private unwatch?: () => void;
   private sequence = 0;
   private destroyed = false;
-  private cursors: Array<string | undefined> = [undefined];
+  private readonly directory = signal<InactivityLoginDirectory | null>(null);
+  readonly direction = signal<'asc' | 'desc'>('asc');
+  private readonly ordered = computed(() => {
+    const sign = this.direction() === 'asc' ? 1 : -1;
+    return [...(this.directory()?.entries ?? [])].sort((a, b) => {
+      if (a.lastLoginAt !== b.lastLoginAt) {
+        if (a.lastLoginAt === null) return 1;
+        if (b.lastLoginAt === null) return -1;
+        return sign * (a.lastLoginAt - b.lastLoginAt);
+      }
+      if (a.uid === b.uid) return 0;
+      return a.uid < b.uid ? -1 : 1;
+    });
+  });
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.ordered().length / INACTIVITY_ADMIN_PAGE_SIZE)));
+  readonly columns = computed(() => this.view() === 'eligible'
+    ? ['account', 'lastLogin', 'events'] : ['account', 'lastLogin', 'events', 'retention']);
   readonly data = signal<InactivityAdminResponse | null>(null);
+  readonly rows = signal<(InactivityLoginEntry & InactivityAdminAccount)[]>([]);
   readonly baseline = signal<InactivitySettings | null>(null);
   readonly view = signal<InactivityAdminView>('queued');
   readonly page = signal(1);
@@ -74,32 +93,51 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.unwatch = this.service.watchOwner(uid => {
       if (uid === this.owner) return;
-      this.cursors = [undefined]; this.page.set(1);
-      this.owner = uid; this.ownerVersion++; this.sequence++; this.data.set(null); this.baseline.set(null);
+      this.directory.set(null); this.page.set(1);
+      this.owner = uid; this.ownerVersion++; this.sequence++; this.data.set(null); this.rows.set([]); this.baseline.set(null);
       this.loading.set(false); this.saving.set(false); this.notice.set('');
       this.error.set('The signed-in account changed. Refresh to continue.'); this.confirmation?.close();
     });
     void this.load();
   }
-  ngOnDestroy(): void { this.destroyed = true; this.sequence++; this.unwatch?.(); this.confirmation?.close(); }
+  ngOnDestroy(): void { this.destroyed = true; this.sequence++; this.directory.set(null); this.rows.set([]); this.data.set(null); this.unwatch?.(); this.confirmation?.close(); }
   private syncDraft(settings: InactivitySettings): void {
     this.baseline.set(settings); this.mode.set(settings.mode); this.warningLimit.set(settings.warningDailyLimit); this.deletionLimit.set(settings.deletionDailyLimit);
   }
   private async load(resetDraft = false, userAction = false): Promise<void> {
     const sequence = ++this.sequence;
     const owner = this.owner;
-    this.loading.set(true); this.error.set('');
+    this.loading.set(true); this.rows.set([]); this.error.set('');
     try {
-      const afterUid = this.cursors[this.page() - 1];
-      const dryRunId = this.view() === 'eligible' && afterUid ? this.data()?.lastCompletedDryRun?.id : undefined;
-      const result = await this.service.read({ view: this.view(), ...(afterUid ? { afterUid } : {}), ...(dryRunId ? { dryRunId } : {}) });
-      if (this.destroyed || sequence !== this.sequence || owner !== this.owner) return;
-      if (dryRunId && dryRunId !== result.lastCompletedDryRun?.id) {
-        this.cursors = [undefined]; this.page.set(1);
-        this.notice.set('A newer dry run finished. Showing its first page.');
+      const view = this.view();
+      const current = () => !this.destroyed && this.sequence === sequence && this.owner === owner;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let directory = this.directory();
+        if (!directory) {
+          directory = await this.service.loadLoginOrder(view, current);
+          if (!current()) return;
+          this.directory.set(directory);
+        }
+        const offset = (this.page() - 1) * INACTIVITY_ADMIN_PAGE_SIZE;
+        const page = this.ordered().slice(offset, offset + INACTIVITY_ADMIN_PAGE_SIZE);
+        const result = page.length ? await this.service.read({ view, accountUids: page.map(row => row.uid),
+          ...(directory.dryRunId && { dryRunId: directory.dryRunId }) }) : directory.snapshot;
+        if (!current()) return;
+        if (view === 'eligible' && directory.dryRunId !== result.lastCompletedDryRun?.id) {
+          this.directory.set(null); this.page.set(1);
+          this.notice.set('A newer dry run finished. Showing its first page.');
+          continue;
+        }
+        const accounts = new Map(result.accounts.map(row => [row.uid, row]));
+        this.rows.set(page.flatMap(entry => {
+          const account = accounts.get(entry.uid);
+          return account ? [{ ...account, ...entry }] : [];
+        }));
+        if (resetDraft || !this.dirty()) this.syncDraft(result.settings);
+        this.data.set(result);
+        return;
       }
-      if (resetDraft || !this.dirty()) this.syncDraft(result.settings);
-      this.data.set(result);
+      throw new Error('The published report changed again.');
     } catch {
       if (this.destroyed || sequence !== this.sequence || owner !== this.owner) return;
       this.error.set('Unable to load account retention. Refresh to try again.');
@@ -108,7 +146,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   }
   refresh(): void {
     if (this.loading() || this.saving() || this.dirty()) return;
-    this.haptics.selection(); this.cursors = [undefined]; this.page.set(1); void this.load(true, true);
+    this.haptics.selection(); this.directory.set(null); this.page.set(1); void this.load(true, true);
   }
   reset(): void {
     if (!this.data() || this.saving() || this.loading()) return;
@@ -120,15 +158,19 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
   }
   changeView(view: InactivityAdminView): void {
     if (view === this.view() || this.loading() || this.saving()) return;
-    this.view.set(view); this.cursors = [undefined]; this.page.set(1); this.haptics.selection(); void this.load(false, true);
+    this.view.set(view); this.directory.set(null); this.page.set(1); this.haptics.selection(); void this.load(false, true);
+  }
+  sortByLogin(direction: SortDirection): void {
+    if (!direction || direction === this.direction() || this.loading() || this.saving()) return;
+    this.direction.set(direction); this.page.set(1); this.haptics.selection(); void this.load(false, true);
   }
   next(): void {
-    if (!this.data()?.nextUid || this.loading() || this.saving()) return;
-    this.cursors.push(this.data()!.nextUid!); this.page.update(value => value + 1); this.haptics.selection(); void this.load(false, true);
+    if (this.page() >= this.totalPages() || this.loading() || this.saving()) return;
+    this.page.update(value => value + 1); this.haptics.selection(); void this.load(false, true);
   }
   previous(): void {
     if (this.page() <= 1 || this.loading() || this.saving()) return;
-    this.cursors.pop(); this.page.update(value => value - 1); this.haptics.selection(); void this.load(false, true);
+    this.page.update(value => value - 1); this.haptics.selection(); void this.load(false, true);
   }
   async save(): Promise<void> {
     if (!this.canSave() || !this.owner) return;
@@ -150,6 +192,7 @@ export class AdminInactiveAccountsComponent implements OnInit, OnDestroy {
       await this.service.save(settings, owner);
       if (!isCurrent()) return;
       this.haptics.success(); this.notice.set('Settings saved. The daily job will use the updated settings.');
+      this.directory.set(null); this.page.set(1);
       await this.load(true);
     } catch {
       if (!isCurrent()) return;

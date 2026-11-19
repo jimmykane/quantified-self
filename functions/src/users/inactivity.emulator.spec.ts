@@ -917,6 +917,56 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         expect(replaced.accounts.map(row => row.uid)).toEqual([uid]);
         expect(replaced.accounts[0]).toMatchObject({ email: null, authPresent: false, deleteAfter: null });
     });
+    it('limits each ordering request to one Auth lookup of at most 100 members', async () => {
+        const records = Array.from({ length: 101 }, (_, i) => inactivityRef(db, uid + '-' + String(i).padStart(3, '0')));
+        const batch = db.batch();
+        for (const ref of records) batch.set(ref, { uid: ref.parent.parent!.id, state: 'warned' });
+        await batch.commit();
+        try {
+            const getUsers = vi.fn().mockResolvedValue({ users: [] });
+            const first = await readInactivityAdmin(db, { getUsers }, { view: 'warned', projection: 'login-order' }, now);
+            expect(first.loginOrder).toHaveLength(100);
+            expect(first.accounts).toEqual([]);
+            expect(first.nextUid).toBe(uid + '-099');
+            const next = await readInactivityAdmin(db, { getUsers }, { view: 'warned', projection: 'login-order', afterUid: first.nextUid! }, now);
+            expect(next.loginOrder).toEqual([{ uid: uid + '-100', lastLoginAt: null }]);
+            expect(next.nextUid).toBeNull();
+            expect(getUsers.mock.calls.map(([identifiers]) => identifiers.length)).toEqual([100, 1]);
+        } finally {
+            const cleanup = db.batch();
+            for (const ref of records) cleanup.delete(ref);
+            await cleanup.commit();
+        }
+    });
+    it('reads login dates for existing dry-run memberships and counts only events for selected members', async () => {
+        const id = randomUUID();
+        await config().set({ lastCompletedDryRun: { id, slot: 'a', finishedAt: Timestamp.fromMillis(now), eligibleCount: 2 } });
+        const missing = uid + '-missing'; owners.push(missing);
+        const other = uid + '-other'; owners.push(other);
+        const batch = db.batch();
+        for (const user of [uid, missing]) batch.set(db.doc(`users/${user}/inactivityDryRunMatches/a`), { scanId: id });
+        batch.set(db.doc(`users/${other}/inactivityDryRunMatches/a`), { scanId: randomUUID() });
+        for (const path of ['events/one', 'events/two', 'routes/one']) batch.set(db.doc(`users/${uid}/${path}`), {});
+        await batch.commit();
+        const getUsers = vi.fn().mockResolvedValue({ users: [{ ...authUser, metadata: {
+            creationTime: '2018-01-01T00:00:00Z', lastSignInTime: '2021-01-01T00:00:00Z', lastRefreshTime: '2026-11-01T00:00:00Z',
+        } }] });
+        const directory = await readInactivityAdmin(db, { getUsers }, { view: 'eligible', projection: 'login-order' }, now);
+        expect(directory.loginOrder).toEqual([{ uid, lastLoginAt: Date.UTC(2021, 0, 1) }, { uid: missing, lastLoginAt: null }]);
+        expect(directory.accounts).toEqual([]);
+        const page = await readInactivityAdmin(db, { getUsers }, { view: 'eligible', dryRunId: id, accountUids: [missing, uid, other] }, now);
+        expect(page.accounts.map(row => [row.uid, row.eventCount, row.authPresent])).toEqual([[missing, 0, false], [uid, 2, true]]);
+        expect(getUsers).toHaveBeenLastCalledWith([{ uid: missing }, { uid }]);
+        getUsers.mockClear();
+        const stale = await readInactivityAdmin(db, { getUsers }, { view: 'eligible', dryRunId: randomUUID(), accountUids: [uid] }, now);
+        expect(stale.accounts).toEqual([]); expect(getUsers).not.toHaveBeenCalled();
+        await inactivityRef(db, uid).set({ uid, state: 'cancelled' });
+        await db.doc(`userDeletionTombstones/${uid}`).set({ source: 'manual', cleanupStatus: 'pending' });
+        for (const view of ['warned', 'pending-deletion'] as const) {
+            const removed = await readInactivityAdmin(db, { getUsers }, { view, accountUids: [uid] }, now);
+            expect(removed.accounts).toEqual([]); expect(getUsers).not.toHaveBeenCalled();
+        }
+    });
     it('defaults off, dry-runs without account/mail changes, and skips overlapping sweeps', async () => {
         await config().set({}); expect((await runInactivitySweep(ctx)).outcome).toBe('off');
         expect(auth.listUsers).not.toHaveBeenCalled();
@@ -947,7 +997,7 @@ describe.skipIf(!host)('inactive account lifecycle (isolated loopback Firestore)
         await config().update({ leaseToken: 'private-lease-canary' });
         const getUsers = vi.fn().mockResolvedValue({ users: [{ uid, email: 'current@example.invalid' }] });
         const view = await readInactivityAdmin(db, { getUsers }, { view: 'queued' }, now);
-        expect(view.accounts).toEqual([{ uid, email: 'current@example.invalid', authPresent: true, queuedAt: now,
+        expect(view.accounts).toEqual([{ uid, email: 'current@example.invalid', authPresent: true, eventCount: 0, queuedAt: now,
             acceptedAt: null, deleteAfter: null, requestedAt: null, detail: 'Awaiting confirmed warning delivery.' }]);
         for (const privateValue of ['private-lease-canary', episode.generation, episode.emailHash, episode.billingRevision, authUser.email])
             expect(JSON.stringify(view)).not.toContain(privateValue);

@@ -12,11 +12,19 @@ export interface InactivitySettings {
     deletionDailyLimit: number;
     revision: number;
 }
-export interface InactivityAdminRequest { view: InactivityAdminView; afterUid?: string; dryRunId?: string }
+export interface InactivityAdminRequest {
+    view: InactivityAdminView;
+    afterUid?: string;
+    dryRunId?: string;
+    projection?: 'login-order';
+    accountUids?: string[];
+}
+export interface InactivityLoginEntry { uid: string; lastLoginAt: number | null }
 export interface InactivityAdminAccount {
     uid: string;
     email: string | null;
     authPresent: boolean;
+    eventCount: number | null;
     queuedAt: number | null;
     acceptedAt: number | null;
     deleteAfter: number | null;
@@ -39,4 +47,5 @@ export interface InactivityAdminResponse {
         overdue: number; reviewRequired: number; capped: boolean } | null;
     accounts: InactivityAdminAccount[];
     nextUid: string | null;
+    loginOrder?: InactivityLoginEntry[];
 }
