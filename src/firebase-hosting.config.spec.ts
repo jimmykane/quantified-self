@@ -381,7 +381,8 @@ describe('Firebase Hosting configuration', () => {
     // Same-day chart help adds automatic Trail Running Heart Rate and preserves custom selections (2026-11-16).
     // Benchmark help covers device rows, mobile metric accordions, and performance chart availability (2026-11-18).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
+    // Benchmark Help locates combined totals on larger screens (2026-11-19).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -521,7 +522,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
@@ -611,7 +612,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
     // Inactive Free account notice and retention policy (2026-11-13).
