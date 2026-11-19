@@ -13,6 +13,11 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
 import { MapStyleService } from '../../../services/map-style.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 describe('EventCardMapComponent', () => {
   let component: EventCardMapComponent;
@@ -22,10 +27,25 @@ describe('EventCardMapComponent', () => {
   let mockMapStyleService: any;
   let mockSettingsQuery: any;
   let mockActivityCursorService: { cursors: Subject<any[]> };
+  let mockHaptics: { selection: ReturnType<typeof vi.fn> };
 
   const makeStat = (value: string, unit = '') => ({
     getDisplayValue: () => value,
     getDisplayUnit: () => unit,
+  });
+
+  const makeActivity = (id: string, name: string, endLatitude = 40.2) => ({
+    creator: { name },
+    getID: () => id,
+    startDate: new Date(0),
+    hasPositionData: () => true,
+    getSquashedPositionData: () => [
+      { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+      { latitudeDegrees: endLatitude, longitudeDegrees: 22.2 },
+    ],
+    generateTimeStream: vi.fn(() => ({ getData: () => [0, 1] })),
+    getLaps: () => [],
+    getAllEvents: () => [],
   });
 
   beforeEach(async () => {
@@ -82,8 +102,10 @@ describe('EventCardMapComponent', () => {
     mockActivityCursorService = {
       cursors: new Subject<any[]>(),
     };
+    mockHaptics = { selection: vi.fn() };
 
     await TestBed.configureTestingModule({
+      imports: [MatButtonModule, MatIconModule, MatMenuModule, NoopAnimationsModule],
       declarations: [EventCardMapComponent],
       providers: [
         { provide: MapboxLoaderService, useValue: mockMapboxLoader },
@@ -105,6 +127,7 @@ describe('EventCardMapComponent', () => {
         },
         { provide: AppUserService, useValue: { updateUserProperties: vi.fn() } },
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
+        { provide: AppHapticsService, useValue: mockHaptics },
         {
           provide: AppThemeService,
           useValue: {
@@ -153,6 +176,92 @@ describe('EventCardMapComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('uses the in-map menu to toggle only mapped tracks and keeps at least one visible', () => {
+    const activities = [
+      makeActivity('a', 'Coros PACE 4'),
+      makeActivity('b', 'Suunto Run'),
+      makeActivity('c', 'Invalid track', 120),
+    ];
+    const event = { getID: () => 'comparison', getActivities: () => activities };
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', activities);
+    fixture.detectChanges();
+    mockMap.isStyleLoaded = vi.fn().mockReturnValue(true);
+    emitMapEvent('style.load');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const trigger = host.querySelector<HTMLButtonElement>('.mapbox-stage .map-tracks-trigger');
+    expect(trigger?.getAttribute('aria-label')).toBe('Tracks, 2 visible');
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    const render = vi.spyOn((component as any).mapManager, 'renderActivities');
+    const streamReads = activities.map(activity => activity.generateTimeStream.mock.calls.length);
+    const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')];
+
+    trigger.click();
+    fixture.detectChanges();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(items()).toHaveLength(2);
+    const [coros, suunto] = items();
+    expect(suunto.textContent).toContain('Suunto Run');
+    mockMap.isStyleLoaded.mockReturnValue(false);
+    suunto.click();
+    fixture.detectChanges();
+
+    expect(suunto.getAttribute('aria-checked')).toBe('false');
+    expect(coros.disabled).toBe(true);
+    expect(trigger.getAttribute('aria-label')).toBe('Tracks, 1 visible');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(render.mock.lastCall[0].map(track => track.activityId)).toEqual(['a', 'c']);
+    mockMap.isStyleLoaded.mockReturnValue(true);
+    emitMapEvent('style.load');
+    expect(activities.map(activity => activity.generateTimeStream.mock.calls.length)).toEqual(streamReads);
+    expect(component.selectedActivities).toBe(activities);
+    expect(mockSettingsQuery.updateMapSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(2);
+
+    mockActivityCursorService.cursors.next([{ activityID: 'b', time: 1_000, byChart: true }]);
+    expect(mockMap.panTo).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('selectedActivities', [activities[1]]);
+    fixture.detectChanges();
+    expect(host.querySelector('.map-tracks-trigger')).toBeNull();
+    expect(render.mock.lastCall[0].map(track => track.activityId)).toEqual(['b']);
+
+    fixture.componentRef.setInput('selectedActivities', activities);
+    fixture.detectChanges();
+    expect(host.querySelector('.map-tracks-trigger')?.getAttribute('aria-label')).toBe('Tracks, 1 visible');
+    expect(render.mock.lastCall[0].map(track => track.activityId)).toEqual(['a', 'c']);
+
+    fixture.componentRef.setInput('event', { ...event, getID: () => 'another-event' });
+    fixture.detectChanges();
+    expect(host.querySelector('.map-tracks-trigger')?.getAttribute('aria-label')).toBe('Tracks, 2 visible');
+    expect(render.mock.lastCall[0].map(track => track.activityId)).toEqual(['a', 'b', 'c']);
+    expect(mockHaptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the Tracks menu when new GPS data arrives for the same recording IDs', () => {
+    const coros = makeActivity('a', 'Coros PACE 4');
+    const original = [coros, makeActivity('b', 'Suunto Run', 120)];
+    const event = { getID: () => 'comparison', getActivities: () => original };
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', original);
+    fixture.detectChanges();
+    mockMap.isStyleLoaded = vi.fn().mockReturnValue(true);
+    emitMapEvent('style.load');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.map-tracks-trigger')).toBeNull();
+
+    const restored = [coros, makeActivity('b', 'Suunto Run', 41.3)];
+    fixture.componentRef.setInput('event', { ...event, getActivities: () => restored });
+    fixture.componentRef.setInput('selectedActivities', restored);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.map-tracks-trigger')?.getAttribute('aria-label')).toBe('Tracks, 2 visible');
+    expect(component.activitiesMapData[1].positions[1].latitudeDegrees).toBe(41.3);
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
   });
 
   it('leaves style resource removal to Mapbox when destroyed', () => {

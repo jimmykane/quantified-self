@@ -13,7 +13,9 @@ import {
   OnInit,
   SimpleChanges,
   ViewChild,
+  computed,
   effect,
+  inject,
   signal,
   untracked,
 } from '@angular/core';
@@ -61,6 +63,15 @@ import {
 } from './event-card-map.manager';
 import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 import { isStyleReady } from '../../../services/map/mapbox-style-ready.utils';
+import { isValidTrackMapPosition } from '../../../services/map/track-map.manager';
+import { getBenchmarkRRLabels } from '../../../helpers/benchmark-rr.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+
+interface MapTrackOption {
+  id: string;
+  label: string;
+  color: string;
+}
 
 @Component({
   selector: 'app-event-card-map',
@@ -138,6 +149,17 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
+  protected readonly mapTracks = signal<MapTrackOption[]>([]);
+  private readonly hiddenMapTrackIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly visibleMapTracks = computed(() => {
+    const tracks = this.mapTracks();
+    const hidden = this.hiddenMapTrackIds();
+    const visible = tracks.filter(track => !hidden.has(track.id));
+    return visible.length ? visible : tracks.slice(0, 1);
+  });
+  protected readonly visibleMapTrackIds = computed(() => new Set(this.visibleMapTracks().map(track => track.id)));
+  private mapTracksEvent?: string | EventInterface;
+  private readonly haptics = inject(AppHapticsService);
 
   public openedJumpMarkerInfoWindow: DataJumpEvent | undefined;
   public jumpPopupScreenPosition = signal<{ x: number; y: number } | null>(null);
@@ -263,6 +285,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           ...activityMapData,
           strokeColor: this.resolveActivityStrokeColor(activityMapData.activity),
         }));
+        this.updateMapTrackOptions();
         this.renderMapData(false);
       });
     });
@@ -281,8 +304,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.activitiesCursorSubscription.add(this.activityCursorService.cursors.pipe(
       throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
+      const visibleActivities = this.visibleActivitiesMapData;
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
-        const cursorActivityMapData = this.activitiesMapData.find(amd => (amd.activity.getID() || '') === cursor.activityID);
+        const cursorActivityMapData = visibleActivities.find(amd => (amd.activity.getID() || '') === cursor.activityID);
         if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
           const position = cursorActivityMapData.positions.reduce((prev, curr) =>
             Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
@@ -314,11 +338,18 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     await this.initializeMap();
   }
 
-  ngOnChanges(_simpleChanges: SimpleChanges) {
+  ngOnChanges(simpleChanges: SimpleChanges) {
     if (!this.event) return;
 
     const currentSelectedActivitiesIDs = (this.selectedActivities || []).map(a => a.getID()).sort().join(',');
     const currentEventID = this.event?.getID();
+    const mapTracksEvent = currentEventID || this.event;
+    const trackScopeChanged = this.mapTracksEvent !== mapTracksEvent || !!simpleChanges['targetUserID'];
+    if (trackScopeChanged) {
+      this.mapTracksEvent = mapTracksEvent;
+      this.hiddenMapTrackIds.set(new Set());
+      this.mapTracks.set([]);
+    }
     const mapSettings = this.mapViewSettings();
 
     const currentState: any = {
@@ -341,11 +372,58 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       }
     });
 
-    if (Object.keys(changes).length > 0) {
-      const shouldFitBounds = !!changes.selectedActivitiesIDs || !!changes.eventID;
+    const previousSelection = simpleChanges['selectedActivities']?.previousValue as ActivityInterface[] | undefined;
+    const selectionRebound = previousSelection?.some((activity, index) => activity !== this.selectedActivities?.[index]);
+    if (trackScopeChanged || selectionRebound || Object.keys(changes).length > 0) {
+      const shouldFitBounds = trackScopeChanged || !!changes.selectedActivitiesIDs || !!changes.eventID;
       this.previousState = { ...this.previousState, ...currentState };
       this.requestMapActivities(shouldFitBounds, 'ngOnChanges');
+    } else if (simpleChanges['event'] || simpleChanges['selectedActivities']) {
+      this.updateMapTrackOptions();
     }
+  }
+
+  protected onTracksMenuOpened(): void {
+    this.haptics.selection();
+  }
+
+  protected toggleMapTrack(id: string): void {
+    if (!this.mapTracks().some(track => track.id === id)) return;
+    const visible = this.visibleMapTrackIds();
+    if (visible.has(id) && visible.size === 1) return;
+    const hidden = new Set(this.hiddenMapTrackIds());
+    // Keep the temporarily shown track when the user adds another from the menu.
+    visible.forEach(trackId => hidden.delete(trackId));
+    if (visible.has(id)) hidden.add(id);
+    else hidden.delete(id);
+    this.hiddenMapTrackIds.set(hidden);
+    if (this.openedJumpMarkerInfoWindow) this.closeJumpPopup();
+    this.renderPreparedMapData(false);
+    this.haptics.selection();
+  }
+
+  private get visibleActivitiesMapData(): MapData[] {
+    const hidden = this.hiddenMapTrackIds();
+    if (!hidden.size) return this.activitiesMapData;
+    const visible = this.visibleMapTrackIds();
+    return this.activitiesMapData.filter(data => {
+      const id = data.activity.getID();
+      return !hidden.has(id) || visible.has(id);
+    });
+  }
+
+  private updateMapTrackOptions(): void {
+    const activities = this.event.getActivities();
+    const labels = getBenchmarkRRLabels(activities);
+    const labelsById = new Map(activities.map((activity, index) => [activity.getID(), labels[index]]));
+    const options = new Map<string, MapTrackOption>();
+    for (const { activity, positions, strokeColor } of this.activitiesMapData) {
+      const id = activity.getID?.();
+      if (id && positions.length >= 2) {
+        options.set(id, { id, label: labelsById.get(id) ?? activity.creator?.name ?? activity.type, color: strokeColor });
+      }
+    }
+    this.mapTracks.set([...options.values()]);
   }
 
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
@@ -483,7 +561,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         this.zone.run(() => this.openJumpMarkerInfoWindow(jump, latitudeDegrees, longitudeDegrees));
       });
 
-      map.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+      map.addControl(new mapboxgl.FullscreenControl({ container: this.mapDiv.nativeElement.parentElement }), 'bottom-right');
       map.addControl(new mapboxgl.NavigationControl({
         visualizePitch: true,
         showCompass: true,
@@ -601,6 +679,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.jumpHangTimeMax = null;
 
     if (!this.selectedActivities?.length) {
+      this.mapTracks.set([]);
       this.noMapData = true;
       this.mapManager.renderActivities([], {
         showArrows: this.showArrows,
@@ -628,7 +707,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         .getData(true)
         .reduce<PositionWithTime[]>((positionWithTimeArray, time, index) => {
           const pos = positionData[index];
-          if (pos && pos.latitudeDegrees !== undefined && pos.longitudeDegrees !== undefined && time !== null) {
+          if (isValidTrackMapPosition(pos) && time !== null) {
             positionWithTimeArray.push({
               time: activity.startDate.getTime() + time * 1000,
               latitudeDegrees: pos.latitudeDegrees,
@@ -693,6 +772,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
     });
 
+    this.updateMapTrackOptions();
     const hasRenderableMapData = this.activitiesMapData.some((data) => data.positions.length > 0);
     if (!hasRenderableMapData) {
       this.noMapData = true;
@@ -724,7 +804,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private renderMapData(shouldFitBounds: boolean) {
-    const renderStartedAt = this.nowMs();
     const map = this.mapInstance();
     if (!this.mapReady || !map) {
       this.logger.log('[EventCardMapPerf] renderMapData:skipped', {
@@ -742,9 +821,12 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
       return;
     }
+    this.renderPreparedMapData(shouldFitBounds);
+  }
 
-    const tracksBuildStartedAt = this.nowMs();
-    const tracks: EventTrackRenderData[] = this.activitiesMapData.map((activityMapData) => ({
+  private renderPreparedMapData(shouldFitBounds: boolean): void {
+    const renderStartedAt = this.nowMs();
+    const tracks: EventTrackRenderData[] = this.visibleActivitiesMapData.map((activityMapData) => ({
       activityId: activityMapData.activity.getID() || '',
       strokeColor: activityMapData.strokeColor,
       positions: activityMapData.positions,
@@ -760,7 +842,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         markerSize: this.getJumpMarkerSize(jump.event),
       }))
     }));
-    const tracksBuildDuration = this.nowMs() - tracksBuildStartedAt;
+    const tracksBuildDuration = this.nowMs() - renderStartedAt;
 
     const managerRenderStartedAt = this.nowMs();
     this.mapManager.renderActivities(tracks, {
@@ -816,7 +898,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private pushCursorMarkersToMap() {
-    const cursors: EventCursorRenderData[] = this.activitiesMapData
+    const cursors: EventCursorRenderData[] = this.visibleActivitiesMapData
       .map((data) => {
         const activityId = data.activity.getID() || '';
         const cursor = this.activitiesCursors.get(activityId);

@@ -22,19 +22,68 @@ section.placeholder {
   min-height: 45vh;
 }
 
-mat-card.map-legend {
-  border: 0 !important;
-  outline: none !important;
-  padding-top: 0.4em;
-  padding-bottom: 0.4em;
-  padding-left: 0;
-  padding-right: 0;
+.mapbox-stage:fullscreen {
+  height: 100%;
+}
+
+.map-tracks-trigger {
   position: absolute;
-  bottom: 21px;
-  right: 48px;
-  z-index: 2;
-  background: inherit;
-  box-shadow: none;
+  inset-block-start: 10px;
+  inset-inline-start: 10px;
+  z-index: 5;
+  min-height: 44px;
+  padding-inline: 11px;
+  border: 1px solid var(--qs-overlay-surface-border);
+  border-radius: 9px;
+  background: var(--qs-overlay-surface);
+  color: var(--mat-sys-on-surface);
+  box-shadow: var(--mat-sys-level1);
+}
+
+.map-tracks-trigger-content, .map-track-dots, .map-track-item {
+  display: flex;
+  align-items: center;
+}
+
+.map-tracks-trigger-content, .map-track-item {
+  gap: 7px;
+}
+
+.map-tracks-trigger-content mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.map-track-dots {
+  gap: 2px;
+}
+
+.map-track-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.map-tracks-menu-heading {
+  padding: 6px 16px 2px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.map-track-item {
+  min-width: 0;
+}
+
+.map-track-swatch {
+  flex: 0 0 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.map-track-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .jump-popup-anchor {

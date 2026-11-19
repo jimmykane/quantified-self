@@ -2549,6 +2549,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
     expect(gettingStartedSection?.content).toContain('each metric shows one row per selected device');
+    expect(gettingStartedSection?.content).toContain('open **Tracks** in the top-left corner of the map to show or hide individual tracks');
     expect(gettingStartedSection?.content).toContain('**Device stats** starts with the metric rows collapsed');
     expect(gettingStartedSection?.content).toContain('available range in your preferred units');
     expect(gettingStartedSection?.content).toContain('Metrics with Min, Avg, and Max group those ranges in one expandable row per unit');
