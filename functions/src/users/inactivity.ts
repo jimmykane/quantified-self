@@ -56,7 +56,16 @@ function consumeBudget(tx: Transaction, config: DocumentSnapshot, kind: 'warning
     const sameDay = config.get('budgetDay') === day;
     const used = sameDay ? (config.get(kind) ?? 0) : 0;
     if (!Number.isSafeInteger(used) || used < 0) throw new Error('invalid_inactivity_budget');
-    if (used >= limit) return false;
+    if (used >= limit) {
+        // Later continuation batches can replace lastRun even though this day's allowance still blocks work.
+        const revision = config.get('settingsRevision') ?? 0;
+        const mode = config.get('mode');
+        if (config.get('lastDailyLimit.day') !== day || config.get('lastDailyLimit.revision') !== revision
+            || config.get('lastDailyLimit.mode') !== mode) {
+            tx.update(config.ref, { lastDailyLimit: { day, revision, mode } });
+        }
+        return false;
+    }
     tx.update(config.ref, { budgetDay: day, ...(!sameDay ? { warnings: 0, deletions: 0 } : {}), [kind]: used + 1 });
     return true;
 }

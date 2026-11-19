@@ -120,11 +120,17 @@ This residual boundary must be understood before enabling enforcement.
 **Admin → Inactive accounts** opens `/admin/inactive-accounts`, independently of Maintenance. It is admin-guarded,
 client-rendered and noindexed, and links directly from the Admin dashboard. The page provides:
 
-- Off, dry-run, warnings-only and enforce settings, daily limits, current UTC-day reservations and explicit save confirmation.
-  Enforcement confirmation explains that existing elapsed notices may become actionable. Saving does not run a scan.
-- Last scan start/finish, last complete Auth inventory, worker lease state and the most recent active run's bounded counters.
-  The scheduler persists only one aggregate `lastRun` alongside its normal lease release. Failed active runs retain a failed
-  summary; off/contended invocations do not replace it. Cloud Monitoring remains authoritative for missed invocations/timeouts.
+- **Change mode** opens the mode and daily-limit editor at the top. Confirmation shows the saved mode, proposed mode
+  and limits. Enforcement confirmation explains when elapsed notices can become actionable. Saving takes effect on
+  subsequent work. Loading, paging or retrying the account list leaves the editor available.
+- Scan status uses a single consistent read of the control document and the private continuation. An active lease
+  identifies a running batch. A continuation matching the current mode and settings revision is pending. Full scan
+  completion requires a finished Auth inventory. Failures and unfinished scans without a handoff have distinct labels.
+  A denied warning or deletion reservation records its UTC day, mode and settings revision on the control document
+  once per day and configuration. This keeps a confirmed cap visible across batches until midnight or a settings
+  change. Earlier workers supply cap evidence through the last batch's denied reservation count.
+- **Processing details** holds the latest batch counters, scan timestamps and current UTC-day reservations. Cloud
+  Monitoring remains authoritative for missed invocations and timeouts.
 - Every account view shows email, UID, last login and event count in pages of 25. The default order is oldest login first.
   Select **Last login** to reverse the order. Missing login dates stay last in both directions, with UID breaking ties.
   Warning, deadline, cancellation and deletion follow-up views also show the notice or cleanup details. Pending tombstones
@@ -132,8 +138,9 @@ client-rendered and noindexed, and links directly from the Admin dashboard. The 
   Hold counts are observations from the
   last run, not a complete per-account billing investigation or a global candidate inventory.
 
-**Last completed dry run.** On this route, **Review eligible accounts** opens the completed scan's list of
-first-warning candidates in pages of 25. The total counts distinct accounts at scan time. Account cleanup removes
+**Last completed dry run.** Dry-run mode opens the eligible view by default, with the published total and completion
+time above the table. Other modes default to warning delivery. An explicitly selected view survives refresh.
+**Review eligible accounts** opens the same report from other views. The total counts distinct accounts at scan time. Account cleanup removes
 that account's row, and Firebase Auth supplies the current sign-in email when the page is viewed. Warning and deletion
 decisions always run their own eligibility checks.
 

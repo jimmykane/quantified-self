@@ -32,3 +32,10 @@ td.mat-mdc-cell { padding-block: 12px; }
   .limits, .status-grid { grid-template-columns: minmax(0, 1fr); }
   .toolbar { gap: 8px; }
 }
+
+.mode-toolbar { margin-block: 12px; }
+.mode-toolbar strong { margin-inline-start: 4px; }
+.scan-summary { padding-block: 16px; }
+.scan-state, .report-summary, .table-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.scan-state { align-items: baseline; }
+.report-summary, .table-status { margin-block: 12px; }
