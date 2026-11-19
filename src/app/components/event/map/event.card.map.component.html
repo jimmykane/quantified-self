@@ -23,23 +23,40 @@
     [showSkeleton]="true"
     height="60vh">
 
-    @if (event && event.getActivities().length > 1) {
-    <mat-card class="map-legend mat-elevation-z0">
-      @for (activity of event.getActivities(); track activity.getID()) {
-      <app-activity-toggle
-        [activity]="activity"
-        [event]="event"
-        [showToggle]="false"
-        [showStats]="false"
-        [showDate]="false"
-        [selectedActivities]="selectedActivities">
-      </app-activity-toggle>
-      }
-    </mat-card>
-    }
-
     <section class="mapbox-stage">
       <div #mapDiv class="mapbox-map"></div>
+
+      @if (apiLoaded() && mapTracks().length > 1) {
+      @let visibleTracks = visibleMapTracks();
+      <button mat-button type="button" class="map-tracks-trigger" #trackMenuTrigger="matMenuTrigger"
+        [matMenuTriggerFor]="trackMenu" (menuOpened)="onTracksMenuOpened()"
+        [attr.aria-label]="'Tracks, ' + visibleTracks.length + ' visible'">
+        <span class="map-tracks-trigger-content">
+          <span class="map-track-dots" aria-hidden="true">
+            @for (track of visibleTracks.slice(0, 4); track track.id) {
+              <span [style.background-color]="track.color"></span>
+            }
+          </span>
+          <span>Tracks · {{ visibleTracks.length }}</span>
+          <mat-icon aria-hidden="true">{{ trackMenuTrigger.menuOpen ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </span>
+      </button>
+      <mat-menu #trackMenu="matMenu" class="qs-menu-panel" aria-label="Visible tracks">
+        <div class="map-tracks-menu-heading" aria-hidden="true">Visible tracks</div>
+        @for (track of mapTracks(); track track.id) {
+          @let visible = !hiddenMapTrackIds().has(track.id);
+          <button mat-menu-item type="button" role="menuitemcheckbox" [attr.aria-checked]="visible"
+            [disabled]="visible && visibleTracks.length === 1"
+            (click)="$event.stopPropagation(); toggleMapTrack(track.id)">
+            <mat-icon aria-hidden="true">{{ visible ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span class="map-track-item">
+              <span class="map-track-swatch" [style.background-color]="track.color" aria-hidden="true"></span>
+              <span class="map-track-label">{{ track.label }}</span>
+            </span>
+          </button>
+        }
+      </mat-menu>
+      }
 
       @if (openedJumpMarkerInfoWindow && jumpPopupScreenPosition(); as popupPosition) {
       <div #jumpPopupAnchor class="jump-popup-anchor" [style.left.px]="popupPosition.x" [style.top.px]="popupPosition.y">
