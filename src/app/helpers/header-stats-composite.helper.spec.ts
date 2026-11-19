@@ -24,6 +24,9 @@ import {
   DataRunningFlightTimeMin,
   DataSpeedAvg,
   DataSpeedAvgKilometersPerHour,
+  DataSpeedAvgKnots,
+  DataSpeedMaxKnots,
+  DataSpeedMinKnots,
   DataStaminaAvg,
   DataStaminaMax,
   DataStaminaMin,
@@ -104,6 +107,13 @@ describe('header-stats-composite.helper', () => {
     expect(expanded).toContain('Average Ground Contact Time');
     expect(expanded).toContain('Minimum Ground Contact Time');
     expect(expanded).toContain('Maximum Ground Contact Time');
+  });
+
+  it('uses the registered minimum speed type to find the knots family', () => {
+    expect(resolveMetricFamilyTypes(DataSpeedMinKnots.type)).toBe(resolveMetricFamilyTypes(DataSpeedAvgKnots.type));
+    expect(expandStatsTypesForCompositeDiff([DataSpeedMinKnots.type])).toEqual([
+      DataSpeedMinKnots.type, DataSpeedAvgKnots.type, DataSpeedMaxKnots.type,
+    ]);
   });
 
   it('should build composite cards for Sports Lib 20.4 running-dynamics families', () => {

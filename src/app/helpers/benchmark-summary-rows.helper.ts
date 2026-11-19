@@ -9,6 +9,7 @@ import {
 import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 import { RR_STAT_LABELS } from '../constants/rr-metrics';
 import { getBenchmarkRRLabels } from './benchmark-rr.helper';
+import { resolveMetricFamilyTypes } from './header-stats-composite.helper';
 import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { resolvePrimaryUnitAwareDisplayStat, resolveSummaryDisplayStat } from './summary-display.helper';
 
@@ -20,31 +21,17 @@ export interface BenchmarkSummarySource {
   stats: Map<string, DataInterface>;
 }
 
-interface BenchmarkMetricFamily {
-  type: string;
-  avgType: string;
-  columns: { type: string; label: string }[];
-}
-
-const metricFamilies = new Map<string, BenchmarkMetricFamily>();
-for (const [type, avgType] of Object.entries(DynamicDataLoader.dataTypeAvgDataType)) {
-  const minType = DynamicDataLoader.dataTypeMinDataType[type];
-  const maxType = DynamicDataLoader.dataTypeMaxDataType[type];
-  if (!minType || !maxType) continue;
-  const family = { type, avgType, columns: [
-    { type: minType, label: 'Min' },
-    { type: avgType, label: 'Avg' },
-    { type: maxType, label: 'Max' },
-  ] };
-  metricFamilies.set(type, family);
-  for (const column of family.columns) metricFamilies.set(column.type, family);
+function resolveBenchmarkMetricFamily(type: string) {
+  const family = resolveMetricFamilyTypes(type);
+  if (!family?.avgType || !family.minType || !family.maxType) return null;
+  return [family.familyType, family.avgType, family.minType, family.maxType].includes(type) ? family : null;
 }
 
 export function getBenchmarkComparisonMetricTypes(type: string): string[] {
-  const family = metricFamilies.get(type);
+  const family = resolveBenchmarkMetricFamily(type);
   if (!family) return [type];
   // Preserve independently saved values for the unqualified stat, for example Power.
-  return type === family.type ? [type, family.avgType] : [family.avgType];
+  return type === family.familyType ? [type, family.avgType] : [family.avgType];
 }
 
 export function getBenchmarkSummarySources(all: ActivityInterface[], selected: ActivityInterface[], types: string[],
@@ -227,29 +214,34 @@ export function buildBenchmarkSummaryCards(sources: BenchmarkSummarySource[], re
 export function buildBenchmarkSummaryPanels(sources: BenchmarkSummarySource[], referenceKey: string, units: UserUnitSettingsInterface) {
   const cards = buildBenchmarkSummaryCards(sources, referenceKey, units);
   const panels = new Map<string, (BenchmarkSummaryCard | BenchmarkFamilyComparison)[]>(cards);
-  const families = new Set([...cards.keys()].map(type => metricFamilies.get(type)).filter(Boolean));
+  const families = new Set([...cards.keys()].map(resolveBenchmarkMetricFamily).filter(Boolean));
   const manufacturer = getCommonMetricManufacturer(sources.map(source => source.activity));
-  for (const family of families) {
-    const variants = new Set(family.columns.flatMap(({ type }) => cards.get(type)?.map(getFamilyVariant) ?? []));
+  for (const { familyType, minType, avgType, maxType } of families) {
+    const columns = [
+      { type: minType, label: 'Min' },
+      { type: avgType, label: 'Avg' },
+      { type: maxType, label: 'Max' },
+    ];
+    const variants = new Set(columns.flatMap(({ type }) => cards.get(type)?.map(getFamilyVariant) ?? []));
     if (!variants.size) continue;
-    for (const { type } of family.columns) panels.delete(type);
-    const label = normalizeUnitDerivedTypeLabel(family.type, family.type, { manufacturer, surface: 'stream' });
-    panels.set(family.avgType, [...variants].map(variant => buildFamilyComparison(family, label, variant, cards, sources, referenceKey)));
-    const base = panels.get(family.type);
+    for (const { type } of columns) panels.delete(type);
+    const label = normalizeUnitDerivedTypeLabel(familyType, familyType, { manufacturer, surface: 'stream' });
+    panels.set(avgType, [...variants].map(variant => buildFamilyComparison(columns, label, variant, cards, sources, referenceKey)));
+    const base = panels.get(familyType);
     if (base) {
-      panels.set(family.type, base.map(card => ({ ...card, label: `${card.label} (recorded value)` })));
+      panels.set(familyType, base.map(card => ({ ...card, label: `${card.label} (recorded value)` })));
     }
   }
   return panels;
 }
 
 function getFamilyVariant(card: BenchmarkSummaryCard): string {
-  return metricFamilies.get(card.type)?.type ?? card.type;
+  return resolveBenchmarkMetricFamily(card.type)?.familyType ?? card.type;
 }
 
-function buildFamilyComparison(family: BenchmarkMetricFamily, label: string, variant: string,
+function buildFamilyComparison(familyColumns: { type: string; label: string }[], label: string, variant: string,
   cards: ReadonlyMap<string, BenchmarkSummaryCard[]>, sources: BenchmarkSummarySource[], referenceKey: string): BenchmarkFamilyComparison {
-  const columns = family.columns.map(column => ({
+  const columns = familyColumns.map(column => ({
     ...column,
     card: cards.get(column.type)?.find(card => getFamilyVariant(card) === variant),
   }));

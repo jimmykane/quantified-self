@@ -22,25 +22,36 @@ export interface HeaderStatCard {
 }
 
 interface MetricFamilyTypes {
-  familyType: string;
-  avgType?: string;
-  minType?: string;
-  maxType?: string;
+  readonly familyType: string;
+  readonly avgType?: string;
+  readonly minType?: string;
+  readonly maxType?: string;
 }
 
 const STAT_KIND_PREFIX_REGEX = /^(average|minimum|maximum)\s+/i;
-const DATA_TYPE_KEYS = [
+const FAMILY_TYPES = new Set([
   ...Object.keys(DynamicDataLoader.dataTypeAvgDataType || {}),
   ...Object.keys(DynamicDataLoader.dataTypeMinDataType || {}),
   ...Object.keys(DynamicDataLoader.dataTypeMaxDataType || {}),
-];
-const DATA_TYPE_KEY_TO_CANONICAL = DATA_TYPE_KEYS.reduce((acc, key) => {
-  const normalized = key.trim().toLowerCase();
-  if (normalized.length && !acc.has(normalized)) {
-    acc.set(normalized, key);
+]);
+const metricFamiliesByName = new Map<string, MetricFamilyTypes>();
+for (const familyType of FAMILY_TYPES) {
+  const key = familyType.trim().toLowerCase();
+  if (!key || metricFamiliesByName.has(key)) continue;
+  const avgType = DynamicDataLoader.dataTypeAvgDataType[familyType];
+  const minType = DynamicDataLoader.dataTypeMinDataType[familyType];
+  const maxType = DynamicDataLoader.dataTypeMaxDataType[familyType];
+  if (avgType || minType || maxType) {
+    metricFamiliesByName.set(key, Object.freeze({ familyType, avgType, minType, maxType }));
   }
-  return acc;
-}, new Map<string, string>());
+}
+// Resolve registered member names before trying their unqualified names.
+for (const family of [...metricFamiliesByName.values()]) {
+  for (const type of [family.avgType, family.minType, family.maxType]) {
+    const key = type?.trim().toLowerCase();
+    if (key && !metricFamiliesByName.has(key)) metricFamiliesByName.set(key, family);
+  }
+}
 
 const toDisplayText = (value: unknown): string => {
   if (value === null || value === undefined) {
@@ -78,25 +89,9 @@ export const resolveMetricFamilyTypes = (statType: string): MetricFamilyTypes | 
   if (!statType) {
     return null;
   }
-  const normalizedKey = normalizeFamilyKey(statType);
-  const canonicalFamilyType = DATA_TYPE_KEY_TO_CANONICAL.get(normalizedKey);
-  if (!canonicalFamilyType) {
-    return null;
-  }
-
-  const avgType = DynamicDataLoader.dataTypeAvgDataType[canonicalFamilyType];
-  const minType = DynamicDataLoader.dataTypeMinDataType[canonicalFamilyType];
-  const maxType = DynamicDataLoader.dataTypeMaxDataType[canonicalFamilyType];
-  if (!avgType && !minType && !maxType) {
-    return null;
-  }
-
-  return {
-    familyType: canonicalFamilyType,
-    avgType,
-    minType,
-    maxType,
-  };
+  return metricFamiliesByName.get(statType.trim().toLowerCase())
+    ?? metricFamiliesByName.get(normalizeFamilyKey(statType))
+    ?? null;
 };
 
 const createValueItem = (
