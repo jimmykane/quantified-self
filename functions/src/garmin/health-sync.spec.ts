@@ -137,6 +137,25 @@ describe('Garmin Health callback synchronization', () => {
     hoisted.mapGarminHealthSummaries.mockReturnValue([]);
   });
 
+  it('preserves the original refresh failure and classifies its safe SDK code before any provider data request', async () => {
+    const error = Object.assign(new Error('private-token/private-health'), {
+      name: 'FirebaseError', code: 'unavailable', response: { body: 'private-provider-body' },
+    });
+    hoisted.getTokenData.mockRejectedValueOnce(error);
+    const onStage = vi.fn();
+    await expect(processGarminHealthQueueItem(
+      queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards(), undefined, onStage,
+    )).rejects.toBe(error);
+    expect(onStage.mock.calls.map(([stage]) => stage)).toEqual(['token_refresh']);
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.mapGarminHealthSummaries).not.toHaveBeenCalled();
+    expect(getGarminHealthFailureTelemetry(error, 'token_refresh', 42)).toEqual({
+      errorName: 'FirebaseError', errorCode: 'garmin_health_processing_failed',
+      failureCategory: 'rpc_error', rpcStatusCode: 14, failureStage: 'token_refresh', processingElapsedMs: 42,
+    });
+  });
+
   it('bounds the authenticated callback and uses upload end as the revision order', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-29T06:00:00.000Z'));

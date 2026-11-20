@@ -17,9 +17,51 @@ describe('Health failure diagnostics', () => {
       .toMatchObject({ failureCategory: 'transport_error', transportCode: code });
   });
 
+  it.each([
+    ['FirebaseError', 'unavailable', 14],
+    ['GoogleError', 'DEADLINE_EXCEEDED', 4],
+    ['ApiError', 'aborted', 10],
+  ])('recognizes %s RPC failures without copying exception data', (name, code, rpcStatusCode) => {
+    const error = Object.assign(new Error('private-token/private-path'), {
+      name, code, details: 'private-health', response: { body: 'private-body' },
+      cause: new Error('private-cause'),
+    });
+    expect(getHealthFailureTelemetry(error, 'token_refresh', 42)).toEqual({
+      errorName: name, failureCategory: 'rpc_error', rpcStatusCode,
+      failureStage: 'token_refresh', processingElapsedMs: 42,
+    });
+  });
+
+  it.each(['TokenRefreshInProgressError', 'TokenRefreshSupersededError'])(
+    'distinguishes %s from an upstream HTTP 503', name => {
+      const error = Object.assign(new Error('private-token-document'), { name, code: 'unavailable', statusCode: 503 });
+      expect(getHealthFailureTelemetry(error, 'token_refresh', 42)).toEqual({
+        errorName: name, failureCategory: 'expected_contention',
+        failureStage: 'token_refresh', processingElapsedMs: 42,
+      });
+    },
+  );
+
+  it('retains an allowlisted nested transport code without copying the cause', () => {
+    const error = Object.assign(new Error('private-path'), {
+      name: 'FetchError', cause: { code: 'ECONNRESET', message: 'private-token', response: 'private-body' },
+    });
+    expect(getHealthFailureTelemetry(error, 'token_refresh', 42)).toEqual({
+      errorName: 'FetchError', failureCategory: 'transport_error', transportCode: 'ECONNRESET',
+      failureStage: 'token_refresh', processingElapsedMs: 42,
+    });
+    error.cause.code = 'private-code';
+    expect(getHealthFailureTelemetry(error, 'token_refresh', 42)).toEqual({
+      errorName: 'FetchError', failureCategory: 'unclassified', failureStage: 'token_refresh', processingElapsedMs: 42,
+    });
+  });
+
   it.each([null, { name: 'private-name', code: 'private-code', transportCode: 'private-code' },
     { get name() { throw new Error('private-getter'); } },
-    { get code() { throw new Error('private-getter'); } }])('fails closed for unknown or hostile errors (%#)', error => {
+    { get code() { throw new Error('private-getter'); } },
+    { get cause() { throw new Error('private-getter'); } },
+    { cause: { get code() { throw new Error('private-getter'); } } },
+  ])('fails closed for unknown or hostile errors (%#)', error => {
     expect(getHealthFailureTelemetry(error, 'private-stage', Infinity)).toEqual({
       errorName: 'UnknownError', failureCategory: 'unclassified', failureStage: 'unknown', processingElapsedMs: 0,
     });
