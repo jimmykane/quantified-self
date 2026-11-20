@@ -392,23 +392,25 @@ describe('ToolsComparePageComponent', () => {
   it('renders the public compare tool and guest sign-in state', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Compare GPX and FIT files');
+    expect(text).toContain('Compare GPX files online');
+    expect(text).toContain('Overlay GPS tracks on one map');
     expect(text).toContain('Sign in to compare files');
     expect(text).toContain('File comparison is available on Starter');
     expect(text).toContain('Uploads and new comparisons use your activity allowance');
-    expect(text).toContain('Compare GPX tracks from the same workout');
+    expect(text).toContain('How to compare two GPX files');
     expect(text).toContain('timestamped recordings with overlapping times');
-    expect(text).toContain('FIT, TCX, JSON and SML recordings are supported too');
+    expect(text).toContain('You can also compare GPX with FIT, TCX, JSON or SML activity files');
     expect(text).toContain('Choose two or more recordings');
-    expect(text).toContain('Review tracks and recorded differences');
-    expect(text).toContain('measurements available in both recordings');
+    expect(text).toContain('See where the tracks diverge');
+    expect(text).toContain('when both files contain those measurements');
     expect(text).toContain('Save comparisons for later review');
     expect(text).not.toContain('New comparison');
     expect(text).not.toContain('Saved comparisons');
     expect(text).not.toContain('Select Files');
     expect(text).not.toContain('No files selected');
     expect(text).not.toContain('Sign in to view saved comparisons.');
-    expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[href="/features/workout-data-comparison"]')?.textContent)
+      .toContain('Comparison overview and sample');
     expect(component.guestSignInRedirectUrl).toBe('/tools/compare');
     expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
   });

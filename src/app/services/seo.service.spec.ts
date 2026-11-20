@@ -113,8 +113,8 @@ describe('SeoService', () => {
     it.each([
         {
             path: '/tools/compare',
-            title: 'Compare GPX & FIT Files',
-            description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
+            title: 'Compare GPX Files Online | FIT & TCX',
+            description: 'Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.',
         },
         {
             path: '/pricing',

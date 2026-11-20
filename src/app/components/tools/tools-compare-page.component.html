@@ -11,9 +11,9 @@
   } @else if (showGuestExperience()) {
   <section class="hero-section" aria-labelledby="tools-compare-title">
     <p class="eyebrow">Tools / Compare</p>
-    <h1 id="tools-compare-title">Compare GPX and FIT files</h1>
+    <h1 id="tools-compare-title">Compare GPX files online</h1>
     <p class="hero-copy">
-      Compare two or more recordings of the same workout to review GPS tracks and recorded measurements. Save the comparison to your account for later review.
+      Overlay GPS tracks on one map and compare distance, elevation and other recorded data. Use two or more files from the same run, ride or workout to see where your devices disagree.
     </p>
   </section>
 
@@ -29,7 +29,7 @@
 
       <mat-card-content>
         <p class="guest-auth-copy">
-          Sign in to upload your recordings and save a comparison. Uploads and new comparisons use your activity allowance.
+          Create a free account or sign in to upload your recordings. Uploads and new comparisons use your activity allowance.
         </p>
         <div class="guest-auth-actions">
           <button mat-flat-button class="qs-mat-primary" type="button" (click)="signIn(guestSignInRedirectUrl, 'guest_cta')">
@@ -43,10 +43,9 @@
 
   <section class="guest-workflow-panel" aria-labelledby="tools-compare-workflow-title">
     <div class="section-heading">
-      <p class="eyebrow">Benchmark workflow</p>
-      <h2 id="tools-compare-workflow-title">Compare GPX tracks from the same workout</h2>
+      <h2 id="tools-compare-workflow-title">How to compare two GPX files</h2>
       <p class="section-copy">
-        For benchmark reports, use timestamped recordings with overlapping times. FIT, TCX, JSON and SML recordings are supported too.
+        Try two devices that recorded the same workout. You can also compare GPX with FIT, TCX, JSON or SML activity files.
       </p>
     </div>
 
@@ -59,7 +58,7 @@
           <mat-card-title>Choose two or more recordings</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>For example, compare GPX recordings from two devices used on the same ride or run. You can also compare GPX with supported FIT, TCX, JSON or SML recordings.</p>
+          <p>Export an activity file from each device, then select both files in Compare. For a benchmark report, use timestamped recordings with overlapping times.</p>
         </mat-card-content>
       </mat-card>
 
@@ -68,10 +67,10 @@
           <div mat-card-avatar class="tool-avatar">
             <mat-icon>query_stats</mat-icon>
           </div>
-          <mat-card-title>Review tracks and recorded differences</mat-card-title>
+          <mat-card-title>See where the tracks diverge</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Review GPS tracks and compare measurements available in both recordings. Heart-rate and altitude comparisons depend on the data the files contain.</p>
+          <p>Look for GPS drift around a sharp turn or under trees. Check how it affects recorded distance, and compare elevation or heart rate when both files contain those measurements.</p>
         </mat-card-content>
       </mat-card>
 
@@ -88,9 +87,9 @@
       </mat-card>
     </div>
 
-    <div class="guest-workflow-links" aria-label="Related comparison page">
+    <div class="guest-workflow-links">
       <a mat-stroked-button routerLink="/features/workout-data-comparison">
-        Workout comparison overview
+        Comparison overview and sample
       </a>
     </div>
   </section>

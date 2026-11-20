@@ -88,7 +88,8 @@ describe('WorkoutDataComparisonPageComponent', () => {
 
     const primaryLinks = links.filter(link => link.hasAttribute('mat-flat-button'));
     expect(primaryLinks.map(link => link.getAttribute('href'))).toEqual(['/tools/compare', '/tools/compare']);
-    for (const link of primaryLinks) expect(link.textContent).toContain('Compare recordings');
+    expect(primaryLinks[0].textContent).toContain('Compare GPX or FIT files');
+    expect(primaryLinks[1].textContent).toContain('Compare recordings');
     expect(hrefs).not.toContain('/login');
     expect(hrefs).toContain('/integrations');
     expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');

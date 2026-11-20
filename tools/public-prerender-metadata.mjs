@@ -26,20 +26,21 @@ export const TRAINING_PLANS_PRERENDER_METADATA = {
 };
 
 export const TOOLS_COMPARE_PRERENDER_METADATA = {
-  title: 'Compare GPX & FIT Files',
-  description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
-  h1: 'Compare GPX and FIT files',
+  title: 'Compare GPX Files Online | FIT & TCX',
+  description: 'Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.',
+  h1: 'Compare GPX files online',
   visibleCopy: [
-    'Compare two or more recordings of the same workout to review GPS tracks and recorded measurements. Save the comparison to your account for later review.',
+    'Overlay GPS tracks on one map and compare distance, elevation and other recorded data. Use two or more files from the same run, ride or workout to see where your devices disagree.',
     'File comparison is available on Starter',
-    'Sign in to upload your recordings and save a comparison. Uploads and new comparisons use your activity allowance.',
-    'Compare GPX tracks from the same workout',
-    'For benchmark reports, use timestamped recordings with overlapping times. FIT, TCX, JSON and SML recordings are supported too.',
+    'Create a free account or sign in to upload your recordings. Uploads and new comparisons use your activity allowance.',
+    'How to compare two GPX files',
+    'Try two devices that recorded the same workout. You can also compare GPX with FIT, TCX, JSON or SML activity files.',
     'Choose two or more recordings',
-    'For example, compare GPX recordings from two devices used on the same ride or run. You can also compare GPX with supported FIT, TCX, JSON or SML recordings.',
-    'Review tracks and recorded differences',
-    'Review GPS tracks and compare measurements available in both recordings. Heart-rate and altitude comparisons depend on the data the files contain.',
+    'Export an activity file from each device, then select both files in Compare. For a benchmark report, use timestamped recordings with overlapping times.',
+    'See where the tracks diverge',
+    'Look for GPS drift around a sharp turn or under trees. Check how it affects recorded distance, and compare elevation or heart rate when both files contain those measurements.',
     'Save comparisons for later review',
     'Reopen saved comparisons and benchmark reports, add review notes and keep consistent device colors.',
+    'Comparison overview and sample',
   ],
 };

@@ -31,7 +31,7 @@ describe('ToolsHubPageComponent', () => {
     expect(text).toContain('Workout data tools');
     expect(text).toContain('File comparison');
     expect(text).not.toMatch(/\bprivate\b/i);
-    expect(compareLink).toBeTruthy();
+    expect(compareLink?.textContent).toContain('Compare GPX or FIT files');
 
     const cards = [...fixture.nativeElement.querySelectorAll('mat-card')] as HTMLElement[];
     const analysis = cards.find(card => card.textContent!.includes('File analysis'))!;

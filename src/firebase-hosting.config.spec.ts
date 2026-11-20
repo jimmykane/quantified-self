@@ -488,7 +488,7 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('records the GPX comparison copy update in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-04');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools/compare`)).toBe('2026-11-20');
   });
 
   it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
@@ -527,7 +527,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-20');
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     // The hero preview now names the charts: Training load and recovery (2026-11-10).
@@ -547,8 +547,8 @@ describe('Firebase Hosting configuration', () => {
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
-    // Both overview CTAs now open the comparison tool directly.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-11');
+    // The overview links directly to the GPX and FIT comparison tool.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-12');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.

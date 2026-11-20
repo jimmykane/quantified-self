@@ -318,17 +318,17 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'Compare GPX & FIT Files',
+      title: 'Compare GPX Files Online | FIT & TCX',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
+      description: 'Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',
         name: 'GPX & FIT File Comparison Tool',
         applicationCategory: 'HealthApplication',
         operatingSystem: 'Web',
-        description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
+        description: 'Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.',
         url: 'https://quantified-self.io/tools/compare',
         inLanguage: 'en',
         featureList: [
