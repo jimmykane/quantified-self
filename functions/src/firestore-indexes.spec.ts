@@ -371,9 +371,14 @@ describe('firestore indexes', () => {
             'status', 'updatedAt', 'processingEntity', 'serviceName', 'serviceUserID',
             'serviceUserName', 'serviceWorkoutID', 'serviceActivityFileID',
         ]) {
-            expect(fieldOverrides).not.toContainEqual(expect.objectContaining({
-                collectionGroup: 'metaData', fieldPath, indexes: [],
-            }));
+            const override = fieldOverrides.find(field => field.collectionGroup === 'metaData' && field.fieldPath === fieldPath);
+            // Without an explicit index list these fields inherit the collection defaults.
+            if (override?.indexes !== undefined) {
+                expect(override.indexes, `metaData.${fieldPath}`).toEqual(expect.arrayContaining([
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                ]));
+            }
         }
         expect(indexes).toContainEqual(expect.objectContaining({
             collectionGroup: 'metaData', queryScope: 'COLLECTION_GROUP',
