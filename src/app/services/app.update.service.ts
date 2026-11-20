@@ -84,6 +84,12 @@ export class AppUpdateService {
       });
 
     updates.unrecoverable.subscribe(event => {
+      // Angular broadcasts a missing hashed resource to every client on that version.
+      // Only the tab importing an obsolete feature needs its normal chunk-load recovery.
+      if (event.reason.includes('(AssetGroup: feature-js |')) {
+        if (!this.isUpdateAvailable()) this.checkForUpdates(updates);
+        return;
+      }
       this.logger.error(
         `An error occurred that we cannot recover from:\n${event.reason}\n\n` +
         'Please reload the page.'

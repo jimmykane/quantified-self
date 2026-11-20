@@ -181,7 +181,8 @@ Angular config keeps the conservative prefetch policy when the release preparati
 An online visit can load a route before the first service worker takes control, including when another tab installs
 the worker. The app passes previously loaded same-origin chunks to the worker so they are available offline. Within an installed version, a previously
 unused feature needs one online load. If a release changes a feature's URL, that version also needs one online load
-of the new code. Existing clients stay on their assigned version until reload or activation. These rules cover
+of the new code. An old tab requesting a removed feature can recover through the existing reload flow. Other tabs on
+that release keep their current page and can accept the update prompt when ready. These rules cover
 JavaScript availability. Route navigation and account data have their own offline behavior.
 
 ## Font and icon caching across releases
