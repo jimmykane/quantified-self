@@ -145,7 +145,7 @@ describe('SeoService', () => {
         mockRouter.url = '/features/activity-map';
         service.init();
         routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
-        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('My Tracks: GPS Activity Map & Trip Detection - Quantified Self');
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('GPS Activity Map & Trip Detection - Quantified Self');
         for (const name of ['description', 'twitter:description']) {
             expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name, content: data.description });
         }

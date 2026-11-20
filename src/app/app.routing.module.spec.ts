@@ -573,9 +573,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityMap,
-        title: 'My Tracks: GPS Activity Map & Trip Detection',
-        h1: 'My Tracks: activities, trips and destinations on one map',
-        descriptionText: 'Map GPS workouts, filter by sport or date',
+        title: 'GPS Activity Map & Trip Detection',
+        h1: 'See all your runs, rides and hikes on one map',
+        descriptionText: 'Explore your GPS workouts on one activity map',
       },
       {
         path: PUBLIC_FEATURE_PATHS.health,

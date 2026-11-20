@@ -404,6 +404,8 @@ describe('ToolsComparePageComponent', () => {
     expect(text).toContain('See where the tracks diverge');
     expect(text).toContain('when both files contain those measurements');
     expect(text).toContain('Save comparisons for later review');
+    expect(text).toContain('Compare two FIT files from the same ride');
+    expect(text).toContain('If both recorded power, overlay the traces to see whether they agree on a climb');
     expect(text).not.toContain('New comparison');
     expect(text).not.toContain('Saved comparisons');
     expect(text).not.toContain('Select Files');

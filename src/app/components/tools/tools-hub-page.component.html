@@ -40,6 +40,9 @@
           <a mat-stroked-button [routerLink]="tool.route" (click)="logToolCardEntry(tool.route)">
             {{ tool.actionLabel }}
           </a>
+          @if (tool.guide; as guide) {
+            <a mat-button [routerLink]="guide.route">{{ guide.label }}</a>
+          }
         </mat-card-actions>
       </mat-card>
       }

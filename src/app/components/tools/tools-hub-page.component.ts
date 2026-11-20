@@ -13,6 +13,7 @@ interface ToolCard {
   route: string;
   status: 'Available' | 'Available in your account';
   actionLabel: string;
+  guide?: { label: string; route: string };
 }
 
 @Component({
@@ -43,6 +44,7 @@ export class ToolsHubPageComponent {
       route: '/dashboard',
       status: 'Available in your account',
       actionLabel: 'Open Dashboard',
+      guide: { label: 'Analyze FIT, GPX or TCX files', route: '/features/fit-gpx-tcx-file-analyzer' },
     },
     {
       title: 'Device benchmarks',
@@ -51,6 +53,7 @@ export class ToolsHubPageComponent {
       route: '/tools/compare/saved',
       status: 'Available in your account',
       actionLabel: 'Open Saved Comparisons',
+      guide: { label: 'Device comparison guide', route: '/features/workout-data-comparison' },
     },
   ];
 

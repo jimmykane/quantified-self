@@ -12,9 +12,9 @@ export const RELEASES_PRERENDER_METADATA = {
 };
 
 export const ACTIVITY_MAP_PRERENDER_METADATA = {
-  title: 'My Tracks: GPS Activity Map & Trip Detection',
-  description: 'Map GPS workouts, filter by sport or date, and group activity history into trips with My Tracks. Included with Starter; provider imports and sync require Pro.',
-  h1: 'My Tracks: activities, trips and destinations on one map',
+  title: 'GPS Activity Map & Trip Detection',
+  description: 'Explore your GPS workouts on one activity map. Filter by sport or date, follow the route of a single workout, or see where you trained on a trip.',
+  h1: 'See all your runs, rides and hikes on one map',
   accessNote: 'My Tracks is included with Starter, Basic and Pro. Activity limits apply. Automatic provider imports and sync require Pro.',
   freeOfferDescription: 'My Tracks mapping is included with Starter, Basic and Pro; activity limits apply. Automatic provider imports and sync require Pro.',
 };
@@ -41,6 +41,8 @@ export const TOOLS_COMPARE_PRERENDER_METADATA = {
     'Look for GPS drift around a sharp turn or under trees. Check how it affects recorded distance, and compare elevation or heart rate when both files contain those measurements.',
     'Save comparisons for later review',
     'Reopen saved comparisons and benchmark reports, add review notes and keep consistent device colors.',
+    'Compare two FIT files from the same ride',
+    'Export the ride from your watch and bike computer as FIT files. If both recorded power, overlay the traces to see whether they agree on a climb. You can check heart rate or cadence the same way.',
     'Comparison overview and sample',
   ],
 };
