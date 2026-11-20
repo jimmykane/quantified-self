@@ -348,10 +348,11 @@ describe('firestore indexes', () => {
         });
     });
 
-    it('exempts activity payloads and internal metadata fields individually', () => {
+    it('exempts event and activity payloads and internal metadata fields individually', () => {
         const { fieldOverrides } = loadFirestoreIndexes();
         const exemptions = {
-            activities: ['creator', 'laps', 'powerCurve'],
+            events: ['originalFile', 'originalFiles', 'powerCurve'],
+            activities: ['creator', 'events', 'intensityZones', 'laps', 'powerCurve', 'swimLengths'],
             metaData: [
                 'checkedAt', 'completedAt', 'loadRevision', 'parentFingerprint', 'processedAt', 'revision',
                 'sourceDigest', 'sourceRevision', 'sourceWriteId', 'sourceWritePending', 'targetSportsLibVersion', 'version',
@@ -365,21 +366,29 @@ describe('firestore indexes', () => {
         }
     });
 
-    it('preserves metadata lookups used by support and reparse', () => {
-        const { fieldOverrides, indexes } = loadFirestoreIndexes();
-        for (const fieldPath of [
+    it.each([
+        { collectionGroup: 'events', fieldPaths: ['startDate'] },
+        { collectionGroup: 'activities', fieldPaths: ['eventID', 'eventStartDate', 'type'] },
+        { collectionGroup: 'metaData', fieldPaths: [
             'status', 'updatedAt', 'processingEntity', 'serviceName', 'serviceUserID',
             'serviceUserName', 'serviceWorkoutID', 'serviceActivityFileID',
-        ]) {
-            const override = fieldOverrides.find(field => field.collectionGroup === 'metaData' && field.fieldPath === fieldPath);
+        ] },
+    ])('preserves collection-scoped lookups on $collectionGroup', ({ collectionGroup, fieldPaths }) => {
+        const { fieldOverrides } = loadFirestoreIndexes();
+        for (const fieldPath of fieldPaths) {
+            const override = fieldOverrides.find(field => field.collectionGroup === collectionGroup && field.fieldPath === fieldPath);
             // Without an explicit index list these fields inherit the collection defaults.
             if (override?.indexes !== undefined) {
-                expect(override.indexes, `metaData.${fieldPath}`).toEqual(expect.arrayContaining([
+                expect(override.indexes, `${collectionGroup}.${fieldPath}`).toEqual(expect.arrayContaining([
                     { order: 'ASCENDING', queryScope: 'COLLECTION' },
                     { order: 'DESCENDING', queryScope: 'COLLECTION' },
                 ]));
             }
         }
+    });
+
+    it('preserves collection-group metadata lookups used by reparse', () => {
+        const { fieldOverrides, indexes } = loadFirestoreIndexes();
         expect(indexes).toContainEqual(expect.objectContaining({
             collectionGroup: 'metaData', queryScope: 'COLLECTION_GROUP',
             fields: [
