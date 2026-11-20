@@ -20,7 +20,7 @@ export class GlobalErrorHandler implements ErrorHandler {
                 // Persist the guard before navigating. Without usable session storage,
                 // leave recovery to the user instead of risking a reload loop.
                 const storage = this.windowService.windowRef.sessionStorage;
-                if (storage && storage.getItem(this.chunkReloadGuardKey) !== '1') {
+                if (this.windowService.windowRef.navigator?.onLine !== false && storage && storage.getItem(this.chunkReloadGuardKey) !== '1') {
                     storage.setItem(this.chunkReloadGuardKey, '1');
                     this.windowService.windowRef.location.reload();
                 }
