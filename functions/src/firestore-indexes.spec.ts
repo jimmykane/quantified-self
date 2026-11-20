@@ -348,6 +348,47 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('exempts activity payloads and internal metadata fields individually', () => {
+        const { fieldOverrides } = loadFirestoreIndexes();
+        const exemptions = {
+            activities: ['creator', 'laps', 'powerCurve'],
+            metaData: [
+                'checkedAt', 'completedAt', 'loadRevision', 'parentFingerprint', 'processedAt', 'revision',
+                'sourceDigest', 'sourceRevision', 'sourceWriteId', 'sourceWritePending', 'targetSportsLibVersion', 'version',
+            ],
+        };
+        for (const [collectionGroup, fieldPaths] of Object.entries(exemptions)) {
+            expect(fieldOverrides).not.toContainEqual(expect.objectContaining({ collectionGroup, fieldPath: '*' }));
+            for (const fieldPath of fieldPaths) {
+                expect(fieldOverrides).toContainEqual({ collectionGroup, fieldPath, indexes: [] });
+            }
+        }
+    });
+
+    it('preserves metadata lookups used by support and reparse', () => {
+        const { fieldOverrides, indexes } = loadFirestoreIndexes();
+        for (const fieldPath of [
+            'status', 'updatedAt', 'processingEntity', 'serviceName', 'serviceUserID',
+            'serviceUserName', 'serviceWorkoutID', 'serviceActivityFileID',
+        ]) {
+            expect(fieldOverrides).not.toContainEqual(expect.objectContaining({
+                collectionGroup: 'metaData', fieldPath, indexes: [],
+            }));
+        }
+        expect(indexes).toContainEqual(expect.objectContaining({
+            collectionGroup: 'metaData', queryScope: 'COLLECTION_GROUP',
+            fields: [
+                { fieldPath: 'processingEntity', order: 'ASCENDING' },
+                { fieldPath: 'sportsLibVersionCode', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        }));
+        expect(fieldOverrides).toContainEqual(expect.objectContaining({
+            collectionGroup: 'metaData', fieldPath: 'sportsLibVersionCode',
+            indexes: expect.arrayContaining([{ order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' }]),
+        }));
+    });
+
     it('keeps workout-backed Health Weight and VO2 range queries deployable', () => {
         const config = loadFirestoreIndexes();
 
