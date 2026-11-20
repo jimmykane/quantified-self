@@ -324,6 +324,19 @@ describe('firestore indexes', () => {
         expect(config.fieldOverrides.some(index => index.collectionGroup === 'wahooAPIUserMappings')).toBe(false);
     });
 
+    it.each(['ASCENDING', 'DESCENDING'])('supports saved benchmark comparisons in %s date order', (order) => {
+        const { indexes } = loadFirestoreIndexes();
+        expect(indexes).toContainEqual(expect.objectContaining({
+            collectionGroup: 'events',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'mergeType', order: 'ASCENDING' },
+                { fieldPath: 'startDate', order },
+                { fieldPath: '__name__', order },
+            ],
+        }));
+    });
+
     it('keeps scoped dashboard Power Curve auto-tile eligibility query deployable', () => {
         const config = loadFirestoreIndexes();
 
