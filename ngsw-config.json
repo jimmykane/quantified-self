@@ -10,6 +10,7 @@
         "files": [
           "/favicon.ico",
           "/index.csr.html",
+          "/assets/theme-init.js",
           "/manifest.json",
           "/*.css",
           "/*.js"

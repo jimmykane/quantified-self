@@ -429,8 +429,8 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
-    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('My Tracks: activities, trips and destinations on one map');
-    expect(PUBLIC_SEO_PAGES.activityMap.description).toContain('group activity history into trips');
+    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See all your runs, rides and hikes on one map');
+    expect(PUBLIC_SEO_PAGES.activityMap.description).toContain('see where you trained on a trip');
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => section.preview === 'activity-map')).toBe(true);
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => (
       section.items.some(item => item.title === 'Automatic trip detection')

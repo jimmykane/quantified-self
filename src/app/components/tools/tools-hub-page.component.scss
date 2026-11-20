@@ -91,6 +91,11 @@ h2 {
   align-items: center;
 }
 
+.tool-card mat-card-actions {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
 .tool-card mat-card-content p {
   margin-bottom: 0;
 }

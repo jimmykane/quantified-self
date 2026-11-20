@@ -142,6 +142,14 @@ and platform trace, never by credentials or provider data. The separate failure-
 `failureStage="failure_state_write"` and cannot replace the original failure or bypass its existing retry accounting.
 These are logging-only changes; deploy only `processSleepSyncTask` after separate approval. #830 monitoring is unchanged.
 
+The shared Health classifier retains allowlisted SDK error names, canonical numeric or named RPC codes, and
+allowlisted transport codes from the error or its immediate cause. A busy or superseded refresh is identified as
+`expected_contention` at `token_refresh`, without misreporting its local 503 as an upstream HTTP response.
+Unknown names/codes remain opaque. Messages, stacks, raw causes, provider bodies, callback URLs and credentials
+are never copied. Existing ERROR severity, retry accounting and lifecycle decisions are unchanged. Monitoring
+coverage remains **unchanged**: #830 selects its existing worker/committed-transition events, not these diagnostic
+fields. Existing Help and MCP contracts need no changes; this adds no provider calls or database reads/writes.
+
 ## Temporary webhook URL probe
 
 `garminWebhookProbe` was a temporary public Gen 2 endpoint for checking Garmin's URL transport. It discarded

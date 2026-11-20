@@ -87,6 +87,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private static readonly JUMP_POPUP_WIDTH_ESTIMATE_PX = 260;
   private static readonly JUMP_POPUP_HEIGHT_ESTIMATE_PX = 220;
 
+  @ViewChild('mapWrapper', { static: true }) private mapWrapper!: ElementRef<HTMLDivElement>;
   @ViewChild('mapDiv', { static: false }) mapDiv!: ElementRef<HTMLDivElement>;
   @ViewChild('jumpPopupAnchor', { static: false }) jumpPopupAnchor?: ElementRef<HTMLDivElement>;
   @Input() event!: EventInterface;
@@ -561,7 +562,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         this.zone.run(() => this.openJumpMarkerInfoWindow(jump, latitudeDegrees, longitudeDegrees));
       });
 
-      map.addControl(new mapboxgl.FullscreenControl({ container: this.mapDiv.nativeElement.parentElement }), 'bottom-right');
+      map.addControl(new mapboxgl.FullscreenControl({ container: this.mapWrapper.nativeElement }), 'bottom-right');
       map.addControl(new mapboxgl.NavigationControl({
         visualizePitch: true,
         showCompass: true,

@@ -113,8 +113,8 @@ describe('SeoService', () => {
     it.each([
         {
             path: '/tools/compare',
-            title: 'Compare GPX & FIT Files',
-            description: 'Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.',
+            title: 'Compare GPX Files Online | FIT & TCX',
+            description: 'Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.',
         },
         {
             path: '/pricing',
@@ -145,7 +145,7 @@ describe('SeoService', () => {
         mockRouter.url = '/features/activity-map';
         service.init();
         routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
-        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('My Tracks: GPS Activity Map & Trip Detection - Quantified Self');
+        expect(titleServiceSpy.setTitle).toHaveBeenCalledWith('GPS Activity Map & Trip Detection - Quantified Self');
         for (const name of ['description', 'twitter:description']) {
             expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name, content: data.description });
         }

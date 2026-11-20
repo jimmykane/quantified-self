@@ -121,6 +121,19 @@ describe('AppUpdateService', () => {
         expect(mockWindow.location.reload).toHaveBeenCalled();
     });
 
+    it('checks for an update without reloading other tabs when an old feature is missing', async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        swUpdateMock.checkForUpdate.mockClear();
+
+        unrecoverableSubject.next({
+            reason: 'Failed to retrieve hashed resource from the server. (AssetGroup: feature-js | URL: /chunk-OLD12345.js)',
+        });
+
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledOnce();
+        expect(mockWindow.location.reload).not.toHaveBeenCalled();
+    });
+
     it('should log error and reload on unrecoverable state', () => {
         const errorEvent = { reason: 'Broken state' };
         unrecoverableSubject.next(errorEvent);

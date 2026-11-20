@@ -1,32 +1,6 @@
-<div class="map-component-wrapper">
+<div #mapWrapper class="map-component-wrapper">
   <app-event-section-header icon="map">
-    <app-map-layers-actions
-      [showLaps]="showLaps"
-      [showArrows]="showArrows"
-      [is3D]="is3D"
-      [mapStyle]="mapStyle"
-      [user]="user"
-      [enableLapsToggle]="true"
-      [enableArrowsToggle]="true"
-      [enable3DToggle]="true"
-      (showLapsChange)="onShowLapsChange($event)"
-      (showArrowsChange)="onShowArrowsChange($event)"
-      (is3DChange)="onShow3DChange($event)"
-      (mapStyleChange)="onMapStyleChange($event)">
-    </app-map-layers-actions>
-  </app-event-section-header>
-
-  <app-loading-overlay
-    [isLoading]="isLoading || !apiLoaded()"
-    [hasError]="noMapData"
-    errorMessage="No Map Data"
-    [showSkeleton]="true"
-    height="60vh">
-
-    <section class="mapbox-stage">
-      <div #mapDiv class="mapbox-map"></div>
-
-      @if (apiLoaded() && mapTracks().length > 1) {
+    @if (apiLoaded() && mapTracks().length > 1) {
       @let visibleTracks = visibleMapTracks();
       <button mat-button type="button" class="map-tracks-trigger" #trackMenuTrigger="matMenuTrigger"
         [matMenuTriggerFor]="trackMenu" (menuOpened)="onTracksMenuOpened()"
@@ -56,7 +30,32 @@
           </button>
         }
       </mat-menu>
-      }
+    }
+    <app-map-layers-actions
+      [showLaps]="showLaps"
+      [showArrows]="showArrows"
+      [is3D]="is3D"
+      [mapStyle]="mapStyle"
+      [user]="user"
+      [enableLapsToggle]="true"
+      [enableArrowsToggle]="true"
+      [enable3DToggle]="true"
+      (showLapsChange)="onShowLapsChange($event)"
+      (showArrowsChange)="onShowArrowsChange($event)"
+      (is3DChange)="onShow3DChange($event)"
+      (mapStyleChange)="onMapStyleChange($event)">
+    </app-map-layers-actions>
+  </app-event-section-header>
+
+  <app-loading-overlay
+    [isLoading]="isLoading || !apiLoaded()"
+    [hasError]="noMapData"
+    errorMessage="No Map Data"
+    [showSkeleton]="true"
+    height="var(--event-map-height)">
+
+    <section class="mapbox-stage">
+      <div #mapDiv class="mapbox-map"></div>
 
       @if (openedJumpMarkerInfoWindow && jumpPopupScreenPosition(); as popupPosition) {
       <div #jumpPopupAnchor class="jump-popup-anchor" [style.left.px]="popupPosition.x" [style.top.px]="popupPosition.y">

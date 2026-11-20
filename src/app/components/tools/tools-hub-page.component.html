@@ -8,7 +8,7 @@
     <p>Sign in to upload activities and open saved comparisons. Uploads and new comparisons use your activity allowance; existing account limits and feature access still apply.</p>
     <div class="hero-actions" aria-label="Primary actions">
       <a mat-flat-button class="qs-mat-primary" routerLink="/tools/compare" (click)="logCompareEntry('tools_hub_hero')">
-        Compare Files
+        Compare GPX or FIT files
         <mat-icon iconPositionEnd>arrow_forward</mat-icon>
       </a>
       <a mat-stroked-button routerLink="/dashboard">
@@ -40,6 +40,9 @@
           <a mat-stroked-button [routerLink]="tool.route" (click)="logToolCardEntry(tool.route)">
             {{ tool.actionLabel }}
           </a>
+          @if (tool.guide; as guide) {
+            <a mat-button [routerLink]="guide.route">{{ guide.label }}</a>
+          }
         </mat-card-actions>
       </mat-card>
       }

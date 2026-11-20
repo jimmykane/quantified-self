@@ -450,9 +450,9 @@ describe('AppRoutingModule routes', () => {
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('Compare GPX & FIT Files');
+    expect(compareRoute?.data?.['title']).toBe('Compare GPX Files Online | FIT & TCX');
     expect(compareRoute?.data?.['description']).not.toMatch(/trusted by device reviewers/i);
-    expect(compareRoute?.data?.['description']).toBe('Compare GPX and FIT recordings from the same workout. Review GPS tracks and shared recorded data. Sign in with a free account; activity limits apply.');
+    expect(compareRoute?.data?.['description']).toBe('Compare two GPX tracks on one map and review distance and elevation. FIT and TCX work too. Sign in with a free account to compare your files.');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
       name: 'GPX & FIT File Comparison Tool',
@@ -573,9 +573,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityMap,
-        title: 'My Tracks: GPS Activity Map & Trip Detection',
-        h1: 'My Tracks: activities, trips and destinations on one map',
-        descriptionText: 'Map GPS workouts, filter by sport or date',
+        title: 'GPS Activity Map & Trip Detection',
+        h1: 'See all your runs, rides and hikes on one map',
+        descriptionText: 'Explore your GPS workouts on one activity map',
       },
       {
         path: PUBLIC_FEATURE_PATHS.health,

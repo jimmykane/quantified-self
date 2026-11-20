@@ -61,6 +61,8 @@ describe('PublicSeoPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.how-to-list')).toBeNull();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/features/workout-data-comparison');
+    expect(links.find(link => link.textContent?.includes('Compare two activity files'))?.getAttribute('href'))
+      .toBe('/tools/compare');
     expect(hrefs).toContain('/help#uploads-and-imports');
     expect(hrefs).toContain('/features/fit-gpx-route-files');
     const workoutPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))

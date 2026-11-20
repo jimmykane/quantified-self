@@ -31,16 +31,20 @@ describe('ToolsHubPageComponent', () => {
     expect(text).toContain('Workout data tools');
     expect(text).toContain('File comparison');
     expect(text).not.toMatch(/\bprivate\b/i);
-    expect(compareLink).toBeTruthy();
+    expect(compareLink?.textContent).toContain('Compare GPX or FIT files');
 
     const cards = [...fixture.nativeElement.querySelectorAll('mat-card')] as HTMLElement[];
     const analysis = cards.find(card => card.textContent!.includes('File analysis'))!;
     const benchmarks = cards.find(card => card.textContent!.includes('Device benchmarks'))!;
     expect(analysis.querySelector('a')?.getAttribute('href')).toBe('/dashboard');
+    expect(analysis.querySelector('a[href="/features/fit-gpx-tcx-file-analyzer"]')?.textContent)
+      .toContain('Analyze FIT, GPX or TCX files');
     expect(analysis.textContent).toContain('Available in your account');
     expect(analysis.textContent).toContain('Open Dashboard');
     expect(analysis.textContent).toContain('Upload an activity');
     expect(benchmarks.querySelector('a')?.getAttribute('href')).toBe('/tools/compare/saved');
+    expect(benchmarks.querySelector('a[href="/features/workout-data-comparison"]')?.textContent)
+      .toContain('Device comparison guide');
     expect(benchmarks.textContent).toContain('Available in your account');
     expect(benchmarks.textContent).toContain('Open Saved Comparisons');
     expect(text).toContain('Sign in');

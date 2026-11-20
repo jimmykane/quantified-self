@@ -617,10 +617,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'activityMap',
     path: PUBLIC_FEATURE_PATHS.activityMap,
     eyebrow: 'My Tracks',
-    title: 'My Tracks: GPS Activity Map & Trip Detection',
-    description: 'Map GPS workouts, filter by sport or date, and group activity history into trips with My Tracks. Included with Starter; provider imports and sync require Pro.',
-    h1: 'My Tracks: activities, trips and destinations on one map',
-    intro: 'Bring location-enabled activities from connected providers and uploaded files into My Tracks. Filter by date or sport, inspect each trace, and move between an inferred Home area and detected destination visits.',
+    title: 'GPS Activity Map & Trip Detection',
+    description: 'Explore your GPS workouts on one activity map. Filter by sport or date, follow the route of a single workout, or see where you trained on a trip.',
+    h1: 'See all your runs, rides and hikes on one map',
+    intro: 'Bring GPS workouts from your devices and uploaded files into My Tracks. Select a start marker to see the workout details, or choose a trip to see where you trained away from home.',
     accessNote: 'My Tracks is included with Starter, Basic and Pro. Activity limits apply. Automatic provider imports and sync require Pro.',
     freeOfferDescription: 'My Tracks mapping is included with Starter, Basic and Pro; activity limits apply. Automatic provider imports and sync require Pro.',
     chips: ['Trip detection', 'Inferred Home', 'Destination visits', 'Date and sport filters', 'Activity details', 'MTB jump heatmaps'],
@@ -929,7 +929,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['FIT file analyzer', 'GPX file analyzer', 'TCX file analyzer', 'Maps', 'Charts', 'Free uploads'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Compare Workouts', '/features/workout-data-comparison'),
+      routeAction('Compare two activity files', '/tools/compare'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
     sections: [
