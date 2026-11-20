@@ -101,7 +101,8 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ],
-              "serviceWorker": "ngsw-config.json"
+              "serviceWorker": "ngsw-config.json",
+              "statsJson": true
             },
             "beta": {
               "server": "src/main.server.ts",
@@ -144,7 +145,8 @@
                   "with": "src/environments/environment.beta.ts"
                 }
               ],
-              "serviceWorker": "ngsw-config.json"
+              "serviceWorker": "ngsw-config.json",
+              "statsJson": true
             },
             "local": {
               "fileReplacements": [

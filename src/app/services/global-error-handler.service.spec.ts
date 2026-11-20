@@ -27,6 +27,15 @@ describe('GlobalErrorHandler', () => {
         handler = new GlobalErrorHandler(loggerMock as any, windowMock as any);
     });
 
+    it('keeps the current page open when an unvisited chunk is unavailable offline', () => {
+        windowMock.windowRef.navigator = { onLine: false };
+        const error = new Error('Failed to fetch dynamically imported module');
+        handler.handleError(error);
+        expect(windowMock.windowRef.location.reload).not.toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.setItem).not.toHaveBeenCalled();
+        expect(loggerMock.error).toHaveBeenCalledWith(error);
+    });
+
     it('should reload the page when a chunk load error occurs (regex 1)', () => {
         const error = new TypeError('Failed to fetch dynamically imported module: https://example.com/chunk.js');
         handler.handleError(error);

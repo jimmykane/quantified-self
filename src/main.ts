@@ -13,10 +13,13 @@ import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagno
 import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 import { scrubSentryOAuthEvent } from './app/helpers/sentry-oauth-url.helper';
 import { filterPushRemovalLog } from './app/helpers/push-removal-log.helper';
+import { cacheFirstVisitChunks } from './app/shared/adapters/first-visit-chunks';
 import { getSentryBuildTags } from './app/helpers/sentry-build-tags.helper';
 
 // Navigation is asynchronous: do not start App Check on the alias while leaving it.
 if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)) {
+  if (environment.production || environment.beta) cacheFirstVisitChunks();
+
   // Only initialize Sentry in non-localhost environments
   if (!environment.localhost) {
     Sentry.init({

@@ -28,16 +28,14 @@ export class AppUpdateService {
     const everyTenMinutes = interval(10 * 60 * 1000);
     const everyTenMinutesOnceAppIsStable$ = concat(appIsStable, everyTenMinutes);
 
-    everyTenMinutesOnceAppIsStable$.subscribe(() => {
-      this.checkForUpdates(updates);
-    });
+    const checkForUpdates = () => this.checkForUpdates(updates);
+    everyTenMinutesOnceAppIsStable$.subscribe(checkForUpdates);
 
-    this.windowService.windowRef.addEventListener('online', () => {
-      this.checkForUpdates(updates);
-    });
-    this.windowService.windowRef.document.addEventListener('visibilitychange', () => {
-      if (this.windowService.windowRef.document.visibilityState === 'visible') {
-        this.checkForUpdates(updates);
+    const windowRef = this.windowService.windowRef;
+    windowRef.addEventListener('online', checkForUpdates);
+    windowRef.document.addEventListener('visibilitychange', () => {
+      if (windowRef.document.visibilityState === 'visible') {
+        checkForUpdates();
       }
     });
 
@@ -59,7 +57,7 @@ export class AppUpdateService {
           .onAction()
           .subscribe(() => {
             void updates.activateUpdate()
-              .then(() => this.windowService.windowRef.location.reload())
+              .then(() => this.activateUpdate())
               .catch((error) => {
                 this.promptedVersionHashes.delete(versionHash);
                 this.logger.error('[AppUpdateService] Failed to activate update', error);
@@ -84,11 +82,14 @@ export class AppUpdateService {
       });
 
     updates.unrecoverable.subscribe(event => {
-      this.logger.error(
-        `An error occurred that we cannot recover from:\n${event.reason}\n\n` +
-        'Please reload the page.'
-      );
-      this.windowService.windowRef.location.reload();
+      // Angular broadcasts a missing hashed resource to every client on that version.
+      // Only the tab importing an obsolete feature needs its normal chunk-load recovery.
+      if (event.reason.includes('(AssetGroup: feature-js |')) {
+        if (!this.isUpdateAvailable()) checkForUpdates();
+        return;
+      }
+      this.logger.error('[AppUpdateService] Unrecoverable state', event.reason);
+      this.activateUpdate();
     });
   }
 
