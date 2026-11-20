@@ -15,7 +15,8 @@ export function splitServiceWorkerJavaScript(manifest, outputs, shellHtml) {
   const app = manifest.assetGroups.find(group => group.name === 'app');
   const previous = manifest.assetGroups.find(group => group.name === 'feature-js');
   const allUrls = [...app.urls, ...(previous?.urls ?? [])];
-  const scripts = allUrls.filter(url => url.endsWith('.js'));
+  // Root scripts are compiler outputs. Copied assets such as theme-init.js have no build metadata.
+  const scripts = allUrls.filter(url => /^\/[^/]+\.js$/.test(url));
   const bundled = new Set(scripts.map(url => url.slice(1)));
   const required = new Set();
   const entries = new Set();
@@ -32,7 +33,11 @@ export function splitServiceWorkerJavaScript(manifest, outputs, shellHtml) {
   const document = new JSDOM(shellHtml, { url: 'https://shell.invalid/' }).window.document;
   for (const tag of document.querySelectorAll('script[src], link[rel~="modulepreload"][href]')) {
     const url = new URL(tag.src || tag.href);
-    if (url.origin === document.location.origin && bundled.has(url.pathname.slice(1))) include(url.pathname.slice(1));
+    if (url.origin !== document.location.origin) continue;
+    if (!allUrls.includes(url.pathname)) {
+      throw new Error(`Local shell script must be in the service worker app group: ${url.pathname}`);
+    }
+    if (bundled.has(url.pathname.slice(1))) include(url.pathname.slice(1));
   }
 
   for (const file of bundled) {

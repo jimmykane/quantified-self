@@ -31,7 +31,31 @@ it('hands off only same-origin hashed scripts started before first control, incl
   await vi.waitFor(() => expect(fetch.mock.calls).toEqual([[a, { cache: 'force-cache' }], [b, { cache: 'force-cache' }]]));
 });
 
-it('leaves a controlled visit to Angular’s worker', () => {
+it('recovers buffered requests from an uncontrolled navigation claimed before bootstrap', async () => {
+  const origin = 'https://example.test';
+  const early = origin + '/chunk-1234ABCD.js';
+  const handled = origin + '/chunk-ABCD1234.js';
+  vi.stubGlobal('navigator', { serviceWorker: Object.assign(new EventTarget(), { controller: {} }) });
+  vi.stubGlobal('location', { origin });
+  vi.stubGlobal('performance', {
+    now: () => 100,
+    getEntriesByType: (type: string) => type === 'navigation' ? [{ workerStart: 0 }] : [
+      { name: early, startTime: 5, workerStart: 0 },
+      { name: handled, startTime: 25, workerStart: 26 },
+      { name: origin + '/chunk-FFFFFFFF.js', startTime: 10, workerStart: 0, responseStatus: 404 },
+    ],
+  });
+  // Some browsers can read resource timings without supporting buffered observation.
+  vi.stubGlobal('PerformanceObserver', undefined);
+  const fetch = vi.fn().mockResolvedValue({});
+  vi.stubGlobal('fetch', fetch);
+  cacheFirstVisitChunks();
+  await Promise.resolve();
+  expect(fetch.mock.calls).toEqual([[early, { cache: 'force-cache' }]]);
+});
+
+it('leaves a worker-controlled navigation to Angular’s worker', () => {
+  vi.stubGlobal('performance', { getEntriesByType: () => [{ workerStart: 10 }] });
   vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
   const observer = vi.fn();
   vi.stubGlobal('PerformanceObserver', observer);

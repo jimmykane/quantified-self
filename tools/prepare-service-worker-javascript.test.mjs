@@ -21,8 +21,15 @@ const outputs = {
   'chart.js': output(),
   'worker.js': output('src/app/workers/feature.worker.ts'),
 };
-const html = '<base href="/"><script src="main.js"></script><script src="polyfills.js"></script><link rel="modulepreload" href="/preload.js">';
-const urls = ['/index.csr.html', ...Object.keys(outputs).map(file => '/' + file)];
+const html = `
+  <base href="/">
+  <script src="assets/theme-init.js"></script>
+  <script src="https://external.example/script.js"></script>
+  <script src="main.js"></script>
+  <script src="polyfills.js"></script>
+  <link rel="modulepreload" href="/preload.js">
+`;
+const urls = ['/index.csr.html', '/assets/theme-init.js', ...Object.keys(outputs).map(file => '/' + file)];
 const app = { name: 'app', installMode: 'prefetch', updateMode: 'prefetch', urls, patterns: [], cacheQueryOptions: { ignoreVary: true } };
 const assets = { name: 'assets', urls: ['/media/font.woff2'] };
 const manifest = { assetGroups: [app, assets], hashTable: Object.fromEntries(urls.map(url => [url, 'test-hash'])), navigationUrls: [] };
@@ -42,6 +49,7 @@ test('prefetches the HTML, bootstrap, locale and static dependency graph, and ke
 });
 
 test('rejects incomplete build metadata before writing a release manifest', () => {
+  assert.throws(() => splitServiceWorkerJavaScript(manifest, outputs, '<script src="assets/forgotten.js"></script>'), /Local shell script/);
   assert.throws(() => splitServiceWorkerJavaScript(manifest, { ...outputs, 'shared.js': undefined }, html), /Missing/);
   assert.throws(() => splitServiceWorkerJavaScript(manifest, { ...outputs, 'app.js': output('unknown') }, html), /Missing offline bootstrap/);
 });

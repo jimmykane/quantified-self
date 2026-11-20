@@ -171,14 +171,15 @@ Use the npm build entry points for deployable artifacts. Build/tool regression t
 ## JavaScript caching in release builds
 
 Production and beta use the Angular build metadata in `dist/stats.json` to partition the hashed JavaScript in
-`dist/browser/ngsw.json`. The `app` group prefetches the CSR HTML entry scripts and module preloads, the Angular
-bootstrap module, the home and sign-in entries, supported locales and their static imports. The `feature-js` group
+`dist/browser/ngsw.json`. The `app` group prefetches the CSR HTML entry scripts (including the first-paint theme script),
+module preloads, the Angular bootstrap module, the home and sign-in entries, supported locales and their static
+imports. The `feature-js` group
 fetches feature modules and workers on demand. Both groups use Angular's release-specific content hashes.
 The release commands run `tools/prepare-service-worker-javascript.mjs` before verifying the manifest. The base
 Angular config keeps the conservative prefetch policy when the release preparation step is bypassed.
 
-An online visit can load a route before the first service worker takes control. The app hands its already-requested,
-same-origin hashed chunks to the new worker so they are available offline. Within an installed version, a previously
+An online visit can load a route before the first service worker takes control, including when another tab installs
+the worker. The app passes previously loaded same-origin chunks to the worker so they are available offline. Within an installed version, a previously
 unused feature needs one online load. If a release changes a feature's URL, that version also needs one online load
 of the new code. Existing clients stay on their assigned version until reload or activation. These rules cover
 JavaScript availability. Route navigation and account data have their own offline behavior.
