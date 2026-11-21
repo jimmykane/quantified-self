@@ -91,6 +91,28 @@ describe('AppCheckDiagnosticsService', () => {
     expect(logger.captureMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('reports blocked sign-in email and only a subsequent successful send as recovery, without private error data', () => {
+    service.setAuthState('signed-out');
+    const beforeFailure = service.beginOperation();
+    const failure = { code: 'auth/firebase-app-check-token-is-invalid.', message: 'private-message',
+      customData: { email: 'private@example.invalid', token: 'private-token' } };
+    service.reportOperationBlocked(failure, 'email-link-send', service.beginOperation());
+    service.reportOperationBlocked(failure, 'email-link-send', service.beginOperation());
+    service.reportOperationSucceeded('email-link-send', beforeFailure);
+    expect(logger.captureMessage).toHaveBeenCalledTimes(1);
+    service.reportOperationSucceeded('email-link-send', service.beginOperation());
+    expect(logger.captureMessage.mock.calls.map(call => call[1].tags)).toEqual([
+      { appCheckOutcome: 'operation-blocked', appCheckErrorCode: 'appCheck/unknown',
+        appCheckAuthState: 'signed-out', appCheckOperation: 'email-link-send' },
+      { appCheckOutcome: 'operation-succeeded', appCheckErrorCode: 'appCheck/unknown',
+        appCheckAuthState: 'signed-out', appCheckOperation: 'email-link-send' },
+    ]);
+    expect(logger.captureMessage.mock.calls[0][1].contexts.appCheck).toMatchObject({
+      httpStatus: null, cooldown: false, retryAfterSeconds: null,
+    });
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
+  });
+
   it('records one bounded recovery with notification count and elapsed time, without serializing tokens', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
     next({ token: 'old-private-token' });

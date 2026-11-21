@@ -15,6 +15,16 @@ describe('appCheckFailureDetails', () => {
       expect(isAppCheckVerificationFailure(error)).toBe(false);
     }
   });
+  it.each(['auth/firebase-app-check-token-is-invalid', 'auth/firebase-app-check-token-is-invalid.'])(
+    'recognizes the explicit Auth rejection %s without inferring a score or cooldown', code => {
+      expect(isAppCheckVerificationFailure({ code, message: 'private-message' })).toBe(true);
+      expect(appCheckFailureDetails({ code })).toBeNull();
+    });
+  it.each(['auth/invalid-app-credential', 'auth/invalid-credential', 'auth/network-request-failed',
+    'auth/firebase-app-check-token-is-invalid.private', 'auth/internal-error'])(
+    'does not misclassify other Auth errors (%s)', code => {
+      expect(isAppCheckVerificationFailure({ code, message: 'App Check verification failed.' })).toBe(false);
+    });
   it('recognizes only the exact SDK initial-rejection log grammar', () => {
     const warning = 'AppCheck: 403 error. Attempts allowed again after 01d:00m:00s (appCheck/initial-throttle).';
     expect(initialAppCheckRejectionFromLog(warning)).toEqual({

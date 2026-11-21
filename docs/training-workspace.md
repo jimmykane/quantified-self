@@ -6733,6 +6733,18 @@ data migration are introduced; development opt-ins under the old key must be set
 The deployed callable remains `generateDayWorkout`, with unchanged options and manual-generation behavior.
 No registered MCP contract digest, client refresh, plugin rebuild or provider rollout is required.
 
+Daily-suggestion eligibility uses the existing server `hasProAccess` helper: a paid Pro role or an active grace
+period permits access, including when the stored role is Free or Basic. Missing/expired grace remains denied;
+an unreadable role remains retryable. The existing post-context entitlement recheck uses that same policy,
+without extra Auth/Firestore/provider calls. Early legal/Pro rejections emit best-effort INFO diagnostics on
+`[DailyWorkoutSuggestion]` with only fixed `accessCheck` and `accessReason` categories, never account IDs or raw
+errors. Consent, deletion fences and daily/manual allowance rules remain unchanged. A review of Assistant quota,
+Training delivery, activity/route dispatch, history import and reparse access found those paths already grace-aware;
+paid-subscription reporting/segmentation remains distinct from feature access. MCP impact: none; this restores
+first-party access already offered by the UI, with no schema, scope, recipe, mutation or provider-consent change.
+Existing Help's Pro-access explanation still applies. Release only `generateDayWorkout` after separate approval;
+no frontend deployment, migration or receipt reset is required.
+
 #### Dashboard daily briefing
 
 The owner-only **At a glance** continues the **Today** greeting in one sentence and one Material text button. The

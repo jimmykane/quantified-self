@@ -2053,7 +2053,9 @@ When opening a page fails, QS may reload once automatically in that tab. If it s
 
 ### Browser verification paused
 
-Temporary verification service errors retry automatically after short pauses. If you see **We couldn't verify this browser**, you're still signed in, but the browser security check could not finish. A rejected check can pause verification in the current page for up to **24 hours**. Repeated retries in that page do not clear the pause.
+If **We couldn't verify this browser** appears after **Send Magic Link**, no sign-in email was sent. Select **Reload page**, then send the link again. QS does not automatically resend the email.
+
+If the message appears while loading an already signed-in account, you remain signed in. Temporary verification service errors during account loading retry automatically after short pauses. A rejected check can pause verification in the current page for up to **24 hours**. Repeated retries in that page do not clear the pause.
 
 Select **Reload page** to start a new check. Reloading does not guarantee acceptance. If verification fails again, try a regular browser window instead of private browsing, or another trusted network. Check whether a privacy extension is blocking Google's verification scripts on Quantified Self. You do not need to sign out, clear browser storage, or repeat onboarding; your saved data stays unchanged. If you remain blocked, contact support with your browser name and the time of the failure. Never send passwords or verification tokens.
 

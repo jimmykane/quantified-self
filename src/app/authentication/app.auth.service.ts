@@ -22,6 +22,9 @@ import {
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from './auth-redirect-url';
 import { AppWindowService } from '../services/app.window.service';
 import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
+import { isAppCheckVerificationFailure } from '../helpers/app-check-error.helper';
+import { AppCheckDiagnosticsService } from '../services/app-check-diagnostics.service';
+import type { AppCheckOperationAttempt } from '../services/app-check-diagnostics.service';
 
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -43,6 +46,7 @@ export class AppAuthService {
   ]);
 
   private readonly sessionCleanup = inject(AuthSessionCleanupService);
+  private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
   private readonly storage = inject(APP_STORAGE);
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -161,13 +165,19 @@ export class AppAuthService {
 
   //// Email Link Auth ////
 
+  /** Explicit browser-verification rejections propagate to the login view's persistent recovery state. */
   async sendEmailLink(email: string, returnUrl?: string | null) {
     const redirectSource = returnUrl === undefined ? this.redirectUrl : returnUrl;
     const sanitizedReturnUrl = sanitizeLocalAuthRedirectUrl(redirectSource);
     const actionCodeSettings = this.buildActionCodeSettings(true, sanitizedReturnUrl);
+    let attempt: AppCheckOperationAttempt | undefined;
+    try { attempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate sign-in. */ }
 
     try {
       await sendSignInLinkToEmail(this.auth, email, actionCodeSettings);
+      try {
+        if (attempt) this.appCheckDiagnostics.reportOperationSucceeded('email-link-send', attempt);
+      } catch { /* Preserve the actual Auth result. */ }
       this.localStorageService.setItem('emailForSignIn', email);
       if (sanitizedReturnUrl) {
         this.localStorageService.setItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizedReturnUrl);
@@ -179,6 +189,13 @@ export class AppAuthService {
       });
       return true;
     } catch (error: any) {
+      if (isAppCheckVerificationFailure(error)) {
+        try {
+          if (attempt) this.appCheckDiagnostics.reportOperationBlocked(error, 'email-link-send', attempt);
+        } catch { /* Preserve the original rejection. */ }
+        // The login view owns persistent recovery; do not capture raw Auth error data.
+        throw error;
+      }
       this.handleError(error);
       return false;
     }

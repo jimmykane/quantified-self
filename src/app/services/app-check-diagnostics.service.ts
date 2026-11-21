@@ -5,7 +5,7 @@ import { observeInitialAppCheckRejections } from '../helpers/app-check-console-d
 import { LoggerService } from './logger.service';
 
 type AuthState = 'restoring' | 'signed-in' | 'signed-out';
-export type AppCheckOperation = 'profile-load' | 'callable';
+export type AppCheckOperation = 'profile-load' | 'callable' | 'email-link-send';
 /** Local ordering only; never copied into telemetry or request data. */
 export interface AppCheckOperationAttempt {
   readonly authRevision: number;
@@ -89,7 +89,7 @@ export class AppCheckDiagnosticsService {
 
   reportOperationBlocked(error: unknown, operation: AppCheckOperation, attempt: AppCheckOperationAttempt, scope?: string): void {
     if (attempt.authRevision !== this.revision || !isAppCheckVerificationFailure(error)
-      || (operation !== 'profile-load' && operation !== 'callable')) return;
+      || (operation !== 'profile-load' && operation !== 'callable' && operation !== 'email-link-send')) return;
     const pending = this.blockedOperations.get(operation);
     if (pending) {
       if (pending.scope === scope) {
@@ -100,7 +100,7 @@ export class AppCheckDiagnosticsService {
     }
     const details = appCheckFailureDetails(error) ?? appCheckFailureDetails({ code: 'appCheck/unknown' })!;
     const episode = this.newEpisode(details);
-    // Keep at most two pending operations. The callable name is local matching state, never telemetry.
+    // Keep at most three pending operations. The callable name is local matching state, never telemetry.
     this.blockedOperations.set(operation, { ...episode, scope, recoveryAfterSequence: this.operationSequence });
     this.reportOutcome('operation-blocked', episode, { operation });
   }

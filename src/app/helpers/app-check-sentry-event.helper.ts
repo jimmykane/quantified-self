@@ -47,7 +47,7 @@ export function appCheckBeforeSend(event: ErrorEvent, hint?: EventHint): ErrorEv
     const raw = record(event.contexts?.['appCheck']);
     const code = appCheckFailureDetails({ code: raw['code'] })?.code ?? 'appCheck/unknown';
     const authState = choice(raw['authState'], ['restoring', 'signed-in', 'signed-out']);
-    const operation = choice(raw['operation'], ['profile-load', 'callable']);
+    const operation = choice(raw['operation'], ['profile-load', 'callable', 'email-link-send']);
     const outcome = choice(raw['outcome'], ['token-available', 'operation-blocked', 'operation-succeeded']);
     const httpStatus = number(raw['httpStatus'], 400, 599) ?? null;
     const phase = choice(event.tags?.['appCheckPhase'], ['initial-rejection', 'cooldown', 'verification']) ?? 'verification';
