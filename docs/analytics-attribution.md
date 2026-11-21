@@ -83,7 +83,7 @@ registering GA4 custom dimensions:
 
 | Goal | Prefix | Expected destination |
 | --- | --- | --- |
-| Analyze my training | `onboarding_analyze_` | `dashboard` |
+| Analyze my training | `onboarding_analyze_` | `membership` for new and Starter accounts, `dashboard` for existing paid access |
 | Sync between services | `onboarding_sync_` | `pro_plans` for Starter/Basic, `connections` for existing Pro access |
 | Compare device recordings | `onboarding_compare_` | `compare` or `saved_comparisons` for an explicit saved-list entry |
 

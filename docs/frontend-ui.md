@@ -81,8 +81,10 @@ it waits at most ten seconds for that same authoritative user stream to publish 
 consent, preventing the route guard from redirecting against an older snapshot. This wait is cancelled when
 the view is destroyed; account changes prevent navigation. Failures retain consent and allow retry.
 
-Analysis and exploration open Dashboard, whose empty state already offers file upload and provider selection.
-Compare opens its workspace directly. These paths have no plan step. Sync opens `/subscriptions?setup=sync`
+After terms, Analyze opens `/subscriptions?setup=analyze` for new and Starter accounts. The picker offers
+every plan. **Continue with Starter** opens Dashboard directly, and canceling a paid checkout returns to
+this picker. Accounts with existing paid access go straight to Dashboard. Exploration opens Dashboard
+and Compare opens its workspace directly. Sync opens `/subscriptions?setup=sync`
 for Starter/Basic members, with the CTA **Choose a Pro plan**, Pro billing choices, and a free Dashboard exit.
 Existing Pro access (including existing admin, legacy and grace-period rules) goes straight to
 `/services?setup=sync` with **Continue to Connections**. Checkout success/cancellation and Basic's existing
@@ -2295,7 +2297,7 @@ Only explicit `false` after completed onboarding and required policies invites s
 without the marker and completed accounts remain quiet. Starting intent never chooses a preset.
 
 The Dashboard retains the invitation after its first-activity actions. The app shell lazily places the same
-component on other normal account workspaces, including Connections, subscription selection and Compare.
+component on other normal account workspaces, including Connections and Compare. Membership and training plan pages are excluded.
 The shell invitation sits before the animated route container so incoming pages cannot overlap it during transitions.
 Public/shared pages, Settings, onboarding, login and authorization/checkout-return pages do not show it.
 `isPreferencesSetupWorkspace` owns this route boundary; Dashboard owner checks exclude another account's data.

@@ -188,7 +188,7 @@ describe('OnboardingComponent', () => {
     });
 
     it.each([
-        { choice: 'analyze', path: '/dashboard' },
+        { choice: 'analyze', path: '/subscriptions' },
         { choice: 'sync', path: '/subscriptions' },
         { choice: 'compare', path: '/tools/compare' },
     ] as const)('completes $choice directly into $path without loading prices or checkout', async ({ choice, path }) => {
@@ -200,11 +200,14 @@ describe('OnboardingComponent', () => {
         fixture.detectChanges();
         clickButton('Continue');
         expect(component.stage()).toBe('privacy');
+        if (choice === 'analyze') {
+            expect(fixture.nativeElement.querySelector('button[type="submit"]').textContent).toContain('Choose a plan');
+        }
         setRequiredPoliciesAccepted();
         await component.onTermsSubmit();
         fixture.detectChanges();
-        if (choice === 'sync') expect(mockRouter.navigate).toHaveBeenCalledWith([path], { queryParams: { setup: 'sync' } });
-        else expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+        if (choice === 'compare') expect(mockRouter.navigate).toHaveBeenCalledWith([path]);
+        else expect(mockRouter.navigate).toHaveBeenCalledWith([path], { queryParams: { setup: choice } });
         expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
         expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(expect.objectContaining(savedConsent), { completeOnboarding: true });
         expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
@@ -536,7 +539,7 @@ describe('OnboardingComponent', () => {
         expect(mockAnalyticsService.logOnboardingFlow).not.toHaveBeenCalled();
         profile$.next({ ...profile$.value, acceptedTrackingPolicy });
         await saving;
-        expect(mockRouter.navigate).toHaveBeenCalledExactlyOnceWith(['/dashboard']);
+        expect(mockRouter.navigate).toHaveBeenCalledExactlyOnceWith(['/subscriptions'], { queryParams: { setup: 'analyze' } });
     });
 
     it('does not record a failure under old consent if an analytics opt-out acknowledgement times out', async () => {
@@ -1415,7 +1418,10 @@ describe('OnboardingComponent', () => {
     });
 
     it.each([
-        { flow: 'analyze', destination: 'dashboard', path: '/dashboard', role: null },
+        { flow: 'analyze', destination: 'membership', path: '/subscriptions?setup=analyze', role: null },
+        { flow: 'analyze', destination: 'membership', path: '/subscriptions?setup=analyze', role: 'free' },
+        { flow: 'analyze', destination: 'dashboard', path: '/dashboard', role: 'basic' },
+        { flow: 'analyze', destination: 'dashboard', path: '/dashboard', role: 'pro' },
         { flow: 'compare', destination: 'compare', path: '/tools/compare', role: null },
         { flow: 'sync', destination: 'pro_plans', path: '/subscriptions?setup=sync', role: null },
         { flow: 'sync', destination: 'pro_plans', path: '/subscriptions?setup=sync', role: 'basic' },

@@ -17,10 +17,12 @@ describe('shared preference setup', () => {
     expect(needsPreferencesSetup({ ...owner, settings: { ...owner.settings, appSettings: {} } })).toBe(false);
     expect(needsPreferencesSetup({ ...owner, settings: { ...owner.settings, appSettings: {unitSetupCompleted: true} } })).toBe(false);
   });
-  it.each(['/dashboard', '/services?setup=sync', '/subscriptions', '/tools/compare', '/tools/compare/saved', '/training/plans', '/calendar', '/health'])('offers the same setup on %s', path => {
+  it.each(['/dashboard', '/services?setup=sync', '/tools/compare', '/tools/compare/saved', '/training', '/calendar', '/health'])('offers the same setup on %s', path => {
     expect(isPreferencesSetupWorkspace(path)).toBe(true);
   });
-  it.each(['/', '/onboarding', '/login', '/settings', '/payment/success', '/mcp/authorize', '/share/event/owner/event', '/user/other/event/event', '/features/training-analysis', '/dashboard-other'])('excludes %s', path => {
+  it.each(['/', '/onboarding', '/login', '/settings', '/payment/success', '/mcp/authorize', '/share/event/owner/event', '/user/other/event/event', '/features/training-analysis', '/dashboard-other',
+    '/subscriptions', '/subscriptions?setup=analyze', '/subscriptions?setup=sync', '/subscriptions?priceId=price_pro',
+    '/training/plans', '/training/plans/plan/example', '/training;view=full/plans/'])('excludes %s', path => {
     expect(isPreferencesSetupWorkspace(path)).toBe(false);
   });
   it('preserves current mixed units and independent weight/week start on opening', () => {
