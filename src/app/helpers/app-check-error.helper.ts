@@ -16,6 +16,9 @@ export interface AppCheckFailureDetails {
 export function isAppCheckVerificationFailure(error: unknown): boolean {
   if (appCheckFailureDetails(error)) return true;
   const value = error as { code?: unknown; message?: unknown } | null;
+  // Auth can surface the server's App Check rejection verbatim, including its final period.
+  if (value?.code === 'auth/firebase-app-check-token-is-invalid'
+    || value?.code === 'auth/firebase-app-check-token-is-invalid.') return true;
   return (value?.code === 'functions/failed-precondition' || value?.code === 'failed-precondition')
     && typeof value.message === 'string' && /app check verification failed/i.test(value.message);
 }

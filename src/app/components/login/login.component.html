@@ -33,6 +33,19 @@
           <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>
           }
         </div>
+        } @else if (emailLinkVerificationFailed()) {
+        <div class="profile-read-error" role="alert" data-testid="email-link-verification-error">
+          <mat-icon aria-hidden="true">error_outline</mat-icon>
+          <h2 class="title">We couldn't verify this browser</h2>
+          <p class="subtitle">No sign-in email was sent. Reload this page, then try sending the link again.</p>
+          <p class="subtitle">If verification fails again, try a regular browser window or another trusted network. Check whether a privacy extension is blocking Google's verification scripts on this site.</p>
+          <p class="subtitle">Reloading starts a new check, but verification may still be rejected.</p>
+          <button mat-raised-button class="action-button qs-mat-primary" data-testid="email-link-verification-reload"
+            (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
+            {{ isProfileRecoveryInProgress ? 'Reloading…' : 'Reload page' }}
+          </button>
+          <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>
+        </div>
         } @else {
 
         <!-- Email Link Sign In -->

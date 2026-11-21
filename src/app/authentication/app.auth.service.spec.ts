@@ -102,6 +102,8 @@ import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-work
 import { HistoryImportProgressService } from '../services/history-import-progress.service';
 import { HISTORY_IMPORT_PROVIDERS } from '../helpers/history-import-progress.helper';
 import { MemoryStorage } from '../services/storage/memory.storage';
+import { AppCheckDiagnosticsService } from '../services/app-check-diagnostics.service';
+import { LoggerService } from '../services/logger.service';
 
 import { signal } from '@angular/core';
 
@@ -135,6 +137,7 @@ const mockLocalStorageService = {
     clearAllStorage: vi.fn()
 };
 const mockSessionStorage = { removeItem: vi.fn() };
+const diagnostics = { beginOperation: vi.fn(), reportOperationBlocked: vi.fn(), reportOperationSucceeded: vi.fn() };
 
 
 describe('AppAuthService', () => {
@@ -145,6 +148,9 @@ describe('AppAuthService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        diagnostics.beginOperation.mockReset().mockReturnValue({ authRevision: 0, sequence: 1 });
+        diagnostics.reportOperationBlocked.mockReset();
+        diagnostics.reportOperationSucceeded.mockReset();
         mockAuth.currentUser = null;
         userSubject = new BehaviorSubject<any>(null);
         authStateSubject = new BehaviorSubject<any>(null);
@@ -160,6 +166,7 @@ describe('AppAuthService', () => {
         TestBed.configureTestingModule({
             providers: [
                 AppAuthService,
+                { provide: AppCheckDiagnosticsService, useValue: diagnostics },
                 { provide: Auth, useValue: mockAuth },
                 { provide: Firestore, useValue: mockFirestore },
                 { provide: Analytics, useValue: null },
@@ -470,6 +477,45 @@ describe('AppAuthService', () => {
     });
 
     describe('email link auth', () => {
+        it.each(['auth/firebase-app-check-token-is-invalid', 'auth/firebase-app-check-token-is-invalid.'])(
+            'hands %s to persistent login recovery without retrying, storing email, or reporting the raw error', async code => {
+                const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+                const failure = { code, message: 'private-message', customData: { token: 'private-token' } };
+                vi.mocked(sendSignInLinkToEmail).mockRejectedValueOnce(failure);
+                const reportRaw = vi.spyOn(TestBed.inject(LoggerService), 'error');
+                await expect(service.sendEmailLink('synthetic@example.invalid')).rejects.toBe(failure);
+                expect(sendSignInLinkToEmail).toHaveBeenCalledTimes(1);
+                expect(mockLocalStorageService.setItem).not.toHaveBeenCalled();
+                expect(mockSnackBar.open).not.toHaveBeenCalled();
+                expect(reportRaw).not.toHaveBeenCalled();
+                expect(diagnostics.reportOperationBlocked).toHaveBeenCalledWith(failure, 'email-link-send',
+                    { authRevision: 0, sequence: 1 });
+                expect(diagnostics.reportOperationSucceeded).not.toHaveBeenCalled();
+            });
+
+        it('reports success only after Auth accepts the email request, without changing the return contract', async () => {
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+            let accept!: () => void;
+            vi.mocked(sendSignInLinkToEmail).mockReturnValueOnce(new Promise(resolve => { accept = resolve; }));
+            const sent = service.sendEmailLink('synthetic@example.invalid');
+            expect(diagnostics.reportOperationSucceeded).not.toHaveBeenCalled();
+            accept();
+            await expect(sent).resolves.toBe(true);
+            expect(diagnostics.reportOperationSucceeded).toHaveBeenCalledWith('email-link-send',
+                { authRevision: 0, sequence: 1 });
+        });
+
+        it.each(['beginOperation', 'reportOperationBlocked', 'reportOperationSucceeded'] as const)(
+            'keeps diagnostics failures in %s from changing Auth outcomes', async method => {
+                diagnostics[method].mockImplementation(() => { throw Error('diagnostics unavailable'); });
+                const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+                const failure = { code: 'auth/firebase-app-check-token-is-invalid.' };
+                vi.mocked(sendSignInLinkToEmail).mockRejectedValueOnce(failure);
+                await expect(service.sendEmailLink('synthetic@example.invalid')).rejects.toBe(failure);
+                vi.mocked(sendSignInLinkToEmail).mockResolvedValueOnce(undefined);
+                await expect(service.sendEmailLink('synthetic@example.invalid')).resolves.toBe(true);
+            });
+
         it('keeps demo billing email links on the current local HTTP origin and port', async () => {
             const previous = environment.firebase.projectId;
             environment.firebase.projectId = 'demo-stripe-billing';

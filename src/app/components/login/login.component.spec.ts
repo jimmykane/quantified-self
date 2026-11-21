@@ -144,6 +144,112 @@ describe('LoginComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each(['auth/firebase-app-check-token-is-invalid', 'auth/firebase-app-check-token-is-invalid.'])(
+        'keeps %s visible without retrying, navigating, or logging raw errors', async code => {
+            mockAuthService.sendEmailLink.mockRejectedValueOnce({ code, message: 'private-message' });
+            await expect(component.sendEmailLink('synthetic@example.invalid')).resolves.toBe(false);
+            expect(component.emailLinkVerificationFailed()).toBe(true);
+            expect(component.isLoading).toBe(false);
+            await component.sendEmailLink('synthetic@example.invalid');
+            expect(mockAuthService.sendEmailLink).toHaveBeenCalledTimes(1);
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
+            expect(mockLogger.error).not.toHaveBeenCalled();
+            expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+            expect(appWindow.windowRef.location.reload).not.toHaveBeenCalled();
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+    it('keeps a normal send failure separate from browser verification and prevents overlapping sends', async () => {
+        let finish!: (sent: boolean) => void;
+        mockAuthService.sendEmailLink.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+        const sending = component.sendEmailLink('synthetic@example.invalid');
+        await expect(component.sendEmailLink('synthetic@example.invalid')).resolves.toBe(false);
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledTimes(1);
+        expect(haptics.error).not.toHaveBeenCalled();
+        expect(haptics.success).not.toHaveBeenCalled();
+        finish(false);
+        await expect(sending).resolves.toBe(false);
+        expect(component.emailLinkVerificationFailed()).toBe(false);
+        expect(component.isLoading).toBe(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives success feedback only after the email request succeeds', async () => {
+        let finish!: (sent: boolean) => void;
+        mockAuthService.sendEmailLink.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+        const sending = component.sendEmailLink('synthetic@example.invalid');
+        expect(haptics.success).not.toHaveBeenCalled();
+        finish(true);
+        await expect(sending).resolves.toBe(true);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(component.emailLinkVerificationFailed()).toBe(false);
+    });
+
+    it('renders blocked email recovery and reloads only after an explicit click without sending again', async () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            declarations: [LoginComponent], imports: [MatButtonModule], schemas: [NO_ERRORS_SCHEMA],
+            providers: [
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: AppHapticsService, useValue: haptics },
+                { provide: AppWindowService, useValue: appWindow },
+                { provide: Router, useValue: mockRouter },
+                { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
+                { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: MatDialog, useValue: mockDialog },
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: AppAnalyticsService, useValue: {} },
+            ],
+        });
+        mockAuthService.sendEmailLink.mockRejectedValueOnce({
+            code: 'auth/firebase-app-check-token-is-invalid.', message: 'private-message',
+        });
+        const fixture = TestBed.createComponent(LoginComponent);
+        vi.spyOn(fixture.componentInstance, 'ngOnInit').mockResolvedValue(undefined);
+        await fixture.componentInstance.sendEmailLink('synthetic@example.invalid');
+        fixture.detectChanges();
+        const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="email-link-verification-error"]');
+        expect(panel.getAttribute('role')).toBe('alert');
+        expect(panel.textContent).toContain('No sign-in email was sent');
+        expect(panel.textContent).not.toContain("You're still signed in");
+        expect(panel.textContent).not.toContain('private-message');
+        expect(panel.querySelector('a')?.textContent).toContain('Browser verification help');
+        expect(fixture.nativeElement.querySelector('input[type="email"]')).toBeNull();
+        expect(appWindow.windowRef.location.reload).not.toHaveBeenCalled();
+        const reload: HTMLButtonElement = panel.querySelector('button')!;
+        reload.click();
+        fixture.detectChanges();
+        expect(reload.disabled).toBe(true);
+        expect(reload.textContent.trim()).toBe('Reloading…');
+        expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(1);
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledTimes(1);
+        expect(mockAuthService.signOut).not.toHaveBeenCalled();
+        expect(mockUserService.retryProfileRead).not.toHaveBeenCalled();
+        expect(haptics.selection).toHaveBeenCalledTimes(2); // Send, then explicit Reload.
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        fixture.destroy();
+    });
+
+    it('re-enables a cancelled email-verification reload without resending or clearing storage', async () => {
+        vi.useFakeTimers();
+        try {
+            component.emailLinkVerificationFailed.set(true);
+            await component.recoverFromProfileReadError();
+            await component.recoverFromProfileReadError();
+            expect(appWindow.windowRef.location.reload).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(component.isProfileRecoveryInProgress).toBe(false);
+            expect(component.emailLinkVerificationFailed()).toBe(true);
+            expect(mockAuthService.sendEmailLink).not.toHaveBeenCalled();
+            expect(mockAuthService.localStorageService.removeItem).not.toHaveBeenCalled();
+            expect(mockAuthService.signOut).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
     it('should render a recovery action instead of an endless loading state for terminal profile errors', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/login/login.component.html'),
