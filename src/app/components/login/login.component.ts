@@ -310,7 +310,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               this.finishEmailLinkCompletion(sentReplacementLink);
               // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub)
               // to the account that will be signed in via email.
-              if (pendingCredential) {
+              if (sentReplacementLink && pendingCredential) {
                 // We can't save the full credential object :(
                 // But we can save the provider ID and ask user to re-login with it to link.
                 this.authService.localStorageService.setItem('pendingLinkProvider', pendingCredential.providerId);

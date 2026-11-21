@@ -210,8 +210,13 @@ describe('LoginComponent', () => {
         });
         const fixture = TestBed.createComponent(LoginComponent);
         vi.spyOn(fixture.componentInstance, 'ngOnInit').mockResolvedValue(undefined);
+        mockUserService.isProfileReadBlocking.set(true);
+        fixture.detectChanges();
+        const overlay = fixture.nativeElement.querySelector('app-loading-overlay') as HTMLElement & { isLoading: boolean };
+        expect(overlay.isLoading).toBe(true);
         await fixture.componentInstance.sendEmailLink('synthetic@example.invalid');
         fixture.detectChanges();
+        expect(overlay.isLoading).toBe(false);
         const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="email-link-verification-error"]');
         expect(panel.getAttribute('role')).toBe('alert');
         expect(panel.textContent).toContain('No sign-in email was sent');
@@ -571,6 +576,26 @@ describe('LoginComponent', () => {
         expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com', null);
         // Check if persist was called. The mock collision error creates a credential.
         expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
+    });
+
+    it.each(['verification', 'ordinary'])('does not save an account-linking intent after a %s email failure', async failure => {
+        mockAuthService.githubLogin.mockRejectedValueOnce({
+            code: 'auth/account-exists-with-different-credential', customData: { email: 'synthetic@example.invalid' },
+        });
+        mockAuthService.fetchSignInMethods.mockResolvedValueOnce(['password']);
+        Object.assign(mockDialog, { open: vi.fn().mockReturnValue({ afterClosed: () => of('emailLink') }) });
+        if (failure === 'verification') {
+            mockAuthService.sendEmailLink.mockRejectedValueOnce({ code: 'auth/firebase-app-check-token-is-invalid.' });
+        } else {
+            mockAuthService.sendEmailLink.mockResolvedValueOnce(false);
+        }
+        component.signInWithProvider(SignInProviders.GitHub);
+        await vi.waitFor(() => expect(component.isLoading).toBe(false));
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledExactlyOnceWith('synthetic@example.invalid', null);
+        expect(mockAuthService.localStorageService.setItem).not.toHaveBeenCalled();
+        expect(component.emailLinkVerificationFailed()).toBe(failure === 'verification');
+        expect(mockAuthService.linkCredential).not.toHaveBeenCalled();
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
     });
 
     it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {

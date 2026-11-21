@@ -1,7 +1,7 @@
 <div class="login-container">
   <mat-card class="login-card">
     <app-loading-overlay
-      [isLoading]="!userService.hasActionableProfileReadFailure() && (isLoading || userService.isProfileReadBlocking())"
+      [isLoading]="!emailLinkVerificationFailed() && !userService.hasActionableProfileReadFailure() && (isLoading || userService.isProfileReadBlocking())"
       [showSkeleton]="false" height="auto">
       <div class="login-content">
         @if (userService.hasActionableProfileReadFailure()) {
