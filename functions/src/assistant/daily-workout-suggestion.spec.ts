@@ -277,6 +277,18 @@ describe('daily workout preparation', () => {
     await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).rejects.toMatchObject({ code: 'permission-denied' });
     expect(deps.store.read).not.toHaveBeenCalled();
   });
+  it('rechecks Pro access after preparation without charging or generating if access expires', async () => {
+    const deps = dependencies();
+    deps.pro.mockResolvedValueOnce(true).mockResolvedValue(false);
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps))
+      .rejects.toMatchObject({ code: 'unavailable' });
+    expect(deps.pro).toHaveBeenCalledTimes(2);
+    expect(deps.store.charge).not.toHaveBeenCalled();
+    expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.log).toHaveBeenCalledWith({
+      outcome: 'access_rejected', accessCheck: 'pro', accessReason: 'pro_required',
+    });
+  });
   it('rejects controls, dates and other injected parameters on the private mode', async () => {
     const deps = dependencies();
     await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare', date: 'tomorrow' }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
