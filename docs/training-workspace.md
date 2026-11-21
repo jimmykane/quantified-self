@@ -828,8 +828,12 @@ Gemini's documented `responseJsonSchema` subset does not include Zod's emitted `
 MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are
 unchanged. Help needs no wording change because the supported generation choices and review flow are unchanged.
 Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
-shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
-complexity limit; the canonical parsers and generation validator still enforce all of those limits after generation.
+shape. Timed endurance steps, including repeated steps, keep an integer `seconds` field with a minimum of 1 in the
+model schema. The prompt tells the model to omit zero-second placeholders. This prevents repeated invalid durations
+from exhausting the same two-attempt budget when the model follows the schema. Other numeric, length, pattern and array
+bounds are trimmed to avoid Gemini's nested-schema complexity limit. The canonical parsers and generation validator
+continue to enforce the full prescription. This affects manual and daily generation through `generateDayWorkout` and
+requires only that Function to be released. Public MCP contracts and existing daily receipts are unaffected.
 See [Gemini structured-output limits](https://ai.google.dev/gemini-api/docs/structured-output#limitations).
 Validation corrections include only server-authored reasons. Failure diagnostics record the stage, billable flag,
 error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
