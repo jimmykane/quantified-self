@@ -5,7 +5,7 @@
     <div class="chart-title">Intensity Zones</div>
     <div class="chart-description">Distribution of time spent across active intensity zones.</div>
     </div>
-    @if (allowMetricSelection && metricOptions.length) {
+    @if (canChooseMetrics) {
     <button mat-button type="button" [matMenuTriggerFor]="metricsMenu" (menuOpened)="metricsMenuOpened()"
       aria-label="Choose intensity metrics" class="intensity-metrics-trigger">
       <mat-icon aria-hidden="true">tune</mat-icon>
@@ -25,7 +25,7 @@
     }
   </div>
   }
-  @if (allowMetricSelection && metricPreferenceSaveFailed()) {
+  @if (canChooseMetrics && metricPreferenceSaveFailed()) {
   <p class="intensity-metrics-save-error" role="status">Your selection applies to this view but could not be saved.</p>
   }
   <mat-menu #metricsMenu="matMenu" class="qs-menu-panel" aria-label="Intensity metrics">
@@ -42,7 +42,7 @@
     [style.visibility]="allowMetricSelection && !selectedMetricCount ? 'hidden' : null"
     [attr.aria-hidden]="allowMetricSelection && !selectedMetricCount ? true : null"
     aria-label="Intensity zones bar chart showing time spent across available intensity metrics."></div>
-  @if (allowMetricSelection && !selectedMetricCount && metricOptions.length) {
+  @if (canChooseMetrics && !selectedMetricCount) {
   <p class="intensity-metrics-empty" role="status">Choose a metric from Metrics to show its zones.</p>
   }
   </div>
