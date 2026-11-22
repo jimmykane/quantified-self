@@ -23,14 +23,14 @@ import { AppUserInterface } from '../../models/app-user.interface';
 import { onboardingReturnTarget, onboardingStart, OnboardingStart } from '../../helpers/onboarding-navigation.helper';
 import { filter, firstValueFrom, of, take, timeout } from 'rxjs';
 import { AppUserAccess } from '../../helpers/user-access.helper';
-import { OnboardingTerrainComponent } from './terrain/onboarding-terrain.component';
+import { TerrainComponent } from '../shared/terrain/terrain.component';
 
 @Component({
     selector: 'app-onboarding',
     standalone: true,
     imports: [
         CommonModule,
-        OnboardingTerrainComponent,
+        TerrainComponent,
         MatButtonModule,
         ReactiveFormsModule,
         MatCheckboxModule,

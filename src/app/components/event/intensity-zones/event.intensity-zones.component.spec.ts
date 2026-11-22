@@ -54,6 +54,10 @@ describe('EventIntensityZonesComponent', () => {
     error: ReturnType<typeof vi.fn>;
   };
 
+  const heartRate = { type: 'Heart Rate', values: [100, 200], percentages: [33.3333, 66.6666] };
+  const power = { type: 'Power', values: [250, 50], percentages: [83.3333, 16.6666] };
+  const heartRateData = { zones: ['Zone 1', 'Zone 2'], series: [heartRate] };
+  const multiMetricData = { ...heartRateData, series: [heartRate, power] };
   const mockedConvert = vi.mocked(convertIntensityZonesStatsToEchartsData);
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
@@ -125,16 +129,7 @@ describe('EventIntensityZonesComponent', () => {
       error: vi.fn(),
     };
 
-    mockedConvert.mockReturnValue({
-      zones: ['Zone 1', 'Zone 2'],
-      series: [
-        {
-          type: 'Heart Rate',
-          values: [100, 200],
-          percentages: [33.3333, 66.6666],
-        },
-      ],
-    });
+    mockedConvert.mockReturnValue(heartRateData);
 
     await TestBed.configureTestingModule({
       imports: [EventIntensityZonesComponent, NoopAnimationsModule],
@@ -161,9 +156,7 @@ describe('EventIntensityZonesComponent', () => {
   });
 
   it('updates selected series and tooltip data without aggregating again or retaining the previous tooltip', async () => {
-    const heartRate = { type: 'Heart Rate', values: [100, 200], percentages: [33.3333, 66.6666] };
-    const power = { type: 'Power', values: [250, 50], percentages: [83.3333, 16.6666] };
-    mockedConvert.mockReturnValue({ zones: ['Zone 1', 'Zone 2'], series: [heartRate, power] });
+    mockedConvert.mockReturnValue(multiMetricData);
     component.allowMetricSelection = true;
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -196,6 +189,7 @@ describe('EventIntensityZonesComponent', () => {
   });
 
   it('restores choices when reopened and preserves hidden metrics absent from this activity', async () => {
+    mockedConvert.mockReturnValue(multiMetricData);
     chartSettings.getHiddenIntensityZoneMetrics.mockReturnValue(['Heart Rate', 'Speed']);
     fixture.destroy();
     fixture = TestBed.createComponent(EventIntensityZonesComponent);
@@ -203,33 +197,61 @@ describe('EventIntensityZonesComponent', () => {
     component.allowMetricSelection = true;
     fixture.detectChanges();
     await waitForChartStabilization();
-    expect(component.selectedMetricCount).toBe(0);
-    expect(getLastOption().series).toEqual([]);
+    expect(component.selectedMetricCount).toBe(1);
+    expect(getLastOption().series.map(series => series.data)).toEqual([power.values]);
     expect(haptics.selection).not.toHaveBeenCalled();
     component.toggleMetric('Heart Rate');
     expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenLastCalledWith(['Speed']);
     expect(getLastOption().series[0].data).toEqual([100, 200]);
   });
 
+  it('shows the sole recorded metric without a picker and restores saved choices when more become available', async () => {
+    chartSettings.getHiddenIntensityZoneMetrics.mockReturnValue(['Heart Rate']);
+    fixture.componentRef.setInput('allowMetricSelection', true);
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.intensity-metrics-trigger')).toBeNull();
+    expect(host.querySelector('.intensity-metric-legend')?.textContent).toContain('Heart rate');
+    expect(host.querySelector('.intensity-zones-chart')?.getAttribute('aria-hidden')).toBeNull();
+    expect(host.querySelector('.intensity-metrics-empty')).toBeNull();
+    expect(getLastOption().series.map(series => series.data)).toEqual([heartRate.values]);
+
+    mockedConvert.mockReturnValue(multiMetricData);
+    fixture.componentRef.setInput('activities', []);
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.intensity-metrics-trigger')?.textContent).toContain('Metrics · 1');
+    expect(getLastOption().series.map(series => series.data)).toEqual([power.values]);
+    expect(chartSettings.setHiddenIntensityZoneMetrics).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('retains a metric choice made while the chart is still initializing', async () => {
+    mockedConvert.mockReturnValue(multiMetricData);
     let finishLoading!: (chart: typeof mockChart) => void;
     mockLoader.init.mockReturnValue(new Promise<typeof mockChart>(resolve => { finishLoading = resolve; }));
     component.allowMetricSelection = true;
     fixture.detectChanges();
 
     component.toggleMetric('Heart Rate');
-    expect(component.selectedMetricCount).toBe(0);
+    expect(component.selectedMetricCount).toBe(1);
     expect(mockChart.dispatchAction).not.toHaveBeenCalled();
     expect(mockLoader.setOption).not.toHaveBeenCalled();
 
     finishLoading(mockChart);
     await waitForChartStabilization();
-    expect(getLastOption().series).toEqual([]);
+    expect(getLastOption().series.map(series => series.data)).toEqual([power.values]);
     expect(chartSettings.setHiddenIntensityZoneMetrics).toHaveBeenCalledExactlyOnceWith(['Heart Rate']);
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('keeps metric toggles working when browser storage rejects the save and clears the message after recovery', async () => {
+    mockedConvert.mockReturnValue(multiMetricData);
     component.allowMetricSelection = true;
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -238,21 +260,22 @@ describe('EventIntensityZonesComponent', () => {
 
     component.toggleMetric('Heart Rate');
     fixture.detectChanges();
-    expect(component.selectedMetricCount).toBe(0);
-    expect(getLastOption().series).toEqual([]);
+    expect(component.selectedMetricCount).toBe(1);
+    expect(getLastOption().series.map(series => series.data)).toEqual([power.values]);
     expect(fixture.nativeElement.querySelector('.intensity-metrics-save-error').textContent).toContain('could not be saved');
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Could not save metric visibility'), error);
     expect(haptics.selection).toHaveBeenCalledOnce();
 
     component.toggleMetric('Heart Rate');
     fixture.detectChanges();
-    expect(component.selectedMetricCount).toBe(1);
-    expect(getLastOption().series).toHaveLength(1);
+    expect(component.selectedMetricCount).toBe(2);
+    expect(getLastOption().series.map(series => series.data)).toEqual([heartRate.values, power.values]);
     expect(fixture.nativeElement.querySelector('.intensity-metrics-save-error')).toBeNull();
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('provides a checkmarked metric menu that stays open for multiple choices', async () => {
+    mockedConvert.mockReturnValue(multiMetricData);
     component.allowMetricSelection = true;
     fixture.detectChanges();
     await waitForChartStabilization();

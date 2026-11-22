@@ -1,6 +1,10 @@
 <div class="landing-page">
   <section class="hero-section" aria-labelledby="home-title">
     <div class="hero-content">
+      <div class="hero-terrain" aria-hidden="true">
+        <app-terrain [motionPaused]="heroMotionPaused()"></app-terrain>
+      </div>
+      <div class="hero-copy">
       <div class="brand-badge">
         <mat-icon svgIcon="logo" class="brand-logo" aria-hidden="true"></mat-icon>
         <p class="brand-name">Quantified Self.io</p>
@@ -18,6 +22,7 @@
         <li><mat-icon aria-hidden="true">download</mat-icon> Original-file exports</li>
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
+      </div>
     </div>
     <div class="hero-visual" [class.hero-motion-paused]="heroMotionPaused()" [class.hero-motion-suspended]="heroMotionSuspended()" role="group" aria-label="Supported provider activities flow into Quantified Self">
       <!-- Decorative connection geometry; all data charts remain shared app components. -->
@@ -66,7 +71,7 @@
           <div class="hero-preview-controls">
             <span class="hero-sample-label">Sample data</span>
             <button mat-icon-button class="hero-motion-toggle" (click)="toggleHeroMotion()"
-              [attr.aria-label]="heroMotionPaused() ? 'Play connection animation' : 'Pause connection animation'"
+              [attr.aria-label]="heroMotionPaused() ? 'Play hero animation' : 'Pause hero animation'"
               [matTooltip]="heroMotionPaused() ? 'Play animation' : 'Pause animation'">
               <mat-icon aria-hidden="true">{{ heroMotionPaused() ? 'play_arrow' : 'pause' }}</mat-icon>
             </button>
