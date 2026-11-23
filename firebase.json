@@ -376,6 +376,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/training/plans/catalog",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/training/plans/workout/*",
           "destination": "/index.csr.html"
         },
@@ -721,6 +725,10 @@
         },
         {
           "source": "/calendar/day/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/catalog",
           "destination": "/index.csr.html"
         },
         {

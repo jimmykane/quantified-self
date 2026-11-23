@@ -2,7 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { Subject, firstValueFrom } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
-import { TrainingRestDaysService } from './training-rest-days.service';
+import { TrainingRestDaysService, calendarRestReadFailureDetails } from './training-rest-days.service';
+import { LoggerService } from './logger.service';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 
 const sdk = vi.hoisted(() => ({ doc: vi.fn((...parts) => parts.slice(1).join('/')), docData: vi.fn(), collectionData: vi.fn(),
@@ -18,8 +19,10 @@ function setup() {
   const set = vi.fn((_ref, value) => { record = value; });
   sdk.docData.mockReturnValue(day$); sdk.collectionData.mockReturnValue(range$);
   sdk.runTransaction.mockImplementation(async (_db, write) => write({ get, set }));
-  TestBed.configureTestingModule({ providers: [{ provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} }] });
-  return { service: TestBed.inject(TrainingRestDaysService), auth, day$, range$, get, set,
+  const logger = { captureMessage: vi.fn() };
+  TestBed.configureTestingModule({ providers: [{ provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
+    { provide: LoggerService, useValue: logger }] });
+  return { service: TestBed.inject(TrainingRestDaysService), auth, day$, range$, get, set, logger,
     seed: (value: TrainingRestDayV1 | null) => { record = value; } };
 }
 const date = '2026-10-31';
@@ -29,6 +32,47 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.useRealTimers());
 
 describe('calendar rest-day persistence', () => {
+  it.each(['no_snapshot', 'cache_only', 'pending_writes', 'revision_behind'] as const)(
+    'diagnoses an exhausted %s timeout without changing the read budget', async state => {
+      vi.useFakeTimers();
+      const { service, day$, logger } = setup(); const error = vi.fn();
+      if (state === 'revision_behind') await service.setDay('owner', date, true, 0, () => true);
+      service.watchDay('owner', date).subscribe({ error });
+      const observe = () => {
+        if (state === 'cache_only' || state === 'pending_writes') {
+          sdk.docData.mock.calls.at(-1)![1].onSnapshotMetadata({ fromCache: state === 'cache_only', hasPendingWrites: state === 'pending_writes' });
+        } else if (state === 'revision_behind') day$.next(undefined);
+      };
+      observe(); await vi.advanceTimersByTimeAsync(15_500); observe(); await vi.advanceTimersByTimeAsync(15_000);
+      expect(calendarRestReadFailureDetails(error.mock.calls[0][0])).toEqual({ attempt: 2, snapshotState: state });
+      expect(sdk.docData).toHaveBeenCalledTimes(2); expect(logger.captureMessage).not.toHaveBeenCalled();
+      expect(calendarRestReadFailureDetails({ code: 'deadline-exceeded', snapshotState: 'private' })).toBeNull();
+    });
+
+  it.each([false, true])('reports shared initial-read recovery once, preserving data if diagnostics throw=%s', async throws => {
+    vi.useFakeTimers(); const { service, day$, logger } = setup(); const next = vi.fn();
+    if (throws) logger.captureMessage.mockImplementation(() => { throw Error('unavailable'); });
+    const first = service.watchDay('owner', date).subscribe(next);
+    const second = service.watchDay('owner', date).subscribe();
+    await vi.advanceTimersByTimeAsync(15_500); day$.next(rest); day$.next({ ...rest, revision: 2 });
+    expect(next).toHaveBeenCalledTimes(2); expect(logger.captureMessage).toHaveBeenCalledOnce();
+    expect(logger.captureMessage.mock.calls[0]).toEqual(['Calendar rest-day verification recovered', {
+      level: 'info', tags: { operation: 'calendar-rest', outcome: 'recovered' },
+      contexts: { calendarRestRead: { attempt: 2, elapsedMs: 500 } },
+    }]);
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toMatch(/owner|2026-10-31|isRestDay|revision/);
+    first.unsubscribe(); second.unsubscribe();
+  });
+
+  it('reports a successful explicit reattachment after exhaustion without restarting failed reads automatically', async () => {
+    vi.useFakeTimers(); const { service, day$, logger } = setup(); const error = vi.fn();
+    const stream = service.watchDay('owner', date); stream.subscribe({ error });
+    await vi.advanceTimersByTimeAsync(30_500); expect(error).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000); expect(sdk.docData).toHaveBeenCalledTimes(2);
+    const next = vi.fn(); const subscription = stream.subscribe(next); day$.next(undefined);
+    expect(next).toHaveBeenCalledExactlyOnceWith(null); expect(sdk.docData).toHaveBeenCalledTimes(3);
+    expect(logger.captureMessage).toHaveBeenCalledOnce(); subscription.unsubscribe();
+  });
   it('shares one bounded initial timeout retry and waits for verified rest evidence', async () => {
     vi.useFakeTimers();
     const { service, day$ } = setup(); const next = vi.fn(), error = vi.fn();
@@ -118,7 +162,9 @@ describe('calendar rest-day persistence', () => {
     const first = service.watchDay('owner', date).subscribe(next), second = service.watchDay('owner', date).subscribe();
     expect(next).not.toHaveBeenCalled(); day$.next(undefined); day$.next(undefined); day$.next(rest);
     expect(next).toHaveBeenCalledTimes(2); expect(changes.mock.calls.map(([value]) => value.revision)).toEqual([0, 1]);
-    expect(sdk.docData).toHaveBeenCalledWith('users/owner/trainingRestDays/2026-10-31', { waitForServer: true });
+    expect(sdk.docData).toHaveBeenCalledWith('users/owner/trainingRestDays/2026-10-31', {
+      waitForServer: true, onSnapshotMetadata: expect.any(Function),
+    });
     first.unsubscribe(); expect(day$.observed).toBe(true); second.unsubscribe(); expect(day$.observed).toBe(false);
   });
   it('requires fresh evidence after the last day listener disconnects and reconnects', () => {

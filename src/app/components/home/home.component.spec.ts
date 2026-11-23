@@ -15,6 +15,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
+import { PublicTrainingCatalogComponent } from '../public-seo/public-training-catalog.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HomeComponent } from './home.component';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -58,6 +59,41 @@ describe('HomeComponent', () => {
     fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
   }
+
+  it('links guests to the public plan comparisons before previews load', () => {
+    renderHome();
+    const catalog = fixture.nativeElement.querySelector('#home-plans app-public-training-catalog') as HTMLElement;
+    const links = Array.from(catalog.querySelectorAll('a'));
+    expect(links.map(link => link.getAttribute('href'))).toEqual([
+      '/features/training-plans#plan-first-run', '/features/training-plans#plan-first-ride',
+      '/features/training-plans#plan-tredict-running-base', '/features/training-plans#free-training-plans',
+    ]);
+    expect(catalog.textContent).toContain('Felix Gertz');
+    expect(selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    links[0].click();
+    expect(router.serializeUrl(navigate.mock.calls[0][0] as ReturnType<Router['createUrlTree']>))
+      .toBe('/features/training-plans#plan-first-run');
+    expect(selection).not.toHaveBeenCalled(); // Cross-page navigation owns the selection feedback.
+  });
+
+  it('yields the pending Home section scroll to a restored catalog link', () => {
+    renderHome();
+    const section = fixture.nativeElement.querySelector('#home-plans') as HTMLElement;
+    section.scrollIntoView = vi.fn();
+    const catalog = fixture.debugElement.query(By.directive(PublicTrainingCatalogComponent)).componentInstance as PublicTrainingCatalogComponent;
+    location.go('/#home-plans');
+    catalog.returnLinkRestored.emit();
+    fixture.detectChanges();
+    expect(section.scrollIntoView).not.toHaveBeenCalled();
+
+    fixture.componentInstance.jumpToFeature('plans');
+    fixture.detectChanges();
+    expect(section.scrollIntoView).toHaveBeenCalledOnce();
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    catalog.returnLinkRestored.emit();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 
   it('keeps anonymous visitors on home and redirects authenticated users to Dashboard', () => {
     renderHome();

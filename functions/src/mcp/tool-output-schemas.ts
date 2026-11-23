@@ -1,4 +1,5 @@
 import { activityStreamSeriesSchema } from './activity-stream.schema';
+import { TEMPLATE_TOOLS, TEMPLATE_OUTPUTS } from './plan-templates.schemas';
 import { GOAL_TOOLS, GOAL_OUTPUTS } from './training-goals.schemas';
 import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_OUTPUTS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
@@ -63,6 +64,7 @@ import {
 export const PUBLIC_MCP_TOOL_NAMES = [
   ...TRAINING_THRESHOLD_TOOLS,
   ...GOAL_TOOLS,
+  ...TEMPLATE_TOOLS,
   ...MCP_WORKOUT_REFLECTION_TOOLS,
   ...MCP_MANUAL_MEASUREMENT_TOOLS,
   ...TRAINING_READ_TOOLS,
@@ -1614,6 +1616,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     ...MCP_MANUAL_MEASUREMENT_OUTPUTS,
     ...TRAINING_READ_OUTPUTS,
     ...GOAL_OUTPUTS,
+    ...TEMPLATE_OUTPUTS,
     ...TRAINING_THRESHOLD_OUTPUTS,
     ...TRAINING_WRITE_OUTPUTS,
     get_training_change_status: TRAINING_CHANGE_STATUS_OUTPUT,

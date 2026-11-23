@@ -3,6 +3,7 @@ export type McpScope =
   | 'training-thresholds:write'
   | 'workout-reflections:read'
   | 'workout-reflections:write'
+  | 'private-plan-templates:read'
   | 'training-plans:read'
   | 'training-plans:write'
   | 'training-delivery:write'
@@ -24,6 +25,7 @@ export const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
   'training-thresholds:write': 'training-thresholds:read',
   'workout-reflections:read': 'activity-details:read',
   'workout-reflections:write': 'workout-reflections:read',
+  'private-plan-templates:read': 'training-plans:read',
   'training-plans:write': 'training-plans:read',
   'training-delivery:write': 'training-plans:read',
   'timeline-notes:write': 'timeline-notes:read',
@@ -53,6 +55,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
     title: 'Change workout reflections',
     description: 'Save or permanently delete private reflection text using current revisions and your client’s native approval controls. Deletion clears the content permanently and retains only a content-free revision receipt. Requires Private workout reflections access. This never completes or adapts a planned workout or changes provider data.',
   },
+  'private-plan-templates:read': { title: 'Read my private plan templates', description: 'Read your reusable whole plans, their workout instructions and phase descriptions. Approve Training plans access as well.' },
   'training-plans:read': {
     title: 'Training plans and planned workouts',
     description: 'Read calendar goals with names, dates, sports, priorities, status, objectives and optional plan links, plus your current plans, standalone planned workouts and undated saved workout recipes, including names, dates where scheduled, plan and standalone calendar rest dates, authored plan phases and optional descriptions, complete workout instructions, step notes, exact recorded completion links and existing service sync summaries. Goal progress additionally requires activity metrics permission. Authored text may contain sensitive health or personal information. Existing connections must reauthorize. This does not grant activity or Timeline notes access. Revoking access cannot erase copies already received.',

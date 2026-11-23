@@ -56,7 +56,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
-import { AppEventMergeService, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
+import { AppEventMergeService, EventMergeError, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
 import { EventTagService } from '../../services/event-tag.service';
 import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
@@ -775,12 +775,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       result = await this.eventMergeService.mergeEvents(eventIDs, mergeType);
     } catch (error) {
       this.restoreEventSelection(selectedRows);
-      this.logger.captureException(error, {
-        extra: {
-          sourceEventsCount: eventIDs.length,
-          mergeType,
+      try {
+        if (error instanceof EventMergeError && error.code === 'LIMIT_REACHED') {
+          this.logger.captureMessage('Activity comparison rejected: account limit reached', {
+            level: 'info', tags: { operation: 'merge-events', reason: 'account_limit_reached' },
+          });
+        } else {
+          this.logger.captureException(error, {
+            extra: { sourceEventsCount: eventIDs.length, mergeType },
+          });
         }
-      });
+      } catch { /* Diagnostics must not prevent the existing error feedback. */ }
       this.loaded();
       this.snackBar.open(this.eventMergeService.getMergeErrorMessage(error), undefined, {
         duration: 5000,

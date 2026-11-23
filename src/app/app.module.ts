@@ -141,8 +141,8 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     provideFirestore(() => {
       const firestoreSettings: FirestoreInitSettings = {
         ignoreUndefinedProperties: true,
-        // Internal flag: keep as best-effort optimization, not as a contract we rely on.
-        useFetchStreams: true,
+        // WebKit buffers the local emulator’s streaming responses. Polling lets demo listeners deliver snapshots.
+        ...(billingTest ? { experimentalForceLongPolling: true } : { useFetchStreams: true }),
       };
 
       if (isPlatformBrowser(inject(PLATFORM_ID))) {

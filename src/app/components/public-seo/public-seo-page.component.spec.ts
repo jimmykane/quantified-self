@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { ActivatedRoute, NavigationEnd, Router, Scroll } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -285,6 +286,49 @@ describe('PublicSeoPageComponent', () => {
     expect(hrefs).toContain('/features/training-plans');
 
     calendarFixture.destroy();
+  });
+
+  it('restores catalog links inside the shell and preserves real viewport history positions', () => {
+    const events = new Subject<Scroll>();
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'events', 'get').mockReturnValue(events);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
+    const fixture = TestBed.createComponent(PublicSeoPageComponent);
+    fixture.detectChanges();
+    const shell = document.createElement('mat-sidenav-content');
+    const root = fixture.nativeElement as HTMLElement;
+    root.before(shell);
+    shell.append(root);
+    const previousState = history.state;
+    try {
+      history.replaceState({ navigationId: 3 }, '');
+      const heading = root.querySelector<HTMLElement>('#plan-first-run')!;
+      const enroll = root.querySelector<HTMLAnchorElement>('a[href$="template=marathon"]')!;
+      heading.scrollIntoView = vi.fn();
+      enroll.scrollIntoView = vi.fn();
+      const navigation = new NavigationEnd(1, '/features/training-plans', '/features/training-plans');
+      events.next(new Scroll(navigation, [0, 300], heading.id));
+      events.next(new Scroll(navigation, null, 'public-seo-title'));
+      expect(heading.scrollIntoView).not.toHaveBeenCalled();
+      events.next(new Scroll(navigation, null, heading.id));
+      events.next(new Scroll(navigation, [0, 0], heading.id));
+      expect(document.activeElement).toBe(heading);
+      expect(heading.scrollIntoView).toHaveBeenCalledTimes(2);
+
+      enroll.addEventListener('click', event => event.preventDefault());
+      enroll.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+      expect(history.state).toEqual({ navigationId: 3 });
+      enroll.click();
+      expect(history.state).toEqual({ navigationId: 3, qsPublicCatalogLink: enroll.getAttribute('href') });
+      events.next(new Scroll(navigation, [0, 0], null));
+      expect(document.activeElement).toBe(enroll);
+      expect(enroll.scrollIntoView).toHaveBeenCalledOnce();
+    } finally {
+      history.replaceState(previousState, '');
+      fixture.destroy();
+      shell.remove();
+    }
   });
 
   it('renders Training Plans with visible MCP and provider-delivery boundaries', () => {

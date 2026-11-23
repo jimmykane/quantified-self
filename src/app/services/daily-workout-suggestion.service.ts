@@ -4,7 +4,7 @@ import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { deleteField } from 'app/firebase/firestore';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest } from '@shared/day-workout';
 import { isDailyWorkoutFailureReason, isDailyWorkoutEventAdvice, dailyWorkoutSuggestionMergePatch, parseDailyWorkoutSuggestionPreferences, type RegenerateDailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
-import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
+import { AppFunctionsService, callableDiagnosticErrorCode, type CallableFailureStage } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
 import { AppWindowService } from './app.window.service';
@@ -14,6 +14,7 @@ import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjecti
 import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 import { Subscription, firstValueFrom, take } from 'rxjs';
 import { LoggerService } from './logger.service';
+import { calendarRestReadFailureDetails } from './training-rest-days.service';
 import { parseDailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferences } from '../helpers/daily-workout-delivery.helper';
 
 const MAX_CACHE_CHARACTERS = 400_000;
@@ -267,8 +268,9 @@ export class DailyWorkoutSuggestionService {
       ? { mode: 'daily-suggestion', action, localDate: expectedDate!, resultVersion: 2 } : { mode: 'daily-suggestion', action, resultVersion: 2 };
     // The shared operation belongs to this authenticated day, not the component that first requested it.
     const canExecute = () => active() && (!expectedDate || current());
+    let failureStage: CallableFailureStage | 'response_handling' | undefined;
     const invoke = () => this.functions.call<DailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout', request,
-      { canExecute });
+      { canExecute, onFailure: stage => { failureStage = stage; } });
     const retrieve = async () => {
       try { return await invoke(); }
       catch (error) {
@@ -282,6 +284,7 @@ export class DailyWorkoutSuggestionService {
       }
     };
     const pending = retrieve().then(({ data }) => {
+        failureStage = 'response_handling';
         if (!active()) throw Error('Daily suggestion access changed.');
         if (data.localDate !== this.preferences().controls.localDate) throw Error('The day changed.');
         entry.status = data;
@@ -290,13 +293,14 @@ export class DailyWorkoutSuggestionService {
         if (action !== 'status' || data.state !== 'waiting-training') entry.trainingKey = trainingKey;
         this.persist(); return data;
       }).catch(error => {
-        if (canExecute()) this.reportFailure(uid, action, error);
+        if (canExecute()) this.reportFailure(uid, action, error, failureStage);
         throw error;
       }).finally(() => { if (entry.pending.get(action) === pending) entry.pending.delete(action); });
     entry.pending.set(action, pending);
     return pending;
   }
-  private reportFailure(uid: string, operation: DailyWorkoutSuggestionRequest['action'] | 'calendar-rest', error: unknown): void {
+  private reportFailure(uid: string, operation: DailyWorkoutSuggestionRequest['action'] | 'calendar-rest', error: unknown,
+    stage?: CallableFailureStage | 'response_handling'): void {
     try {
       if (!this.eligible(uid)) return;
       const user = this.logger.getUser();
@@ -311,6 +315,13 @@ export class DailyWorkoutSuggestionService {
       this.logger.captureMessage('Daily workout suggestion request failed', {
         level: 'warning', user, fingerprint: ['daily-workout-suggestion', operation, errorCode],
         tags: { operation: 'daily-workout-suggestion', action: operation, errorCode },
+        contexts: { dailyWorkoutRequest: {
+          stage: operation === 'calendar-rest' ? 'calendar_rest_read' : stage ?? 'unknown',
+          ...(operation === 'calendar-rest' ? calendarRestReadFailureDetails(error) : null),
+          online: typeof navigator === 'undefined' ? null : navigator.onLine,
+          visibility: typeof document === 'undefined' ? 'unknown'
+            : document.visibilityState === 'visible' ? 'visible' : document.visibilityState === 'hidden' ? 'hidden' : 'unknown',
+        } },
       });
     } catch { /* Diagnostics must preserve the original failure. */ }
   }

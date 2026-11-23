@@ -34,6 +34,7 @@ export const EMULATOR_SUITES = {
   ],
   'mcp-data': [
     'src/training-goals/goals.emulator.spec.ts',
+    'src/training-plans/plan-templates.emulator.spec.ts',
     'src/assistant/day-workout.emulator.spec.ts',
     'src/reparse/monitoring.emulator.spec.ts',
     'src/derived-metrics/monitoring.emulator.spec.ts',

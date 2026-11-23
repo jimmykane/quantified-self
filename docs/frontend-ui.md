@@ -247,6 +247,14 @@ Plans, Health, Assistant, Maps and Comparisons follow; detailed integration rows
 those product sections. Copy and shared previews stay unchanged. `#home-integrations` targets the moved detail section,
 with a local visually hidden heading so jump-link focus and subsequent keyboard navigation remain in that section.
 
+Home and Features link three published plans to named sections on `/features/training-plans`. The dedicated feature
+page renders every catalog description, duration, enrollment link and applicable source credit in its initial HTML.
+Its structured `ItemList` uses the same names, ordering and public fragment URLs. Keep this catalog outside the
+deferred example’s snippet exclusion. The production output check verifies both discovery pages and the catalog.
+
+The release build measured 15.27 MB of total scripts with the public catalog. Develop already exceeded its 15.26 MB
+limit by 5.52 kB before this addition. Production and beta use a 15.28 MB total-script cap.
+
 ## Navigation startup rendering
 
 Keep the Material sidenav container mounted so the existing navigation service can open it. Its contents use
@@ -1346,6 +1354,15 @@ change to Training planning semantics or MCP read/write contracts, scopes, proje
 
 ## Callable freshness-check recovery
 
+Daily-workout suggestion failures reuse the existing report with a fixed local failure-stage label supplied by
+`AppFunctionsService`. The diagnostic callback is never serialized to the callable and cannot change its result,
+retry budget or cancellation checks. SDK transport and server errors can share a code; use the existing request
+breadcrumbs for that distinction rather than claiming a missing HTTP status proves a backend error.
+
+Activity-comparison quota rejection (`EventMergeError.LIMIT_REACHED`) is an INFO outcome with fixed labels.
+Other merge failures retain exception reporting. Both preserve the existing selection, message and haptic feedback,
+even if diagnostic reporting fails.
+
 `AppFunctionsService` retries only `ensureDerivedMetrics` after SDK `internal`, `unavailable` or
 `deadline-exceeded` failures, accepting both prefixed and unprefixed codes. A lost browser response does not prove
 the server failed; the existing freshness probe/coordinator coalesces already queued work, so replaying this check
@@ -1485,6 +1502,12 @@ A shell startup warning with `profile_state=initializing`, no active profile sta
 means Auth has not finished restoring; it does not prove that App Check caused the stall. A 403 attestation
 rejection and a script-level reCAPTCHA error are different diagnoses. Check the existing build tags, Auth/profile
 stage and token/operation outcomes before attributing a login failure or changing provider configuration.
+
+An inline-page `Dk`/`Fk` stack-overflow pattern can originate in Chrome's injected Google translation library.
+The `TE_20261118` library served through Google's [Translate Element loader](https://translate.googleapis.com/translate_a/element.js)
+contains both mutually calling functions at line 236. Attribute against the actual library and stack coordinates;
+an inline page filename alone does not identify an application recursion. Ordinary Chromium/mobile emulation does
+not exercise native iPhone Chrome translation. Keep such errors visible until attribution and the trigger are established.
 
 App Check failure events also record `appCheckAuthState`: `restoring` until the existing Auth subscription first
 resolves, then `signed-in` or `signed-out`. This includes startup before that subscription has initialized; it is

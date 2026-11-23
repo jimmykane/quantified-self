@@ -210,6 +210,7 @@
     "src/app/helpers/training-metric-text.helper.spec.ts",
     "src/app/helpers/training-plan-appearance.helper.spec.ts",
     "src/app/helpers/training-plan-phases.helper.spec.ts",
+    "src/app/helpers/training-plan-templates.spec.ts",
     "src/app/helpers/training-plans.shared.spec.ts",
     "src/app/helpers/training-power-profile.helper.spec.ts",
     "src/app/helpers/training-power-systems.helper.spec.ts",

@@ -363,6 +363,7 @@ export function parseStoredMutationResponse(value: unknown): MutateTrainingSched
 function getOperationWorkoutIds(request: MutateTrainingScheduleRequestV1): string[] {
     switch (request.operation.kind) {
         case 'create-plan':
+            return request.operation.enrollment?.sessions.map(session => session.workoutId) ?? [];
         case 'rename-plan':
         case 'set-plan-color':
         case 'set-plan-phases':
@@ -384,7 +385,7 @@ function getOperationCreatedEntityIds(
 ): Array<{ kind: TrainingScheduleDeletionTombstoneKindV1; id: string }> {
     switch (request.operation.kind) {
         case 'create-plan':
-            return [{ kind: 'plan', id: request.operation.planId }];
+            return [{ kind: 'plan', id: request.operation.planId }, ...(request.operation.enrollment?.sessions ?? []).map(session => ({ kind: 'workout' as const, id: session.workoutId }))];
         case 'create-workout':
             return [{ kind: 'workout', id: request.operation.workoutId }];
         case 'bulk-create-workouts':
@@ -523,6 +524,11 @@ function uniqueDocumentCount(values: readonly string[]): number {
     return new Set(values).size;
 }
 
+// Enrollment creates a fresh paused plan with server-generated, never-reused workout IDs.
+function isTemplateEnrollment(item: AppliedBatchItem): boolean {
+    return item.request.operation.kind === 'create-plan' && !!item.request.operation.enrollment;
+}
+
 function reconciliationWorkoutTargets(items: readonly AppliedBatchItem[]): string[] | undefined {
     // Plan lifecycle/activation can change untouched workouts. Keep that path a full scan.
     const workoutOperations = new Set(['create-workout', 'bulk-create-workouts', 'update-workout', 'move-workout',
@@ -541,7 +547,7 @@ function estimateBatchWriteCount(
     const affectedPlans = items.flatMap(item => item.applied.affectedPlanIds);
     const changedWorkouts = items.flatMap(item => item.applied.changedWorkoutIds);
     const permanentlyDeletedWorkouts = items.flatMap(item => item.applied.permanentlyDeletedWorkoutIds);
-    const invalidatedWorkouts = items.flatMap(item => (
+    const invalidatedWorkouts = items.filter(item => !isTemplateEnrollment(item)).flatMap(item => (
         [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds].filter(id => (
             item.applied.before.workouts.get(id)?.planId !== item.applied.after.workouts.get(id)?.planId
             || item.applied.after.workouts.get(id)?.lifecycle === 'deleted'
@@ -695,20 +701,16 @@ export async function mutateTrainingScheduleBatchForUser(
         }
         const items: AppliedBatchItem[] = [];
         pendingRequests.forEach((request, offset) => {
-            const operationNowMs = nowMs + pendingStart + offset;
-            const applied = applyTrainingScheduleMutation(snapshot, request, operationNowMs);
-            const revisions = buildTrainingScheduleRevisionWrites(applied, request, operationNowMs);
-            items.push({ request, applied, revisions, nowMs: operationNowMs });
-            snapshot = applied.after;
+            const item = prepareTrainingMutation(snapshot, request, nowMs + pendingStart + offset);
+            items.push(item);
+            snapshot = item.applied.after;
         });
-        if (estimateBatchWriteCount(items, additionalWriteBudget) > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
-            throw new TrainingScheduleBatchWriteLimitError();
-        }
-        assertBoundedBatchWritePayload(items, additionalWriteBudget);
+        assertTrainingBatchFitsTransaction(items, additionalWriteBudget);
 
-        stageTrainingDeliveryReconciliation(transaction, db, uid, reconciliationWorkoutTargets(items));
+        const deliveryItems = items.filter(item => !isTemplateEnrollment(item));
+        if (deliveryItems.length) stageTrainingDeliveryReconciliation(transaction, db, uid, reconciliationWorkoutTargets(deliveryItems));
         const invalidatedWorkoutIds = new Set<string>();
-        for (const item of items) {
+        for (const item of deliveryItems) {
             for (const id of [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds]) {
                 if (item.applied.before.workouts.get(id)?.planId !== item.applied.after.workouts.get(id)?.planId
                     || item.applied.after.workouts.get(id)?.lifecycle === 'deleted'
@@ -833,6 +835,25 @@ export async function mutateTrainingScheduleBatchForUser(
         await finishTrainingCleanupJob(db, uid, 'workout', workoutId, response.mutationId, nowMs);
     }
     return responses;
+}
+
+function prepareTrainingMutation(snapshot: TrainingScheduleSnapshotV1, request: MutateTrainingScheduleRequestV1,
+    nowMs: number): AppliedBatchItem {
+    const applied = applyTrainingScheduleMutation(snapshot, request, nowMs);
+    return { request, applied, revisions: buildTrainingScheduleRevisionWrites(applied, request, nowMs), nowMs };
+}
+
+function assertTrainingBatchFitsTransaction(items: AppliedBatchItem[], additionalWriteBudget: number): void {
+    if (estimateBatchWriteCount(items, additionalWriteBudget) > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
+        throw new TrainingScheduleBatchWriteLimitError();
+    }
+    assertBoundedBatchWritePayload(items, additionalWriteBudget);
+}
+
+/** Use the same history and write limits for a review as the subsequent atomic save. */
+export function assertTrainingMutationFitsTransaction(snapshot: TrainingScheduleSnapshotV1,
+    request: MutateTrainingScheduleRequestV1, nowMs: number, additionalWriteBudget: number): void {
+    assertTrainingBatchFitsTransaction([prepareTrainingMutation(snapshot, request, nowMs)], additionalWriteBudget);
 }
 
 export async function mutateTrainingScheduleForUser(

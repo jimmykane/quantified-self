@@ -180,6 +180,7 @@ describe('serverRoutes', () => {
       .toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.find(route => route.path === 'training/plans/plan/:planId'))
       .toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.find(route => route.path === 'training/plans/catalog')).toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.find(route => route.path === 'training/plans')).toMatchObject({ renderMode: RenderMode.Client });
     expect(clientRoutes.some(route => route.path === 'plans')).toBe(false);
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();

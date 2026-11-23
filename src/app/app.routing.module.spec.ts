@@ -276,6 +276,7 @@ describe('AppRoutingModule routes', () => {
     });
     expect(plansRoute?.data?.['description']).toContain('standalone workouts');
     expect(planRoutes.map(route => route.path)).toEqual([
+      'training/plans/catalog',
       'training/plans/workout/:workoutId',
       'training/plans/library/new',
       'training/plans/library/:itemId',

@@ -1295,6 +1295,16 @@ MCP impact review for initial rest-read recovery: none. Only the first-party exa
 failure diagnostics change; server rest-day reads, strict preview/Apply contracts, consent and provider actions remain
 unchanged. Existing Help guidance on unavailable schedule evidence and explicit **Check again** still applies.
 
+Browser timeout diagnostics now attach only the attempt (one or two) and a fixed snapshot state: no snapshot,
+cache only, pending writes, server snapshot or revision behind the acknowledged floor. The shared `docData`
+metadata observer sees only two booleans before filtering; it adds no listener/read and cannot affect delivery.
+The daily failure report also distinguishes calendar verification, App Check readiness/refresh, callable dispatch/retry
+and local response handling, with browser online/visibility hints. It does not infer HTTP status or distinguish
+transport from server failure when the Functions SDK supplies the same error code for both. A later accepted day
+record emits at most one INFO recovery per shared owner/date/session stream, including explicit reattachment.
+No document dates, revisions, contents, raw errors or credentials enter these new fields. Existing guards, timeouts,
+retry budgets and model-call rules remain unchanged. MCP impact: none; these are first-party browser diagnostics only.
+
 Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
 or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context
 off preserves the existing explicit opt-out. The optional Today feature always respects authored rest.
@@ -10772,6 +10782,28 @@ Before merging a Training change, confirm:
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.
 - [ ] Focused tests, Functions build, frontend build, sports-lib build, and `git diff --check` pass.
+
+## Whole-plan templates and enrollment
+
+The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven Quantified Self originals and one licensed running plan. Direct visits to the signed-in catalog use client rendering. Choosing a public plan updates the template link, so refresh and browser history restore that plan. Private template IDs stay out of the URL. The phone picker wraps long titles. Enrollment uses the athlete’s regional date format and calendar week start. Preview moves focus to the dated review before confirmation. An expired or stale review clears the confirmation and asks for fresh dates. A transport failure retains the proposal for an idempotent retry. These UI behaviors preserve the existing MCP template reads, enrollment proposals and approval contract. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
+
+### Editorial publication
+
+Quantified Self maintains the published program definitions and source credit in `shared/training-plan-programs.ts`. `shared/training-plan-templates.ts` materializes the versioned catalog used by the library, Assistant and MCP. Home and Features link to the public summaries on the Training Plans feature page using the same catalog IDs. Review every week, recovery intervals, starting assumptions, event distance, schedule choices and workout parser tests in a pull request. Increment the edition when published content changes. The same reviewed edition supplies the public preview, app, Assistant and MCP. An athlete’s enrolled copy is independent of subsequent editorial changes. Invited coach publication is a future editorial workflow.
+
+The NHS publishes a free progressive run/walk program. British Cycling shows weekly commitment and session frequency for its free beginner ride. 80/20 offers sample weeks to evaluate its training plans. TrainerRoad lets subscribers plan around an event and their weekly availability, then review the resulting calendar. These informed discovery and preview design. The seven original programs are authored for QS. [NHS running plan](https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/couch-to-5k-running-plan/) · [British Cycling](https://cloud.britishcycling.org.uk/knowledge/article/izn20151216-Beginner-8-week-Sofa-to-50km-Training-Plan-0) · [80/20 samples](https://www.8020endurance.com/free-plans/) · [TrainerRoad Plan Builder](https://support.trainerroad.com/hc/trainerroad-support/articles/360037923191-plan-builder-overview)
+
+### Licensed running plan
+
+Felix Gertz published *Build-up a foundational running base* on Tredict under CC BY 4.0. The public calendar, checked on 2026-11-23, supplies 14 sessions and four week notes. Tredict dates the source edition to October 2022. The edition in `shared/foundational-running-plan.ts` preserves the 28-day layout, timed steps, stride counts, recoveries, and open endings. The two open cooldowns with 10-minute estimates retain that guidance in notes. Empty days stay open. Heart-rate targets and the threshold-pace step use rounded percentage cues. The conversion omits example-athlete values, device tolerance bands and calculated distance, power and effort estimates. QS reworded the coaching cues and retained the publisher’s example-plan notice. [Original plan by Felix Gertz](https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+Enrollment snapshots the credit with the plan origin. Saving a private template copies that snapshot, marks it as a personal adaptation and preserves the original author. Re-enrollment carries the snapshot forward even after the original catalog edition is retired. The plan page, saved library, public preview, MCP and Assistant have the source and licence links, adaptation details, and the publisher’s notice.
+
+### Dates, ownership and consent
+
+`scheduleTemplate` works in local calendar days. Event-date enrollment anchors the last day exactly. Start-date enrollment aligns the first full week of a QS original with the selected long-session day. Private templates and the licensed pilot retain their original relative spacing. The catalog declares the pilot’s fixed schedule explicitly. App and MCP show the weekly coaching notes and the app numbers fixed-schedule days from the start of the plan. The dated plan page loads its immutable credit once per selected plan and account, including across ordinary schedule refreshes. Arbitrary rest dates and phases stay attached to the copy. Saving a plan snapshots the current planned prescriptions, including strength details, under the owner’s `trainingPlanState/current/planTemplates`. Repeated saves of the same plan revision reuse the snapshot. The library holds up to 100 snapshots, each bounded to 700 KB of prescription data.
+
+The `trainingPlanTemplates` callable and MCP use one server enrollment implementation. Preview records the exact edition, options, schedule revision, conflict dates, access generation and a 15-minute expiry. Confirmation checks these again, creates the paused plan, workouts and ordinary plan history in a single transaction and records the result for retries. It leaves the active plan selection intact. Browser clients have no direct Firestore access to templates, proposals or grants. Private Assistant access is off by default and bound to the current Training-enabled conversation. MCP clients additionally need `private-plan-templates:read` for private reads and `training-plans:write` for enrollment. Activation, adjustment and provider delivery continue to use their existing independent reviews and entitlements. See [MCP server](mcp-server.md#whole-plan-templates).
 
 ## Generate a plan from Plans
 

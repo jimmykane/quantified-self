@@ -15,6 +15,7 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
 import { TRAINING_PLANS_HOME_CONTENT } from '../public-seo/training-plans-home.content';
+import { PublicTrainingCatalogComponent } from '../public-seo/public-training-catalog.component';
 import { HomeRevealDirective } from './home-reveal.directive';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { TerrainComponent } from '../shared/terrain/terrain.component';
@@ -46,7 +47,7 @@ interface HomeFeatureHistory {
   styleUrls: ['./home.component.scss'],
   standalone: true,
   imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatTooltipModule,
-    PublicFeaturePreviewComponent, CompactRowComponent, HomeRevealDirective, TerrainComponent],
+    PublicFeaturePreviewComponent, PublicTrainingCatalogComponent, CompactRowComponent, HomeRevealDirective, TerrainComponent],
   providers: [{ provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: {
     showDelay: 0, hideDelay: 0, touchendHideDelay: 1500, touchGestures: 'off',
   } }],
@@ -258,6 +259,13 @@ export class HomeComponent implements OnInit {
     const isPair = (value: unknown) => Array.isArray(value) && value.length === 2
       && value.every(coordinate => typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= 0);
     return isPair(viewport) && (shell === null || isPair(shell));
+  }
+
+  // A returning catalog link has a more specific destination than the surrounding Home section.
+  cancelFeatureScroll(): void {
+    this.featureScrollTarget = null;
+    this.featureFocusTarget = null;
+    this.cancelFeatureScrollFrame();
   }
 
   private cancelFeatureScrollFrame(): void {

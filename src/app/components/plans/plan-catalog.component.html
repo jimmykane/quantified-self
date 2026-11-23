@@ -1,0 +1,106 @@
+<main class="qs-workspace-page">
+  <a mat-button routerLink="/training/plans">← My plans</a>
+  <h1>Training plan library</h1>
+  <nav aria-label="Plan collections">
+    <button mat-button [attr.aria-pressed]="source() === 'catalog'" (click)="openSource('catalog')" [disabled]="busy()">Free plans</button>
+    <button mat-button [attr.aria-pressed]="source() === 'private'" (click)="openSource('private')" [disabled]="busy()">My templates</button>
+  </nav>
+  <div class="layout">
+    <aside aria-label="Choose a plan">
+      @if (items().length) {
+        <app-compact-select class="mobile-choice" label="Choose a plan" [options]="planOptions()"
+          [value]="selected()?.id ?? null" [disabled]="busy()" (selectionChange)="selectById($event)" />
+      }
+      @for (item of items(); track item.id) {
+        <button class="choice" [attr.aria-pressed]="selected()?.id === item.id" [disabled]="busy()" (click)="selectById(item.id)">
+          <strong>{{ item.name }}</strong><small>{{ item.sport }} · {{ item.days }} days · {{ item.workoutCount }} workouts</small>
+        </button>
+      } @empty {
+        @if (!busy() && !error()) { <p>To save your first template, open one of your plans and choose “Save to my templates”.</p> }
+      }
+    </aside>
+    @if (selected(); as plan) {
+      <article>
+        <small>@if (plan.source === 'private') { Personal template · Saved revision {{ plan.version }} }
+          @else { {{ plan.author }} · Edition {{ plan.version }} }</small>
+        <h2>{{ plan.name }}</h2><p>{{ plan.description }}</p>
+        <app-plan-attribution [credit]="plan.attribution" />
+        <dl class="facts"><div><dt>Duration</dt><dd>{{ weeks().length }} weeks</dd></div>
+          <div><dt>Workouts</dt><dd>{{ plan.sessions.length }}</dd></div>
+          <div><dt>Sport</dt><dd>{{ plan.sport }}</dd></div></dl>
+        <section>
+          <h3>Weekly schedule</h3>
+          <small>Weekly training time</small>
+          <div class="workload" aria-label="Scheduled time by week">
+            @for (load of workloads(); track $index) {
+              <button type="button" [attr.aria-pressed]="week() === $index" (click)="week.set($index)"
+                [title]="'Week ' + ($index + 1) + ' · ' + load.text" [attr.aria-label]="'Week ' + ($index + 1) + ', ' + load.text">
+                <span class="bar-track"><span class="bar" [class.partial]="load.partial" [style.height.%]="load.percent"></span></span><small>{{ $index + 1 }}</small>
+              </button>
+            }
+          </div>
+          <label>Week <select [ngModel]="week()" (ngModelChange)="week.set($event)">
+            @for (i of weeks(); track i) { <option [ngValue]="i">{{ i + 1 }}</option> }
+          </select></label>
+          @for (phase of weekPhases(); track phase.id) {
+            <p><strong>{{ phase.name }}</strong>@if (phase.description) { · {{ phase.description }} }</p>
+          }
+          <p class="weekly-total">{{ workloads()[week()]?.text }}</p>
+          @for (session of weekRows(); track $index) {
+            <details><summary>{{ dayLabel(session.day, true) }} · {{ session.title }} · {{ session.totals }}</summary>
+              <app-workout-profile [structure]="session.structure" [unitSettings]="users.user()?.settings?.unitSettings ?? null"
+                [contextKey]="plan.id + '/' + session.day + '/' + $index" [initiallyExpanded]="false" />
+              @for (step of session.steps; track $index) { <p>{{ step }}</p> }
+              @if (session.strength; as strength) { @for (exercise of strength.exercises; track $index) { <p>{{ exercise.name }}</p> } }
+            </details>
+          } @empty { <p>No prescribed workouts this week.</p> }
+          @if (weekRest().length) {
+            <small>Rest days in this week @for (day of weekRest(); track day) { <span> · {{ dayLabel(day) }}</span> }</small>
+          }
+        </section>
+        <section>
+          <h3>Fit this plan to your calendar</h3>
+          <fieldset [disabled]="busy()"><label>Schedule by
+            <select [ngModel]="options().anchor" (ngModelChange)="change({anchor: $event})">
+              <option value="start">{{ flexibleDays() ? 'Start on or after' : 'Start on' }}</option><option value="finish">Finish on</option>
+            </select>
+          </label>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Date</mat-label>
+            <input matInput required [matDatepicker]="calendar" [ngModel]="pickerDate()"
+              (dateInput)="setDate($event.value)" [disabled]="busy()">
+            <mat-datepicker-toggle matSuffix [for]="calendar" />
+            <mat-datepicker #calendar (opened)="haptics.selection()" />
+            <mat-error>Choose a valid date.</mat-error>
+          </mat-form-field>
+          @if (flexibleDays()) {
+            <label>Long session <select [disabled]="options().anchor === 'finish'" [ngModel]="options().longDay" (ngModelChange)="change({longDay: $event})">
+              @for (day of weekdays; track day.value) { <option [ngValue]="day.value">{{ day.label }}</option> }
+            </select></label>
+            <label>Training days <select [ngModel]="options().pattern" (ngModelChange)="change({pattern: $event})">
+              <option value="standard">{{ patternLabel('standard') }}</option><option value="early">{{ patternLabel('early') }}</option>
+            </select></label>
+          } @else { <p>Workout spacing follows the template.</p> }</fieldset>
+          <button mat-stroked-button (click)="review()" [disabled]="busy() || !options().date">Preview dates</button>
+        </section>
+        @if (preview(); as review) {
+          <section aria-labelledby="plan-review-heading">
+            <h3 #reviewHeading id="plan-review-heading" tabindex="-1">Review your plan</h3>
+            <p>{{ review.start | date:'mediumDate' }} – {{ review.end | date:'mediumDate' }} · {{ review.dates.length }} workouts · {{ review.restDays.length }} rest days</p>
+            @if (review.conflicts.length) { <p>Already scheduled on @for (day of review.conflicts; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p> }
+            <details><summary>See all dates</summary>
+              <p>Workouts · @for (day of review.dates; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p>
+              @if (review.restDays.length) {
+                <p>Rest · @for (day of review.restDays; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p>
+              }
+            </details>
+            <p>Your copy starts paused. You can activate it and choose device delivery from My plans.</p>
+            <button mat-flat-button (click)="confirm()" [disabled]="busy()">Add paused plan</button>
+          </section>
+        }
+      </article>
+    }
+  </div>
+  @if (busy()) { <p role="status">Loading…</p> }
+  @if (error()) { <p #errorMessage role="alert" tabindex="-1">{{ error() }}</p> }
+</main>

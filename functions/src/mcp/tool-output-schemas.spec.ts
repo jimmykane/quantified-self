@@ -1,3 +1,4 @@
+import { TEMPLATE_TOOLS } from './plan-templates.schemas';
 import { GOAL_TOOLS } from './training-goals.schemas';
 import { TRAINING_THRESHOLD_TOOLS } from './training-thresholds.schemas';
 import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
@@ -621,6 +622,14 @@ const service = {
         readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
+    planTemplateTool: vi.fn(async (tool: string) => {
+      const template = { templateRef: 'opaque-template', source: 'catalog', scheduleMode: 'flexible', version: 1, name: '10K Race', description: 'Three sessions a week.', author: 'Quantified Self', sport: 'Running', days: 70, workoutCount: 30 };
+      if (tool === 'get_training_plan_attribution') return { attribution: null };
+      if (tool === 'list_training_plan_templates') return { templates: [template], nextCursor: null };
+      if (tool === 'get_training_plan_template') return { template, sessions: [], rest: [2], phases: [{ name: 'Base', start: 0, end: 34 }], nextOffset: null };
+      if (tool === 'preview_training_plan_enrollment') return { ...trainingPreviewFixture, changes: [{ index: 0, kind: 'enroll-plan', summary: 'Add paused plan.' }] };
+      return { status: 'applied', lifecycle: 'paused', planRef: 'opaque-plan', scheduleRevision: 2 };
+    }),
     readTrainingGoals: vi.fn(async ({ tool }: { tool: string }) => tool === 'list_training_goals'
       ? { goalsRevision: 1, goals: [goalFixture], nextCursor: null }
       : tool === 'get_training_goal' ? { goalsRevision: 1, goal: goalFixture }
@@ -1458,6 +1467,11 @@ const successfulToolArguments: Record<
   preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { runningPace: { paceSeconds: 270, distanceUnit: 'km' },
     lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' } },
   apply_training_threshold_change: { proposalRef: 'opaque-threshold-proposal' },
+  get_training_plan_attribution: { planRef: 'opaque-plan' },
+  list_training_plan_templates: { source: 'catalog' },
+  get_training_plan_template: { templateRef: 'opaque-template', offset: 0 },
+  preview_training_plan_enrollment: { templateRef: 'opaque-template', anchor: 'finish', date: '2027-02-07', longDay: 0, pattern: 'standard' },
+  apply_training_plan_enrollment: { proposalRef: 'opaque-proposal' },
   list_training_goals: {},
   get_training_goal: { goalRef: 'opaque-goal' },
   get_training_goals_progress: { localDate: '2026-07-02', timeZone: 'UTC', goalRefs: ['opaque-goal'] },
@@ -2208,6 +2222,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const templateTools = tools.filter(tool => (TEMPLATE_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(templateTools), 'utf8')).toBeLessThan(40 * 1024);
     const goalTools = tools.filter(tool => (GOAL_TOOLS as readonly string[]).includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(goalTools), 'utf8')).toBeLessThan(40 * 1024);
     const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
@@ -2217,7 +2233,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
       && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
       && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
-      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !thresholdTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool))), 'utf8'))
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !thresholdTools.includes(tool) && !enduranceTools.includes(tool) && !goalTools.includes(tool) && !templateTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -3034,6 +3050,18 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
+
+  it('rejects template output containing a neighboring private field on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service); connections.push(connection);
+    const item = { templateRef: 'opaque-template', source: 'private', name: 'Example', author: 'You',
+      description: '', version: 1, days: 7, sport: 'Running', workoutCount: 3, ownerId: 'PRIVATE-TEMPLATE-CANARY' };
+    service.planTemplateTool = vi.fn().mockResolvedValue({ templates: [item], nextCursor: null });
+    const result = await connection.client.callTool({ name: 'list_training_plan_templates', arguments: { source: 'private' } });
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE-TEMPLATE-CANARY');
+  });
 
   it('exposes phase tools only with their independent grants and rejects nested leakage on every transport', async () => {
     const service = createFixtureDataService();

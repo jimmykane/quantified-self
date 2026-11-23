@@ -248,8 +248,13 @@ export async function assertAuthorityInTransaction(
       && data.pendingTrainingProposal?.proposalRef !== expectedAssistantProposalRef) {
       invalid('This Assistant Training proposal is no longer current. Review the latest proposal.');
     }
-    const generation = JSON.stringify([conversationId, data.trainingPlanChangesEnabled === true,
-      data.trainingDeliveryEnabled === true]);
+    const permissions: (string | boolean | number)[] = [conversationId, data.trainingPlanChangesEnabled === true, data.trainingDeliveryEnabled === true];
+    if (required.includes('private-plan-templates:read')) {
+      const grant = await tx.get(stateRef.collection('planTemplateAccess').doc('assistant'));
+      if (grant.get('conversationId') !== conversationId || grant.get('enabled') !== true) invalid('Enable private plan templates for this conversation.');
+      permissions.push(grant.get('revision'));
+    }
+    const generation = JSON.stringify(permissions);
     if (expectedGeneration !== undefined && generation !== expectedGeneration) {
       invalid('The Assistant Training permissions changed. Review the proposal again.');
     }
@@ -480,7 +485,8 @@ function describeScheduleEffects(
       ? operation.planId
       : null;
   if (activatedPlanId && before.state.activePlanId && before.state.activePlanId !== activatedPlanId) {
-    details.push('The previously active plan will be paused.');
+    const previous = before.plans.get(before.state.activePlanId);
+    details.push(previous ? `The previously active plan will be paused: ${previous.name}.` : 'The previously active plan will be paused.');
   }
   if (operation.kind === 'shift-plan') {
     const shifted = [...before.workouts.values()].filter(workout => workout.planId === operation.planId).length;

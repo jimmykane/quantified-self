@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { AppFunctionsService } from '../../services/app.functions.service';
+import { ChangeDetectionStrategy, Component, inject, Injector, signal } from '@angular/core';
 import {
   MAT_BOTTOM_SHEET_DATA,
   MatBottomSheetRef,
@@ -10,6 +11,7 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface AssistantExploreBottomSheetData {
+  conversationId?: string | null;
   timelineNotesEnabled?: boolean;
   activityTagChangesEnabled?: boolean;
   timelineNoteChangesEnabled?: boolean;
@@ -53,6 +55,25 @@ export class AssistantExploreBottomSheetComponent {
   );
   readonly data = inject<AssistantExploreBottomSheetData>(MAT_BOTTOM_SHEET_DATA);
 
+  private readonly injector = inject(Injector);
+  readonly privateEnabled = signal(false);
+  readonly privateLoading = signal(false);
+  readonly privateError = signal('');
+  constructor() {
+    if (this.data.trainingPlansEnabled && this.data.conversationId) void this.privateAccess();
+  }
+  async privateAccess(enabled?: boolean) {
+    if (this.privateLoading() || !this.data.conversationId) return;
+    this.privateLoading.set(true);
+    this.privateError.set('');
+    try {
+      const response = await this.injector.get(AppFunctionsService).call<object,{ enabled: boolean }>('trainingPlanTemplates', {
+        action: 'assistant-access', conversationId: this.data.conversationId, ...(enabled === undefined ? {} : { enabled }) });
+      this.privateEnabled.set(response.data.enabled);
+      if (enabled !== undefined) this.haptics.selection();
+    } catch { this.privateError.set('Private template permission could not be loaded or changed.'); }
+    finally { this.privateLoading.set(false); }
+  }
   readonly prompts = ASSISTANT_PROMPT_CARDS;
 
   selectPrompt(prompt: string): void {
