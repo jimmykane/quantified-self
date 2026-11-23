@@ -1,3 +1,4 @@
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { getUserChartDataTypesToUse } from '../../helpers/app-chart-data-types.helper';
 import { createSwimIntervalFixture } from '../../helpers/event-swim-interval.test-fixtures';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -253,6 +254,7 @@ describe('EventCardComponent', () => {
             providers: [
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppAnalyticsService, useValue: { logOwnedResultView: vi.fn().mockReturnValue(true) } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppActivitySelectionService, useValue: mockActivitySelectionService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
@@ -275,6 +277,30 @@ describe('EventCardComponent', () => {
         fixture = TestBed.createComponent(EventCardComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();
+    });
+
+    it('counts a loaded owned result once per view and excludes shared or incomplete recordings', () => {
+        const log = TestBed.inject(AppAnalyticsService).logOwnedResultView;
+        component.currentUser.set({ ...mockUser, acceptedTrackingPolicy: true } as typeof mockUser);
+        const recording = { ...mockEvent, originalFile: { path: 'original.fit' } } as AppEventInterface;
+        component.isPublicShare.set(true);
+        component.event.set(recording);
+        fixture.detectChanges();
+        expect(log).not.toHaveBeenCalled();
+        component.isPublicShare.set(false);
+        fixture.detectChanges();
+        component.event.set({ ...recording });
+        fixture.detectChanges();
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log).toHaveBeenCalledWith(mockUser.uid, 'recorded_workout_opened');
+        component.event.set({ ...recording, getID: () => 'other' });
+        fixture.detectChanges();
+        component.event.set({ ...recording, toolSource: 'tools/compare', isMerge: true });
+        fixture.detectChanges();
+        expect(log).toHaveBeenCalledTimes(1);
+        component.event.set({ ...component.event()!, getActivities: () => [mockActivity, mockActivity] });
+        fixture.detectChanges();
+        expect(log).toHaveBeenLastCalledWith(mockUser.uid, 'comparison_result_opened');
     });
 
     it('invalidates interval focus when watches or events change, without reviving old selections', () => {

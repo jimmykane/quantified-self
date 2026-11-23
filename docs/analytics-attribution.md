@@ -113,6 +113,44 @@ are not an ordered same-session conversion cohort. The `onboarding_goal`, `desti
 parameters can additionally be registered as event-scoped dimensions after reviewing existing GA4 definitions,
 but no administrative setting is changed by this code. Normal GA4 processing delays still apply.
 
+### First result within 24 hours
+
+Measure from the account's first observed, consented selection of each goal since the production release. Someone who tries two goals can appear once in each cohort. The denominator for each rate contains only accounts with a full 24 hours of follow-up. The report lists more recent selections separately as `pending24h`.
+
+| Goal | First qualifying result after selection |
+| --- | --- |
+| Analyze | The owner opens an activity with at least one loaded recording and an original imported or uploaded file (`recorded_workout_opened`). |
+| Compare | The owner opens a completed comparison containing two or more recordings, or opens a completed report from Saved Comparisons (`comparison_result_opened`). |
+| Sync | An activity transfer receives a successful confirmation from the destination. Provider duplicates, connection, queue creation, file selection and retries do not qualify. |
+
+The two result events use saved analytics consent, the signed-in owner and the existing GA4 user identifier. Public views are excluded. Neither event sends workout identifiers or provider responses. Routine background sync can succeed while the browser is closed. The local report therefore joins existing delivery receipts to consented selections by account. A subsequent successful delivery qualifies even if the connection existed before onboarding.
+
+#### Run the report
+
+1. Record the UTC production deployment time as `cutover`. Choose `from` (inclusive), `until` (exclusive), and `asOf` (inclusive). For a fully mature cohort, allow 24 hours between `until` and `asOf`. Use an observation cutoff covered by finalized data for all input sources.
+2. Obtain production account-level GA4 events from **cutover through asOf**, including days before the reporting window. Use [the parameterized query](../tools/onboarding-results/ga4.sql) against the authorized GA4 daily export. Set `cutover` and `as_of` as TIMESTAMP parameters and `stream` to the numeric production stream ID as a STRING. Adjust the dataset reference if necessary. Save the full result as a JSON array of `{uid, name, at}` objects, verifying the exported row count. An equivalent consented event-level export also works. Windsor totals alone cannot reconstruct these account timelines.
+3. For a recent Sync cohort the runner can read retained queue receipts using read-only production Firestore credentials specified via `GOOGLE_APPLICATION_CREDENTIALS`. Queue documents expire (ordinary queue TTL is seven days). The reported Sync share is a lower bound when using these records. For a longer window supply an authorized archive containing only fresh confirmed deliveries as `[{"uid":"…","at":"…"}]`. Set `completeReceipts` to true only if that archive covers the entire observation window, including transfers from file uploads.
+4. To compare first results with switching off renewal, optionally supply Stripe cancellation-request history as `[{"customer":"cus_…","reason":"cancellation_requested","at":"…"}]`. Use the timestamp of the user's voluntary cancellation request, including a request to end at period end. The scheduled end, failed payments and a current subscription snapshot cannot establish that timestamp. Supply a complete history through `asOf` and allow read-only access to the existing customer bindings. Omitting the file leaves the cancellation comparison unavailable.
+5. Store the inputs and manifest outside the checkout. The manifest accepts UTC ISO timestamps (or Unix milliseconds) and resolves input paths relative to itself. Run from the repository root:
+
+```json
+{
+  "cutover": "2027-01-01T00:00:00Z",
+  "from": "2027-01-01T00:00:00Z",
+  "until": "2027-01-04T00:00:00Z",
+  "asOf": "2027-01-06T00:00:00Z",
+  "events": "events.json",
+  "deliveries": "confirmed-deliveries.json",
+  "cancellations": "voluntary-cancellations.json"
+}
+```
+
+```sh
+node tools/onboarding-results/run.mjs /path/outside/checkout/manifest.json
+```
+
+The dates above are examples. Omit `deliveries` to use retained receipts. With no billing input and a supplied deliveries archive, the runner works entirely offline. It prints aggregate counts and shares. The latency median includes mature starters who actually reached a first result through `asOf`, including results after 24 hours. Cancellation ordering uses the first matched voluntary request after selection, distinguishes same-second ties, and separates accounts with no observed result. Unmatched Stripe bindings and incomplete receipt or GA4 coverage limit what can be inferred. An observed sequence alone does not establish why someone cancelled.
+
 ## GA4 administration and rollout
 
 No GA4 administrative settings are changed by this code. Windsor currently exposes reporting reads and no GA4

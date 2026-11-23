@@ -1563,6 +1563,8 @@ On the plan-selection page, **Check what you can sync** shows the supported dire
 
 [Send activities](/send-activities) supports **Suunto, COROS, and Wahoo**. It is a separate workspace from automatic sync and route/course uploads. Anyone signed in can view the page and their retained results; preparing and starting a send requires **Pro**, rather than Basic. Connect the destination in **Connections**, choose local files or saved activities, review the selected recordings and warnings, then explicitly confirm **Send**.
 
+For a saved workout, open **Activity actions → Delivery status** to check each recorded transfer. **Delivered** means the destination confirmed receipt. A queued transfer is waiting to send. **Waiting to retry** means QS will try again. If the status asks you to reconnect, open Connections. Use **Refresh** to check again. Temporary FIT files sent directly to a service have their receipts under **Recent sends** on the Send activities page.
+
 If opening a new draft fails, reopen it from **Recent sends** and choose your recordings again. If you switch destinations, sources or sends during preparation, reopen the original draft to continue. Confirmed sends keep running in the background.
 
 Previewing does not send activities. Draft counts show **checked**, **ready**, and **excluded** recordings, not successful deliveries. Saved previews check small groups and continue while the page stays open. If checking times out, use **Continue saved-activity preview** on the same draft; completed checks are retained. Choose **Uploaded to QS** for FIT files you imported yourself, even if you recorded them on a Garmin device. **Garmin API** selects recordings imported through the Garmin connection, not every recording made by a Garmin device.

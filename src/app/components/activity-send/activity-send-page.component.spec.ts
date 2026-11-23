@@ -25,7 +25,7 @@ describe('activity sending workspace', () => {
   beforeEach(() => {
     push = { deliveryNotificationsAvailable: signal(false), canNotifyDelivery: signal(false), state: signal('disabled'), operation: signal(null), canEnable: signal(true), enable: vi.fn(), deliveryNotificationTarget: vi.fn() };
     preferences = { isEnabled: vi.fn().mockReturnValue(true), canEdit: signal(true), saving: signal(null), setEnabled: vi.fn() };
-    sends = { summary: signal(null), summaryError: signal(null), loadingSummary: signal(false), refreshSummary: vi.fn(), batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
+    sends = { summary: signal(null), summaryError: signal(null), loadingSummary: signal(false), refreshSummary: vi.fn(), batch: signal(null), requestedBatchId: signal(null), loadingBatch: signal(false), loadingRows: signal(false), batchReadError: signal(null), rowReadError: signal(null), rows: signal([]), recent: signal([]), loadingRecent: signal(false), readError: signal(null), selection: signal([]), watchBatch: vi.fn(), closeBatch: vi.fn(), loadMoreRows: vi.fn(), setSelection: vi.fn(), command: vi.fn().mockResolvedValue({ batchId: 'batch-1', revision: 2 }), upload: vi.fn().mockResolvedValue(undefined) };
     sends.setSelection.mockImplementation((ids: string[]) => sends.selection.set(ids));
     users = { user: signal({ uid: 'owner' }), hasProAccessSignal: signal(true) };
     haptics = { selection: vi.fn(), error: vi.fn(), success: vi.fn(), trigger: vi.fn() };
@@ -48,6 +48,17 @@ describe('activity sending workspace', () => {
     expect(fixture.nativeElement.textContent).not.toContain('100 delivered');
     summary.querySelector('button').click();
     expect(sends.refreshSummary).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('shows an empty send history only after a successful read', () => {
+    sends.loadingRecent.set(true);
+    const fixture = render();
+    const history = fixture.nativeElement.querySelector('[aria-label="Recent sends"]') as HTMLElement;
+    expect(history.textContent).toContain('Loading recent sends');
+    expect(history.textContent).not.toContain('No sends');
+    sends.loadingRecent.set(false); sends.readError.set('Offline'); fixture.detectChanges();
+    expect(history.textContent).not.toContain('No sends');
+    sends.readError.set(null); fixture.detectChanges();
+    expect(history.textContent).toContain('No sends for this destination');
   });
   it('renders a viewable Pro upsell without a file picker or mutation', () => {
     users.hasProAccessSignal.set(false);

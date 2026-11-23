@@ -1245,6 +1245,7 @@ export class ToolsComparePageComponent implements OnInit {
 
   private buildBenchmarkFlowConfig(item: ComparisonListItem, user: User) {
     return {
+      ownedComparisonList: true,
       event: item.event,
       persistEvent: item.event,
       user,

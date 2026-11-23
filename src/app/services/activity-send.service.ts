@@ -33,6 +33,7 @@ export class ActivitySendService {
   readonly batchReadError = signal<string | null>(null);
   readonly rowReadError = signal<string | null>(null);
   private readonly historyReadError = signal<string | null>(null);
+  readonly loadingRecent = signal(true);
   readonly readError = computed(() => this.batchReadError() || this.rowReadError() || this.historyReadError());
   readonly selection = signal<string[]>([]);
   readonly summary = signal<ActivitySendSummary | null>(null);
@@ -68,7 +69,7 @@ export class ActivitySendService {
       const pendingBatch = this.batchOwner === uid && this.auth.currentUser?.uid === uid ? this.selectedId : null;
       this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); this.closeBatch();
       for (const job of this.jobs.values()) this.processing.removeJob(job);
-      this.jobs.clear(); this.recent.set([]);
+      this.jobs.clear(); this.recent.set([]); this.loadingRecent.set(!!uid);
       if (!uid || this.selectionOwner !== uid) this.selection.set([]);
       this.selectionOwner = uid; this.historyReadError.set(null); this.uid = uid;
       if (!uid) return;
@@ -77,8 +78,12 @@ export class ActivitySendService {
           if (!this.isCurrentOwner(uid)) return;
           const batches = records as unknown as ActivitySendBatch[];
           this.recent.set(batches);
-
-        }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Could not load recent sends. Check your connection and refresh the page.'); } });
+          this.loadingRecent.set(false);
+        }, error: () => {
+          if (!this.isCurrentOwner(uid)) return;
+          this.loadingRecent.set(false);
+          this.historyReadError.set('Could not load recent sends. Check your connection and refresh the page.');
+        } });
       this.activeSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), where('state', '==', 'confirmed'), limit(100))).subscribe({ next: records => { if (this.isCurrentOwner(uid)) this.syncJobs(records as unknown as ActivitySendBatch[]); }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Delivery status is unavailable. Refresh the page to check your results.'); } });
       if (pendingBatch) this.watchBatch(pendingBatch);
     });

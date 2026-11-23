@@ -27,6 +27,10 @@
     "environment": "angular",
     "reason": "Compiles the real dashboard wrapper and shared Training renderers, exercises Material menu selection, input-driven rendering, haptics and teardown."
   },
+  "src/app/components/event-actions/activity-delivery-status.dialog.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the Material dialog and AsyncPipe with TestBed to verify owner-scoped receipt reads, refresh, failure recovery and removal of status after an account switch."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."

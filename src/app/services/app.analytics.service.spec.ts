@@ -76,6 +76,18 @@ describe('AppAnalyticsService', () => {
         (environment as any).forceAnalyticsCollection = false;
     });
 
+    it('requires saved consent and a matching live identity for owned result views', () => {
+        mockAuthService.currentUser = { uid: 'owner' };
+        userSubject.next({ uid: 'owner', acceptedTrackingPolicy: true } as User);
+        expect(service.logOwnedResultView('owner', 'recorded_workout_opened')).toBe(true);
+        expect(service.logOwnedResultView('other', 'comparison_result_opened')).toBe(false);
+        mockAuthService.currentUser = { uid: 'other' };
+        expect(service.logOwnedResultView('owner', 'comparison_result_opened')).toBe(false);
+        userSubject.next({ uid: 'other', acceptedTrackingPolicy: false } as User);
+        expect(service.logOwnedResultView('other', 'comparison_result_opened')).toBe(false);
+        expect(logEvent).toHaveBeenCalledTimes(1);
+    });
+
     it('should be created', () => {
         expect(service).toBeTruthy();
     });

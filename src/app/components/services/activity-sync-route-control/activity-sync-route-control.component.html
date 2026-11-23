@@ -46,6 +46,9 @@
     Automatically send new {{ sourceName }} activities to {{ destinationName }}
   </mat-slide-toggle>
 
+  @if (routeEnabled) {
+  <p class="activity-sync-route-control__description">After your next {{ sourceName }} workout imports, open it and choose <strong>Activity actions → Delivery status</strong> to check whether {{ destinationName }} has received it.</p>
+  }
   @if (destinationServiceName === 'Wahoo API') {
   <p class="activity-sync-route-control__description">If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.</p>
   }

@@ -12,6 +12,9 @@
     <button mat-menu-item (click)="editAscent()" [disabled]="disabled || isReprocessing"><mat-icon>edit</mat-icon><span>Edit ascent / descent</span></button>
   }
   @if (canSendOwnedActivities) { <button mat-menu-item [disabled]="disabled" (click)="sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
+  @if (canSendOwnedActivities && !event.isMerge) {
+    <button mat-menu-item [disabled]="disabled" (click)="openDeliveryStatus()"><mat-icon>fact_check</mat-icon><span>Delivery status</span></button>
+  }
   @if (!isPubliclyShared) {
   <button mat-menu-item (click)="shareEventLink()" [disabled]="disabled || isSharing">
     <mat-icon>share</mat-icon>

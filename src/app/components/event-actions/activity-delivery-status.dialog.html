@@ -1,0 +1,23 @@
+@let result = view | async;
+<h2 mat-dialog-title>Delivery status</h2>
+<mat-dialog-content aria-live="polite">
+  @if (result) {
+    @if (result.state === 'ready') {
+      @for (row of result.rows; track row.direction) {
+        <p><strong>{{ row.direction }}</strong><br>{{ row.label }} @if (row.updated) { · {{ row.updated | date:'medium' }} }
+          @if (row.label === 'Waiting to retry') { <br>QS will retry automatically. }
+          @if (row.label === 'Reconnect in Connections' || row.label === 'Check destination connection') {
+            <br><a mat-button routerLink="/services" [queryParams]="{ setup: 'sync' }" mat-dialog-close (click)="haptics.selection()">Open Connections</a>
+          }
+          @if (row.label === 'Needs attention') { <br>Check your connection and the destination before sending this workout again. }
+        </p>
+      } @empty { <p>No activity delivery has been recorded for this workout yet.</p> }
+    } @else if (result.state === 'loading') { <p>Checking delivery…</p> }
+    @else if (result.state === 'forbidden') { <p>Sign in as the workout owner to see its delivery status.</p> }
+    @else { <p>Delivery status is unavailable. Check your connection and refresh.</p> }
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button [disabled]="!result || result.state === 'loading' || result.state === 'forbidden'" (click)="checkAgain()">Refresh</button>
+  <button mat-button mat-dialog-close (click)="haptics.selection()">Close</button>
+</mat-dialog-actions>

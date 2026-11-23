@@ -1,3 +1,5 @@
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import type { AppUserInterface } from '../../models/app-user.interface';
 import { getUserChartDataTypesToUse } from '../../helpers/app-chart-data-types.helper';
 import {
   ChangeDetectionStrategy,
@@ -208,6 +210,30 @@ export class EventCardComponent implements OnInit {
     return request && request.event === this.event() && this.canFocusSwimCharts()
       && this.selectedActivitiesInstant().includes(request.focus.activity)
       && this.selectedActivitiesDebounced().includes(request.focus.activity) ? request.focus : null;
+  });
+
+  private readonly analytics = inject(AppAnalyticsService);
+  private lastMeasuredView = '';
+  private readonly measureOwnedResult = effect(() => {
+    const viewer = this.currentUser() as AppUserInterface | null;
+    const event = this.event();
+    const owner = this.targetUserID();
+    const id = event?.getID?.();
+    if (!viewer?.acceptedTrackingPolicy || !owner || viewer.uid !== owner || this.isPublicShare()
+      || this.route.snapshot.paramMap.get('userID') !== owner
+      || !event || !id || this.route.snapshot.paramMap.get('eventID') !== id) {
+      this.lastMeasuredView = '';
+      return;
+    }
+    const count = event.getActivities().length;
+    const comparison = event.toolSource === 'tools/compare' && count >= 2;
+    const recording = !event.isMerge && !event.mergeType && !event.toolSource && count > 0
+      && (event.originalFile?.path || event.originalFiles?.some(file => !!file?.path));
+    if (!comparison && !recording) return;
+    const key = owner + '/' + id;
+    if (this.lastMeasuredView !== key && this.analytics.logOwnedResultView(owner,
+      comparison ? 'comparison_result_opened' : 'recorded_workout_opened',
+    )) this.lastMeasuredView = key;
   });
 
   private readonly clearInvalidSwimFocus = effect(() => {
