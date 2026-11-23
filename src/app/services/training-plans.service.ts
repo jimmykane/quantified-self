@@ -1,3 +1,4 @@
+import type { PlanAttribution } from '@shared/training-plan-templates';
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
@@ -391,6 +392,13 @@ export class TrainingPlansService {
     const unique = this.browserCompatibility.createRandomUUID()
       ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
     return `${normalizedPrefix}-${unique}`.slice(0, 128);
+  }
+
+  async getPlanAttribution(planId: string, createdAtMs: number, canExecute: () => boolean) {
+    const request = { action: 'attribution' as const, planId, createdAtMs };
+    return (await this.functions.call<typeof request, { attribution: PlanAttribution | null }>(
+      'trainingPlanTemplates', request, { canExecute },
+    )).data.attribution;
   }
 
   async saveTemplate(planId: string, revision: number, canExecute: () => boolean): Promise<void> {

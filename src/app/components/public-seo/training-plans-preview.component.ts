@@ -4,6 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { PlanAttributionComponent } from '../plans/plan-attribution.component';
 import { TRAINING_PLAN_CATALOG } from '@shared/training-plan-templates';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
@@ -32,7 +33,7 @@ interface TrainingPlansPreviewWorkoutRow {
   selector: 'app-training-plans-preview',
   standalone: true,
   imports: [MatIconModule, MatButtonToggleModule, MatFormFieldModule, MatSelectModule,
-    PlanScheduleCalendarComponent, WorkoutProfileComponent],
+    PlanScheduleCalendarComponent, WorkoutProfileComponent, PlanAttributionComponent],
   templateUrl: './training-plans-preview.component.html',
   styleUrls: ['./training-plans-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,7 +45,7 @@ export class TrainingPlansPreviewComponent {
   readonly selectedView = signal<'calendar' | 'profile'>('calendar');
   readonly preview = buildTrainingPlansPreviewFixture();
   readonly catalog = computed(() => TRAINING_PLAN_CATALOG.map(plan => ({
-    id: plan.id, name: plan.name, weeks: plan.days / 7, description: plan.description, author: plan.author,
+    id: plan.id, name: plan.name, weeks: plan.days / 7, description: plan.description, author: plan.author, attribution: plan.attribution,
     workoutCount: plan.sessions.length, sample: plan.sessions.filter(s => s.day < 7).map(s => ({
       day: s.day + 1, title: s.title,
       summary: formatWorkoutPrescriptionSummaryV1(s.structure, this.unitSettings(), s.structure.sport, this.locale),

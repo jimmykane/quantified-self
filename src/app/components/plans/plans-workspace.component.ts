@@ -55,6 +55,8 @@ import { TrainingWorkoutDuplicateService } from '../../services/training-workout
 import { WorkoutLibraryService } from '../../services/workout-library.service';
 import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import type { PlanAttribution } from '@shared/training-plan-templates';
+import { PlanAttributionComponent } from './plan-attribution.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { PlanPhasesDialogComponent } from './plan-phases-dialog.component';
 import { trainingPlanPhaseOnDate } from '../../helpers/training-plan-phases.helper';
@@ -195,7 +197,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent, WorkoutTargetsEditorComponent],
+  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanAttributionComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent, WorkoutTargetsEditorComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -666,6 +668,30 @@ export class PlansWorkspaceComponent {
     }
     this.pendingEditorNodeFocus.set(null);
   });
+
+  readonly planCredit = signal<PlanAttribution | null>(null);
+  readonly creditUnavailable = signal(false);
+  readonly creditRetry = signal(0);
+  private readonly creditTarget = computed(() => {
+    const uid = this.currentUser()?.uid;
+    const plan = this.selectedPlan();
+    if (!uid || !plan?.id.startsWith('enroll-') || !this.browsing() || this.libraryView() || this.view() !== 'plans') return null;
+    return { uid, id: plan.id, createdAtMs: plan.createdAtMs };
+  }, { equal: (a, b) => a?.uid === b?.uid && a?.id === b?.id && a?.createdAtMs === b?.createdAtMs });
+  private readonly creditEffect = effect(onCleanup => {
+    const target = this.creditTarget();
+    this.creditRetry();
+    this.planCredit.set(null);
+    this.creditUnavailable.set(false);
+    if (!target) return;
+    let active = true;
+    const current = () => active && !this.destroyRef.destroyed && this.creditTarget() === target;
+    onCleanup(() => { active = false; });
+    void this.plansService.getPlanAttribution(target.id, target.createdAtMs, current).then(credit => {
+      if (current()) this.planCredit.set(credit);
+    }).catch(() => { if (current()) this.creditUnavailable.set(true); });
+  });
+  retryPlanCredit(): void { this.creditRetry.update(value => value + 1); }
 
   private readonly selectionEffect = effect(() => {
     const plans = this.planOptions();

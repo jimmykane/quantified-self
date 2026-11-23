@@ -427,6 +427,8 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/training/plans/library')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/catalog')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/catalog/unknown')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/training/plans/library/new')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
@@ -568,6 +570,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-11-12');
+    // Includes the licensed running plan and its public source credit.
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-20');

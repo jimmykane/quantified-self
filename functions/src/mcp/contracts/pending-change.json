@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "02628a84b5f1f12f178a2c1bc555a2ba7357aba19961254866f3ad8121ee3c14",
+  "candidateSha256": "42de8558da59304174e798a9335fd97f9b7f59451721968e13a6a63e4f08ba66",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retains pending Sports Lib, Training, calendar goals, thresholds, manual HR and HR formula preferences. Readiness formula 5 treats above-range HRV as informational. Frozen formula-3 contracts stay intact. Adds whole-plan catalog reads, opt-in private template reads and reviewed enrollment into a paused plan. Requires backend release and app rescan.",
+  "summary": "Retains pending Sports Lib, Training, calendar goals, thresholds, manual HR and HR formula preferences. Readiness formula 5 treats above-range HRV as informational. Frozen formula-3 contracts stay intact. Adds whole-plan catalog reads, opt-in private template reads and reviewed enrollment into a paused plan. Adds scheduling modes, coaching notes, licensed template credit and an enrolled-plan attribution read. Requires backend release and app rescan.",
   "rescanRequired": true
 }

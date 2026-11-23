@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { TrainingScheduleMutationError } from '../training-plans/mutation';
-import { applyEnrollment, getTemplate, listTemplates, previewEnrollment, summarizeTemplate, scheduleOptions, type TemplateAccess } from '../training-plans/plan-templates';
+import { applyEnrollment, getTemplate, listTemplates, previewEnrollment, summarizeTemplate, readPlanAttribution, templateId, scheduleOptions, type TemplateAccess } from '../training-plans/plan-templates';
 import { encodeOpaqueValue, decodeOpaqueValue, McpDataError } from './data.service';
 import { assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
 import { TEMPLATE_INPUTS, TEMPLATE_OUTPUTS, type TEMPLATE_TOOLS } from './plan-templates.schemas';
@@ -49,6 +49,11 @@ export async function handleTemplateTool(tool: typeof TEMPLATE_TOOLS[number], in
   }
 }
 async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input) {
+  if (tool === 'get_training_plan_attribution') {
+    const { planRef } = TEMPLATE_INPUTS[tool].parse(input.arguments);
+    const ref = z.strictObject({ kind: z.literal('plan'), id: templateId, createdAtMs: z.number().int().nonnegative() }).parse(decode(input, planRef));
+    return TEMPLATE_OUTPUTS[tool].parse(await readPlanAttribution(access(input, false), ref.id, ref.createdAtMs));
+  }
   if (tool === 'list_training_plan_templates') {
     const args = TEMPLATE_INPUTS[tool].parse(input.arguments);
     const items = await listTemplates(access(input,false), args.source);
@@ -67,12 +72,14 @@ async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input
     while (end > args.offset+1 && Buffer.byteLength(JSON.stringify(item.sessions.slice(args.offset,end))) > 45000) end--;
     if (Buffer.byteLength(JSON.stringify(item.sessions.slice(args.offset,end))) > 55000) throw new McpDataError('detail_not_available','This prescription exceeds the single-response limit.');
     return TEMPLATE_OUTPUTS[tool].parse({ template: project(input,summarizeTemplate(item)), sessions: item.sessions.slice(args.offset,end),
-      phases: item.phases.map(({ name,start,end }) => ({ name,start,end })), rest: item.rest, nextOffset: end < item.sessions.length ? end : null });
+      phases: item.phases.map(({ name, start, end, description }) => ({ name, start, end, ...(description ? { description } : {}) })), rest: item.rest, nextOffset: end < item.sessions.length ? end : null });
   }
   if (tool === 'preview_training_plan_enrollment') {
     const args = TEMPLATE_INPUTS[tool].parse(input.arguments), ref = templateRef.parse(decode(input,args.templateRef));
     const { anchor, date, longDay, pattern } = args;
-    const review = await previewEnrollment(access(input,true), ref.source,ref.id,ref.version,scheduleOptions.parse({ anchor, date, longDay, pattern }));
+    const options = scheduleOptions.parse({ anchor, date,
+      longDay: longDay ?? (anchor === 'finish' ? new Date(date + 'T12:00:00Z').getUTCDay() : 0), pattern: pattern ?? 'standard' });
+    const review = await previewEnrollment(access(input,true), ref.source,ref.id,ref.version,options);
     const workoutCounts = new Map<string, number>();
     for (const date of review.dates) workoutCounts.set(date, (workoutCounts.get(date) ?? 0) + 1);
     const rest = new Set(review.restDays), overlaps = new Set(review.conflicts);
@@ -84,7 +91,9 @@ async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input
     for (let i = 0; i < days.length; i += 18) chunks.push(days.slice(i, i + 18).join(', '));
     return TEMPLATE_OUTPUTS[tool].parse({ proposalRef: encode(input,{ kind:'plan-enrollment',id:review.id },true),
       permissionMode: 'schedule', scheduleRevision: review.scheduleRevision, expiresAtMs: review.expiresAtMs, requiresConfirmation:true,
-      summary: `Add “${review.name}” as paused, ${review.start} through ${review.end}. ${review.dates.length} workouts, ${review.restDays.length} rest days, ${review.conflicts.length} overlapping dates. Device sync stays off.`,
+      summary: `Add “${review.name}” as paused, ${review.start} through ${review.end}. ${review.dates.length} workouts, ${review.restDays.length} rest days, ${review.conflicts.length} overlapping dates. Device sync stays off.` +
+        (review.scheduleMode === 'fixed' ? ' Workout spacing follows the template.' : '') +
+        (review.attribution ? ` Original by ${review.attribution.originalAuthor} (${review.attribution.license}).` : ''),
       changes: chunks.map((summary,index) => ({ index,kind:'enroll-plan',summary })), providerPreviews:[] });
   }
   const args = TEMPLATE_INPUTS.apply_training_plan_enrollment.parse(input.arguments), ref = proposalRef.parse(decode(input,args.proposalRef,true));

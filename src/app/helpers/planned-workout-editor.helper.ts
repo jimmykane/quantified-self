@@ -291,10 +291,15 @@ export function formatManualWorkoutStructure(
   structure: WorkoutStructureV1,
   unitSettings?: UserUnitSettingsInterface | null,
   locale?: string,
+  includeNotes = false,
 ): string[] {
+  const format = (step: WorkoutStepV1) => {
+    const prescription = formatWorkoutStepV1(step, unitSettings, locale, structure.sport);
+    return includeNotes && step.note ? prescription + ' · ' + step.note : prescription;
+  };
   const steps = structure.nodes.map(node => node.kind === 'step'
-    ? formatWorkoutStepV1(node, unitSettings, locale, structure.sport)
-    : `${node.count}× (${node.steps.map(step => formatWorkoutStepV1(step, unitSettings, locale, structure.sport)).join('; ')})`);
+    ? format(node)
+    : `${node.count}× (${node.steps.map(format).join('; ')})`);
   return structure.poolLength
     ? [`Pool · ${formatWorkoutEndingV1({ kind: 'distance', meters: structure.poolLength.meters }, unitSettings, locale, structure.sport)}`, ...steps]
     : steps;

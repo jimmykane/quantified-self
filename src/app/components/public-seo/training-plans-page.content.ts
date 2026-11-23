@@ -32,7 +32,7 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
     items: [
       {
         icon: 'collections_bookmark',
-        title: 'Seven free running and cycling plans',
+        title: 'Eight free running and cycling plans',
         copy: 'Browse the plan library, inspect weekly training time and workouts, and fit a plan to your event date. Review overlaps before adding a paused copy to your calendar.',
       },
       {

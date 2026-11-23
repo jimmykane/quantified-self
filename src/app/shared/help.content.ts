@@ -248,7 +248,7 @@ const TRAINING_PLANNING_HELP_SNIPPETS = {
 
 const TRAINING_PLANS_HELP_CONTENT = `## Create plans and workouts
 
-Open **Plans → Browse plans** to see seven free running and cycling programs. Check the starting fitness, weekly workouts and event week. Choose a start date or work backwards from an event date, then preview the calendar and any overlapping dates. **Add paused plan** creates your own copy. **Activate plan** makes it your current plan and pauses your previous active plan. Device delivery is a separate Pro action.
+Open **Plans → Browse plans** to see seven Quantified Self programs and a four-week running plan by Felix Gertz, licensed under CC BY 4.0. The licensed plan keeps its original workout spacing. Select a week to read its coaching notes. Day numbers count from the start of the plan. Step notes explain its heart-rate and pace guidance. The original source, licence, publisher’s notice and adaptations stay with your plan when you save or reuse it. Check the starting fitness, weekly workouts and event week. Choose a start date or work backwards from an event date, then preview the calendar and any overlapping dates. **Add paused plan** creates your own copy. **Activate plan** makes it your current plan and pauses your previous active plan. Device delivery is a separate Pro action.
 
 Choose **Save to my templates** in a plan’s actions to keep its planned workouts, rest days and phases for reuse. Find that copy in **Browse plans → My templates**. Use **Adjust with Assistant** when your available days change or you miss training. Review each proposed edit before applying it. The usual Assistant quota applies.
 

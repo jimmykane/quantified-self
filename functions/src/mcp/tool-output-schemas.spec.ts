@@ -623,7 +623,8 @@ const service = {
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
     planTemplateTool: vi.fn(async (tool: string) => {
-      const template = { templateRef: 'opaque-template', source: 'catalog', version: 1, name: '10K Race', description: 'Three sessions a week.', author: 'Quantified Self', sport: 'Running', days: 70, workoutCount: 30 };
+      const template = { templateRef: 'opaque-template', source: 'catalog', scheduleMode: 'flexible', version: 1, name: '10K Race', description: 'Three sessions a week.', author: 'Quantified Self', sport: 'Running', days: 70, workoutCount: 30 };
+      if (tool === 'get_training_plan_attribution') return { attribution: null };
       if (tool === 'list_training_plan_templates') return { templates: [template], nextCursor: null };
       if (tool === 'get_training_plan_template') return { template, sessions: [], rest: [2], phases: [{ name: 'Base', start: 0, end: 34 }], nextOffset: null };
       if (tool === 'preview_training_plan_enrollment') return { ...trainingPreviewFixture, changes: [{ index: 0, kind: 'enroll-plan', summary: 'Add paused plan.' }] };
@@ -1466,6 +1467,7 @@ const successfulToolArguments: Record<
   preview_training_threshold_change: { policyRef: 'opaque-threshold-policy', mutationId: '123e4567-e89b-42d3-a456-426614174000', changes: { runningPace: { paceSeconds: 270, distanceUnit: 'km' },
     lactateThresholdHR: 165, restingHeartRate: 55, maxHeartRate: 190, hrAlgorithm: 'BANISTER' } },
   apply_training_threshold_change: { proposalRef: 'opaque-threshold-proposal' },
+  get_training_plan_attribution: { planRef: 'opaque-plan' },
   list_training_plan_templates: { source: 'catalog' },
   get_training_plan_template: { templateRef: 'opaque-template', offset: 0 },
   preview_training_plan_enrollment: { templateRef: 'opaque-template', anchor: 'finish', date: '2027-02-07', longDay: 0, pattern: 'standard' },

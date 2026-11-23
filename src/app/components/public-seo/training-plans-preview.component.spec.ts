@@ -31,6 +31,17 @@ describe('TrainingPlansPreviewComponent', () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it('links the licensed plan to its original publisher and licence', () => {
+    const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
+    fixture.detectChanges();
+    const credit = fixture.nativeElement.querySelector('section[aria-label="Plan attribution"]');
+    expect(credit.textContent).toContain('Felix Gertz');
+    expect(credit.textContent).toContain('Device target bands');
+    expect(credit.textContent).toContain('example plan');
+    expect(credit.querySelector('a').href).toBe('https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM');
+    expect(credit.querySelector('a[rel="license"]').href).toBe('https://creativecommons.org/licenses/by/4.0/');
+  });
+
   it('opens the real profile locally with canonical totals, target ranges and keyboard step selection', async () => {
     const fixture = TestBed.createComponent(TrainingPlansPreviewComponent);
     const original = JSON.stringify(fixture.componentInstance.workouts);
