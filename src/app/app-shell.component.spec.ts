@@ -32,6 +32,16 @@ import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 
+const { WhatsNewDialogStub } = vi.hoisted(() => ({
+    WhatsNewDialogStub: class WhatsNewDialogStub {},
+}));
+
+// This suite checks dialog orchestration; the dialog's own spec covers its UI.
+// Keep lazy component compilation outside this test's execution deadline.
+vi.mock('./components/whats-new/whats-new-dialog.component', () => ({
+    WhatsNewDialogComponent: WhatsNewDialogStub,
+}));
+
 const navigationLifecycle = { created: vi.fn(), destroyed: vi.fn() };
 
 @Component({ selector: 'app-sidenav', template: '<button type="button">Navigation contents</button>', standalone: false })
@@ -1046,8 +1056,8 @@ describe('AppShellComponent', () => {
         const [, config] = dialog.open.mock.calls.at(-1);
 
         expect(whatsNewService.ensureChangelogsLoaded).toHaveBeenCalledOnce();
-        expect(dialog.open).toHaveBeenCalledWith(
-            expect.any(Function),
+        expect(dialog.open).toHaveBeenCalledExactlyOnceWith(
+            WhatsNewDialogStub,
             expect.objectContaining({
                 width: '860px',
                 maxWidth: '96vw',
