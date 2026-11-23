@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
-import { Firestore } from 'app/firebase/firestore';
+import { Firestore, onSnapshot } from 'app/firebase/firestore';
 import { ActivitySendService, ACTIVITY_SEND_SUMMARY_TIMEOUT_MS } from './activity-send.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -13,7 +13,10 @@ import { AppProcessingService } from './app.processing.service';
 import { ACTIVITY_SEND_LIMITS } from '@shared/activity-send';
 
 const streams = vi.hoisted(() => ({ reads: [] as Array<Subject<unknown>>, data: vi.fn(), count: vi.fn(), doc: vi.fn() }));
-vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), collectionData: streams.data, docData: streams.data, getCountFromServer: streams.count, getDocFromServer: streams.doc }));
+vi.mock('app/firebase/firestore', () => ({ Firestore: class {}, collection: vi.fn(), doc: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), where: vi.fn(), query: vi.fn(), onSnapshot: vi.fn((_query, _options, next, error) => {
+  const subscription = streams.data().subscribe({ next, error });
+  return () => subscription.unsubscribe();
+}), collectionData: streams.data, docData: streams.data, getCountFromServer: streams.count, getDocFromServer: streams.doc }));
 
 class FakeXHR {
   static latest: FakeXHR;
@@ -56,6 +59,20 @@ describe('ActivitySendService owner and upload boundaries', () => {
     service.watchBatch('batch'); streams.reads[2].next(batch); streams.reads[3].next([{ id: 'visible-only' }]);
     return batch;
   }
+  it('shows cached batches while waiting for authoritative recent history', () => {
+    expect(onSnapshot).toHaveBeenCalledWith(undefined, { includeMetadataChanges: true }, expect.any(Function), expect.any(Function));
+    const snapshot = (fromCache: boolean, records: object[]) => ({
+      metadata: { fromCache }, docs: records.map(record => ({ data: () => record })),
+    });
+    streams.reads[0].next(snapshot(true, []));
+    expect(service.loadingRecent()).toBe(true);
+    streams.reads[0].next(snapshot(true, [{ id: 'cached' }]));
+    expect(service.recent()).toEqual([{ id: 'cached' }]);
+    expect(service.loadingRecent()).toBe(true);
+    streams.reads[0].next(snapshot(false, []));
+    expect(service.loadingRecent()).toBe(false);
+    expect(service.recent()).toEqual([]);
+  });
   it('reads full-batch server counts independently of pagination and fences a stable batch version', async () => {
     vi.useFakeTimers(); summaryBatch(); await vi.advanceTimersByTimeAsync(0);
     expect(service.summary()).toMatchObject({ delivered: 95, duplicate: 3, needs_action: 2, pending: 0 });

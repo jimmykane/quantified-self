@@ -108,10 +108,12 @@ describe('AppBenchmarkFlowService', () => {
   it('measures a saved comparison only when its report opens from the owner list', async () => {
     const event = createEvent();
     const user = { uid: 'owner' } as User;
-    await service.openBenchmarkReport({ event, user, ownedComparisonList: true });
+    await service.openBenchmarkReport({ event, user, comparisonOwnerUid: 'owner' });
     await service.openBenchmarkReport({ event, user, result: createResult() });
+    await service.openBenchmarkReport({ event, user, result: createResult(), comparisonOwnerUid: 'other' });
+    await service.openBenchmarkReport({ event, user, result: { ...createResult(), requiresRegeneration: true }, comparisonOwnerUid: 'owner' });
     expect(analyticsService.logOwnedResultView).not.toHaveBeenCalled();
-    await service.openBenchmarkReport({ event, user, result: createResult(), ownedComparisonList: true });
+    await service.openBenchmarkReport({ event, user, result: createResult(), comparisonOwnerUid: 'owner' });
     expect(analyticsService.logOwnedResultView).toHaveBeenCalledExactlyOnceWith('owner', 'comparison_result_opened');
   });
 

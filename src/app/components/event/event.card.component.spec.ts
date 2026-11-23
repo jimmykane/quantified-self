@@ -56,7 +56,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
-import type { AppEventInterface } from '@shared/app-event.interface';
+import type { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
@@ -299,6 +299,18 @@ describe('EventCardComponent', () => {
         fixture.detectChanges();
         expect(log).toHaveBeenCalledTimes(1);
         component.event.set({ ...component.event()!, getActivities: () => [mockActivity, mockActivity] });
+        fixture.detectChanges();
+        expect(log).toHaveBeenCalledTimes(1);
+        const report = { referenceId: 'a', testId: 'b' } as BenchmarkResult;
+        component.event.set({ ...component.event()!, benchmarkResult: { ...report, requiresRegeneration: true } });
+        fixture.detectChanges();
+        expect(log).toHaveBeenCalledTimes(1);
+        routeBenchmarkQuery = '1';
+        component.event.set({ ...component.event()!, benchmarkResult: report });
+        fixture.detectChanges();
+        expect(log).toHaveBeenCalledTimes(1);
+        routeBenchmarkQuery = null;
+        component.event.set({ ...component.event()! });
         fixture.detectChanges();
         expect(log).toHaveBeenLastCalledWith(mockUser.uid, 'comparison_result_opened');
     });
@@ -663,6 +675,7 @@ describe('EventCardComponent', () => {
             createActivity('act-a'),
             createActivity('act-b'),
         ], 'Tool Comparison');
+        Object.assign(comparisonEvent, { toolSource: 'tools/compare' });
 
         routeData$.next({ event: comparisonEvent });
         routeData$.next({ event: comparisonEvent });
@@ -671,6 +684,7 @@ describe('EventCardComponent', () => {
         expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
             event: comparisonEvent,
             user: mockUser,
+            comparisonOwnerUid: mockUser.uid,
             hydrateStreamsForGeneration: true,
         }));
     });

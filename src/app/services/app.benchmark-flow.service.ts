@@ -32,8 +32,8 @@ interface BenchmarkFlowConfig {
   onGenerationComplete?: (status: 'success' | 'failure', failureReason?: BenchmarkGenerationFailureReason) => void;
   hydrateStreamsForGeneration?: boolean;
   allowRerun?: boolean;
-  /** Only the signed-in owner’s saved comparison list sets this. */
-  ownedComparisonList?: boolean;
+  /** Set only by a private comparison entry point with a known owner. */
+  comparisonOwnerUid?: string;
 }
 
 export type BenchmarkGenerationFailureReason = 'no_overlap' | 'streams_unavailable' | 'no_shared_data' | 'unknown';
@@ -93,8 +93,8 @@ export class AppBenchmarkFlowService {
       scrollStrategy: this.overlay.scrollStrategies.noop()
     });
 
-    if (config.ownedComparisonList && config.user?.uid) {
-      this.analyticsService.logOwnedResultView(config.user.uid, 'comparison_result_opened');
+    if (config.comparisonOwnerUid && config.comparisonOwnerUid === config.user?.uid && !config.result.requiresRegeneration) {
+      this.analyticsService.logOwnedResultView(config.comparisonOwnerUid, 'comparison_result_opened');
     }
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun && nextConfig.allowRerun !== false) {

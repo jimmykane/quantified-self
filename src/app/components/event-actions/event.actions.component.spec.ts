@@ -1039,6 +1039,10 @@ describe('recording delivery status', () => {
     [{status: 'retrying', lastError: {message: 'Reconnect Wahoo API to resume this activity delivery.'}}, 'Reconnect in Connections'],
     [{status: 'retrying', lastError: {message: 'Wahoo API disconnect is pending.'}}, 'Waiting for disconnect'],
     [{status: 'skipped', skippedReason: 'destination_permission_required'}, 'Check destination connection'],
+    [{status: 'skipped', skippedReason: 'service_reconnect_required'}, 'Reconnect in Connections'],
+    [{status: 'skipped', skippedReason: 'destination_write_scope_missing'}, 'Check destination connection'],
+    [{status: 'skipped', skippedReason: 'route_disabled'}, 'Automatic sync was off'],
+    [{status: 'skipped', skippedReason: 'unsupported_original_file'}, 'File format unsupported'],
     [{status: 'failed'}, 'Needs attention'],
     [{status: 'unexpected'}, 'Status unavailable'],
   ] as const)('distinguishes the recorded outcome %#', (row, expected) => {

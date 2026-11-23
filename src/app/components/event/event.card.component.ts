@@ -226,7 +226,10 @@ export class EventCardComponent implements OnInit {
       return;
     }
     const count = event.getActivities().length;
-    const comparison = event.toolSource === 'tools/compare' && count >= 2;
+    const savedResults = event.toolSource === 'tools/compare' && count >= 2
+      && this.route.snapshot.queryParamMap?.get('benchmark') !== '1'
+      ? [...Object.values(event.benchmarkResults ?? {}), event.benchmarkResult] : [];
+    const comparison = savedResults.some(result => result && !result.requiresRegeneration);
     const recording = !event.isMerge && !event.mergeType && !event.toolSource && count > 0
       && (event.originalFile?.path || event.originalFiles?.some(file => !!file?.path));
     if (!comparison && !recording) return;
@@ -690,12 +693,14 @@ export class EventCardComponent implements OnInit {
       event: AppEventInterface;
       user: User;
       initialSelection?: ActivityInterface[];
+      comparisonOwnerUid?: string;
       hydrateStreamsForGeneration: boolean;
     } = {
       event,
       user,
       hydrateStreamsForGeneration: true,
     };
+    if (this.isOwner() && event.toolSource === 'tools/compare') benchmarkConfig.comparisonOwnerUid = this.targetUserID();
     if (initialSelection) {
       benchmarkConfig.initialSelection = initialSelection;
     }

@@ -10,8 +10,30 @@ const results = {
   compare: 'comparison_result_opened',
 };
 
-export function flowForSelection(name) {
-  return Object.hasOwn(starts, name) ? starts[name] : undefined;
+function validateAccount(uid) {
+  if (typeof uid !== 'string' || !uid.trim() || uid.includes('/')) throw new Error('Invalid account identifier.');
+}
+
+// Keep the first selection since rollout, including selections before the reporting window.
+export function cohortStarts(events, from, until) {
+  const byAccount = new Map();
+  for (const { uid, name, at } of events) {
+    if (!Object.hasOwn(starts, name)) continue;
+    validateAccount(uid);
+    const time = instant(at);
+    if (time >= until) continue;
+    if (!byAccount.has(uid)) byAccount.set(uid, {});
+    const selections = byAccount.get(uid);
+    const flow = starts[name];
+    selections[flow] = Math.min(selections[flow] ?? Infinity, time);
+  }
+  for (const [uid, selections] of byAccount) {
+    for (const [flow, first] of Object.entries(selections)) {
+      if (first < from) delete selections[flow];
+    }
+    if (!Object.keys(selections).length) byAccount.delete(uid);
+  }
+  return byAccount;
 }
 
 export function freshDelivery(row) {
@@ -44,28 +66,22 @@ export function report({ from, until, asOf, events, deliveries, cancellations, c
   const end = instant(asOf);
   if (lo >= hi || hi > end) throw new Error('Expected from < until <= asOf.');
   const users = new Map();
-  function account(uid) {
-    if (typeof uid !== 'string' || !uid.trim()) throw new Error('Missing account identifier.');
-    if (!users.has(uid)) users.set(uid, { start: {}, results: {}, cancellations: [] });
-    return users.get(uid);
+  for (const [uid, start] of cohortStarts(events, lo, hi)) {
+    users.set(uid, { start, results: {}, cancellations: [] });
   }
-
   for (const { uid, name, at } of events) {
+    if (name !== results.analyze && name !== results.compare) continue;
+    validateAccount(uid);
     const time = instant(at);
-    if (time > end) continue;
-    const flow = flowForSelection(name);
-    if (flow) {
-      const start = account(uid).start;
-      start[flow] = Math.min(time, start[flow] ?? Infinity);
-    } else if (name === results.analyze || name === results.compare) {
-      (account(uid).results[name] ??= []).push(time);
-    }
+    if (time <= end && users.has(uid)) (users.get(uid).results[name] ??= []).push(time);
   }
   for (const { uid, at } of deliveries) {
+    validateAccount(uid);
     const time = instant(at);
     if (time <= end && users.has(uid)) (users.get(uid).results[results.sync] ??= []).push(time);
   }
   for (const { uid, at } of cancellations ?? []) {
+    validateAccount(uid);
     const time = instant(at);
     if (time <= end && users.has(uid)) users.get(uid).cancellations.push(time);
   }
@@ -76,11 +92,11 @@ export function report({ from, until, asOf, events, deliveries, cancellations, c
     const counts = { starters: 0, observed24h: 0, matureStarters: 0, pending24h: 0 };
     const order = {
       resultBeforeCancellation: 0, cancellationBeforeFirstObservedResult: 0,
-      sameInstant: 0, cancellationWithoutObservedResult: 0,
+      sameInstant: 0, cancellationWithoutObservedResult: 0, selectionOrderUnknown: 0,
     };
     for (const user of users.values()) {
       const start = user.start[flow];
-      if (start === undefined || start < lo || start >= hi) continue;
+      if (start === undefined) continue;
       counts.starters++;
       const first = firstOnOrAfter(user.results[result] ?? [], start);
       if (start + day <= end) {
@@ -90,8 +106,10 @@ export function report({ from, until, asOf, events, deliveries, cancellations, c
       } else {
         counts.pending24h++;
       }
-      const cancel = firstOnOrAfter(user.cancellations, start);
-      if (Number.isFinite(cancel)) order[cancellationOrder(first, cancel)]++;
+      const selectionSecond = Math.floor(start / 1000) * 1000;
+      const cancel = firstOnOrAfter(user.cancellations, selectionSecond);
+      if (cancel < start) order.selectionOrderUnknown++;
+      else if (Number.isFinite(cancel)) order[cancellationOrder(first, cancel)]++;
     }
     minutes.sort((a, b) => a - b);
     const lower = Math.floor((minutes.length - 1) / 2);

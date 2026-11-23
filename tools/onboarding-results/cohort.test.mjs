@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { freshDelivery, instant, report } from './cohort.mjs';
+import { cohortStarts, freshDelivery, instant, report } from './cohort.mjs';
 
 const start = Date.UTC(2026, 10, 16), day = 86_400_000;
 const event = (uid, name, elapsed) => ({ uid, name, at: start + elapsed });
@@ -34,4 +34,25 @@ test('accepts only genuine provider confirmations and rejects ambiguous time uni
   assert.equal(freshDelivery({ resultStatus: 'success', destinationInfoCode: null }), true);
   assert.throws(() => instant(start / 1000));
   assert.throws(() => instant('2026-11-16T06:00:00'));
+});
+
+test('repeated pre-window selections do not trigger billing or receipt lookups', () => {
+  const rows = [event('old', 'onboarding_sync_selected', 100), event('old', 'onboarding_sync_selected', -1),
+    event('new', 'onboarding_sync_selected', 20), event('new', 'onboarding_compare_selected', -50),
+    event('old', 'onboarding_analyze_selected', 80), event('old', 'onboarding_analyze_selected', 50)];
+  assert.deepEqual(Object.fromEntries(cohortStarts(rows, start, start + day)),
+    { new: { sync: start + 20 }, old: { analyze: start + 50 } });
+});
+
+test('keeps second-precision cancellation requests that could be on either side of selection', () => {
+  const result = report({ from: start + 10, until: start + day, asOf: start + day * 2,
+    events: [event('a', 'onboarding_compare_selected', 400), event('a', 'comparison_result_opened', 1500)],
+    deliveries: [], cancellations: [event('a', '', 0)] });
+  assert.equal(result.compare.cancellationOrder.selectionOrderUnknown, 1);
+  assert.equal(result.compare.cancellationOrder.cancellationBeforeFirstObservedResult, 0);
+});
+
+test('rejects malformed receipt archives instead of publishing a zero success rate', () => {
+  assert.throws(() => report({ from: start, until: start + day, asOf: start + day,
+    events: [event('a', 'onboarding_sync_selected', 0)], deliveries: [{ at: start }], completeReceipts: true }), /account/);
 });

@@ -22,7 +22,11 @@ describe('ActivityDeliveryStatusDialog', () => {
     vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({ docs: [{ id: routeId, data: () => ({ status: 'success' }) }] } as unknown as Snapshot)
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ docs: [] } as unknown as Snapshot);
+      .mockResolvedValueOnce({ docs: [] } as unknown as Snapshot)
+      .mockResolvedValueOnce({ docs: [{
+        id: 'activitySync_GarminAPI_to_WahooAPI',
+        data: () => ({ status: 'skipped', skippedReason: 'destination_write_scope_missing' }),
+      }] } as unknown as Snapshot);
     const haptics = { selection: vi.fn() };
     TestBed.configureTestingModule({
       imports: [ActivityDeliveryStatusDialog],
@@ -51,12 +55,17 @@ describe('ActivityDeliveryStatusDialog', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(content()).toContain('No activity delivery has been recorded');
+    refresh.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(content()).toContain('Check destination connection');
+    expect(fixture.nativeElement.querySelector('a').getAttribute('href')).toBe('/services?setup=sync');
     account.next({ uid: 'different-owner' });
     fixture.detectChanges();
     expect(content()).toContain('Sign in as the workout owner');
     expect(refresh.disabled).toBe(true);
     refresh.click();
-    expect(haptics.selection).toHaveBeenCalledTimes(2);
-    expect(getDocsFromServer).toHaveBeenCalledTimes(3);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    expect(getDocsFromServer).toHaveBeenCalledTimes(4);
   });
 });

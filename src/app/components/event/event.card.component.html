@@ -15,6 +15,7 @@
   } @else if (event(); as activeEvent) {
   <!-- Standard Event Dashboard -->
   <app-event-summary [event]="activeEvent" [user]='displayUser()' [isOwner]="isOwner()"
+    [comparisonOwnerUid]="isOwner() && !isPublicShare() && activeEvent.toolSource === 'tools/compare' ? targetUserID() : undefined"
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 

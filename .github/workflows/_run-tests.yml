@@ -68,6 +68,9 @@ jobs:
       - name: Test Health/Sleep monitoring configuration
         run: npm run test:health-sleep-monitoring
 
+      - name: Test onboarding outcome reporting
+        run: npm run test:onboarding-results
+
       - name: Test recorded activity delivery monitoring configuration
         run: npm run test:activity-delivery-monitoring
 

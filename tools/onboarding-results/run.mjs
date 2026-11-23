@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { applicationDefault, deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { flowForSelection, freshDelivery, instant, report } from './cohort.mjs';
+import { cohortStarts, freshDelivery, instant, report } from './cohort.mjs';
 
 const manifest = process.argv[2];
 if (!manifest) throw new Error('Usage: node tools/onboarding-results/run.mjs /path/to/manifest.json');
@@ -20,15 +20,10 @@ const until = instant(config.until);
 const asOf = instant(config.asOf);
 if (from < cutover || from >= until || until > asOf) throw new Error('Expected cutover <= from < until <= asOf.');
 const events = (await rows(config.events)).filter(row => instant(row.at) >= cutover && instant(row.at) <= asOf);
-const owners = new Set();
-const syncOwners = new Set();
-for (const row of events) {
-  const flow = flowForSelection(row.name);
-  if (!flow || instant(row.at) < from || instant(row.at) >= until) continue;
-  if (typeof row.uid !== 'string' || !row.uid || row.uid.includes('/')) throw new Error('Invalid account identifier.');
-  owners.add(row.uid);
-  if (flow === 'sync') syncOwners.add(row.uid);
-}
+const selections = cohortStarts(events, from, until);
+const owners = [...selections.keys()];
+const syncOwners = new Set(owners.filter(uid => selections.get(uid).sync !== undefined));
+const firstReportingSecond = Math.floor(from / 1000) * 1000;
 
 let app;
 function database() {
@@ -45,14 +40,14 @@ async function retainedReceipts() {
   // Page by finalization time, including deliveries from requests queued earlier.
   const base = database().collection('activitySyncQueue').where('processedAt', '>=', from)
     .where('processedAt', '<=', asOf).orderBy('processedAt')
-    .select('userID', 'processedAt', 'successProcessedAt', 'resultStatus', 'destinationInfoCode');
+    .select('userID', 'processedAt', 'resultStatus', 'destinationInfoCode');
   let cursor;
   for (;;) {
     const page = await (cursor ? base.startAfter(cursor) : base).limit(500).get();
     for (const doc of page.docs) {
       const row = doc.data();
       if (syncOwners.has(row.userID) && freshDelivery(row)) {
-        receipts.push({ uid: row.userID, at: row.successProcessedAt ?? row.processedAt });
+        receipts.push({ uid: row.userID, at: row.processedAt });
       }
     }
     if (page.size < 500) return receipts;
@@ -63,14 +58,13 @@ async function retainedReceipts() {
 async function renewalRequests() {
   if (!config.cancellations) return { events: null };
   const input = await rows(config.cancellations);
-  const requests = input.filter(row => row.reason === 'cancellation_requested' && instant(row.at) >= from && instant(row.at) <= asOf);
+  const requests = input.filter(row => row.reason === 'cancellation_requested' && instant(row.at) >= firstReportingSecond && instant(row.at) <= asOf);
   if (requests.some(row => typeof row.customer !== 'string' || !row.customer)) throw new Error('Missing Stripe customer on a cancellation request.');
-  if (!requests.length || !owners.size) return { events: [] };
+  if (!requests.length || !owners.length) return { events: [] };
   const db = database();
   const byCustomer = new Map();
-  const ids = [...owners];
-  for (let i = 0; i < ids.length; i += 100) {
-    const refs = ids.slice(i, i + 100).map(uid => db.collection('customers').doc(uid));
+  for (let i = 0; i < owners.length; i += 100) {
+    const refs = owners.slice(i, i + 100).map(uid => db.collection('customers').doc(uid));
     const snapshots = await db.getAll(...refs, { fieldMask: ['stripeId'] });
     for (const snap of snapshots) {
       const customer = snap.get('stripeId');
@@ -81,7 +75,7 @@ async function renewalRequests() {
   }
   return {
     events: requests.filter(row => byCustomer.has(row.customer)).map(row => ({ uid: byCustomer.get(row.customer), at: row.at })),
-    selectedAccountsWithoutStripeBinding: ids.length - byCustomer.size,
+    selectedAccountsWithoutStripeBinding: owners.length - byCustomer.size,
   };
 }
 

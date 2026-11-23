@@ -157,7 +157,7 @@
     @for (batch of recentForProvider(); track batch.id) {
       <button mat-button class="recent-send" [disabled]="actionPending()" (click)="openBatch(batch.id, batch.provider)">{{ batch.provider === 'coros' ? 'COROS' : batch.provider === 'suunto' ? 'Suunto' : 'Wahoo' }} · {{ batch.createdAt | date:'medium' }} · @if (batch.state === 'draft') { Draft · {{ batch.total }} activities } @else { {{ batch.finished }}/{{ batch.total }} processed }</button>
     } @empty {
-      @if (sends.loadingRecent()) { <p role="status">Loading recent sends…</p> }
+      @if (sends.loadingRecent()) { <p role="status">Loading recent sends… Check your connection if this takes a moment.</p> }
       @else if (!sends.readError()) { <p>No sends for this destination in your recent history.</p> }
     }
   </section>

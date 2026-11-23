@@ -26,8 +26,18 @@ export function deliveryLabel(row: Record<string, unknown>): string {
       }
       return 'Waiting to retry';
     case 'skipped':
-      if (['destination_auth_failed', 'destination_not_connected', 'destination_permission_required'].includes(String(row['skippedReason']))) return 'Check destination connection';
-      return 'Skipped';
+      switch (row['skippedReason']) {
+        case 'service_reconnect_required': return 'Reconnect in Connections';
+        case 'destination_auth_failed':
+        case 'destination_not_connected':
+        case 'destination_permission_required':
+        case 'destination_write_scope_missing': return 'Check destination connection';
+        case 'route_disabled': return 'Automatic sync was off';
+        case 'no_pro_access': return 'Pro access required';
+        case 'missing_original_files': return 'Original file unavailable';
+        case 'unsupported_original_file': return 'File format unsupported';
+        default: return 'Skipped';
+      }
     case 'failed': return 'Needs attention';
     default: return 'Status unavailable';
   }
@@ -50,7 +60,7 @@ export class ActivityDeliveryStatusDialog {
     this.refresh.next();
   }
 
-  readonly view = user(inject(Auth)).pipe(switchMap(account => {
+  readonly view$ = user(inject(Auth)).pipe(switchMap(account => {
     if (!account || account.uid !== this.data.owner) return of({ state: 'forbidden' } as const);
     return this.refresh.pipe(startWith(undefined), switchMap(() => {
       const records = collection(this.db, 'users', account.uid, 'events', this.data.id, 'metaData');
