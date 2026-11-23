@@ -68,10 +68,49 @@ describe('Send file rejection diagnostics', () => {
     await invoke(request(), res);
     expect(res.status).toHaveBeenCalledWith(status);
     expect(res.json).toHaveBeenCalledWith({ code, message: PRIVATE });
-    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[ActivitySendUpload] Request rejected.', { stage, errorCode: code, httpStatus: status });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[ActivitySendUpload] Request rejected.', {
+      stage, errorCode: code, httpStatus: status,
+      ...(stage === 'recording_review' || stage === 'source_reservation' ? { reason: 'unclassified' } : {}),
+    });
     expect(logger.error).not.toHaveBeenCalled();
     expect(mocks.save).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+  });
+
+  it.each([
+    ['recording_review', 'describe', 'invalid-argument', 'Choose a recorded activity FIT. Send course files from Routes.', 'fit_recording_validation_failed', 400],
+    ['recording_review', 'describe', 'invalid-argument', 'This FIT cannot be read as a recorded activity.', 'fit_parser_failed', 400],
+    ['recording_review', 'describe', 'invalid-argument', 'This is not a recorded activity. Send course files from Routes.', 'fit_no_activities', 400],
+    ['source_reservation', 'transaction', 'failed-precondition', 'Draft expired or changed.', 'draft_changed', 400],
+    ['source_reservation', 'transaction', 'failed-precondition', 'This file was removed. Start a new draft to select it again.', 'file_removed', 400],
+    ['source_reservation', 'transaction', 'failed-precondition', 'File reference cannot be replaced.', 'file_reference_conflict', 400],
+    ['source_reservation', 'transaction', 'already-exists', 'This file is already in the draft.', 'duplicate_file', 409],
+    ['source_reservation', 'transaction', 'resource-exhausted', 'Temporary storage limit reached: 50 files per batch and 200 MiB per account.', 'temporary_storage_limit', 429],
+    ['source_reservation', 'transaction', 'failed-precondition', 'Account is unavailable.', 'account_unavailable', 400],
+  ] as const)('identifies %s/%s/%s as %s without private fields', async (stage, target, code, message, reason, status) => {
+    mocks[target].mockRejectedValueOnce(new HttpsError(code, message, { privateData: PRIVATE }));
+    const res = response();
+    await invoke(request(), res);
+    expect(res.status).toHaveBeenCalledWith(status);
+    expect(res.json).toHaveBeenCalledWith({ code, message });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[ActivitySendUpload] Request rejected.', {
+      stage, errorCode: code, httpStatus: status, reason,
+    });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain(message);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it.each(['describe', 'transaction'] as const)('does not attribute arbitrary %s exceptions to a known rejection', async target => {
+    mocks[target].mockRejectedValueOnce(new Error('Draft expired or changed.'));
+    const res = response();
+    await invoke(request(), res);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith('[ActivitySendUpload] Request rejected.', {
+      stage: target === 'describe' ? 'recording_review' : 'source_reservation', errorCode: 'unknown',
+      httpStatus: 503, reason: 'unexpected_error',
+    });
+    expect(mocks.save).not.toHaveBeenCalled();
   });
 
   it.each([

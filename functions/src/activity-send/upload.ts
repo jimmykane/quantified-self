@@ -17,6 +17,18 @@ const UPLOAD_ERROR_CODES = new Set([
   'permission-denied', 'resource-exhausted', 'failed-precondition', 'aborted', 'out-of-range',
   'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated',
 ]);
+// Only fixed server-authored messages become diagnostic labels; never log the message itself.
+const REVIEW_SOURCE_REJECTION_REASONS = new Map([
+  ['Choose a recorded activity FIT. Send course files from Routes.', 'fit_recording_validation_failed'],
+  ['This FIT cannot be read as a recorded activity.', 'fit_parser_failed'],
+  ['This is not a recorded activity. Send course files from Routes.', 'fit_no_activities'],
+  ['Draft expired or changed.', 'draft_changed'],
+  ['This file was removed. Start a new draft to select it again.', 'file_removed'],
+  ['File reference cannot be replaced.', 'file_reference_conflict'],
+  ['This file is already in the draft.', 'duplicate_file'],
+  ['Temporary storage limit reached: 50 files per batch and 200 MiB per account.', 'temporary_storage_limit'],
+  ['Account is unavailable.', 'account_unavailable'],
+]);
 
 function logUploadRejection(stage: UploadStage, code: string, httpStatus: number, error: unknown): void {
   try {
@@ -24,6 +36,9 @@ function logUploadRejection(stage: UploadStage, code: string, httpStatus: number
     // Use the existing request trace; never copy headers, identities or exceptions.
     log('[ActivitySendUpload] Request rejected.', {
       stage, errorCode: UPLOAD_ERROR_CODES.has(code) ? code : 'unknown', httpStatus,
+      ...(stage === 'recording_review' || stage === 'source_reservation'
+        ? { reason: error instanceof HttpsError
+          ? REVIEW_SOURCE_REJECTION_REASONS.get(error.message) || 'unclassified' : 'unexpected_error' } : {}),
       ...(stage === 'file_validation' && error instanceof SendFileValidationError
         ? { validationReason: error.validationReason, receivedBytes: error.receivedBytes } : {}),
     });

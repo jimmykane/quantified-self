@@ -2072,6 +2072,19 @@ are never copied into these diagnostics. Original errors, replies, authorization
 Monitoring coverage is unchanged: the activity-delivery bundle selects `[ActivityDelivery]` events, so these
 request diagnostics do not add queue failure counts, metric labels or alerts.
 
+Send file rejections at `recording_review` and `source_reservation` also include a fixed `reason` for recording
+validation, FIT parser failure, no activities, changed/removed/conflicting sources, duplicates, temporary-storage
+limits, or an unavailable account. Only exact server-authored messages are mapped; other known errors use
+`unclassified`, and unexpected exceptions use `unexpected_error`. Messages, filenames and error details are not logged.
+
+Comparison parser failures reuse the shared activity-parser diagnostics: installed sports-lib version, normalized
+format, decompressed parser-input byte count, allowlisted error name/code/message, a message fingerprint and a
+bounded package-relative parser location. GPX locations identify only the fixed importer module, line and column.
+`fileIndex` is zero-based within the request and `fileCount` is the number of prepared files. Filenames, raw exceptions,
+absolute stack paths and file contents are excluded. Logging failures preserve the existing HTTP 400 response.
+Comparison rejections do not add debug-file captures or queue jobs. User-facing behavior and help are unchanged;
+monitoring coverage is **unchanged** because these request diagnostics remain outside delivery/import outcome metrics.
+
 The shared route picker labels routes/courses separately from recorded workouts. Garmin manual route input
 rejections emit `[importRouteToGarminAPI] File rejected.` at WARNING with only HTTP 400 and the fixed reason
 `fit_not_route_course` or `invalid_route_upload`. Correlate by the platform request trace; filenames, identities,

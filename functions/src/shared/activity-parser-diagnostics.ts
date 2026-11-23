@@ -28,6 +28,7 @@ const SAFE_ERROR_NAMES = new Set([
 const SAFE_ERROR_CODES = new Set(['EVENT_EMPTY_ERROR', 'PARSING_LIB_ERROR', 'ERR_BUFFER_OUT_OF_BOUNDS', 'ERR_OUT_OF_RANGE']);
 const SAFE_FORMATS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 const SAFE_PARSER_MODULES = new Set([
+  'lib/cjs/events/adapters/importers/gpx/importer.gpx.js',
   'lib/cjs/events/adapters/importers/json/importer.json.js',
   'lib/cjs/events/adapters/importers/suunto/importer.suunto.json.js',
   'lib/cjs/events/adapters/importers/suunto/importer.suunto.sml.js',
