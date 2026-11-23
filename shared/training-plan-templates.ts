@@ -1,3 +1,4 @@
+import { FOUNDATIONAL_RUNNING_PLAN } from './foundational-running-plan';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStepV1, WorkoutStructureV1 } from './planned-workout';
 import type { StrengthWorkoutDraftV1 } from './strength-workout';
@@ -9,7 +10,18 @@ export interface TemplateSession {
   structure: WorkoutStructureV1;
   strength?: StrengthWorkoutDraftV1;
 }
+export interface PlanAttribution {
+  title: string;
+  creator: string;
+  sourceUrl: string;
+  license: string;
+  licenseUrl: string;
+  changes: string;
+  notice: string;
+  privateCopy?: true;
+}
 export interface PlanTemplate {
+  attribution?: PlanAttribution;
   id: string;
   version: number;
   source: 'catalog' | 'private';
@@ -92,18 +104,22 @@ function buildProgram(program: Program): PlanTemplate {
       { id: 'build', name: 'Build', start: boundary, end: long.length * 7 - 8 },
       { id: 'finish', name: 'Event week', start: long.length * 7 - 7, end: long.length * 7 - 1 }] };
 }
-export const TRAINING_PLAN_CATALOG = programs.map(buildProgram);
+export const TRAINING_PLAN_CATALOG = [...programs.map(buildProgram), FOUNDATIONAL_RUNNING_PLAN];
+
+export function hasFlexibleTrainingDays(template: PlanTemplate): boolean {
+  return template.source === 'catalog' && !template.attribution;
+}
 export function scheduleTemplate(template: PlanTemplate, options: TemplateScheduleOptions) {
   const date = normalizeTrainingLocalDate(options.date);
   const weekday = new Date(date + 'T12:00:00Z').getUTCDay();
   if (!Number.isInteger(options.longDay) || options.longDay < 0 || options.longDay > 6) throw Error('Choose a valid long-session weekday.');
-  const catalog = template.source === 'catalog';
-  if (catalog && options.anchor === 'finish' && weekday !== options.longDay) throw Error('Choose the event weekday as the long-session day.');
-  const lead = catalog ? (options.longDay + 1 - weekday + 7) % 7 : 0;
+  const flexibleDays = hasFlexibleTrainingDays(template);
+  if (flexibleDays && options.anchor === 'finish' && weekday !== options.longDay) throw Error('Choose the event weekday as the long-session day.');
+  const lead = flexibleDays ? (options.longDay + 1 - weekday + 7) % 7 : 0;
   const start = addDaysToTrainingLocalDate(date, options.anchor === 'finish' ? 1 - template.days : lead);
   const at = (offset: number) => addDaysToTrainingLocalDate(start, offset);
   return { start, end: at(template.days - 1), sessions: template.sessions.map(({ day, ...session }) => ({
-      ...session, localDate: at(catalog && options.pattern === 'early' && day % 7 === 1 ? day - 1 : day) })),
+      ...session, localDate: at(flexibleDays && options.pattern === 'early' && day % 7 === 1 ? day - 1 : day) })),
     restDays: template.rest.map(at), phases: { version: 1 as const, items: template.phases.map(({ start, end, ...phase }) =>
       ({ ...phase, startLocalDate: at(start), endLocalDate: at(end) })) } };
 }

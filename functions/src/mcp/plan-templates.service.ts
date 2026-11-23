@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { TrainingScheduleMutationError } from '../training-plans/mutation';
-import { applyEnrollment, getTemplate, listTemplates, previewEnrollment, summarizeTemplate, scheduleOptions, type TemplateAccess } from '../training-plans/plan-templates';
+import { applyEnrollment, getTemplate, listTemplates, previewEnrollment, summarizeTemplate, readPlanAttribution, templateId, scheduleOptions, type TemplateAccess } from '../training-plans/plan-templates';
 import { encodeOpaqueValue, decodeOpaqueValue, McpDataError } from './data.service';
 import { assertAuthorityInTransaction, type TrainingWriteInput } from './training-plans-write.service';
 import { TEMPLATE_INPUTS, TEMPLATE_OUTPUTS, type TEMPLATE_TOOLS } from './plan-templates.schemas';
@@ -49,6 +49,11 @@ export async function handleTemplateTool(tool: typeof TEMPLATE_TOOLS[number], in
   }
 }
 async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input) {
+  if (tool === 'get_training_plan_attribution') {
+    const { planRef } = TEMPLATE_INPUTS[tool].parse(input.arguments);
+    const ref = z.strictObject({ kind: z.literal('plan'), id: templateId, createdAtMs: z.number().int().nonnegative() }).parse(decode(input, planRef));
+    return TEMPLATE_OUTPUTS[tool].parse(await readPlanAttribution(access(input, false), ref.id, ref.createdAtMs));
+  }
   if (tool === 'list_training_plan_templates') {
     const args = TEMPLATE_INPUTS[tool].parse(input.arguments);
     const items = await listTemplates(access(input,false), args.source);
@@ -84,7 +89,8 @@ async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input
     for (let i = 0; i < days.length; i += 18) chunks.push(days.slice(i, i + 18).join(', '));
     return TEMPLATE_OUTPUTS[tool].parse({ proposalRef: encode(input,{ kind:'plan-enrollment',id:review.id },true),
       permissionMode: 'schedule', scheduleRevision: review.scheduleRevision, expiresAtMs: review.expiresAtMs, requiresConfirmation:true,
-      summary: `Add “${review.name}” as paused, ${review.start} through ${review.end}. ${review.dates.length} workouts, ${review.restDays.length} rest days, ${review.conflicts.length} overlapping dates. Device sync stays off.`,
+      summary: `Add “${review.name}” as paused, ${review.start} through ${review.end}. ${review.dates.length} workouts, ${review.restDays.length} rest days, ${review.conflicts.length} overlapping dates. Device sync stays off.` +
+        (review.attribution ? ` Original by ${review.attribution.creator} (${review.attribution.license}).` : ''),
       changes: chunks.map((summary,index) => ({ index,kind:'enroll-plan',summary })), providerPreviews:[] });
   }
   const args = TEMPLATE_INPUTS.apply_training_plan_enrollment.parse(input.arguments), ref = proposalRef.parse(decode(input,args.proposalRef,true));

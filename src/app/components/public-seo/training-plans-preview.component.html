@@ -86,6 +86,7 @@
     <details><summary>{{ template.name }} · {{ template.weeks }} weeks</summary>
       <p>{{ template.description }}</p>
       <p>{{ template.workoutCount }} workouts · {{ template.author }}</p>
+      <app-plan-attribution [credit]="template.attribution" />
       <h4>Week 1</h4>
       <ul>@for (session of template.sample; track session.day) {
         <li>Day {{ session.day }} · {{ session.title }} · {{ session.summary }}</li>

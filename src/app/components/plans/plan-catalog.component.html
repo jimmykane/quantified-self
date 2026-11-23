@@ -26,6 +26,7 @@
       <article>
         <small>{{ plan.author }} · Edition {{ plan.version }}</small>
         <h2>{{ plan.name }}</h2><p>{{ plan.description }}</p>
+        <app-plan-attribution [credit]="plan.attribution" />
         <dl class="facts"><div><dt>Duration</dt><dd>{{ weeks().length }} weeks</dd></div>
           <div><dt>Workouts</dt><dd>{{ plan.sessions.length }}</dd></div>
           <div><dt>Sport</dt><dd>{{ plan.sport }}</dd></div></dl>
@@ -60,17 +61,17 @@
           <h3>Fit this plan to your calendar</h3>
           <fieldset [disabled]="busy()"><label>Schedule by
             <select [ngModel]="options().anchor" (ngModelChange)="change({anchor: $event})">
-              <option value="start">Start on or after</option><option value="finish">Finish on</option>
+              <option value="start">{{ flexibleDays() ? 'Start on or after' : 'Start on' }}</option><option value="finish">Finish on</option>
             </select>
           </label><label>Date <input type="date" [ngModel]="options().date" (ngModelChange)="change({date: $event})"></label>
-          @if (source() === 'catalog') {
+          @if (flexibleDays()) {
             <label>Long session <select [disabled]="options().anchor === 'finish'" [ngModel]="options().longDay" (ngModelChange)="change({longDay: $event})">
               @for (day of weekdays; track day.value) { <option [ngValue]="day.value">{{ day.label }}</option> }
             </select></label>
             <label>Training days <select [ngModel]="options().pattern" (ngModelChange)="change({pattern: $event})">
               <option value="standard">{{ patternLabel('standard') }}</option><option value="early">{{ patternLabel('early') }}</option>
             </select></label>
-          }</fieldset>
+          } @else { <p>Workout spacing follows the template.</p> }</fieldset>
           <button mat-stroked-button (click)="review()" [disabled]="busy() || !options().date">Preview dates</button>
         </section>
         @if (preview(); as review) {

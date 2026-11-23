@@ -1,3 +1,4 @@
+import { planAttributionSchema } from './plan-attribution.schema';
 import { createHash, randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -53,21 +54,33 @@ async function readTemplate(tx: Tx, uid: string, source: Source, id: string): Pr
 }
 export function summarizeTemplate(item: PlanTemplate) {
   return { id: item.id, version: item.version, source: item.source, name: item.name, description: item.description,
+    ...(item.attribution ? { attribution: planAttributionSchema.parse(item.attribution) } : {}),
     author: item.author, sport: item.sport, days: item.days, workoutCount: item.sessions.length };
 }
 export async function listTemplates(access: TemplateAccess, source: Source) {
   return admin.firestore().runTransaction(async tx => {
     await access.check(tx, source);
     if (source === 'catalog') return TRAINING_PLAN_CATALOG.map(summarizeTemplate);
-    const snapshot = await tx.get(library(access.uid).select('id','version','source','name','description','author','sport','days','workoutCount').limit(100));
+    const snapshot = await tx.get(library(access.uid).select('id','version','source','name','description','author','sport','days','workoutCount','attribution').limit(100));
     return snapshot.docs.map(doc => {
-      const { id, version, name, description, author, sport, days, workoutCount } = doc.data();
-      return { id, version, source, name, description, author, sport, days, workoutCount } as ReturnType<typeof summarizeTemplate>;
+      const { id, version, name, description, author, sport, days, workoutCount, attribution } = doc.data();
+      return { id, version, source, name, description, author, sport, days, workoutCount,
+        ...(attribution ? { attribution: planAttributionSchema.parse(attribution) } : {}) } as ReturnType<typeof summarizeTemplate>;
     });
   });
 }
 export async function getTemplate(access: TemplateAccess, source: Source, id: string) {
   return admin.firestore().runTransaction(async tx => { await access.check(tx, source); return readTemplate(tx, access.uid, source, id); });
+}
+/** A dated plan's public credit is independent of access to the private template library. */
+export async function readPlanAttribution(access: TemplateAccess, id: string, createdAtMs: number) {
+  const plan = admin.firestore().doc('users/' + access.uid + '/trainingPlans/' + templateId.parse(id));
+  return admin.firestore().runTransaction(async tx => {
+    await access.check(tx, 'catalog');
+    if ((await tx.get(plan)).get('createdAtMs') !== createdAtMs) reject('The training plan is unavailable.');
+    const credit = (await tx.get(plan.collection('templateOrigin').doc('current'))).get('attribution');
+    return { attribution: credit ? planAttributionSchema.parse(credit) : null };
+  });
 }
 export async function savePrivateTemplate(uid: string, planId: string, revision: number) {
   const db = admin.firestore();
@@ -91,8 +104,11 @@ export async function savePrivateTemplate(uid: string, planId: string, revision:
     }
     sessions.sort((a,b) => a.day - b.day);
     if (!sessions.length) reject('Add a planned workout before saving a template.');
-    const template: PlanTemplate = { id, version: revision, source: 'private', name: plan.name,
-      description: 'Saved from your training plan.', author: 'You', sport: new Set(sessions.map(s => s.structure.sport)).size === 1 ? sessions[0].structure.sport : 'Multisport',
+    const origin = await tx.get(db.doc('users/' + uid + '/trainingPlans/' + planId + '/templateOrigin/current'));
+    const credit = origin.get('attribution');
+    const attribution = credit ? { ...planAttributionSchema.parse(credit), privateCopy: true as const } : undefined;
+    const template: PlanTemplate = { ...(attribution ? { attribution } : {}), id, version: revision, source: 'private', name: plan.name,
+      description: 'Saved from your training plan.', author: attribution?.creator ?? 'You', sport: new Set(sessions.map(s => s.structure.sport)).size === 1 ? sessions[0].structure.sport : 'Multisport',
       days: countTrainingPlanDays(plan.startLocalDate, plan.endLocalDate), sessions, rest: (plan.restDays ?? []).map(offset),
       phases: (plan.phases?.items ?? []).map(({ startLocalDate, endLocalDate, ...phase }) => ({ ...phase, start: offset(startLocalDate), end: offset(endLocalDate) })) };
     if (Buffer.byteLength(JSON.stringify(template)) > 700000) reject('The template exceeds the supported prescription size.');
@@ -143,7 +159,7 @@ export async function previewEnrollment(access: TemplateAccess, source: Source, 
     const snapshot = await readTrainingScheduleSnapshotInTransaction(tx, admin.firestore().doc('users/' + access.uid), [request]);
     assertTrainingMutationFitsTransaction(snapshot, request, now, 2);
     tx.create(ref, { ...proposal, expireAt: Timestamp.fromMillis(now + 30 * 86400000) });
-    return { id: ref.id, name: item.name, scheduleRevision: proposal.revision, expiresAtMs: proposal.expiresAt,
+    return { id: ref.id, name: item.name, attribution: item.attribution ?? null, scheduleRevision: proposal.revision, expiresAtMs: proposal.expiresAt,
       start: schedule.start, end: schedule.end, dates: schedule.sessions.map(w => w.localDate), restDays: schedule.restDays, conflicts: occupied };
   });
 }
@@ -175,6 +191,7 @@ export async function applyEnrollment(access: TemplateAccess, id: string) {
     transactionPostcondition: (tx, [result]) => {
       tx.set(db.doc('users/' + access.uid + '/trainingPlans/' + planId + '/templateOrigin/current'), {
         source: p.source, templateId: p.templateId, edition: p.version, options: p.options,
+        ...(template.attribution ? { attribution: planAttributionSchema.parse(template.attribution) } : {}),
       });
       tx.update(ref, { result: { planId, createdAtMs: p.createdAt, scheduleRevision: result.state.revision } }); },
   });

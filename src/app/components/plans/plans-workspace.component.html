@@ -133,6 +133,10 @@
     @if (browsing() && !libraryView() && view() === 'plans') {
       <section class="plan-scope" aria-label="Selected plan">
         @if (selectedPlan(); as plan) {
+        <app-plan-attribution [credit]="planCredit()" />
+        @if (creditUnavailable()) {
+          <p role="status">Could not load the plan credits. <button type="button" mat-button appHapticTap (click)="retryPlanCredit()">Retry</button></p>
+        }
         <div class="plan-selector-row">
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>Training plan</mat-label>

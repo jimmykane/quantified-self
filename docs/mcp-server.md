@@ -3257,6 +3257,9 @@ existing pending MCP contract.
 
 ## Whole-plan templates
 
+Licensed catalog and private-template summaries and details carry optional public attribution: original title and author, source and licence links, adaptation description, retained publisher notice, and an indicator for personal copies. Use `get_training_plan_attribution` with a dated plan reference when presenting licensed plan content. It returns the snapshot or null and requires current Training read consent. The read checks the owner, connection, and plan creation time and does not grant access to the originating private template. The existing enrolled-plan schema stays frozen. Show credit with the content in Assistant and external clients. Percentage cues in the Tredict edition are coaching notes; the example athlete's bpm values are never used.
+
+
 With `training-plans:read`, use `list_training_plan_templates` with `source: catalog` and follow `nextCursor`. Use `get_training_plan_template` and follow `nextOffset` to inspect a specific edition, zero-based days, canonical prescriptions, explicit rest days and phases. Selecting `source: private` additionally requires the independent `private-plan-templates:read` grant. OAuth initially leaves that permission unchecked. Assistant has a separate switch for its current conversation.
 
 With Training changes access, `preview_training_plan_enrollment` fits the exact edition to a start or finish date. Show the dates, overlaps and paused lifecycle, then obtain approval before `apply_training_plan_enrollment`. The result includes a plan reference for existing plan reads, adjustment and activation. Activation has its own review identifying the active plan it will pause. The Assistant model can prepare the preview. Only the app’s Apply action can confirm it. Date changes, access changes and expired reviews require a fresh preview. See [Training implementation](training-workspace.md#whole-plan-templates-and-enrollment).

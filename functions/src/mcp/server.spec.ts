@@ -968,6 +968,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_change_status',
       'get_training_goal',
       'get_training_plan',
+      'get_training_plan_attribution',
       'get_training_plan_phases',
       'get_training_plan_rest_days',
       'get_training_plan_template',

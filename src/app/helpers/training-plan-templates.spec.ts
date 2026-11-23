@@ -16,6 +16,29 @@ describe('published training plans', () => {
     expect(new Set(template.sessions.map(session => Math.floor(session.day / 7))).size).toBe(template.days / 7);
     expect(result.phases.items.at(-1)?.endLocalDate).toBe(result.end);
   });
+  it('preserves all published run days, fixed durations, repeats and manual endings', () => {
+    const plan = TRAINING_PLAN_CATALOG.find(t => t.id === 'tredict-running-base')!;
+    expect(plan.sessions.map(s => s.day)).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 27]);
+    // Open cooldowns on days 11 and 23 have a ten-minute estimate in the source.
+    const fixedSeconds = plan.sessions.map(s => s.structure.nodes.reduce((sum, n) => {
+      const steps = n.kind === 'repeat' ? n.steps : [n];
+      return sum + steps.reduce((duration, step) => duration + (step.ending.kind === 'time' ? step.ending.seconds : 0), 0)
+        * (n.kind === 'repeat' ? n.count : 1);
+    }, 0));
+    expect(fixedSeconds).toEqual([1200, 1800, 1800, 3000, 1800, 1520, 3000, 3320, 3000, 3920, 1800, 1620, 3300, 5400]);
+    const notes = plan.sessions.map(s => s.structure.nodes.flatMap(n => n.kind === 'repeat' ? n.steps : [n]).map(step => step.note).join(' '));
+    expect(notes.map(n => Array.from(n.matchAll(/(\d+)% of your maximum heart rate/g), m => Number(m[1]))))
+      .toEqual([[68], [68], [75], [72], [67], [70], [68], [70], [68], [70], [74], [66], [67,67,72], []]);
+    expect(notes[12]).toContain('threshold pace (100%)');
+    expect(notes[5]).toContain('10 minutes');
+    expect(notes[11]).toContain('10 minutes');
+    expect(plan.rest).toEqual([]);
+    const start = { anchor: 'start' as const, date: '2027-02-02', longDay: 6, pattern: 'early' as const };
+    const fixed = scheduleTemplate(plan, start);
+    expect(fixed.start).toBe(start.date);
+    expect(fixed.sessions).toEqual(scheduleTemplate(plan, { ...start, longDay: 1, pattern: 'standard' }).sessions);
+    expect(scheduleTemplate(plan, { ...start, anchor: 'finish', date: fixed.end }).sessions).toEqual(fixed.sessions);
+  });
   it('reserves complete-template materialization for the confirmed server operation', () => {
     expect(() => parseMutateTrainingScheduleRequestV1({ mutationId: 'forged', expectedRevisions: [{scope: 'state', id: 'current', revision: 0}],
       operation: { kind: 'create-plan', planId: 'local', name: 'Example', activate: false, startLocalDate: '2027-01-01',

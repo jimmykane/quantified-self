@@ -5,7 +5,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppUserService } from '../../services/app.user.service';
-import { TRAINING_PLAN_CATALOG, type PlanTemplate, type TemplateScheduleOptions } from '@shared/training-plan-templates';
+import { PlanAttributionComponent } from './plan-attribution.component';
+import { hasFlexibleTrainingDays, TRAINING_PLAN_CATALOG, type PlanTemplate, type TemplateScheduleOptions } from '@shared/training-plan-templates';
 import { PLAN_WEEKDAYS } from '@shared/training-plan-generation';
 import { formatManualWorkoutStructure } from '../../helpers/planned-workout-editor.helper';
 import { aggregateWorkoutAnalysesV1, analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
@@ -20,7 +21,7 @@ const today = () => {
 };
 
 @Component({
-  selector: 'app-plan-catalog', standalone: true, imports: [FormsModule, RouterLink, MatButtonModule, WorkoutProfileComponent],
+  selector: 'app-plan-catalog', standalone: true, imports: [FormsModule, RouterLink, MatButtonModule, WorkoutProfileComponent, PlanAttributionComponent],
   templateUrl: './plan-catalog.component.html', styleUrls: ['./plan-catalog.component.scss'], changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlanCatalogComponent {
@@ -34,6 +35,10 @@ export class PlanCatalogComponent {
   readonly source = signal<PlanTemplate['source']>('catalog');
   readonly items = signal<Summary[]>([]);
   readonly selected = signal<PlanTemplate | null>(null);
+  readonly flexibleDays = computed(() => {
+    const plan = this.selected();
+    return !!plan && hasFlexibleTrainingDays(plan);
+  });
   readonly week = signal(0);
   readonly options = signal<TemplateScheduleOptions>({ anchor: 'start', date: today(), longDay: 0, pattern: 'standard' });
   readonly weekdays = PLAN_WEEKDAYS;
@@ -45,7 +50,7 @@ export class PlanCatalogComponent {
   private readonly locale = inject(LOCALE_ID);
   readonly weekRows = computed(() => this.sessions().map(s => ({ ...s,
     totals: formatWorkoutPrescriptionSummaryV1(s.structure, this.users.user()?.settings?.unitSettings ?? null, s.structure.sport, this.locale),
-    steps: formatManualWorkoutStructure(s.structure, this.users.user()?.settings?.unitSettings ?? null, this.locale) })));
+    steps: formatManualWorkoutStructure(s.structure, this.users.user()?.settings?.unitSettings ?? null, this.locale, true) })));
   readonly workloads = computed(() => {
     const plan = this.selected();
     if (!plan) return [];
@@ -68,7 +73,7 @@ export class PlanCatalogComponent {
     return plan.sessions.filter(s => s.day < 7).map(s => this.dayLabel(s.day, true, pattern)).join(' · ');
   }
   dayLabel(offset: number, workout = false, pattern = this.options().pattern): string {
-    if (this.selected()?.source === 'private') return 'Day ' + (offset % 7 + 1);
+    if (!this.flexibleDays()) return 'Day ' + (offset % 7 + 1);
     const index = workout && pattern === 'early' && offset % 7 === 1 ? offset - 1 : offset;
     const weekday = (this.options().longDay + 1 + index) % 7;
     return this.weekdays.find(d => d.value === weekday)?.label ?? '';
