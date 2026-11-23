@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { parseWorkoutStructureV1 } from '@shared/planned-workout';
 import { parseMutateTrainingScheduleRequestV1 } from '@shared/training-plans';
 import { TRAINING_PLAN_CATALOG, scheduleTemplate } from '@shared/training-plan-templates';
+import { PUBLIC_TRAINING_PLANS } from '../components/public-seo/public-training-catalog.content';
 
 describe('published training plans', () => {
+  it('publishes the same editions, starting requirements, sport, duration and source credit as the library', () => {
+    expect(PUBLIC_TRAINING_PLANS.map(({ id, name, description, sport, weeks, attribution }) =>
+      ({ id, name, description, sport, weeks, attribution }))).toEqual(
+      TRAINING_PLAN_CATALOG.map(({ id, name, description, sport, days, attribution }) =>
+        ({ id, name, description, sport, weeks: days / 7, attribution })));
+  });
+
   for (const template of TRAINING_PLAN_CATALOG) it('materializes every week of ' + template.name, () => {
     const options = { anchor: 'finish' as const, date: '2027-02-07', longDay: 0, pattern: 'standard' as const };
     const result = scheduleTemplate(template, options);

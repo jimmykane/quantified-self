@@ -1,0 +1,27 @@
+<ul class="plan-list" [class.featured]="!full()" aria-label="Free training plans">
+  @for (plan of full() ? plans : featured; track plan.id) {
+    <li>
+      @if (full()) {
+        <h3 [id]="planFragment(plan.id)" tabindex="-1">{{ plan.name }}</h3>
+      } @else {
+        <a class="plan-name" [routerLink]="pageUrl" [fragment]="planFragment(plan.id)">{{ plan.name }}</a>
+      }
+      <p class="plan-meta">
+        {{ plan.sport }} · {{ plan.weeks }} weeks
+        @if (plan.attribution; as credit) { · By {{ credit.originalAuthor }} }
+      </p>
+      @if (full()) {
+        <p>{{ plan.description }}</p>
+        <a mat-button routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
+          [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
+      }
+    </li>
+  }
+</ul>
+@if (full()) {
+  @for (credit of credits; track credit.sourceUrl) {
+    <app-plan-attribution class="catalog-credit" [credit]="credit" />
+  }
+} @else {
+  <a mat-button [routerLink]="pageUrl" [fragment]="catalogFragment">Browse all {{ plans.length }} free training plans</a>
+}

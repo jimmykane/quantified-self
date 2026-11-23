@@ -570,7 +570,10 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-11-12');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-11-12');
-    // Includes the licensed running plan and its public source credit.
+    // Discovery links use fragments of the existing public feature URL. The signed-in enrollment
+    // flow and individual fragments must never become separate sitemap entries.
+    expect(sitemapXml).not.toContain(`${siteOrigin}/features/training-plans#`);
+    expect(sitemapXml).not.toContain(`${siteOrigin}/training/plans/catalog`);
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-20');
@@ -741,7 +744,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.26mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.28mb',
     });
   });
 

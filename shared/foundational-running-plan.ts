@@ -1,17 +1,7 @@
+import { FOUNDATIONAL_RUNNING_PLAN_SUMMARY } from './training-plan-programs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { WorkoutStepV1, WorkoutStructureV1 } from './planned-workout';
 import type { PlanTemplate, TemplateSession } from './training-plan-templates';
-
-// The training content in this file is adapted from the CC BY 4.0 work credited below.
-const attribution = {
-  title: 'Build-up a foundational running base',
-  originalAuthor: 'Felix Gertz',
-  sourceUrl: 'https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM',
-  license: 'CC BY 4.0',
-  licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
-  changes: 'Quantified Self adapted the titles and coaching cues, converted the sessions into workout steps, and kept the original day spacing. Heart-rate and threshold-pace guidance is rounded and shown in step notes. Device target bands and example athlete values are omitted.',
-  notice: 'This is an example plan for the Tredict training plans publishing feature.',
-};
 
 function step(id: string, seconds: number | null, note: string, purpose: WorkoutStepV1['purpose'] = 'work'): WorkoutStepV1 {
   return { kind: 'step', id, purpose, ending: seconds === null ? { kind: 'manual' } : { kind: 'time', seconds }, targets: [], note };
@@ -36,9 +26,8 @@ function warmup(seconds: number, percent: number) {
 const openTenMinutes = () => step('cooldown', null, 'Cool down easily for about 10 minutes. Finish this step manually.', 'cooldown');
 
 export const FOUNDATIONAL_RUNNING_PLAN: PlanTemplate = {
-  id: 'tredict-running-base', version: 1, source: 'catalog', scheduleMode: 'fixed', attribution,
-  name: attribution.title, author: attribution.originalAuthor, sport: ActivityTypes.Running, days: 28,
-  description: 'For runners returning after a break. Use a heart-rate monitor for the easy efforts. Four weeks progress from a 20-minute run to a 90-minute outing, with short strides and a threshold-pace session.',
+  ...FOUNDATIONAL_RUNNING_PLAN_SUMMARY,
+  version: 1, source: 'catalog', scheduleMode: 'fixed', sport: ActivityTypes.Running,
   phases: [
     { id: 'week-1', name: 'Find an easy rhythm', start: 0, end: 6, description: 'Keep the first week easy as you return to running.' },
     { id: 'week-2', name: 'Introduce strides', start: 7, end: 13, description: 'Keep a steady running rhythm and introduce short faster efforts.' },

@@ -8,6 +8,7 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { STRAVA_IMPORT_GUIDE_PAGES } from './strava-import-guides.content';
 import { WAHOO_GARMIN_GUIDE_CONTENT } from './wahoo-garmin-guide.content';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { PUBLIC_CATALOG_FRAGMENT, PUBLIC_TRAINING_PLANS, publicPlanFragment } from './public-training-catalog.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 import { WORKOUT_GENERATION_SECTION } from './workout-generation.content';
 import { COROS_SETUP_QUERY_PARAMS, WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
@@ -2113,6 +2114,21 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
       })),
     },
   ];
+
+  if (page.key === 'trainingPlans') {
+    const url = pageUrl(page.path);
+    mainEntity.push({
+      '@type': 'ItemList',
+      '@id': url + '#' + PUBLIC_CATALOG_FRAGMENT,
+      name: 'Free running and cycling plans',
+      itemListElement: PUBLIC_TRAINING_PLANS.map((plan, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: plan.name,
+        url: url + '#' + publicPlanFragment(plan.id),
+      })),
+    });
+  }
 
   if (page.howToSteps?.length) {
     mainEntity.unshift({

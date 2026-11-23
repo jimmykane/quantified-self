@@ -5,6 +5,17 @@ import type { PlanAttribution } from '@shared/training-plan-templates';
   selector: 'app-plan-attribution',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    :host(.catalog-credit) {
+      display: block;
+      padding-block-start: 0.5rem;
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-body-small);
+    }
+    :host(.catalog-credit) p { max-width: 80ch; margin-block: 0.5rem; }
+    :host(.catalog-credit) a { color: var(--mat-sys-primary); }
+  `],
   template: `
     @if (credit(); as source) {
       <section aria-label="Plan attribution">

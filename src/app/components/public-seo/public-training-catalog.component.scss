@@ -1,0 +1,16 @@
+:host { display: block; }
+.plan-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: 1.25rem 2rem;
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.plan-list.featured { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+li { min-width: 0; padding-block-start: 0.75rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+h3, .plan-name { margin: 0; font: var(--mat-sys-title-medium); }
+h3[id] { scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 1rem); }
+.plan-name { display: inline-flex; align-items: center; min-height: 44px; color: var(--mat-sys-primary); }
+p { margin: 0.5rem 0; font: var(--mat-sys-body-medium); }
+.plan-meta { color: var(--mat-sys-on-surface-variant); }

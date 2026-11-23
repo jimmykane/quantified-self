@@ -122,6 +122,7 @@ assertNoStartupSource(
   'deferred Training examples and charts',
   /^src\/app\/components\/(?:public-seo\/training-explorer-preview\.(?:component|data)|training\/training-(?:readiness-trend|power-systems-trend|durability-trajectory)-chart\.component)\.ts$/,
 );
+assertNoStartupSource('training plan scheduling and workout prescriptions', /^shared\/(?:training-plan-templates|foundational-running-plan)\.ts$/);
 assertNoStartupSource(
   'deferred Training Plans preview',
   /^src\/app\/components\/public-seo\/training-plans-preview\.(?:component|data)\.ts$/,
@@ -410,6 +411,14 @@ function assertPrerenderedDocuments() {
       }
     }
 
+    if (route === '/' || route === '/features') {
+      const showcase = documentRef.querySelector('app-public-training-catalog');
+      for (const fragment of ['plan-first-run', 'plan-first-ride', 'plan-tredict-running-base', 'free-training-plans']) {
+        if (!showcase?.querySelector(`a[href="${TRAINING_PLANS_ROUTE}#${fragment}"]`) || showcase.closest('[data-nosnippet]')) {
+          throw new Error(`Prerendered ${route} is missing its public catalog link to #${fragment}.`);
+        }
+      }
+    }
     if (route === TRAINING_PLANS_ROUTE) {
       assertTrainingPlansDocument(documentRef);
     }
@@ -540,6 +549,29 @@ function assertTrainingPlansDocument(documentRef) {
     if (documentRef.querySelector(selector)?.getAttribute('content') !== expectedValue) {
       throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected metadata for ${selector}.`);
     }
+  }
+
+  const catalog = documentRef.querySelector('section[aria-labelledby="free-training-plans"]');
+  const headings = [...documentRef.querySelectorAll('app-public-training-catalog li h3[id]')];
+  const list = [...documentRef.querySelectorAll('script[type="application/ld+json"]')]
+    .map(script => JSON.parse(script.textContent))
+    .flatMap(schema => schema.mainEntity ?? [])
+    .find(entity => entity['@type'] === 'ItemList');
+  if (!catalog?.querySelector('h2#free-training-plans') || catalog.closest('[data-nosnippet]') ||
+      headings.length < 8 || list?.itemListElement?.length !== headings.length) {
+    throw new Error('Missing visible public plan catalog or matching ItemList in prerendered HTML.');
+  }
+  for (const [index, heading] of headings.entries()) {
+    const item = list.itemListElement[index];
+    const id = heading.id.slice('plan-'.length);
+    if (item.position !== index + 1 || item.name !== heading.textContent.trim() ||
+        item.url !== expectedCanonical + '#' + heading.id ||
+        !heading.closest('li').querySelector(`a[href="/training/plans/catalog?template=${id}"]`)) {
+      throw new Error(`Prerendered catalog entry and structured data disagree for ${heading.id}.`);
+    }
+  }
+  if (!catalog.querySelector('a[rel="license"][href="https://creativecommons.org/licenses/by/4.0/"]')) {
+    throw new Error('Missing license link in the prerendered plan catalog.');
   }
 
   const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';

@@ -104,6 +104,8 @@ h3 {
   font-weight: 700;
 }
 
+#free-training-plans { scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 1rem); }
+
 .section-heading {
   max-width: 48rem;
   margin-bottom: 1.25rem;

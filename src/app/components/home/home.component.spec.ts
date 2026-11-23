@@ -59,6 +59,23 @@ describe('HomeComponent', () => {
     fixture.detectChanges();
   }
 
+  it('links guests to the public plan comparisons before previews load', () => {
+    renderHome();
+    const catalog = fixture.nativeElement.querySelector('#home-plans app-public-training-catalog') as HTMLElement;
+    const links = Array.from(catalog.querySelectorAll('a'));
+    expect(links.map(link => link.getAttribute('href'))).toEqual([
+      '/features/training-plans#plan-first-run', '/features/training-plans#plan-first-ride',
+      '/features/training-plans#plan-tredict-running-base', '/features/training-plans#free-training-plans',
+    ]);
+    expect(catalog.textContent).toContain('Felix Gertz');
+    expect(selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    links[0].click();
+    expect(router.serializeUrl(navigate.mock.calls[0][0] as ReturnType<Router['createUrlTree']>))
+      .toBe('/features/training-plans#plan-first-run');
+    expect(selection).not.toHaveBeenCalled(); // Cross-page navigation owns the selection feedback.
+  });
+
   it('keeps anonymous visitors on home and redirects authenticated users to Dashboard', () => {
     renderHome();
     expect(router.navigate).not.toHaveBeenCalled();

@@ -35,6 +35,13 @@
     </div>
   </section>
 
+  @if (page.key === 'featuresHub' || page.key === 'trainingPlans') {
+  <section class="content-section" aria-labelledby="free-training-plans">
+    <h2 id="free-training-plans" tabindex="-1">Free running and cycling plans</h2>
+    <app-public-training-catalog [full]="page.key === 'trainingPlans'" />
+  </section>
+  }
+
   @for (section of page.sections; track section.title) {
   <section class="content-section" [attr.aria-label]="section.title">
     <div class="section-heading">

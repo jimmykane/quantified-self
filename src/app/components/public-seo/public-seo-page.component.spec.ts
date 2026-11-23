@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { ActivatedRoute, NavigationEnd, Router, Scroll } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -285,6 +286,25 @@ describe('PublicSeoPageComponent', () => {
     expect(hrefs).toContain('/features/training-plans');
 
     calendarFixture.destroy();
+  });
+
+  it('focuses the linked catalog plan and respects a restored history position', () => {
+    const events = new Subject<Scroll>();
+    vi.spyOn(TestBed.inject(Router), 'events', 'get').mockReturnValue(events);
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
+    const fixture = TestBed.createComponent(PublicSeoPageComponent);
+    fixture.detectChanges();
+    const target = fixture.nativeElement.querySelector('#plan-first-run') as HTMLElement;
+    target.scrollIntoView = vi.fn();
+    const focus = vi.spyOn(target, 'focus');
+    const navigation = new NavigationEnd(1, '/features/training-plans', '/features/training-plans');
+    events.next(new Scroll(navigation, [0, 300], target.id));
+    events.next(new Scroll(navigation, null, 'public-seo-title'));
+    expect(focus).not.toHaveBeenCalled();
+    events.next(new Scroll(navigation, null, target.id));
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(target.scrollIntoView).toHaveBeenCalledOnce();
+    fixture.destroy();
   });
 
   it('renders Training Plans with visible MCP and provider-delivery boundaries', () => {

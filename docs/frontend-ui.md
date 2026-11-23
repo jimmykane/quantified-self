@@ -247,6 +247,14 @@ Plans, Health, Assistant, Maps and Comparisons follow; detailed integration rows
 those product sections. Copy and shared previews stay unchanged. `#home-integrations` targets the moved detail section,
 with a local visually hidden heading so jump-link focus and subsequent keyboard navigation remain in that section.
 
+Home and Features link three published plans to named sections on `/features/training-plans`. The dedicated feature
+page renders every catalog description, duration, enrollment link and applicable source credit in its initial HTML.
+Its structured `ItemList` uses the same names, ordering and public fragment URLs. Keep this catalog outside the
+deferred example’s snippet exclusion. The production output check verifies both discovery pages and the catalog.
+
+The release build measured 15.27 MB of total scripts with the public catalog. Develop already exceeded its 15.26 MB
+limit by 5.52 kB before this addition. Production and beta use a 15.28 MB total-script cap.
+
 ## Navigation startup rendering
 
 Keep the Material sidenav container mounted so the existing navigation service can open it. Its contents use
