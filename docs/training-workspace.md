@@ -10775,7 +10775,7 @@ Before merging a Training change, confirm:
 
 ## Whole-plan templates and enrollment
 
-The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven Quantified Self originals and one licensed running plan. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
+The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven Quantified Self originals and one licensed running plan. Direct visits to the signed-in catalog use client rendering, including links that select a template. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
 
 ### Editorial publication
 
