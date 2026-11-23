@@ -6,7 +6,7 @@ import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
-import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
+import { enforceAppCheck, hasProAccess } from '../utils';
 import { assertAssistantLegalAccess } from './access';
 import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
 import { dayWorkoutDependencies, runGenerateDayWorkout, generateDayWorkoutSuggestion, generateValidatedDayWorkout, retryDayWorkoutModelError } from './day-workout-callable';
@@ -86,11 +86,25 @@ export interface DailyWorkoutSuggestionDependencies {
 }
 const defaults: DailyWorkoutSuggestionDependencies = {
   store: createDailyWorkoutSuggestionStore(), regenerate: runGenerateDayWorkout, now: () => new Date(), legal: assertAssistantLegalAccess,
-  pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
+  pro: hasProAccess,
   importActive: readDailyWorkoutHistoryImportActive, prepareContext: collectDailyWorkoutSuggestionContext, coverage: readDailyWorkoutSuggestionCoverage, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
 };
 const coveredStates = ['planned', 'completed', 'rest-day'];
+function logAccessRejection(dependencies: DailyWorkoutSuggestionDependencies, check: 'legal' | 'pro',
+  reason: 'legal_consent_required' | 'pro_required' | 'check_failed'): void {
+  try { dependencies.log({ outcome: 'access_rejected', accessCheck: check, accessReason: reason }); }
+  catch { /* Diagnostics must preserve the original access decision. */ }
+}
+async function requireProAccess(uid: string, dependencies: DailyWorkoutSuggestionDependencies): Promise<void> {
+  let allowed: boolean;
+  try { allowed = await dependencies.pro(uid); }
+  catch (error) { logAccessRejection(dependencies, 'pro', 'check_failed'); throw error; }
+  if (!allowed) {
+    logAccessRejection(dependencies, 'pro', 'pro_required');
+    throw new HttpsError('permission-denied', 'Daily suggestions require Pro.');
+  }
+}
 async function currentDailyWorkoutSuggestionStatus(uid: string, dependencies: DailyWorkoutSuggestionDependencies) {
   const initial = await dependencies.store.read(uid);
   if (!initial.preferences || !['waiting', 'waiting-sleep', 'waiting-import', 'waiting-training', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
@@ -122,8 +136,13 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     || (input.resultVersion !== undefined && input.resultVersion !== 2)
     || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss', 'use-available-data', 'regenerate'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a daily action.');
   const uid = context.auth.uid;
-  await dependencies.legal(uid);
-  if (!await dependencies.pro(uid)) throw new HttpsError('permission-denied', 'Daily suggestions require Pro.');
+  try { await dependencies.legal(uid); }
+  catch (error) {
+    logAccessRejection(dependencies, 'legal', error instanceof HttpsError && error.code === 'permission-denied'
+      ? 'legal_consent_required' : 'check_failed');
+    throw error;
+  }
+  await requireProAccess(uid, dependencies);
   let expectedDate: string | undefined;
   if (datedAction) {
     try { expectedDate = normalizeTrainingLocalDate(input.localDate); }
@@ -176,7 +195,7 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   const date = preferences.controls.localDate;
   const assertActive = async () => {
     await dependencies.store.assertActive(uid, date, token);
-    if (!await dependencies.pro(uid)) throw new HttpsError('permission-denied', 'Daily suggestions require Pro.');
+    await requireProAccess(uid, dependencies);
   };
   let attempts = 0, meteredAttempts = 0, inputTokens = 0, outputTokens = 0, thoughtsTokens = 0;
   let outcome: DailyWorkoutSuggestionStatus['state'] = 'failed';

@@ -83,6 +83,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   selectedMetricCount = 0;
   readonly metricPreferenceSaveFailed = signal(false);
 
+  protected get canChooseMetrics(): boolean {
+    return this.allowMetricSelection && this.chartData.series.length > 1;
+  }
+
   constructor(
     private breakpointObserver: BreakpointObserver,
     private eChartsLoader: EChartsLoaderService,
@@ -159,7 +163,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   toggleMetric(type: string): void {
-    if (!this.allowMetricSelection || !this.chartSettings || !this.metricOptions.some(metric => metric.type === type)) return;
+    if (!this.canChooseMetrics || !this.chartSettings || !this.metricOptions.some(metric => metric.type === type)) return;
     const hidden = new Set(this.hiddenMetricTypes);
     if (hidden.has(type)) hidden.delete(type);
     else hidden.add(type);
@@ -179,18 +183,19 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private updateMetricOptions(): void {
+    const applyMetricPreferences = this.canChooseMetrics;
     this.metricOptions = this.chartData.series.map(series => ({
       type: series.type,
       label: series.type === DataHeartRate.type ? 'Heart rate' : series.type,
       color: this.getSeriesColor(series.type),
-      selected: !this.hiddenMetricTypes.has(series.type),
+      selected: !applyMetricPreferences || !this.hiddenMetricTypes.has(series.type),
     }));
     this.selectedMetricCount = this.metricOptions.filter(metric => metric.selected).length;
     this.changeDetector.markForCheck();
   }
 
   private updateChart(): void {
-    const data = this.allowMetricSelection
+    const data = this.canChooseMetrics
       ? { ...this.chartData, series: this.chartData.series.filter(series => !this.hiddenMetricTypes.has(series.type)) }
       : this.chartData;
     this.chartHost.setOption(this.buildChartOption(data), ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);

@@ -226,6 +226,34 @@ describe('generateDayWorkout callable', () => {
       expect(deps.finalize).toHaveBeenCalledOnce();
     } finally { generate.mockReset(); }
   });
+  it.each([
+    { durationMode: 'manual', seconds: 0, repeated: false },
+    { durationMode: 'manual', seconds: -1, repeated: true },
+    { durationMode: 'auto', seconds: 0, repeated: true },
+    { durationMode: 'auto', seconds: 0.5, repeated: false },
+  ] as const)('rejects $seconds seconds in $durationMode mode (repeat: $repeated) before saving a prescription', async ({ durationMode, seconds, repeated }) => {
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 300 }, targets: [] };
+    const invalidStep = { ...step, ending: { ...step.ending, seconds } };
+    const reply = (work: typeof step) => JSON.stringify({ kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.', structure: {
+      version: 1, sport: request.controls.sport, nodes: [repeated ? { kind: 'repeat', id: 'repeat', count: 2, steps: [work] } : work],
+    } });
+    const controls = durationMode === 'auto'
+      ? defaultDayWorkoutControls(request.controls.localDate, request.controls.timeZone, request.controls.sport)
+      : request.controls;
+    const { provider, generate } = mockSdkOutputs(reply(invalidStep), reply(step));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    try {
+      const response = await runGenerateDayWorkout({ ...request, controls }, auth, deps);
+      expect(response.draft?.structure).toEqual(JSON.parse(reply(step)).structure);
+      const correction = JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction;
+      expect(correction).toContain('Invalid prescription schema.');
+      expect(correction).toContain(repeated ? '$.structure.nodes[].steps[].ending.seconds' : '$.structure.nodes[].ending.seconds');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce();
+      expect(deps.finalize).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
+
   it('corrects an endurance ending rejected by the decoder without a second quota charge', async () => {
     vi.mocked(logger.info).mockClear();
     vi.mocked(logger.warn).mockClear();

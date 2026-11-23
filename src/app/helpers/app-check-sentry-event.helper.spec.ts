@@ -58,6 +58,15 @@ describe('appCheckBeforeSend', () => {
     expect(clean.fingerprint).toEqual(['app-check-outcome', 'unknown', 'verification', 'appCheck/unknown']);
     expect(JSON.stringify(clean)).not.toContain('secret-');
   });
+  it.each(['operation-blocked', 'operation-succeeded'])('preserves the sign-in email %s label without private Auth error data', outcome => {
+    const clean = appCheckBeforeSend(diagnostic({ contexts: { appCheck: {
+      code: 'appCheck/unknown', authState: 'signed-out', outcome, operation: 'email-link-send',
+      email: 'secret-email', error: { message: 'secret-message', token: 'secret-token' },
+    } } }))!;
+    expect(clean.tags).toMatchObject({ appCheckOutcome: outcome, appCheckOperation: 'email-link-send' });
+    expect(clean.fingerprint).toEqual(['app-check-outcome', outcome, 'email-link-send', 'appCheck/unknown']);
+    expect(JSON.stringify(clean)).not.toContain('secret-');
+  });
   it.each(['App Check verification failed', 'App Check verification outcome'])(
     'preserves only validated public build tags on %s', message => {
       const safe = appCheckBeforeSend(diagnostic({ message, tags: { build_commit: 'a'.repeat(40), build_run: '123.2',

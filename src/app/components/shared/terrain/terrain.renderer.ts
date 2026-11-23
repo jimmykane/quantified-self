@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { createTerrainGeometry } from './onboarding-terrain.geometry';
+import { createTerrainGeometry } from './terrain.geometry';
 import type {
   TerrainController,
   TerrainOptions
-} from './onboarding-terrain.types';
+} from './terrain.types';
 
 // Decorative scenery, not a metric chart. This fictional landscape has no axes
 // or readable training values. WebGL supplies lit 3D relief and contour occlusion
@@ -147,6 +147,7 @@ export function createTerrainRenderer(
       disposed = false,
       rendered = false;
     let reduced = options.reducedMotion;
+    let paused = false;
     // The entry glide eases into a small, seamless orbit rather than coming to rest.
     const entryDuration = 4500;
     const driftDuration = 24000 / 1.1;
@@ -173,7 +174,7 @@ export function createTerrainRenderer(
       if (disposed || !visible || document.hidden) return;
       const dt = lastTime === undefined ? 0 : Math.max(0, time - lastTime);
       lastTime = time;
-      if (!reduced) {
+      if (!reduced && !paused) {
         entryTime = Math.min(entryDuration, entryTime + dt);
         driftTime = (driftTime + dt) % driftDuration;
         // Passive scenery needs only 30 paints per second; pointer input remains responsive.
@@ -213,7 +214,7 @@ export function createTerrainRenderer(
           options.onReady();
         }
       }
-      if (!reduced || settling) schedule();
+      if ((!reduced && !paused) || settling) schedule();
     }
     function resize() {
       if (disposed) return;
@@ -265,7 +266,7 @@ export function createTerrainRenderer(
       schedule();
     }
     function replayEntry() {
-      if (disposed || reduced) return;
+      if (disposed || reduced || paused) return;
       cancel();
       entryTime = 0;
       driftTime = 0;
@@ -284,8 +285,17 @@ export function createTerrainRenderer(
       }
       schedule();
     }
+    function setPaused(pause: boolean) {
+      if (disposed || paused === pause) return;
+      cancel();
+      paused = pause;
+      pointerX = currentX;
+      pointerY = currentY;
+      dirty = true;
+      schedule();
+    }
     const move = (event: PointerEvent) => {
-      if (reduced || event.pointerType === 'touch') return;
+      if (reduced || paused || event.pointerType === 'touch') return;
       const b = stage.getBoundingClientRect();
       if (!b.width || !b.height) return;
       pointerX = ((event.clientX - b.left) / b.width - 0.5) * 1.4;
@@ -293,6 +303,7 @@ export function createTerrainRenderer(
       schedule();
     };
     const leave = () => {
+      if (paused) return;
       pointerX = pointerY = 0;
       schedule();
     };
@@ -341,7 +352,7 @@ export function createTerrainRenderer(
     observer?.observe(stage);
     setTheme(options.dark);
     resize();
-    return { setTheme, setReducedMotion, replayEntry, dispose };
+    return { setTheme, setReducedMotion, setPaused, replayEntry, dispose };
   } catch (error) {
     if (cleanup) cleanup();
     else for (const resource of resources) resource.dispose();

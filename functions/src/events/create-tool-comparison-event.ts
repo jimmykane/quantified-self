@@ -45,6 +45,7 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
 const FILE_MANIFEST_HEADER = 'X-Tool-Comparison-Files-Encoded';
@@ -753,7 +754,7 @@ async function parseComparisonFiles(
 ): Promise<ParsedComparisonFile[]> {
   const parsedFiles: ParsedComparisonFile[] = [];
 
-  for (const preparedFile of preparedFiles) {
+  for (const [fileIndex, preparedFile] of preparedFiles.entries()) {
     const { file, payloadForParsing, rawBytes } = preparedFile;
     let event: EventInterface;
     try {
@@ -762,11 +763,12 @@ async function parseComparisonFiles(
       if (error instanceof HttpStatusError) {
         throw error;
       }
-      logger.warn('[createToolComparisonEvent] Activity parsing failed', {
-        originalFilename: file.originalFilename,
-        extension: file.extension,
-        error,
-      });
+      try {
+        logger.warn('[createToolComparisonEvent] Activity parsing failed', {
+          ...getActivityParserDiagnostics(error, payloadForParsing, file.extension),
+          fileIndex, fileCount: preparedFiles.length,
+        });
+      } catch { /* Diagnostics must preserve the existing parser rejection. */ }
       throw new HttpStatusError(400, `Could not parse uploaded file${file.originalFilename ? `: ${file.originalFilename}` : ''}.`);
     }
 

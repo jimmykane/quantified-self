@@ -51,6 +51,24 @@ export class EventActionsComponent implements OnChanges, OnInit, OnDestroy {
   get canEditAscent(): boolean {
     return this.canSendOwnedActivities && !isBenchmarkEvent(this.event as unknown as { isMerge?: unknown; mergeType?: unknown });
   }
+  async openDeliveryStatus(): Promise<void> {
+    const owner = this.user?.uid;
+    const id = this.event?.getID();
+    if (!this.canSendOwnedActivities || !id || this.event.isMerge) return;
+    try {
+      const { ActivityDeliveryStatusDialog } = await import('./activity-delivery-status.dialog');
+      if (!this.destroyRef.destroyed && this.user?.uid === owner && this.event?.getID() === id && this.canSendOwnedActivities) {
+        this.dialog.open(ActivityDeliveryStatusDialog, { data: { owner, id }, width: '460px', maxWidth: '95vw' });
+        this.hapticsService.selection();
+      }
+    } catch {
+      if (!this.destroyRef.destroyed && this.canSendOwnedActivities && this.user?.uid === owner) {
+        this.hapticsService.error();
+        this.snackBar.open('Could not open delivery status. Try again.', undefined, { duration: 4000 });
+      }
+    }
+  }
+
   async editAscent(): Promise<void> {
     if (!this.canEditAscent || this.isReprocessing || this.ascentEditorOpen || this.destroyRef.destroyed) return;
     const event = this.event, eventId = event.getID(), owner = this.user;

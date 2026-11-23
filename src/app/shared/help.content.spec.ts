@@ -17,6 +17,13 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains that a rejected sign-in email needs an explicit reload and is not resent automatically', () => {
+    const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
+    for (const phrase of ['after **Send Magic Link**', 'no sign-in email was sent',
+      'QS does not automatically resend the email', 'Reloading does not guarantee acceptance']) {
+      expect(troubleshooting).toContain(phrase);
+    }
+  });
   it('includes My Tracks on Starter while keeping provider imports and sync on Pro', () => {
     const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
     const starter = billing.split('### Starter (Free)')[1].split('### Basic')[0];
@@ -366,7 +373,7 @@ describe('help.content', () => {
 
   it('explains browser verification cooldowns and recovery without resetting account data', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!.content;
-    expect(copy).toContain('Temporary verification service errors retry automatically after short pauses');
+    expect(copy).toContain('Temporary verification service errors during account loading retry automatically after short pauses');
     for (const text of ["We couldn't verify this browser", '**Reload page**', '**24 hours**',
       'Repeated retries in that page do not clear the pause', 'Reloading does not guarantee acceptance',
       'another trusted network', 'your saved data stays unchanged', 'Never send passwords or verification tokens']) {

@@ -586,10 +586,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!isCurrent()) return;
     const initialSelection = appEvent.getActivities().slice(0, 2);
     const result = this.getFirstBenchmarkResult(appEvent);
+    const comparisonOwnerUid = appEvent.toolSource === 'tools/compare' && ownerID === viewerID ? ownerID : undefined;
 
     if (result) {
       this.benchmarkFlow.openBenchmarkReport({
         event: appEvent,
+        comparisonOwnerUid,
         hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user,
@@ -599,6 +601,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } else {
       this.benchmarkFlow.openBenchmarkSelectionDialog({
         event: appEvent,
+        comparisonOwnerUid,
         hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
         user,

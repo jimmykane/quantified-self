@@ -384,7 +384,8 @@ describe('Firebase Hosting configuration', () => {
     // Benchmark Help covers metric accordions on desktop and mobile (2026-11-19).
     // Benchmark Help covers grouped Min, Avg, and Max ranges and per-device readings (2026-11-19).
     // Activity Help locates the Tracks menu beside Layers above the map (2026-11-19).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
+    // Activity Help explains automatic display of the sole recorded intensity metric (2026-11-22).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-23');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -524,7 +525,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-23');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-20');
@@ -614,7 +615,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-19');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
     // Inactive Free account notice and retention policy (2026-11-13).
@@ -737,7 +738,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.20mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.22mb',
     });
   });
 

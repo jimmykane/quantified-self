@@ -2,7 +2,7 @@ import { Injectable, DestroyRef, computed, effect, inject, signal } from '@angul
 import { DOCUMENT } from '@angular/common';
 import { Auth } from 'app/firebase/auth';
 import { FirebaseApp } from 'app/firebase/app';
-import { Firestore, collection, collectionData, doc, docData, getCountFromServer, getDocFromServer, limit, orderBy, query, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getCountFromServer, getDocFromServer, limit, onSnapshot, orderBy, query, where } from 'app/firebase/firestore';
 import { Subscription, Subject, firstValueFrom, from, fromEvent, takeUntil, timeout } from 'rxjs';
 import { ACTIVITY_SEND_LIMITS, ActivitySendBatch, ActivitySendCommand, ActivitySendCommandResult, ActivitySendRow, ActivitySendSummary } from '@shared/activity-send';
 import { AppUserService } from './app.user.service';
@@ -33,6 +33,7 @@ export class ActivitySendService {
   readonly batchReadError = signal<string | null>(null);
   readonly rowReadError = signal<string | null>(null);
   private readonly historyReadError = signal<string | null>(null);
+  readonly loadingRecent = signal(true);
   readonly readError = computed(() => this.batchReadError() || this.rowReadError() || this.historyReadError());
   readonly selection = signal<string[]>([]);
   readonly summary = signal<ActivitySendSummary | null>(null);
@@ -45,7 +46,7 @@ export class ActivitySendService {
   private summaryNextReadAt = 0;
   private readonly jobs = new Map<string, string>();
   private activeSubscription?: Subscription;
-  private recentSubscription?: Subscription;
+  private stopRecent?: () => void;
   private batchSubscription?: Subscription;
   private rowSubscription?: Subscription;
   private uid: string | null = null;
@@ -60,25 +61,28 @@ export class ActivitySendService {
         clearTimeout(this.summaryTimer); this.summaryTimer = undefined;
       } else this.scheduleSummary(true);
     });
-    inject(DestroyRef).onDestroy(() => { visibility.unsubscribe(); this.closeBatch(); this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); });
+    inject(DestroyRef).onDestroy(() => { visibility.unsubscribe(); this.closeBatch(); this.stopRecent?.(); this.activeSubscription?.unsubscribe(); });
     effect(() => {
       const uid = this.user.user()?.uid || null;
       if (this.uid === uid) return;
       // A route can open its draft before the initial profile effect runs.
       const pendingBatch = this.batchOwner === uid && this.auth.currentUser?.uid === uid ? this.selectedId : null;
-      this.recentSubscription?.unsubscribe(); this.activeSubscription?.unsubscribe(); this.closeBatch();
+      this.stopRecent?.(); this.activeSubscription?.unsubscribe(); this.closeBatch();
       for (const job of this.jobs.values()) this.processing.removeJob(job);
-      this.jobs.clear(); this.recent.set([]);
+      this.jobs.clear(); this.recent.set([]); this.loadingRecent.set(!!uid);
       if (!uid || this.selectionOwner !== uid) this.selection.set([]);
       this.selectionOwner = uid; this.historyReadError.set(null); this.uid = uid;
       if (!uid) return;
-      this.recentSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), orderBy('createdAt', 'desc'), limit(20)))
-        .subscribe({ next: records => {
-          if (!this.isCurrentOwner(uid)) return;
-          const batches = records as unknown as ActivitySendBatch[];
-          this.recent.set(batches);
-
-        }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Could not load recent sends. Check your connection and refresh the page.'); } });
+      const recentQuery = query(collection(this.firestore, `users/${uid}/activitySends`), orderBy('createdAt', 'desc'), limit(20));
+      this.stopRecent = onSnapshot(recentQuery, { includeMetadataChanges: true }, snapshot => {
+        if (!this.isCurrentOwner(uid)) return;
+        this.recent.set(snapshot.docs.map(doc => doc.data() as ActivitySendBatch));
+        this.loadingRecent.set(snapshot.metadata.fromCache);
+      }, () => {
+        if (!this.isCurrentOwner(uid)) return;
+        this.loadingRecent.set(false);
+        this.historyReadError.set('Could not load recent sends. Check your connection and refresh the page.');
+      });
       this.activeSubscription = collectionData(query(collection(this.firestore, `users/${uid}/activitySends`), where('state', '==', 'confirmed'), limit(100))).subscribe({ next: records => { if (this.isCurrentOwner(uid)) this.syncJobs(records as unknown as ActivitySendBatch[]); }, error: () => { if (this.isCurrentOwner(uid)) this.historyReadError.set('Delivery status is unavailable. Refresh the page to check your results.'); } });
       if (pendingBatch) this.watchBatch(pendingBatch);
     });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TerrainOptions } from './onboarding-terrain.types';
-import { createTerrainRenderer } from './onboarding-terrain.renderer';
+import type { TerrainOptions } from './terrain.types';
+import { createTerrainRenderer } from './terrain.renderer';
 
 const graphics = vi.hoisted(() => ({
   render: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('three', async (importOriginal) => {
   };
 });
 
-describe('onboarding terrain renderer lifecycle', () => {
+describe('shared terrain renderer lifecycle', () => {
   const driftDuration = 24000 / 1.1;
   let stage: HTMLElement;
   let canvas: HTMLCanvasElement;
@@ -146,6 +146,41 @@ describe('onboarding terrain renderer lifecycle', () => {
       pointerType, clientX: 450, clientY: 700
     }));
   }
+
+  it('freezes the current camera on pause and resumes without advancing hidden time', () => {
+    options.reducedMotion = false;
+    const controller = create();
+    frame();
+    frame(frameTime + 5000);
+    const camera = graphics.render.mock.lastCall![1];
+    const position = camera.position.clone();
+    controller.setPaused(true);
+    frame();
+    expect(camera.position.equals(position)).toBe(true);
+    expect(frames.size).toBe(0);
+    move();
+    stage.dispatchEvent(new Event('pointerleave'));
+    expect(frames.size).toBe(0);
+    controller.replayEntry();
+    expect(frames.size).toBe(0);
+    controller.setTheme(true);
+    frame(frameTime + 60_000);
+    expect(camera.position.equals(position)).toBe(true);
+    expect(frames.size).toBe(0);
+    controller.setPaused(false);
+    frame();
+    expect(camera.position.equals(position)).toBe(true);
+    frame(frameTime + 1000);
+    expect(camera.position.distanceTo(position)).toBeGreaterThan(0.01);
+    expect(frames.size).toBe(1);
+    controller.setReducedMotion(true);
+    frame();
+    controller.setPaused(true);
+    frame();
+    controller.setPaused(false);
+    frame();
+    expect(frames.size).toBe(0);
+  });
 
   it('layers pointer parallax over the drift and returns to the same orbit after leaving', () => {
     options.reducedMotion = false;

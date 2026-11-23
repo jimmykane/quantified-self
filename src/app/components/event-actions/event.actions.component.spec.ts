@@ -1,3 +1,4 @@
+import { deliveryLabel } from './activity-delivery-status.dialog';
 import { AppEventSummary } from '@shared/event-summary';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Location } from '@angular/common';
@@ -427,6 +428,17 @@ describe('EventActionsComponent', () => {
         }));
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
+    it('opens delivery status only for the signed-in owner and confirms the open once', async () => {
+        component.user = { uid: 'other-user' } as any;
+        await component.openDeliveryStatus();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        component.user = { uid: 'test-user' } as any;
+        await component.openDeliveryStatus();
+        expect(mockDialog.open).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
     it.each(['shared', 'benchmark', 'processing'])('does not open ascent editing for %s recordings', async kind => {
         component.user = { uid: kind === 'shared' ? 'other-user' : 'test-user' } as any;
         if (kind === 'benchmark') (component.event as any).mergeType = 'benchmark';
@@ -1017,4 +1029,23 @@ describe('EventActionsComponent', () => {
             expect(component.getReimportDisabledReason()).toContain('No original source files');
         });
     });
+});
+
+describe('recording delivery status', () => {
+  it.each([
+    [{status: 'success'}, 'Delivered'],
+    [{status: 'success', infoCode: 'ALREADY_EXISTS'}, 'Already at destination'],
+    [{status: 'retrying'}, 'Waiting to retry'],
+    [{status: 'retrying', lastError: {message: 'Reconnect Wahoo API to resume this activity delivery.'}}, 'Reconnect in Connections'],
+    [{status: 'retrying', lastError: {message: 'Wahoo API disconnect is pending.'}}, 'Waiting for disconnect'],
+    [{status: 'skipped', skippedReason: 'destination_permission_required'}, 'Check destination connection'],
+    [{status: 'skipped', skippedReason: 'service_reconnect_required'}, 'Reconnect in Connections'],
+    [{status: 'skipped', skippedReason: 'destination_write_scope_missing'}, 'Check destination connection'],
+    [{status: 'skipped', skippedReason: 'route_disabled'}, 'Automatic sync was off'],
+    [{status: 'skipped', skippedReason: 'unsupported_original_file'}, 'File format unsupported'],
+    [{status: 'failed'}, 'Needs attention'],
+    [{status: 'unexpected'}, 'Status unavailable'],
+  ] as const)('distinguishes the recorded outcome %#', (row, expected) => {
+    expect(deliveryLabel(row)).toBe(expected);
+  });
 });

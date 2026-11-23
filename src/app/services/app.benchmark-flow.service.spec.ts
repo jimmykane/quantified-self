@@ -28,7 +28,7 @@ describe('AppBenchmarkFlowService', () => {
   };
   let logger: { error: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
   const haptics = { selection: vi.fn() };
-  let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+  let analyticsService: { logEvent: ReturnType<typeof vi.fn>; logOwnedResultView: ReturnType<typeof vi.fn> };
 
   const activityA = { getID: () => 'a1' } as ActivityInterface;
   const activityB = { getID: () => 'b1' } as ActivityInterface;
@@ -66,7 +66,7 @@ describe('AppBenchmarkFlowService', () => {
       getEventActivitiesAndAllStreams: vi.fn(),
     };
     logger = { error: vi.fn(), info: vi.fn() };
-    analyticsService = { logEvent: vi.fn() };
+    analyticsService = { logEvent: vi.fn(), logOwnedResultView: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [
@@ -103,6 +103,18 @@ describe('AppBenchmarkFlowService', () => {
     expect(bottomSheet.open).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(dialog.open).toHaveBeenCalledTimes(1));
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('measures a saved comparison only when its report opens from the owner list', async () => {
+    const event = createEvent();
+    const user = { uid: 'owner' } as User;
+    await service.openBenchmarkReport({ event, user, comparisonOwnerUid: 'owner' });
+    await service.openBenchmarkReport({ event, user, result: createResult() });
+    await service.openBenchmarkReport({ event, user, result: createResult(), comparisonOwnerUid: 'other' });
+    await service.openBenchmarkReport({ event, user, result: { ...createResult(), requiresRegeneration: true }, comparisonOwnerUid: 'owner' });
+    expect(analyticsService.logOwnedResultView).not.toHaveBeenCalled();
+    await service.openBenchmarkReport({ event, user, result: createResult(), comparisonOwnerUid: 'owner' });
+    expect(analyticsService.logOwnedResultView).toHaveBeenCalledExactlyOnceWith('owner', 'comparison_result_opened');
   });
 
   it('opens read-only reports without allowing rerun generation', async () => {

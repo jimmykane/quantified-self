@@ -118,9 +118,13 @@ error caps to 14.88 MB before the Firebase/Angular patch upgrade documented belo
 measured 1.41 MB (335.55 kB estimated transfer), below the unchanged 1474 kB cap. Warning budgets stay unchanged.
 This is compiled-output accounting, not a runtime performance claim.
 
-## Field guide onboarding terrain and bundle allowance
+## Shared homepage and onboarding terrain
 
-The optional Field guide and general account setup use `OnboardingTerrainComponent`. Its native 3D mountain
+The homepage hero, optional Field guide and general account setup use `TerrainComponent` in
+`src/app/components/shared/terrain/`. Geometry, light/dark illustration palettes, camera movement, lazy loading,
+fallbacks and lifecycle management have one implementation. Both consumers import this standalone component;
+changes to the renderer apply everywhere. Only composition, opacity and CSS fade variables belong to each page.
+The static fallback assets live in `src/assets/terrain/`. Its native 3D mountain
 illustration uses fictional sample loads reshaped into scenery; it does not visualize an account or expose
 readable Training metrics. The compact Compare account step never mounts this component. The geometry helper
 is pure TypeScript; the renderer is imported after browser rendering and pins Three.js to 0.180.0.
@@ -131,23 +135,26 @@ Light and dark scenes follow `AppThemeService`. Material tokens control text and
 the terrain itself uses slate/silver illustration palettes, cool ridge lighting and a small mipmapped
 procedural bump texture. Faint contours and a short feathered highlight retain the data-terrain detail.
 A 4.5-second camera glide introduces depth on first display and when entering the optional intro, blending
-into a gentle continuous camera orbit with a 24-second cycle. Entering the intro replays the glide on the
+into a gentle continuous camera orbit with a `24000 / 1.1` millisecond cycle. Entering the intro replays the glide on the
 existing renderer so time spent on the starting-point screen cannot consume the intro's movement.
 Passive animation paints at up to 30 fps; pointer panning, theme and size changes can repaint immediately.
-There is no playback control. Touch input disables pointer panning; reduced-motion preferences disable
+The homepage binds its existing hero animation control to the shared `motionPaused` input, pausing both the
+provider connection effects and the terrain. Pausing freezes the current camera and resuming does not advance
+paused time or override reduced motion. Onboarding does not add a playback control. Touch input disables pointer panning; reduced-motion preferences disable
 all camera motion. Enabling reduced motion centers the camera and ends the entry glide without replaying
 it; disabling it resumes only the slow drift. Rendering suspends offscreen and in hidden tabs without
 advancing either animation while hidden. Destroying the view releases frames, GPU
 resources, listeners and observers, and a late module response cannot initialize a destroyed view.
 Static light/dark PNG renders of the approved native terrain cover loading, WebGL failure and context
-loss. Onboarding stays usable in all cases.
+loss. Both pages stay usable in all cases. The homepage keeps the terrain within the copy column, fades it behind
+the headline and access note with theme tokens, and gives the secondary action an opaque surface. Its copy and
+navigation are independent of WebGL readiness, and the artwork is hidden from assistive technology.
+The renderer remains a dynamic import after browser rendering; importing the shared component does not eagerly
+load Three.js. This is decorative presentation, so existing app help, Training behavior and MCP contracts need no change.
 
-The production build measured 14.76431 MB of total scripts, including a 497.07 kB terrain renderer chunk
-(104.45 kB estimated transfer). Production and beta therefore use a matching 14.77 MB `allScript` error cap.
-The 1474 kB initial cap, 13000 kB total-script warning and public startup checks remain unchanged. The renderer
-is outside the startup import graph; the existing service worker still precaches JavaScript chunks. This is
-bundle accounting, not a runtime performance measurement. There are no new account reads, writes, provider
-operations, Training calculations or MCP contracts.
+At integration, production scripts totaled 15.204 MB, up 1.84 kB from the same build on
+`develop`. Production and beta share a 15.21 MB total-script error cap. The initial bundle measured
+1.43 MB (340.75 kB estimated transfer). The terrain renderer loads separately from homepage startup.
 
 ## Frontend build identification
 

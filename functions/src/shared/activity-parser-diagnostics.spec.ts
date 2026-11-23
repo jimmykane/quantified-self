@@ -9,6 +9,16 @@ function makeJsonParserError(message: string, importer: 'json' | 'sml') {
 }
 
 describe('activity parser diagnostics', () => {
+  it('retains the known GPX importer location and a fixed date failure without exposing input or stack paths', () => {
+    const error = Object.assign(new Error('Cannot parse start and end dates'), { name: 'ParsingEventLibError', code: 'PARSING_LIB_ERROR' });
+    error.stack = 'Error: private-name\n at privateFunction (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/gpx/importer.gpx.js:81:36)';
+    const result = getActivityParserDiagnostics(error, Buffer.from('private-gpx-payload'), 'gpx');
+    expect(result).toMatchObject({ format: 'gpx', payloadBytes: 19, errorCode: 'PARSING_LIB_ERROR',
+      errorMessage: 'Cannot parse start and end dates',
+      parserSite: { package: 'sports-lib', module: 'lib/cjs/events/adapters/importers/gpx/importer.gpx.js', line: 81, column: 36 },
+    });
+    expect(JSON.stringify(result)).not.toContain('private');
+  });
   it('reports a known parser reason, installed version and structural FIT facts', () => {
     const payload = Buffer.alloc(12);
     payload.writeUInt32LE(123, 4);

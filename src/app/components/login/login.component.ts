@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -15,7 +15,7 @@ import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppWindowService } from '../../services/app.window.service';
-import { appCheckFailureDetails } from '../../helpers/app-check-error.helper';
+import { appCheckFailureDetails, isAppCheckVerificationFailure } from '../../helpers/app-check-error.helper';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
@@ -29,6 +29,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   isLoading: boolean = false;
   isProfileRecoveryInProgress = false;
+  readonly emailLinkVerificationFailed = signal(false);
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
@@ -36,6 +37,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
+  private isSendingEmailLink = false;
   private readonly haptics = inject(AppHapticsService);
   private readonly windowService = inject(AppWindowService);
   readonly profileVerificationFailure = computed(() => {
@@ -200,17 +202,32 @@ export class LoginComponent implements OnInit, OnDestroy {
   // .. existing sendEmailLink ...
 
   async sendEmailLink(email: string): Promise<boolean> {
+    if (this.isSendingEmailLink || this.emailLinkVerificationFailed()) return false;
     if (!email) {
       this.snackBar.open('Please enter a valid email address.', 'Close', { duration: 3000 });
       return false;
     }
+    this.haptics.selection();
+    this.isSendingEmailLink = true;
     this.isLoading = true;
-    const success = await this.authService.sendEmailLink(email, this.getEmailLinkReturnUrl());
-    this.isLoading = false;
-    if (success) {
-      this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
+    try {
+      const success = await this.authService.sendEmailLink(email, this.getEmailLinkReturnUrl());
+      if (success) {
+        this.haptics.success();
+        this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
+      } else {
+        this.haptics.error();
+      }
+      return success;
+    } catch (error) {
+      this.haptics.error();
+      if (!isAppCheckVerificationFailure(error)) throw error;
+      this.emailLinkVerificationFailed.set(true);
+      return false;
+    } finally {
+      this.isSendingEmailLink = false;
+      this.isLoading = false;
     }
-    return success;
   }
 
 
@@ -293,7 +310,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               this.finishEmailLinkCompletion(sentReplacementLink);
               // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub)
               // to the account that will be signed in via email.
-              if (pendingCredential) {
+              if (sentReplacementLink && pendingCredential) {
                 // We can't save the full credential object :(
                 // But we can save the provider ID and ask user to re-login with it to link.
                 this.authService.localStorageService.setItem('pendingLinkProvider', pendingCredential.providerId);
@@ -455,7 +472,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.haptics.selection();
     let pageReloadRequested = false;
     try {
-      if (this.profileVerificationNeedsReload()) {
+      if (this.emailLinkVerificationFailed() || this.profileVerificationNeedsReload()) {
         // A new page can retry a failed module fetch or browser verification.
         // Keep reload explicit; same-page retries cannot clear either browser cache/cooldown.
         this.windowService.windowRef.location.reload();

@@ -27,6 +27,10 @@
     "environment": "angular",
     "reason": "Compiles the real dashboard wrapper and shared Training renderers, exercises Material menu selection, input-driven rendering, haptics and teardown."
   },
+  "src/app/components/event-actions/activity-delivery-status.dialog.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the Material dialog and AsyncPipe with TestBed to verify owner-scoped receipt reads, refresh, failure recovery and removal of status after an account switch."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
@@ -46,10 +50,6 @@
   "src/app/components/notification-offer/notification-offer.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles dashboard and tray offer templates with Material controls, reactive permission/preference state, async click handling, account changes and haptics."
-  },
-  "src/app/components/onboarding/terrain/onboarding-terrain.component.spec.ts": {
-    "environment": "angular",
-    "reason": "Uses TestBed to verify theme effects, afterNextRender lazy initialization, reduced motion, Material pause/play bindings, one haptic owner, fallback states and DestroyRef cleanup."
   },
   "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
     "environment": "angular",
@@ -130,6 +130,10 @@
   "src/app/components/shared/table-date-filter/table-date-filter.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the shared table date control with real Material menus and range-picker portals to verify calendar selection, deferred Apply versus Cancel, focus restoration, disabled controls and haptic ownership."
+  },
+  "src/app/components/shared/terrain/terrain.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify shared theme/input effects, afterNextRender lazy initialization, reduced-motion and host pause inputs, fallback states and DestroyRef cleanup."
   },
   "src/app/components/summaries/daily-workout-suggestion/daily-workout-suggestion.component.spec.ts": {
     "environment": "angular",

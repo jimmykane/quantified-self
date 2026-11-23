@@ -46,6 +46,7 @@ export class EventSummaryComponent implements OnChanges {
   @Input() showType = true;
   @Input() showIcon = false;
   @Input() isOwner = false;
+  @Input() comparisonOwnerUid?: string;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() unitSettings!: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
@@ -224,6 +225,7 @@ export class EventSummaryComponent implements OnChanges {
     const targetEventID = targetEvent.getID();
     await this.benchmarkFlow.openBenchmarkEntry({
       event: targetEvent,
+      comparisonOwnerUid: this.comparisonOwnerUid,
       hydrateStreamsForGeneration: true,
       user: this.user,
       initialSelection: this.selectedActivities,
@@ -241,6 +243,7 @@ export class EventSummaryComponent implements OnChanges {
     const targetEventID = targetEvent.getID();
     this.benchmarkFlow.openBenchmarkSelectionDialog({
       event: targetEvent,
+      comparisonOwnerUid: this.comparisonOwnerUid,
       hydrateStreamsForGeneration: true,
       user: this.user,
       initialSelection: this.selectedActivities,

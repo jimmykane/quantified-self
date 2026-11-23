@@ -173,10 +173,12 @@ export class AppAnalyticsService {
     private logger = inject(LoggerService);
     private storage = inject(APP_STORAGE);
     private hasConsent = false;
+    private consentingOwner: string | null = null;
     private readonly subscriptionStartedStoragePrefix = 'analytics.subscription_started.';
 
     constructor() {
         this.authService.user$.pipe(takeUntilDestroyed()).subscribe(user => {
+            this.consentingOwner = user?.acceptedTrackingPolicy === true ? user.uid : null;
             if (environment.forceAnalyticsCollection) {
                 this.hasConsent = true;
                 this.setCollectionEnabled(true);
@@ -213,6 +215,11 @@ export class AppAnalyticsService {
             this.logger.warn('Analytics logEvent error:', error);
             return false;
         }
+    }
+
+    logOwnedResultView(owner: string, event: 'recorded_workout_opened' | 'comparison_result_opened'): boolean {
+        return !!owner && owner === this.consentingOwner && owner === this.authService.currentUser?.uid
+            && this.logEvent(event);
     }
 
     /** Goal-specific event names remain reportable without GA4 custom dimensions. */

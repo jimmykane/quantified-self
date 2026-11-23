@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import {
   TOOL_COMPARISON_EVENT_ID_HEADER,
@@ -85,6 +86,7 @@ const hoisted = vi.hoisted(() => {
 vi.mock('firebase-functions/v2/https', () => ({
   onRequest: hoisted.mockOnRequest,
 }));
+vi.mock('firebase-functions/logger', () => ({ warn: vi.fn(), error: vi.fn() }));
 
 vi.mock('firebase-admin', () => {
   const firestoreFn = vi.fn(() => ({
@@ -406,6 +408,7 @@ async function invokeCreateToolComparisonEvent(
 describe('createToolComparisonEvent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(logger.warn).mockReset();
     hoisted.mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' });
     hoisted.mockVerifyAppCheckToken.mockResolvedValue({ appId: 'app-id' });
     hoisted.mockEventsCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
@@ -435,7 +438,7 @@ describe('createToolComparisonEvent', () => {
     hoisted.mockEnforceAppCheckFlag.value = true;
 
     hoisted.mockFITImporter.getFromArrayBuffer.mockImplementation(async () => makeParsedEvent('fit'));
-    hoisted.mockGPXImporter.getFromString.mockImplementation(async () => makeParsedEvent('gpx'));
+    hoisted.mockGPXImporter.getFromString.mockReset().mockImplementation(async () => makeParsedEvent('gpx'));
     hoisted.mockTCXImporter.getFromXML.mockImplementation(async () => makeParsedEvent('tcx'));
     hoisted.mockSuuntoJSONImporter.getFromJSONString.mockImplementation(async () => makeParsedEvent('json'));
     hoisted.mockSuuntoSMLImporter.getFromXML.mockImplementation(async () => makeParsedEvent('sml'));
@@ -452,6 +455,43 @@ describe('createToolComparisonEvent', () => {
       timeoutSeconds: 3600,
       maxInstances: 20,
     }));
+  });
+
+  it.each([false, true])('logs safe GPX parser diagnostics without filenames or source data (gzip=%s)', async compressed => {
+    const sensitive = 'private-name 37.1234 https://example.invalid/?token=private-token';
+    const payload = Buffer.from('<gpx><trk>private-name 37.1234</trk></gpx>');
+    const error = Object.assign(new Error(sensitive), { code: 'PARSING_LIB_ERROR', event: { name: sensitive } });
+    error.stack = `Error: ${sensitive}\n at privateFunction (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/gpx/importer.gpx.js:81:36)`;
+    hoisted.mockGPXImporter.getFromString.mockRejectedValueOnce(error);
+    const originalFilename = compressed ? 'private-file.gpx.gz' : 'private-file.gpx';
+    const response = makeResponse();
+    await invokeCreateToolComparisonEvent(makeRequest({ files: [
+      { bytes: Buffer.from([1, 2]), extension: 'fit', originalFilename: 'private-reference.fit' },
+      { bytes: compressed ? gzipSync(payload) : payload, extension: compressed ? 'gpx.gz' : 'gpx', originalFilename },
+    ] }), response);
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: `Could not parse uploaded file: ${originalFilename}.` });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[createToolComparisonEvent] Activity parsing failed', expect.objectContaining({
+      fileIndex: 1, fileCount: 2, format: 'gpx', payloadBytes: payload.length, errorCode: 'PARSING_LIB_ERROR',
+      errorMessage: 'Unclassified parser error; message withheld.',
+      parserSite: { package: 'sports-lib', module: 'lib/cjs/events/adapters/importers/gpx/importer.gpx.js', line: 81, column: 36 },
+    }));
+    const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    for (const value of ['private-', '37.1234', 'https:', 'token=', 'privateFunction', '/private', 'user-1']) expect(logged).not.toContain(value);
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+  });
+
+  it('preserves the GPX rejection when diagnostic logging fails', async () => {
+    hoisted.mockGPXImporter.getFromString.mockRejectedValueOnce(new Error('Cannot parse start and end dates'));
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw Error('logger unavailable'); });
+    const response = makeResponse();
+    await invokeCreateToolComparisonEvent(makeRequest(), response);
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded file: test.gpx.' });
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
   });
 
   it('rejects non-POST methods', async () => {

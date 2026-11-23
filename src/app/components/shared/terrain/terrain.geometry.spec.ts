@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createTerrainGeometry } from './onboarding-terrain.geometry';
+import { createTerrainGeometry } from './terrain.geometry';
 
-describe('onboarding terrain geometry', () => {
+describe('shared terrain geometry', () => {
   const geometry = createTerrainGeometry();
 
   it('creates a finite, indexed landscape and contours', () => {
