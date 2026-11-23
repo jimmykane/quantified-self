@@ -24,7 +24,8 @@
     </aside>
     @if (selected(); as plan) {
       <article>
-        <small>{{ plan.author }} · Edition {{ plan.version }}</small>
+        <small>@if (plan.source === 'private') { Personal template · Saved revision {{ plan.version }} }
+          @else { {{ plan.author }} · Edition {{ plan.version }} }</small>
         <h2>{{ plan.name }}</h2><p>{{ plan.description }}</p>
         <app-plan-attribution [credit]="plan.attribution" />
         <dl class="facts"><div><dt>Duration</dt><dd>{{ weeks().length }} weeks</dd></div>
@@ -43,7 +44,10 @@
           </div>
           <label>Week <select [ngModel]="week()" (ngModelChange)="week.set($event)">
             @for (i of weeks(); track i) { <option [ngValue]="i">{{ i + 1 }}</option> }
-          </select></label> {{ phase() }}
+          </select></label>
+          @for (phase of weekPhases(); track phase.id) {
+            <p><strong>{{ phase.name }}</strong>@if (phase.description) { · {{ phase.description }} }</p>
+          }
           <p class="weekly-total">{{ workloads()[week()]?.text }}</p>
           @for (session of weekRows(); track $index) {
             <details><summary>{{ dayLabel(session.day, true) }} · {{ session.title }} · {{ session.totals }}</summary>

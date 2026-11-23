@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { TRAINING_PLAN_CATALOG, scheduleTemplate, type PlanTemplate, type TemplateScheduleOptions } from '../../../shared/training-plan-templates';
+import { TRAINING_PLAN_CATALOG, scheduleTemplate, templateScheduleMode, type PlanTemplate, type TemplateScheduleOptions } from '../../../shared/training-plan-templates';
 import { type MutateTrainingScheduleRequestV1, countTrainingPlanDays, normalizeTrainingLocalDate, TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '../../../shared/training-plans';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { assertTrainingMutationFitsTransaction, mutateTrainingScheduleForUser, readTrainingScheduleSnapshotInTransaction } from './persistence';
@@ -55,7 +55,7 @@ async function readTemplate(tx: Tx, uid: string, source: Source, id: string): Pr
 export function summarizeTemplate(item: PlanTemplate) {
   return { id: item.id, version: item.version, source: item.source, name: item.name, description: item.description,
     ...(item.attribution ? { attribution: planAttributionSchema.parse(item.attribution) } : {}),
-    author: item.author, sport: item.sport, days: item.days, workoutCount: item.sessions.length };
+    scheduleMode: templateScheduleMode(item), author: item.author, sport: item.sport, days: item.days, workoutCount: item.sessions.length };
 }
 export async function listTemplates(access: TemplateAccess, source: Source) {
   return admin.firestore().runTransaction(async tx => {
@@ -64,7 +64,7 @@ export async function listTemplates(access: TemplateAccess, source: Source) {
     const snapshot = await tx.get(library(access.uid).select('id','version','source','name','description','author','sport','days','workoutCount','attribution').limit(100));
     return snapshot.docs.map(doc => {
       const { id, version, name, description, author, sport, days, workoutCount, attribution } = doc.data();
-      return { id, version, source, name, description, author, sport, days, workoutCount,
+      return { id, version, source, name, description, author, sport, days, workoutCount, scheduleMode: templateScheduleMode({ source }),
         ...(attribution ? { attribution: planAttributionSchema.parse(attribution) } : {}) } as ReturnType<typeof summarizeTemplate>;
     });
   });
@@ -159,7 +159,7 @@ export async function previewEnrollment(access: TemplateAccess, source: Source, 
     const snapshot = await readTrainingScheduleSnapshotInTransaction(tx, admin.firestore().doc('users/' + access.uid), [request]);
     assertTrainingMutationFitsTransaction(snapshot, request, now, 2);
     tx.create(ref, { ...proposal, expireAt: Timestamp.fromMillis(now + 30 * 86400000) });
-    return { id: ref.id, name: item.name, attribution: item.attribution ?? null, scheduleRevision: proposal.revision, expiresAtMs: proposal.expiresAt,
+    return { id: ref.id, name: item.name, attribution: item.attribution ?? null, scheduleMode: templateScheduleMode(item), scheduleRevision: proposal.revision, expiresAtMs: proposal.expiresAt,
       start: schedule.start, end: schedule.end, dates: schedule.sessions.map(w => w.localDate), restDays: schedule.restDays, conflicts: occupied };
   });
 }

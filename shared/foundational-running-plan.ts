@@ -36,7 +36,7 @@ function warmup(seconds: number, percent: number) {
 const openTenMinutes = () => step('cooldown', null, 'Cool down easily for about 10 minutes. Finish this step manually.', 'cooldown');
 
 export const FOUNDATIONAL_RUNNING_PLAN: PlanTemplate = {
-  id: 'tredict-running-base', version: 1, source: 'catalog', attribution,
+  id: 'tredict-running-base', version: 1, source: 'catalog', scheduleMode: 'fixed', attribution,
   name: attribution.title, author: attribution.originalAuthor, sport: ActivityTypes.Running, days: 28,
   description: 'For runners returning after a break. Use a heart-rate monitor for the easy efforts. Four weeks progress from a 20-minute run to a 90-minute outing, with short strides and a threshold-pace session.',
   phases: [

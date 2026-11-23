@@ -46,6 +46,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     const list = TEMPLATE_OUTPUTS.list_training_plan_templates.parse(await handleTemplateTool('list_training_plan_templates', input({})));
     const licensed = list.templates.find(t => t.author === 'Felix Gertz')!;
     const detail = TEMPLATE_OUTPUTS.get_training_plan_template.parse(await handleTemplateTool('get_training_plan_template', input({ templateRef: licensed.templateRef })));
+    expect(licensed.scheduleMode).toBe('fixed');
+    expect(detail.phases[0].description).toBe('Keep the first week easy as you return to running.');
     expect(detail.template.attribution).toEqual(licensed.attribution);
     expect(detail.template.attribution).toMatchObject({ originalAuthor: 'Felix Gertz', license: 'CC BY 4.0', changes: expect.any(String), notice: expect.any(String) });
     const enrolled = await applyEnrollment(access, (await previewEnrollment(access, 'catalog', 'tredict-running-base', 1, options)).id);
@@ -67,6 +69,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     const library = TEMPLATE_OUTPUTS.list_training_plan_templates.parse(await handleTemplateTool('list_training_plan_templates', privateInput({ source: 'private' })));
     expect(library.templates[0].attribution).toEqual(copy.attribution);
     const privateDetail = TEMPLATE_OUTPUTS.get_training_plan_template.parse(await handleTemplateTool('get_training_plan_template', privateInput({ templateRef: library.templates[0].templateRef })));
+    expect(privateDetail.template.scheduleMode).toBe('fixed');
+    expect(privateDetail.phases).toEqual(detail.phases);
     expect(privateDetail.template.attribution).toEqual(copy.attribution);
     const original = await applyEnrollment(access, (await previewEnrollment(access, 'catalog', 'first-run', 1, options)).id);
     expect(await read(planRef(original))).toEqual({ attribution: null });
@@ -114,6 +118,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     await expect(handleTemplateTool('list_training_plan_templates', input({ source: 'private' }))).rejects.toThrow(/permission/i);
     const listed = TEMPLATE_OUTPUTS.list_training_plan_templates.parse(await handleTemplateTool('list_training_plan_templates', input({source:'catalog'})));
     expect(listed.templates).toHaveLength(8);
+    const fixed = listed.templates.find(t => t.scheduleMode === 'fixed')!;
+    const dated = TEMPLATE_OUTPUTS.preview_training_plan_enrollment.parse(await handleTemplateTool('preview_training_plan_enrollment',
+      input({ templateRef: fixed.templateRef, anchor: 'start', date: '2027-02-02' })));
+    expect(dated.summary).toContain('2027-02-02 through 2027-03-01');
+    expect(dated.summary).toContain('Workout spacing follows the template.');
+    expect(listed.templates[0].scheduleMode).toBe('flexible');
     const templateRef = listed.templates[0].templateRef;
     const read = TEMPLATE_OUTPUTS.get_training_plan_template.parse(await handleTemplateTool('get_training_plan_template',input({templateRef})));
     expect(read.sessions).toHaveLength(7);

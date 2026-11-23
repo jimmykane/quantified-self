@@ -4408,6 +4408,8 @@ describe('PlansWorkspaceComponent', () => {
     const base = schedule.plans[0];
     const enrolled = { ...base, id: 'enroll-licensed', name: 'Personal running plan', lifecycle: 'paused' as const };
     schedule = { ...schedule, plans: [...schedule.plans, enrolled] };
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live.asObservable());
     const getCredit = vi.mocked(TestBed.inject(TrainingPlansService).getPlanAttribution);
     getCredit.mockResolvedValue({ title: 'Original running plan', originalAuthor: 'Felix Gertz',
       sourceUrl: 'https://plans.tredict.com/', license: 'CC BY 4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
@@ -4418,6 +4420,10 @@ describe('PlansWorkspaceComponent', () => {
     expect(getCredit).toHaveBeenCalledWith(enrolled.id, enrolled.createdAtMs, expect.any(Function));
     expect(fixture.nativeElement.querySelector('app-plan-attribution').textContent).toContain('Felix Gertz');
     expect(fixture.nativeElement.querySelector('a[rel="license"]').href).toBe('https://creativecommons.org/licenses/by/4.0/');
+    live.next({ ...schedule, plans: schedule.plans.map(plan => ({ ...plan, revision: plan.revision + 1 })) });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(getCredit).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('app-plan-attribution').textContent).toContain('Felix Gertz');
     fixture.componentInstance.selectPlan(base.id);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Felix Gertz');

@@ -56,6 +56,25 @@ describe('whole-plan library', () => {
     expect(html.textContent).toContain('Day 1');
     expect(html.textContent).toContain('68% of your maximum heart rate');
     expect(html.textContent).not.toContain('Long session');
+    expect(html.textContent).toContain('Keep the first week easy as you return to running.');
+    component.week.set(1); fixture.detectChanges();
+    expect(html.textContent).toContain('Day 9');
+    expect(html.textContent).toContain('Keep a steady running rhythm and introduce short faster efforts.');
+    expect(html.textContent).not.toContain('Keep the first week easy as you return to running.');
+  });
+  it('labels a personal revision separately from the original work and author', async () => {
+    const { component, request, fixture } = await setup();
+    await component.select(component.items().find(item => item.id === 'tredict-running-base')!);
+    const original = component.selected()!;
+    const copy = { ...original, source: 'private', id: 'saved', version: 4, name: 'My spring block',
+      attribution: { ...original.attribution, privateCopy: true } };
+    request.mockResolvedValueOnce({ data: [{ ...copy, workoutCount: copy.sessions.length }] }).mockResolvedValueOnce({ data: copy });
+    await component.openSource('private'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('article > small').textContent).toContain('Personal template · Saved revision 4');
+    expect(fixture.nativeElement.querySelector('h2').textContent).toBe('My spring block');
+    const credit = fixture.nativeElement.querySelector('section[aria-label="Plan attribution"]');
+    expect(credit.textContent).toContain(original.name);
+    expect(credit.textContent).toContain('Felix Gertz');
   });
   it('discards private data received after an account switch', async () => {
     const { component, request, user, auth, fixture } = await setup();

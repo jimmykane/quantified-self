@@ -623,7 +623,7 @@ const service = {
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
     planTemplateTool: vi.fn(async (tool: string) => {
-      const template = { templateRef: 'opaque-template', source: 'catalog', version: 1, name: '10K Race', description: 'Three sessions a week.', author: 'Quantified Self', sport: 'Running', days: 70, workoutCount: 30 };
+      const template = { templateRef: 'opaque-template', source: 'catalog', scheduleMode: 'flexible', version: 1, name: '10K Race', description: 'Three sessions a week.', author: 'Quantified Self', sport: 'Running', days: 70, workoutCount: 30 };
       if (tool === 'get_training_plan_attribution') return { attribution: null };
       if (tool === 'list_training_plan_templates') return { templates: [template], nextCursor: null };
       if (tool === 'get_training_plan_template') return { template, sessions: [], rest: [2], phases: [{ name: 'Base', start: 0, end: 34 }], nextOffset: null };

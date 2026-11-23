@@ -22,6 +22,7 @@ export interface PlanAttribution {
 }
 export interface PlanTemplate {
   attribution?: PlanAttribution;
+  scheduleMode?: 'fixed' | 'flexible';
   id: string;
   version: number;
   source: 'catalog' | 'private';
@@ -106,14 +107,14 @@ function buildProgram(program: Program): PlanTemplate {
 }
 export const TRAINING_PLAN_CATALOG = [...programs.map(buildProgram), FOUNDATIONAL_RUNNING_PLAN];
 
-export function hasFlexibleTrainingDays(template: PlanTemplate): boolean {
-  return template.source === 'catalog' && !template.attribution;
+export function templateScheduleMode(template: Pick<PlanTemplate, 'source' | 'scheduleMode'>): 'fixed' | 'flexible' {
+  return template.source === 'private' ? 'fixed' : template.scheduleMode ?? 'flexible';
 }
 export function scheduleTemplate(template: PlanTemplate, options: TemplateScheduleOptions) {
   const date = normalizeTrainingLocalDate(options.date);
   const weekday = new Date(date + 'T12:00:00Z').getUTCDay();
   if (!Number.isInteger(options.longDay) || options.longDay < 0 || options.longDay > 6) throw Error('Choose a valid long-session weekday.');
-  const flexibleDays = hasFlexibleTrainingDays(template);
+  const flexibleDays = templateScheduleMode(template) === 'flexible';
   if (flexibleDays && options.anchor === 'finish' && weekday !== options.longDay) throw Error('Choose the event weekday as the long-session day.');
   const lead = flexibleDays ? (options.longDay + 1 - weekday + 7) % 7 : 0;
   const start = addDaysToTrainingLocalDate(date, options.anchor === 'finish' ? 1 - template.days : lead);

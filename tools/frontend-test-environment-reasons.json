@@ -59,6 +59,10 @@
     "environment": "angular",
     "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."
   },
+  "src/app/components/plans/plan-catalog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the plan catalog in TestBed to verify week selection, date review, licensed attribution links and account changes during a pending private template read."
+  },
   "src/app/components/plans/plan-generation-dialog.component.spec.ts": {
     "environment": "angular",
     "reason": "Renders Material controls and the shared sport picker in TestBed to verify live goal selection, optional creation, quota, consent defaults, validation and account-safe dialog closure."

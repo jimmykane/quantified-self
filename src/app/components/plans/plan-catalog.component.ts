@@ -6,7 +6,7 @@ import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppUserService } from '../../services/app.user.service';
 import { PlanAttributionComponent } from './plan-attribution.component';
-import { hasFlexibleTrainingDays, TRAINING_PLAN_CATALOG, type PlanTemplate, type TemplateScheduleOptions } from '@shared/training-plan-templates';
+import { templateScheduleMode, TRAINING_PLAN_CATALOG, type PlanTemplate, type TemplateScheduleOptions } from '@shared/training-plan-templates';
 import { PLAN_WEEKDAYS } from '@shared/training-plan-generation';
 import { formatManualWorkoutStructure } from '../../helpers/planned-workout-editor.helper';
 import { aggregateWorkoutAnalysesV1, analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
@@ -37,7 +37,7 @@ export class PlanCatalogComponent {
   readonly selected = signal<PlanTemplate | null>(null);
   readonly flexibleDays = computed(() => {
     const plan = this.selected();
-    return !!plan && hasFlexibleTrainingDays(plan);
+    return !!plan && templateScheduleMode(plan) === 'flexible';
   });
   readonly week = signal(0);
   readonly options = signal<TemplateScheduleOptions>({ anchor: 'start', date: today(), longDay: 0, pattern: 'standard' });
@@ -73,14 +73,17 @@ export class PlanCatalogComponent {
     return plan.sessions.filter(s => s.day < 7).map(s => this.dayLabel(s.day, true, pattern)).join(' · ');
   }
   dayLabel(offset: number, workout = false, pattern = this.options().pattern): string {
-    if (!this.flexibleDays()) return 'Day ' + (offset % 7 + 1);
+    if (!this.flexibleDays()) return 'Day ' + (offset + 1);
     const index = workout && pattern === 'early' && offset % 7 === 1 ? offset - 1 : offset;
     const weekday = (this.options().longDay + 1 + index) % 7;
     return this.weekdays.find(d => d.value === weekday)?.label ?? '';
   }
   readonly weekRest = computed(() => (this.selected()?.rest ?? []).filter(day => Math.floor(day / 7) === this.week()));
   readonly ownerUid = computed(() => this.users.user()?.uid);
-  readonly phase = computed(() => this.selected()?.phases.filter(p => p.start < (this.week()+1)*7 && p.end >= this.week()*7).map(p => p.name).join(' / '));
+  readonly weekPhases = computed(() => {
+    const firstDay = this.week() * 7;
+    return this.selected()?.phases.filter(phase => phase.start < firstDay + 7 && phase.end >= firstDay) ?? [];
+  });
   constructor() {
     effect(() => {
       const uid = this.ownerUid();

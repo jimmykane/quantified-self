@@ -672,18 +672,22 @@ export class PlansWorkspaceComponent {
   readonly planCredit = signal<PlanAttribution | null>(null);
   readonly creditUnavailable = signal(false);
   readonly creditRetry = signal(0);
-  private readonly creditEffect = effect(onCleanup => {
+  private readonly creditTarget = computed(() => {
     const uid = this.currentUser()?.uid;
     const plan = this.selectedPlan();
+    if (!uid || !plan?.id.startsWith('enroll-') || !this.browsing() || this.libraryView() || this.view() !== 'plans') return null;
+    return { uid, id: plan.id, createdAtMs: plan.createdAtMs };
+  }, { equal: (a, b) => a?.uid === b?.uid && a?.id === b?.id && a?.createdAtMs === b?.createdAtMs });
+  private readonly creditEffect = effect(onCleanup => {
+    const target = this.creditTarget();
     this.creditRetry();
     this.planCredit.set(null);
     this.creditUnavailable.set(false);
-    if (!uid || !plan?.id.startsWith('enroll-') || !this.browsing() || this.view() !== 'plans') return;
+    if (!target) return;
     let active = true;
-    const current = () => active && !this.destroyRef.destroyed && this.currentUser()?.uid === uid &&
-      this.selectedPlan()?.id === plan.id && this.selectedPlan()?.createdAtMs === plan.createdAtMs;
+    const current = () => active && !this.destroyRef.destroyed && this.creditTarget() === target;
     onCleanup(() => { active = false; });
-    void this.plansService.getPlanAttribution(plan.id, plan.createdAtMs, current).then(credit => {
+    void this.plansService.getPlanAttribution(target.id, target.createdAtMs, current).then(credit => {
       if (current()) this.planCredit.set(credit);
     }).catch(() => { if (current()) this.creditUnavailable.set(true); });
   });
