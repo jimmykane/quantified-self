@@ -64,6 +64,7 @@
     "/activities",
     "/calendar",
     "/calendar/day/*",
+    "/training/plans/catalog",
     "/training/plans/workout/*",
     "/training/plans/library/new",
     "/training/plans/library/*",
