@@ -22,16 +22,19 @@ export class PlanGenerationService {
     });
   }
   private isOwner(uid: string): boolean { return !!uid && this.auth.currentUser?.uid === uid && this.users.user()?.uid === uid; }
-  async open(uid: string, canExecute: () => boolean): Promise<void> {
+  async open(uid: string, canExecute: () => boolean, adjustment?: PlanAssistantRequest): Promise<void> {
     const session = this.auth.currentUser;
     const current = () => this.isOwner(uid) && this.auth.currentUser === session && canExecute();
     if (this.opening || !current()) return;
     this.opening = true;
     try {
-      const { PlanGenerationDialogComponent } = await import('../components/plans/plan-generation-dialog.component');
-      if (!current()) return;
-      const request = await firstValueFrom(this.dialogs.open<InstanceType<typeof PlanGenerationDialogComponent>, { uid: string }, PlanAssistantRequest>(
-        PlanGenerationDialogComponent, { data: { uid }, width: '640px', maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)' }).afterClosed());
+      let request = adjustment;
+      if (!request) {
+        const { PlanGenerationDialogComponent } = await import('../components/plans/plan-generation-dialog.component');
+        if (!current()) return;
+        request = await firstValueFrom(this.dialogs.open<InstanceType<typeof PlanGenerationDialogComponent>, { uid: string }, PlanAssistantRequest>(
+          PlanGenerationDialogComponent, { data: { uid }, width: '640px', maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)' }).afterClosed());
+      }
       if (!request || !current()) return;
       this.pending = { session, request, expires: Date.now() + 15 * 60_000 };
       try {

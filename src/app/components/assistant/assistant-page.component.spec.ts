@@ -1687,6 +1687,7 @@ describe('AssistantPageComponent', () => {
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
       data: {
+        conversationId: null,
         trainingThresholdsEnabled: false,
         locationAccess: 'coordinate_free',
         timelineNotesEnabled: false,

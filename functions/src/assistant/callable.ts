@@ -1,3 +1,4 @@
+import { handleTemplateTool, isPlanEnrollmentProposal } from '../mcp/plan-templates.service';
 import { applyTrainingGoalChange, isTrainingGoalProposal } from '../mcp/training-goals.service';
 import { randomUUID } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -926,9 +927,18 @@ export async function runApplyAssistantTrainingProposal(
         MCP_OAUTH_SCOPES.TrainingPlansRead,
         ...(needsSchedule ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
         ...(needsDelivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
-      ],
+      ] as string[],
       arguments: { proposalRef, permissionMode },
     };
+    if (isPlanEnrollmentProposal(writeInput, proposalRef)) {
+      if (permissionMode !== 'schedule') throw new HttpsError('invalid-argument','Enrollment needs plan change permission.');
+      const { assistantPrivateTemplateAccess } = await import('../training-plans/plan-templates');
+      if (await assistantPrivateTemplateAccess(uid,conversationId)) writeInput.scopes.push(MCP_OAUTH_SCOPES.PrivatePlanTemplatesRead);
+      const result = await handleTemplateTool('apply_training_plan_enrollment', { ...writeInput, arguments: { proposalRef } });
+      if (!('planRef' in result)) throw new HttpsError('internal','Invalid enrollment result.');
+      return retainResult({ status: 'applied', scheduleRevision: result.scheduleRevision,
+        changes: [{ index: 0, kind: 'enroll-plan', status: 'applied', message: 'Added the reviewed paused plan.' }], providers: [] });
+    }
     if (isTrainingGoalProposal(writeInput, proposalRef)) {
       if (permissionMode !== 'schedule') throw new HttpsError('invalid-argument', 'Goal changes require Training change permission.');
       await applyTrainingGoalChange({ ...writeInput, arguments: { proposalRef } });

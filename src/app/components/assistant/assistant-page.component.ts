@@ -479,7 +479,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!this.canApplyAccountResult(openingUid)) return;
     const openingConversationId = this.conversation()?.conversationId ?? null;
     this.bottomSheet.open(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled(),
+      data: { conversationId: openingConversationId, locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled(),
         activityTagChangesEnabled: this.activityTagChangesEnabled(),
         timelineNoteChangesEnabled: this.timelineNoteChangesEnabled(),
         measurementChangesEnabled: this.measurementChangesEnabled(),

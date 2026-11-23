@@ -337,6 +337,8 @@ backend—is licensed under the [GNU Affero General Public License v3.0 only](LI
 packages and assets remain under their respective licenses. Release tags retain versioned source, and the hosted
 interfaces link directly to the source repository and license.
 
+The running plan *Build-up a foundational running base* by Felix Gertz is published under CC BY 4.0. Its training content is adapted into QS workout steps, with reworded coaching cues and percentage targets in step notes. The publisher identifies it as an example of Tredict’s training plan publishing feature. [Original plan](https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
 Original frontend code whose copyright holders have authorized it also carries a narrow
 [AGPL section 7 exception for linking or combining with Mapbox GL JS](LICENSE-MAPBOX-EXCEPTION). The exception does
 not license Mapbox materials: users must obtain any required Mapbox account and access token and follow Mapbox's terms.

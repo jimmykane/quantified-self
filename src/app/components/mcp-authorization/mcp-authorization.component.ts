@@ -95,7 +95,7 @@ export class McpAuthorizationComponent implements OnInit {
         McpAuthorizationRequest
       >('getMcpAuthorizationRequest', { requestId });
       this.request.set(result.data);
-      this.selectedScopes.set([...result.data.scopes]);
+      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'private-plan-templates:read'));
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to load authorization request', error);
       this.error.set('This authorization request is invalid, expired, or no longer available.');

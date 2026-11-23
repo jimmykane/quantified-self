@@ -6586,6 +6586,11 @@ export function createMcpDataService(
       }
     },
 
+    async planTemplateTool(tool: typeof import('./plan-templates.schemas').TEMPLATE_TOOLS[number],
+      input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { handleTemplateTool } = await import('./plan-templates.service');
+      return handleTemplateTool(tool, input);
+    },
     async readTrainingGoals(input: import('./training-plans-write.service').TrainingWriteInput & {
       tool: typeof import('./training-goals.schemas').GOAL_READ_TOOLS[number];
     }) {

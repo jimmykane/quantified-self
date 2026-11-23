@@ -715,6 +715,8 @@ const topLevelRoutes: Routes = [
     },
     canMatch: [authGuard, onboardingGuard]
   },
+  { path: 'training/plans/catalog', loadComponent: () => import('./components/plans/plan-catalog.component').then(m => m.PlanCatalogComponent),
+    data: { ...TRAINING_PLANS_ROUTE_DATA, title: 'Training plan library' }, canMatch: [authGuard, onboardingGuard] },
   trainingPlansRoute('training/plans/workout/:workoutId', 'edit'),
   trainingPlansRoute('training/plans/library/new', 'library-create'),
   trainingPlansRoute('training/plans/library/:itemId', 'library-edit'),

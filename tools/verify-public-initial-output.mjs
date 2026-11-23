@@ -545,6 +545,7 @@ function assertTrainingPlansDocument(documentRef) {
   const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   for (const expectedCopy of [
     'A standalone workout is first-class',
+    'Eight free running and cycling plans',
     'Plan directly, through MCP, or with provider delivery',
     'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members',
     'New COROS plan sync and standalone Send actions are coming soon in the app',

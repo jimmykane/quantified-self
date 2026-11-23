@@ -5,6 +5,12 @@ import { STRENGTH_WORKOUT_SPORT_ALIASES_V1 } from '../../../shared/strength-work
 import type { AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
 
 describe('Training phase preview routing', () => {
+  it('routes enrollment, schedule adjustment and activation separately', () => {
+    expect(selectAssistantTrainingPreviewTool('Fit the 10K race plan to my race Sunday')).toBe('preview_training_plan_enrollment');
+    expect(selectAssistantTrainingPreviewTool('Use my private plan template starting Monday')).toBe('preview_training_plan_enrollment');
+    expect(selectAssistantTrainingPreviewTool('Activate my 10K race plan')).toBe('preview_training_changes');
+    expect(selectAssistantTrainingPreviewTool('Move a workout in my 10K plan to Friday')).not.toBe('preview_training_plan_enrollment');
+  });
   it('prepares a server-validated threshold review without applying it', async () => {
     const { session, callTool } = createSession();
     session.tools.push({ name: 'get_training_thresholds', title: 'Read thresholds', description: 'Read settings', inputSchema: { type: 'object' } },

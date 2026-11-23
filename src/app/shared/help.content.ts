@@ -248,6 +248,12 @@ const TRAINING_PLANNING_HELP_SNIPPETS = {
 
 const TRAINING_PLANS_HELP_CONTENT = `## Create plans and workouts
 
+Open **Plans → Browse plans** to see seven Quantified Self programs and a four-week running plan by Felix Gertz, licensed under CC BY 4.0. The licensed plan keeps its original workout spacing. Select a week to read its coaching notes. Day numbers count from the start of the plan. Step notes explain its heart-rate and pace guidance. The original source, licence, publisher’s notice and adaptations stay with your plan when you save or reuse it. Check the starting fitness, weekly workouts and event week. Choose a start date or work backwards from an event date, then preview the calendar and any overlapping dates. **Add paused plan** creates your own copy. **Activate plan** makes it your current plan and pauses your previous active plan. Device delivery is a separate Pro action.
+
+Choose **Save to my templates** in a plan’s actions to keep its planned workouts, rest days and phases for reuse. Find that copy in **Browse plans → My templates**. Use **Adjust with Assistant** when your available days change or you miss training. Review each proposed edit before applying it. The usual Assistant quota applies.
+
+Assistant and connected MCP apps can browse catalog editions with Training read access. Turn on **Private plan templates** separately to share your saved templates. Adding a dated copy or activating one also requires Training changes access and approval.
+
 See the public [Training Plans overview](/features/training-plans) for a walkthrough, interactive sample calendar, and read-only workout profiles. Choose a sample workout to inspect its steps and targets. The samples use synthetic workouts and never load account data or save changes.
 
 - Open [Plans](/training/plans) to create a dated workout. Its sidebar entry is a full-level row in **Training & health**, after **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.

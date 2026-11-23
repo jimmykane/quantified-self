@@ -1,7 +1,12 @@
 import { TRAINING_PREVIEW_TOOLS as PLAN_PREVIEW_TOOLS, TRAINING_READ_TOOLS as PLAN_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { GOAL_READ_TOOLS, GOAL_PREVIEW_TOOLS } from '../mcp/training-goals.schemas';
-const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS] as const;
-const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS] as const;
+import { TEMPLATE_PREVIEW_TOOLS, TEMPLATE_READ_TOOLS } from '../mcp/plan-templates.schemas';
+vi.mock('../training-plans/plan-templates', async importOriginal => ({
+  ...await importOriginal<typeof import('../training-plans/plan-templates')>(),
+  assistantPrivateTemplateAccess: vi.fn().mockResolvedValue(false),
+}));
+const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS, ...TEMPLATE_PREVIEW_TOOLS] as const;
+const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS, ...TEMPLATE_READ_TOOLS] as const;
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { TimeIntervals } from '@sports-alliance/sports-lib';

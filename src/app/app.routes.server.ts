@@ -111,6 +111,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'activities',
   'calendar',
   'calendar/day/:date',
+  'training/plans/catalog',
   'training/plans/workout/:workoutId',
   'training/plans/library/new',
   'training/plans/library/:itemId',

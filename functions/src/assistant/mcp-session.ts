@@ -1,7 +1,8 @@
 import { TRAINING_PREVIEW_TOOLS as PLAN_PREVIEW_TOOLS, TRAINING_READ_TOOLS as PLAN_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { GOAL_PREVIEW_TOOLS, GOAL_READ_TOOLS } from '../mcp/training-goals.schemas';
-const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS] as const;
-const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS] as const;
+import { TEMPLATE_PREVIEW_TOOLS, TEMPLATE_READ_TOOLS } from '../mcp/plan-templates.schemas';
+const TRAINING_PREVIEW_TOOLS = [...PLAN_PREVIEW_TOOLS, ...GOAL_PREVIEW_TOOLS, ...TEMPLATE_PREVIEW_TOOLS] as const;
+const TRAINING_READ_TOOLS = [...PLAN_READ_TOOLS, ...GOAL_READ_TOOLS, ...TEMPLATE_READ_TOOLS] as const;
 import { MCP_MANUAL_MEASUREMENT_READ_TOOLS } from '../mcp/manual-measurements.schemas';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -190,6 +191,7 @@ export interface AssistantMcpSession {
 }
 
 interface AssistantMcpSessionDependencies {
+  privateTemplates?(uid: string, conversationId: string): Promise<boolean>;
   createServer: (
     auth: AuthenticatedMcpRequest,
     publicBaseUrl: string,
@@ -261,6 +263,7 @@ function recoverableAssistantToolError(message: string, name: AssistantMcpToolNa
 }
 
 const defaultDependencies: AssistantMcpSessionDependencies = {
+  privateTemplates: async (uid, conversationId) => (await import('../training-plans/plan-templates')).assistantPrivateTemplateAccess(uid, conversationId),
   createServer: (auth, publicBaseUrl) => createMcpServer(auth, publicBaseUrl),
 };
 
@@ -467,6 +470,7 @@ export async function createAssistantMcpSession(
       ...(activityTagChangesEnabled ? [MCP_OAUTH_SCOPES.EventsWrite] : []),
       ...(timelineNoteChangesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesWrite] : []),
       ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
+      ...(trainingPlansEnabled && conversationId && await dependencies.privateTemplates?.(uid, conversationId) ? [MCP_OAUTH_SCOPES.PrivatePlanTemplatesRead] : []),
       ...(trainingPlanChangesEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
       ...(trainingDeliveryEnabled ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
     ],

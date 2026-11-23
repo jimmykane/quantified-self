@@ -124,6 +124,13 @@
             (change)="setTrainingPlans($event.checked)"></mat-slide-toggle>
         </app-compact-row>
 
+        @if (data.trainingPlansEnabled && data.conversationId) {
+          <app-compact-row title="Read my private plan templates">
+            <mat-slide-toggle compactRowAction aria-label="Read my private plan templates" [checked]="privateEnabled()"
+              [disabled]="privateLoading()" (change)="privateAccess($event.checked)"></mat-slide-toggle>
+          </app-compact-row>
+          @if (privateError()) { <p role="alert">{{ privateError() }}</p> }
+        }
         @if (data.trainingPlansEnabled !== true) {
           <p class="assistant-training-dependency" role="note">Turn on Training plans before allowing changes.</p>
         }

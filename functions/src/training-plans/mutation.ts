@@ -267,6 +267,25 @@ export function applyTrainingScheduleMutation(
                 createdAtMs: nowMs,
                 updatedAtMs: nowMs,
             };
+            if (operation.enrollment) {
+                const { sessions, restDays, phases } = operation.enrollment;
+                if (operation.activate || currentWorkoutCount(after.workouts) + sessions.length > TRAINING_PLAN_MAX_CURRENT_WORKOUTS) {
+                    throw new TrainingScheduleMutationError('limit-exceeded', 'The full plan must fit in the training schedule.');
+                }
+                plan.restDays = restDays;
+                plan.phases = phases;
+                for (const session of sessions) {
+                    if (after.workouts.has(session.workoutId)) throw new TrainingScheduleMutationError('already-exists', 'Workout already exists.');
+                    enforceDestinationRange(plan, session.localDate, false);
+                    const strength = validateStrengthInput(session.workoutId, 1, session.structure, session.strength);
+                    after.workouts.set(session.workoutId, { schemaVersion: 1, id: session.workoutId, planId: plan.id,
+                        localDate: session.localDate, title: session.title, structure: session.structure, lifecycle: 'planned',
+                        revision: 1, createdAtMs: nowMs, updatedAtMs: nowMs });
+                    if (strength) after.strengthDetails!.set(session.workoutId, strength);
+                    changeWorkout(session.workoutId);
+                }
+                bulkOperation = true;
+            }
             after.plans.set(plan.id, plan);
             affectedPlanIds.add(plan.id);
             if (operation.activate) after.state.activePlanId = plan.id;

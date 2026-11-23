@@ -157,6 +157,12 @@ export interface CreateTrainingPlanMutationV1 {
   startLocalDate: string;
   endLocalDate: string;
   activate: boolean;
+  /** Server-resolved whole-plan edition. The public mutation decoder rejects this field. */
+  enrollment?: {
+    phases: TrainingPlanPhasesV1;
+    restDays: string[];
+    sessions: { workoutId: string; localDate: string; title: string; structure: WorkoutStructureV1; strength?: StrengthWorkoutDraftV1 }[];
+  };
 }
 
 export interface RenameTrainingPlanMutationV1 {
