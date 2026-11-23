@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, LOCALE_ID, computed, effect, inject, signal, untracked } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, LOCALE_ID, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { distinctUntilChanged, map, skip } from 'rxjs';
+import { DatePipe } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import dayjs, { type Dayjs } from 'dayjs';
+import { CompactSelectComponent } from '../shared/compact-select/compact-select.component';
+import { TrainingCalendarDateAdapter } from '../../shared/adapters/training-calendar-date-adapter';
+import { MAT_DAYJS_DATE_FORMATS } from '../../shared/adapters/mat-dayjs-date.module';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -21,7 +33,15 @@ const today = () => {
 };
 
 @Component({
-  selector: 'app-plan-catalog', standalone: true, imports: [FormsModule, RouterLink, MatButtonModule, WorkoutProfileComponent, PlanAttributionComponent],
+  selector: 'app-plan-catalog', standalone: true, imports: [
+    FormsModule, RouterLink, MatButtonModule, MatFormFieldModule, MatInputModule, MatDatepickerModule,
+    DatePipe, CompactSelectComponent, WorkoutProfileComponent, PlanAttributionComponent,
+  ],
+  providers: [
+    { provide: DateAdapter, useFactory: (locale: string, users: AppUserService) => new TrainingCalendarDateAdapter(locale, users),
+      deps: [MAT_DATE_LOCALE, AppUserService] },
+    { provide: MAT_DATE_FORMATS, useValue: MAT_DAYJS_DATE_FORMATS },
+  ],
   templateUrl: './plan-catalog.component.html', styleUrls: ['./plan-catalog.component.scss'], changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlanCatalogComponent {
@@ -31,9 +51,14 @@ export class PlanCatalogComponent {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroy = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  readonly haptics = inject(AppHapticsService);
+  private readonly reviewHeading = viewChild<ElementRef<HTMLElement>>('reviewHeading');
+  private readonly errorMessage = viewChild<ElementRef<HTMLElement>>('errorMessage');
   private generation = 0;
   readonly source = signal<PlanTemplate['source']>('catalog');
   readonly items = signal<Summary[]>([]);
+  readonly planOptions = computed(() => this.items().map(item => ({ value: item.id, label: item.name })));
   readonly selected = signal<PlanTemplate | null>(null);
   readonly flexibleDays = computed(() => {
     const plan = this.selected();
@@ -41,6 +66,7 @@ export class PlanCatalogComponent {
   });
   readonly week = signal(0);
   readonly options = signal<TemplateScheduleOptions>({ anchor: 'start', date: today(), longDay: 0, pattern: 'standard' });
+  readonly pickerDate = computed(() => this.options().date ? dayjs(this.options().date) : null);
   readonly weekdays = PLAN_WEEKDAYS;
   readonly preview = signal<Preview | null>(null);
   readonly busy = signal(false);
@@ -85,10 +111,17 @@ export class PlanCatalogComponent {
     return this.selected()?.phases.filter(phase => phase.start < firstDay + 7 && phase.end >= firstDay) ?? [];
   });
   constructor() {
+    this.route.queryParamMap.pipe(
+      map(params => params.get('template')), distinctUntilChanged(), skip(1), takeUntilDestroyed(),
+    ).subscribe(() => { void this.openSource('catalog'); });
     effect(() => {
       const uid = this.ownerUid();
       untracked(() => { void this.openSource('catalog', uid); });
     });
+  }
+  setDate(value: Dayjs | null) {
+    const date = value?.isValid() ? value.format('YYYY-MM-DD') : '';
+    if (date !== this.options().date) this.change({ date });
   }
   private async request<T>(payload: Record<string, unknown>, current: () => boolean) {
     return (await this.functions.call<Record<string, unknown>, T>('trainingPlanTemplates', payload, { canExecute: current })).data;
@@ -101,7 +134,18 @@ export class PlanCatalogComponent {
     if (!current()) { this.busy.set(false); return; }
     this.busy.set(true);
     try { await work(current); }
-    catch (e) { if (current()) this.error.set(e instanceof Error ? e.message : 'Could not load the plan. Try again.'); }
+    catch (error) {
+      if (!current()) return;
+      const details = (error as { details?: { requiresNewPreview?: boolean } } | null)?.details;
+      if (details?.requiresNewPreview === true) {
+        this.preview.set(null);
+        this.error.set('This preview is out of date. Preview the dates again before adding your plan.');
+        this.haptics.error();
+        afterNextRender(() => { if (current()) this.errorMessage()?.nativeElement.focus(); }, { injector: this.injector });
+      } else {
+        this.error.set(error instanceof Error ? error.message : 'Could not load the plan. Try again.');
+      }
+    }
     finally { if (current()) this.busy.set(false); }
   }
   async openSource(source: PlanTemplate['source'], uid = this.users.user()?.uid) {
@@ -110,26 +154,33 @@ export class PlanCatalogComponent {
     if (!uid) { this.busy.set(false); return; }
     if (source === 'catalog') {
       this.items.set(TRAINING_PLAN_CATALOG.map(t => ({ ...t, workoutCount: t.sessions.length })));
-      this.selected.set(TRAINING_PLAN_CATALOG.find(t => t.id === this.route.snapshot.queryParamMap.get('template')) ?? TRAINING_PLAN_CATALOG[0]);
+      const id = this.route.snapshot.queryParamMap.get('template');
+      this.selected.set(TRAINING_PLAN_CATALOG.find(plan => plan.id === id) ?? TRAINING_PLAN_CATALOG[0]);
       this.busy.set(false);
     } else await this.run(async current => {
       const items = await this.request<Summary[]>({ action: 'list', source }, current);
       if (!current()) return;
       this.items.set(items);
-      if (items.length) await this.select(items[0]);
+      if (items.length) await this.loadPrivateTemplate(items[0].id, current);
     });
   }
-  selectById(id: string): void {
+  async selectById(id: string): Promise<void> {
+    if (this.busy() || this.selected()?.id === id) return;
     const item = this.items().find(t => t.id === id);
-    if (item) void this.select(item);
+    if (!item) return;
+    this.haptics.selection();
+    if (item.source === 'private') {
+      this.preview.set(null);
+      this.week.set(0);
+      this.selected.set(null);
+      await this.run(current => this.loadPrivateTemplate(id, current));
+      return;
+    }
+    await this.router.navigate([], { relativeTo: this.route, queryParams: { template: id }, queryParamsHandling: 'merge' });
   }
-  async select(item: Summary) {
-    this.preview.set(null); this.week.set(0); this.selected.set(null);
-    await this.run(async current => {
-      const template = item.source === 'catalog' ? TRAINING_PLAN_CATALOG.find(t => t.id === item.id)
-        : await this.request<PlanTemplate>({ action: 'get', source: item.source, id: item.id }, current);
-      if (current() && template) this.selected.set(template);
-    });
+  private async loadPrivateTemplate(id: string, current: () => boolean) {
+    const template = await this.request<PlanTemplate>({ action: 'get', source: 'private', id }, current);
+    if (current()) this.selected.set(template);
   }
   change(options: Partial<TemplateScheduleOptions>) {
     this.generation++; this.busy.set(false); this.preview.set(null); this.error.set('');
@@ -139,11 +190,19 @@ export class PlanCatalogComponent {
   }
   async review() {
     const item = this.selected();
-    if (!item || this.busy()) return;
+    if (!item || this.busy() || !this.options().date) return;
+    this.haptics.selection();
     this.preview.set(null);
     await this.run(async current => {
       const result = await this.request<Preview>({ action: 'preview', source: item.source, id: item.id, version: item.version, options: this.options() }, current);
-      if (current()) this.preview.set(result);
+      if (!current()) return;
+      this.preview.set(result);
+      afterNextRender(() => {
+        if (!current() || this.preview() !== result) return;
+        const heading = this.reviewHeading()?.nativeElement;
+        heading?.focus({ preventScroll: true });
+        heading?.scrollIntoView?.({ block: 'start' });
+      }, { injector: this.injector });
     });
   }
   async confirm() {

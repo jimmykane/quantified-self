@@ -77,6 +77,19 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     await user.collection('mcpConnections').doc('reader').update({ status: 'revoked' });
     await expect(read(planRef(enrolled))).rejects.toThrow();
   });
+  it('asks for a new preview after expiry, while a previously committed confirmation stays replayable', async () => {
+    const { access, user } = await setup();
+    const reviews = user.collection('trainingPlanState').doc('current').collection('planEnrollmentProposals');
+    const before = await previewEnrollment(access, 'catalog', 'tredict-running-base', 1, options);
+    await reviews.doc(before.id).update({ expiresAt: 0 });
+    await expect(applyEnrollment(access, before.id)).rejects.toMatchObject({ details: { requiresNewPreview: true } });
+    expect((await user.collection('trainingPlans').get()).empty).toBe(true);
+    const fresh = await previewEnrollment(access, 'catalog', 'tredict-running-base', 1, options);
+    const saved = await applyEnrollment(access, fresh.id);
+    await reviews.doc(fresh.id).update({ expiresAt: 0 });
+    expect(await applyEnrollment(access, fresh.id)).toEqual(saved);
+    expect((await user.collection('trainingPlans').get()).size).toBe(1);
+  });
   it('binds private enrollment to the reviewed Assistant conversation and opt-in generation', async () => {
     const { user, uid, access } = await setup();
     const conversation = user.collection('assistantConversations').doc('active');
@@ -134,7 +147,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     const stale = await previewEnrollment(access,'catalog','first-run',1,options);
     const other = await previewEnrollment(access,'catalog','5k',1,options);
     await applyEnrollment(access,other.id);
-    await expect(applyEnrollment(access,stale.id)).rejects.toThrow();
+    await expect(applyEnrollment(access,stale.id)).rejects.toMatchObject({
+      code: 'failed-precondition', details: { requiresNewPreview: true }, message: expect.stringMatching(/preview the dates again/i),
+    });
     expect((await user.collection('trainingPlans').get()).size).toBe(1);
   });
 });

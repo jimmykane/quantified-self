@@ -8,6 +8,7 @@ import { TRAINING_PLAN_CATALOG, scheduleTemplate, templateScheduleMode, type Pla
 import { type MutateTrainingScheduleRequestV1, countTrainingPlanDays, normalizeTrainingLocalDate, TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '../../../shared/training-plans';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { assertTrainingMutationFitsTransaction, mutateTrainingScheduleForUser, readTrainingScheduleSnapshotInTransaction } from './persistence';
+import { TrainingScheduleMutationError } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 
 export const templateId = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
@@ -27,6 +28,9 @@ const library = (uid: string) => state(uid).collection('planTemplates');
 const proposals = (uid: string) => state(uid).collection('planEnrollmentProposals');
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 function reject(message: string): never { throw new HttpsError('failed-precondition', message); }
+function rejectStalePreview(message: string): never {
+  throw new HttpsError('failed-precondition', message, { requiresNewPreview: true });
+}
 export function ownerAccess(uid: string): TemplateAccess {
   return { uid, connectionId: 'app', check: async tx => {
     if ((await getUserDeletionGuardStateInTransaction(admin.firestore(), tx, uid)).shouldSkip) reject('Account unavailable.');
@@ -169,13 +173,13 @@ export async function applyEnrollment(access: TemplateAccess, id: string) {
     const data = (await tx.get(ref)).data() as SavedProposal | undefined;
     if (!data || data.connectionId !== access.connectionId) reject('The enrollment proposal is unavailable.');
     await access.check(tx, data.source, data.generation, true);
-    if (!data.result && data.expiresAt <= Date.now()) reject('Enrollment preview expired.');
+    if (!data.result && data.expiresAt <= Date.now()) rejectStalePreview('The preview expired. Preview the dates again.');
     return data;
   };
   const p = await db.runTransaction(read);
   if (p.result) return p.result;
   const template = await getTemplate(access, p.source, p.templateId);
-  if (template.version !== p.version) reject('Template edition changed.');
+  if (template.version !== p.version) rejectStalePreview('The template changed. Preview the dates again.');
   const schedule = scheduleTemplate(template, p.options);
   const request = enrollmentRequest(id, template.name, schedule, p.revision);
   const planId = request.mutationId;
@@ -184,9 +188,9 @@ export async function applyEnrollment(access: TemplateAccess, id: string) {
     transactionPrecondition: async tx => {
       const reviewed = await read(tx);
       if (reviewed.result) return;
-      if ((await readTemplate(tx, access.uid, p.source, p.templateId)).version !== p.version) reject('Template edition changed.');
+      if ((await readTemplate(tx, access.uid, p.source, p.templateId)).version !== p.version) rejectStalePreview('The template changed. Preview the dates again.');
       const occupied = await conflicts(tx, access.uid, schedule.sessions.map(s => s.localDate), schedule.restDays);
-      if (JSON.stringify(occupied) !== JSON.stringify(p.conflicts)) reject('Calendar conflicts changed. Preview the plan again.');
+      if (JSON.stringify(occupied) !== JSON.stringify(p.conflicts)) rejectStalePreview('Calendar conflicts changed. Preview the dates again.');
     },
     transactionPostcondition: (tx, [result]) => {
       tx.set(db.doc('users/' + access.uid + '/trainingPlans/' + planId + '/templateOrigin/current'), {
@@ -194,6 +198,11 @@ export async function applyEnrollment(access: TemplateAccess, id: string) {
         ...(template.attribution ? { attribution: planAttributionSchema.parse(template.attribution) } : {}),
       });
       tx.update(ref, { result: { planId, createdAtMs: p.createdAt, scheduleRevision: result.state.revision } }); },
+  }).catch((error: unknown) => {
+    if (error instanceof TrainingScheduleMutationError && error.code === 'revision-conflict') {
+      rejectStalePreview('Your training schedule changed. Preview the dates again.');
+    }
+    throw error;
   });
   return { planId, createdAtMs: p.createdAt, scheduleRevision: response.state.revision };
 }

@@ -1,4 +1,4 @@
-<main>
+<main class="qs-workspace-page">
   <a mat-button routerLink="/training/plans">← My plans</a>
   <h1>Training plan library</h1>
   <nav aria-label="Plan collections">
@@ -8,14 +8,11 @@
   <div class="layout">
     <aside aria-label="Choose a plan">
       @if (items().length) {
-        <label class="mobile-choice">Choose a plan
-          <select [ngModel]="selected()?.id" (ngModelChange)="selectById($event)" [disabled]="busy()">
-            @for (item of items(); track item.id) { <option [value]="item.id">{{ item.name }}</option> }
-          </select>
-        </label>
+        <app-compact-select class="mobile-choice" label="Choose a plan" [options]="planOptions()"
+          [value]="selected()?.id ?? null" [disabled]="busy()" (selectionChange)="selectById($event)" />
       }
       @for (item of items(); track item.id) {
-        <button class="choice" [attr.aria-pressed]="selected()?.id === item.id" [disabled]="busy()" (click)="select(item)">
+        <button class="choice" [attr.aria-pressed]="selected()?.id === item.id" [disabled]="busy()" (click)="selectById(item.id)">
           <strong>{{ item.name }}</strong><small>{{ item.sport }} · {{ item.days }} days · {{ item.workoutCount }} workouts</small>
         </button>
       } @empty {
@@ -67,7 +64,15 @@
             <select [ngModel]="options().anchor" (ngModelChange)="change({anchor: $event})">
               <option value="start">{{ flexibleDays() ? 'Start on or after' : 'Start on' }}</option><option value="finish">Finish on</option>
             </select>
-          </label><label>Date <input type="date" [ngModel]="options().date" (ngModelChange)="change({date: $event})"></label>
+          </label>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Date</mat-label>
+            <input matInput required [matDatepicker]="calendar" [ngModel]="pickerDate()"
+              (dateInput)="setDate($event.value)" [disabled]="busy()">
+            <mat-datepicker-toggle matSuffix [for]="calendar" />
+            <mat-datepicker #calendar (opened)="haptics.selection()" />
+            <mat-error>Choose a valid date.</mat-error>
+          </mat-form-field>
           @if (flexibleDays()) {
             <label>Long session <select [disabled]="options().anchor === 'finish'" [ngModel]="options().longDay" (ngModelChange)="change({longDay: $event})">
               @for (day of weekdays; track day.value) { <option [ngValue]="day.value">{{ day.label }}</option> }
@@ -79,11 +84,16 @@
           <button mat-stroked-button (click)="review()" [disabled]="busy() || !options().date">Preview dates</button>
         </section>
         @if (preview(); as review) {
-          <section aria-live="polite">
-            <h3>Review your plan</h3>
-            <p>{{ review.start }} – {{ review.end }} · {{ review.dates.length }} workouts · {{ review.restDays.length }} rest days</p>
-            @if (review.conflicts.length) { <p>Already scheduled on {{ review.conflicts.join(', ') }}.</p> }
-            <details><summary>See all dates</summary><p>Workouts · {{ review.dates.join(', ') }}</p><p>Rest · {{ review.restDays.join(', ') }}</p></details>
+          <section aria-labelledby="plan-review-heading">
+            <h3 #reviewHeading id="plan-review-heading" tabindex="-1">Review your plan</h3>
+            <p>{{ review.start | date:'mediumDate' }} – {{ review.end | date:'mediumDate' }} · {{ review.dates.length }} workouts · {{ review.restDays.length }} rest days</p>
+            @if (review.conflicts.length) { <p>Already scheduled on @for (day of review.conflicts; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p> }
+            <details><summary>See all dates</summary>
+              <p>Workouts · @for (day of review.dates; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p>
+              @if (review.restDays.length) {
+                <p>Rest · @for (day of review.restDays; track $index) { {{ day | date:'mediumDate' }}{{ $last ? '' : ' · ' }} }</p>
+              }
+            </details>
             <p>Your copy starts paused. You can activate it and choose device delivery from My plans.</p>
             <button mat-flat-button (click)="confirm()" [disabled]="busy()">Add paused plan</button>
           </section>
@@ -92,5 +102,5 @@
     }
   </div>
   @if (busy()) { <p role="status">Loading…</p> }
-  @if (error()) { <p role="alert">{{ error() }}</p> }
+  @if (error()) { <p #errorMessage role="alert" tabindex="-1">{{ error() }}</p> }
 </main>

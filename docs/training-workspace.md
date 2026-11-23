@@ -10785,7 +10785,7 @@ Before merging a Training change, confirm:
 
 ## Whole-plan templates and enrollment
 
-The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven Quantified Self originals and one licensed running plan. Direct visits to the signed-in catalog use client rendering, including links that select a template. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
+The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven Quantified Self originals and one licensed running plan. Direct visits to the signed-in catalog use client rendering. Choosing a public plan updates the template link, so refresh and browser history restore that plan. Private template IDs stay out of the URL. The phone picker wraps long titles. Enrollment uses the athlete’s regional date format and calendar week start. Preview moves focus to the dated review before confirmation. An expired or stale review clears the confirmation and asks for fresh dates. A transport failure retains the proposal for an idempotent retry. These UI behaviors preserve the existing MCP template reads, enrollment proposals and approval contract. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
 
 ### Editorial publication
 

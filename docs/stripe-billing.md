@@ -261,6 +261,8 @@ npm run billing:local -- listen
 npm run billing:app -- --host 127.0.0.1
 ```
 
+The demo browser uses Firestore long polling so WebKit receives emulator snapshots promptly.
+
 The long-running local stack exports/imports only its synthetic demo data under ignored `.local/stripe-billing/emulator-state` across restarts, retaining operation journals. Temporary runtime files and local test credentials are never deployed.
 
 `STRIPE_CLI=/absolute/path/to/stripe` may select a locally installed CLI. Listener output is filtered so signing secrets are not echoed. Use Stripe test products/prices and synthetic emulator users. Seed server-owned catalog with the operator tool below. Set the emulator control to native, requests/webhooks enabled and a nativeSince Timestamp before the test requests. Local Cloud Tasks dispatch is HTTP-only to the Functions emulator; delayed retries are driven by the explicit local recovery command. Future local work remains undispatched in the outbox, with recovery eligible at its scheduled time (or a later retained dispatch backoff). Deferring delivery does not create a task reservation, add a lease-length delay, or consume the missing-task recovery budget. Once due, local recovery delivers the same generation. It never calls a cloud queue.

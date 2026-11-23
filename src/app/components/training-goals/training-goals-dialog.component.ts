@@ -24,22 +24,14 @@ import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/
 import { TrainingGoalDetailsComponent } from './training-goal-details.component';
 import { CompactSelectComponent, type CompactSelectOption } from '../shared/compact-select/compact-select.component';
 import dayjs, { type Dayjs } from 'dayjs';
-import { DayjsDateAdapter } from '../../shared/adapters/dayjs-date-adapter';
+import { TrainingCalendarDateAdapter } from '../../shared/adapters/training-calendar-date-adapter';
 import { MAT_DAYJS_DATE_FORMATS } from '../../shared/adapters/mat-dayjs-date.module';
-
-class GoalDateAdapter extends DayjsDateAdapter {
-  constructor(locale: string, private readonly users: AppUserService) { super(locale); }
-  override getFirstDayOfWeek(): number {
-    const start = this.users.user()?.settings?.unitSettings?.startOfTheWeek;
-    return Number.isInteger(start) && start >= 0 && start <= 6 ? start : 1;
-  }
-}
 
 @Component({ selector: 'app-training-goals-dialog', standalone: true, imports: [FormsModule, MatDialogModule, MatButtonModule,
   MatFormFieldModule, MatInputModule, MatDatepickerModule, CompactSelectComponent, MatIconModule, MatProgressSpinnerModule, AppChartSharedModule,
   ActivityFilterPickerComponent, TrainingGoalDetailsComponent], templateUrl: './training-goals-dialog.component.html',
   providers: [
-    { provide: DateAdapter, useFactory: (locale: string, users: AppUserService) => new GoalDateAdapter(locale, users),
+    { provide: DateAdapter, useFactory: (locale: string, users: AppUserService) => new TrainingCalendarDateAdapter(locale, users),
       deps: [MAT_DATE_LOCALE, AppUserService] },
     { provide: MAT_DATE_FORMATS, useValue: MAT_DAYJS_DATE_FORMATS },
   ],
