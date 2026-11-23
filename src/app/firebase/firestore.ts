@@ -71,6 +71,11 @@ export interface FirestoreDataOptions {
   waitForServer?: boolean;
 }
 
+export interface FirestoreDocumentDataOptions extends FirestoreDataOptions {
+  /** Metadata only; called before server-confirmation filtering, without an additional read. */
+  onSnapshotMetadata?: (metadata: { fromCache: boolean; hasPendingWrites: boolean }) => void;
+}
+
 const firestoreZoneRegistry = new WeakMap<FirebaseFirestore, NgZone | null>();
 
 function rememberFirestoreZone(firestore: FirebaseFirestore, zone: NgZone | null): void {
@@ -246,12 +251,17 @@ export function collectionData<T = DocumentData>(
 
 export function docData<T = DocumentData>(
   reference: DocumentReference<T>,
-  options?: FirestoreDataOptions
+  options?: FirestoreDocumentDataOptions
 ): Observable<T | undefined> {
   const zone = resolveNgZoneForSource(reference);
 
   return new Observable<T | undefined>((subscriber) => {
     const next = (snapshot: FirebaseDocumentSnapshot<T>) => {
+      try {
+        options?.onSnapshotMetadata?.({
+          fromCache: snapshot.metadata.fromCache, hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        });
+      } catch { /* Diagnostic observers must not affect delivery or server-confirmation checks. */ }
       if (options?.waitForServer && (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
         return;
       }

@@ -16,7 +16,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconModule } from '@angular/material/icon';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
-import { AppEventMergeService } from '../../services/app.event-merge.service';
+import { AppEventMergeService, EventMergeError } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Router } from '@angular/router';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -274,6 +274,7 @@ describe('EventTableComponent', () => {
             warn: vi.fn(),
             error: vi.fn(),
             captureException: vi.fn(),
+            captureMessage: vi.fn(),
         };
         mockEventTagService = {
             getTags: vi.fn((event: any) => event.tags || event.benchmarkReviewTags || []),
@@ -1939,6 +1940,36 @@ describe('EventTableComponent', () => {
         expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'multi');
     });
 
+    it('reports an expected comparison quota rejection at INFO and preserves the selection and user feedback', async () => {
+        component.selection.select({ Event: new MockEvent('event1') } as any);
+        component.selection.select({ Event: new MockEvent('event2') } as any);
+        mockEventMergeService.mergeEvents.mockRejectedValueOnce(new EventMergeError('LIMIT_REACHED', 'private account details'));
+        mockEventMergeService.getMergeErrorMessage.mockReturnValueOnce('Upload limit reached for your tier.');
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockLogger.captureException).not.toHaveBeenCalled();
+        expect(mockLogger.captureMessage).toHaveBeenCalledExactlyOnceWith('Activity comparison rejected: account limit reached', {
+            level: 'info', tags: { operation: 'merge-events', reason: 'account_limit_reached' },
+        });
+        expect(JSON.stringify(mockLogger.captureMessage.mock.calls)).not.toContain('private');
+        expect(component.selection.selected).toHaveLength(2);
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Upload limit reached for your tier.', undefined, { duration: 5000 });
+        expect(mockHapticsService.error).toHaveBeenCalledOnce();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('preserves comparison quota feedback when INFO reporting throws', async () => {
+        component.selection.select({ Event: new MockEvent('event1') } as any);
+        component.selection.select({ Event: new MockEvent('event2') } as any);
+        mockEventMergeService.mergeEvents.mockRejectedValueOnce(new EventMergeError('LIMIT_REACHED', 'limit'));
+        mockLogger.captureMessage.mockImplementationOnce(() => { throw Error('diagnostics unavailable'); });
+        await component.mergeSelection(new Event('click'));
+        expect(component.selection.selected).toHaveLength(2);
+        expect(mockSnackBar.open).toHaveBeenCalled(); expect(mockHapticsService.error).toHaveBeenCalledOnce();
+        expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledWith(null);
+    });
+
     it('should show mapped error message when backend merge fails', async () => {
         const e1 = new MockEvent('event1');
         const e2 = new MockEvent('event2');
@@ -1960,6 +1991,10 @@ describe('EventTableComponent', () => {
         expect(mockSnackBar.open).toHaveBeenCalledWith('Mapped merge error', undefined, { duration: 5000 });
         expect(component.selection.selected).toHaveLength(2);
         expect(component.selection.selected).toEqual(refreshedRows);
+        expect(mockLogger.captureException).toHaveBeenCalledWith(expect.any(Error), {
+            extra: { sourceEventsCount: 2, mergeType: 'benchmark' },
+        });
+        expect(mockLogger.captureMessage).not.toHaveBeenCalled();
         expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledWith(null);
     });
 

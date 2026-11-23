@@ -1295,6 +1295,16 @@ MCP impact review for initial rest-read recovery: none. Only the first-party exa
 failure diagnostics change; server rest-day reads, strict preview/Apply contracts, consent and provider actions remain
 unchanged. Existing Help guidance on unavailable schedule evidence and explicit **Check again** still applies.
 
+Browser timeout diagnostics now attach only the attempt (one or two) and a fixed snapshot state: no snapshot,
+cache only, pending writes, server snapshot or revision behind the acknowledged floor. The shared `docData`
+metadata observer sees only two booleans before filtering; it adds no listener/read and cannot affect delivery.
+The daily failure report also distinguishes calendar verification, App Check readiness/refresh, callable dispatch/retry
+and local response handling, with browser online/visibility hints. It does not infer HTTP status or distinguish
+transport from server failure when the Functions SDK supplies the same error code for both. A later accepted day
+record emits at most one INFO recovery per shared owner/date/session stream, including explicit reattachment.
+No document dates, revisions, contents, raw errors or credentials enter these new fields. Existing guards, timeouts,
+retry budgets and model-call rules remain unchanged. MCP impact: none; these are first-party browser diagnostics only.
+
 Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
 or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context
 off preserves the existing explicit opt-out. The optional Today feature always respects authored rest.

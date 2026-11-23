@@ -15,6 +15,7 @@ import { AppAnalyticsService } from './app.analytics.service';
 import { AppWindowService } from './app.window.service';
 import { TrainingPlansService } from './training-plans.service';
 import { LoggerService } from './logger.service';
+import { RestDayReadTimeoutError } from './training-rest-days.service';
 
 function storage() {
   const values = new Map<string, string>();
@@ -39,7 +40,7 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
   const result = (): DailyWorkoutSuggestionStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
     result: { requestId: `daily-suggestion:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
       rationale: 'An easy day.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } });
-  const call = vi.fn(async () => ({ data: result() }));
+  const call = vi.fn(async (_name?: string, _request?: { action: string }, _options?: Parameters<AppFunctionsService['call']>[2]) => ({ data: result() }));
   TestBed.configureTestingModule({ providers: [DailyWorkoutSuggestionService,
     { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: pro } },
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
@@ -59,6 +60,29 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it.each(['app_check_readiness', 'callable', 'app_check_refresh', 'callable_retry'] as const)(
+    'adds the fixed %s stage to the existing failure report without repeating preparation', async stage => {
+      const { service, call, logger } = setup();
+      const failure = { code: 'functions/internal', message: 'private-message', details: { workout: 'private-workout' } };
+      call.mockImplementationOnce(async (_name, _request, options) => { options.onFailure(stage); throw failure; });
+      await expect(service.request('owner', 'prepare', () => true)).rejects.toBe(failure);
+      expect(call).toHaveBeenCalledOnce(); expect(logger.captureMessage).toHaveBeenCalledOnce();
+      expect(logger.captureMessage.mock.calls[0][1].contexts).toEqual({ dailyWorkoutRequest: {
+        stage, online: true, visibility: 'visible',
+      } });
+      expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private');
+    });
+
+  it('distinguishes response handling failures and exposes only typed timeout metadata', async () => {
+    const { service, call, logger, restDay$ } = setup();
+    call.mockResolvedValueOnce({ data: { localDate: 'invalid-date', state: 'waiting' } });
+    await expect(service.request('owner', 'prepare', () => true)).rejects.toThrow('day changed');
+    expect(logger.captureMessage.mock.calls[0][1].contexts.dailyWorkoutRequest.stage).toBe('response_handling');
+    restDay$.error(new RestDayReadTimeoutError(2, 'cache_only'));
+    expect(logger.captureMessage.mock.calls[1][1].contexts.dailyWorkoutRequest).toEqual({
+      stage: 'calendar_rest_read', attempt: 2, snapshotState: 'cache_only', online: true, visibility: 'visible',
+    });
+  });
   it('persists the checked Training snapshot and invalidates only a deferred suggestion on a ready update', async () => {
     const { service, call, saved } = setup();
     service.observeTraining('owner', 'snapshot-a');

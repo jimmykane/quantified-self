@@ -54,6 +54,25 @@ describe('Firebase firestore observables', () => {
     TestBed.resetTestingModule();
   });
 
+  it.each([false, true])('observes only snapshot metadata before filtering and tolerates diagnostic failure=%s', throws => {
+    let deliver: (value: unknown) => void;
+    firebaseFirestoreMocks.onSnapshot.mockImplementation((_ref, _options, next) => { deliver = next; return vi.fn(); });
+    const metadata = vi.fn((_value: { fromCache: boolean; hasPendingWrites: boolean }) => { if (throws) throw Error('diagnostics unavailable'); });
+    const next = vi.fn();
+    const subscription = docData({} as DocumentReference, { waitForServer: true, onSnapshotMetadata: metadata }).subscribe(next);
+    for (const [fromCache, hasPendingWrites] of [[true, false], [false, true], [false, false]]) {
+      deliver({ id: 'private-document', exists: () => true, data: () => ({ secret: 'private-payload' }),
+        metadata: { fromCache, hasPendingWrites, secret: 'private-metadata' } });
+    }
+    expect(metadata.mock.calls.map(([value]) => value)).toEqual([
+      { fromCache: true, hasPendingWrites: false }, { fromCache: false, hasPendingWrites: true },
+      { fromCache: false, hasPendingWrites: false },
+    ]);
+    expect(next).toHaveBeenCalledExactlyOnceWith({ secret: 'private-payload' });
+    expect(JSON.stringify(metadata.mock.calls)).not.toContain('private');
+    expect(firebaseFirestoreMocks.onSnapshot).toHaveBeenCalledOnce(); subscription.unsubscribe();
+  });
+
   it('initializes Firestore outside Angular while preserving the factory injection context', () => {
     const app = {};
     const firestore = {} as FirebaseFirestoreType;

@@ -142,6 +142,35 @@ describe('AppFunctionsService', () => {
         vi.clearAllMocks();
     });
 
+    it.each(['app_check_readiness', 'callable', 'app_check_refresh', 'callable_retry'] as const)(
+        'reports only the fixed %s failure stage without changing rejection or retry behavior', async stage => {
+            const failure = { code: 'functions/internal', message: 'private payload', details: { token: 'private-token' } };
+            const appCheckRejection = { code: 'functions/failed-precondition', message: 'App Check verification failed.' };
+            if (stage === 'app_check_readiness') mocks.ensureReadyMock.mockRejectedValueOnce(failure);
+            else if (stage === 'callable') mocks.callableSpy.mockRejectedValueOnce(failure);
+            else {
+                mocks.callableSpy.mockRejectedValueOnce(appCheckRejection);
+                if (stage === 'app_check_refresh') mocks.ensureReadyMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(failure);
+                else mocks.callableSpy.mockRejectedValueOnce(failure);
+            }
+            const onFailure = vi.fn();
+            await expect(service.call('defaultRegionFunc' as any, { private: 'request' }, { canExecute: () => true, onFailure })).rejects.toBe(failure);
+            expect(onFailure).toHaveBeenCalledExactlyOnceWith(stage);
+            expect(JSON.stringify(onFailure.mock.calls)).not.toContain('private');
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(stage === 'app_check_readiness' ? 0 : stage === 'callable_retry' ? 2 : 1);
+        });
+
+    it('preserves a callable failure when its diagnostic callback throws and skips retired-context diagnostics', async () => {
+        const failure = { code: 'functions/internal' }; mocks.callableSpy.mockRejectedValue(failure);
+        const onFailure = vi.fn(() => { throw Error('diagnostics unavailable'); });
+        await expect(service.call('defaultRegionFunc' as any, {}, { canExecute: () => true, onFailure })).rejects.toBe(failure);
+        expect(onFailure).toHaveBeenCalledOnce(); onFailure.mockClear();
+        let active = true;
+        mocks.callableSpy.mockImplementationOnce(async () => { active = false; throw failure; });
+        await expect(service.call('defaultRegionFunc' as any, {}, { canExecute: () => active, onFailure })).rejects.toBe(failure);
+        expect(onFailure).not.toHaveBeenCalled();
+    });
+
     describe('metrics refresh transport recovery', () => {
         beforeEach(() => vi.useFakeTimers());
 

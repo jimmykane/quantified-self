@@ -10,7 +10,7 @@ import { LoggerService } from './logger.service';
 import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
 
-type CallableFailureStage = 'app_check_readiness' | 'callable' | 'app_check_refresh' | 'callable_retry';
+export type CallableFailureStage = 'app_check_readiness' | 'callable' | 'app_check_refresh' | 'callable_retry';
 
 // Only SDK-defined codes may enter diagnostics; arbitrary error fields can contain private data.
 const CALLABLE_DIAGNOSTIC_CODES = new Set([
@@ -66,7 +66,7 @@ export class AppFunctionsService {
     async call<RequestData = any, ResponseData = any>(
         functionKey: FunctionName,
         data?: RequestData,
-        options?: { canExecute: () => boolean },
+        options?: { canExecute: () => boolean; onFailure?: (stage: CallableFailureStage) => void },
     ): Promise<{ data: ResponseData }> {
         const callable = this.callables.get(functionKey);
         if (!callable) {
@@ -142,6 +142,9 @@ export class AppFunctionsService {
                 return response;
             }
         } catch (error) {
+            try {
+                if (!cancelled && options?.canExecute()) options.onFailure?.(stage);
+            } catch { /* Local diagnostics must preserve the original rejection. */ }
             if (!cancelled) this.trackAppCheckOutcome('blocked', diagnosticAttempt, functionKey, error, options);
             if (reportFailure && !cancelled) this.reportEnsureFailure(error, stage, diagnosticUser);
             throw error;
