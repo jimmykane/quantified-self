@@ -288,23 +288,47 @@ describe('PublicSeoPageComponent', () => {
     calendarFixture.destroy();
   });
 
-  it('focuses the linked catalog plan and respects a restored history position', () => {
+  it('restores catalog links inside the shell and preserves real viewport history positions', () => {
     const events = new Subject<Scroll>();
-    vi.spyOn(TestBed.inject(Router), 'events', 'get').mockReturnValue(events);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'events', 'get').mockReturnValue(events);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
     const fixture = TestBed.createComponent(PublicSeoPageComponent);
     fixture.detectChanges();
-    const target = fixture.nativeElement.querySelector('#plan-first-run') as HTMLElement;
-    target.scrollIntoView = vi.fn();
-    const focus = vi.spyOn(target, 'focus');
-    const navigation = new NavigationEnd(1, '/features/training-plans', '/features/training-plans');
-    events.next(new Scroll(navigation, [0, 300], target.id));
-    events.next(new Scroll(navigation, null, 'public-seo-title'));
-    expect(focus).not.toHaveBeenCalled();
-    events.next(new Scroll(navigation, null, target.id));
-    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
-    expect(target.scrollIntoView).toHaveBeenCalledOnce();
-    fixture.destroy();
+    const shell = document.createElement('mat-sidenav-content');
+    const root = fixture.nativeElement as HTMLElement;
+    root.before(shell);
+    shell.append(root);
+    const previousState = history.state;
+    try {
+      history.replaceState({ navigationId: 3 }, '');
+      const heading = root.querySelector<HTMLElement>('#plan-first-run')!;
+      const enroll = root.querySelector<HTMLAnchorElement>('a[href$="template=marathon"]')!;
+      heading.scrollIntoView = vi.fn();
+      enroll.scrollIntoView = vi.fn();
+      const navigation = new NavigationEnd(1, '/features/training-plans', '/features/training-plans');
+      events.next(new Scroll(navigation, [0, 300], heading.id));
+      events.next(new Scroll(navigation, null, 'public-seo-title'));
+      expect(heading.scrollIntoView).not.toHaveBeenCalled();
+      events.next(new Scroll(navigation, null, heading.id));
+      events.next(new Scroll(navigation, [0, 0], heading.id));
+      expect(document.activeElement).toBe(heading);
+      expect(heading.scrollIntoView).toHaveBeenCalledTimes(2);
+
+      enroll.addEventListener('click', event => event.preventDefault());
+      enroll.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+      expect(history.state).toEqual({ navigationId: 3 });
+      enroll.click();
+      expect(history.state).toEqual({ navigationId: 3, qsPublicCatalogLink: enroll.getAttribute('href') });
+      events.next(new Scroll(navigation, [0, 0], null));
+      expect(document.activeElement).toBe(enroll);
+      expect(enroll.scrollIntoView).toHaveBeenCalledOnce();
+    } finally {
+      history.replaceState(previousState, '');
+      fixture.destroy();
+      shell.remove();
+    }
   });
 
   it('renders Training Plans with visible MCP and provider-delivery boundaries', () => {

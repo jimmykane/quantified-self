@@ -11,6 +11,6 @@
 li { min-width: 0; padding-block-start: 0.75rem; border-top: 1px solid var(--mat-sys-outline-variant); }
 h3, .plan-name { margin: 0; font: var(--mat-sys-title-medium); }
 h3[id] { scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 1rem); }
-.plan-name { display: inline-flex; align-items: center; min-height: 44px; color: var(--mat-sys-primary); }
+.plan-name { display: inline-flex; align-items: center; min-height: 44px; color: var(--mat-sys-on-surface); }
 p { margin: 0.5rem 0; font: var(--mat-sys-body-medium); }
 .plan-meta { color: var(--mat-sys-on-surface-variant); }

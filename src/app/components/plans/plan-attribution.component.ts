@@ -14,7 +14,7 @@ import type { PlanAttribution } from '@shared/training-plan-templates';
       font: var(--mat-sys-body-small);
     }
     :host(.catalog-credit) p { max-width: 80ch; margin-block: 0.5rem; }
-    :host(.catalog-credit) a { color: var(--mat-sys-primary); }
+    :host(.catalog-credit) a { color: var(--mat-sys-on-surface); }
   `],
   template: `
     @if (credit(); as source) {

@@ -154,7 +154,7 @@
     </div>
     <div>
       <h3>Free running and cycling plans</h3>
-      <app-public-training-catalog />
+      <app-public-training-catalog (returnLinkRestored)="cancelFeatureScroll()" />
     </div>
     <app-compact-row appHomeReveal layout="stacked" icon="auto_awesome"
       [title]="workoutGeneration.title" [summary]="workoutGeneration.copy" [showDivider]="false"></app-compact-row>

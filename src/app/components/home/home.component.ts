@@ -261,6 +261,13 @@ export class HomeComponent implements OnInit {
     return isPair(viewport) && (shell === null || isPair(shell));
   }
 
+  // A returning catalog link has a more specific destination than the surrounding Home section.
+  cancelFeatureScroll(): void {
+    this.featureScrollTarget = null;
+    this.featureFocusTarget = null;
+    this.cancelFeatureScrollFrame();
+  }
+
   private cancelFeatureScrollFrame(): void {
     if (this.featureScrollFrame === null) return;
     this.document.defaultView?.cancelAnimationFrame(this.featureScrollFrame);
