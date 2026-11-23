@@ -393,6 +393,10 @@ export class TrainingPlansService {
     return `${normalizedPrefix}-${unique}`.slice(0, 128);
   }
 
+  async saveTemplate(planId: string, revision: number, canExecute: () => boolean): Promise<void> {
+    await this.functions.call('trainingPlanTemplates', { action: 'save', planId, revision }, { canExecute });
+  }
+
   async mutate(request: MutateTrainingScheduleRequestV1, canExecute?: () => boolean): Promise<MutateTrainingScheduleResponseV1> {
     return (await this.functions.call<MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1>(
       'mutateTrainingSchedule', request, ...(canExecute ? [{ canExecute }] : []),

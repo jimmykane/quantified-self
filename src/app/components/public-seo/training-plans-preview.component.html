@@ -79,3 +79,18 @@
     </section>
   }
 </section>
+
+<section aria-label="Free training plans">
+  <h3>Free training plans</h3>
+  @for (template of catalog(); track template.id) {
+    <details><summary>{{ template.name }} · {{ template.weeks }} weeks</summary>
+      <p>{{ template.description }}</p>
+      <p>{{ template.workoutCount }} workouts · {{ template.author }}</p>
+      <h4>Week 1</h4>
+      <ul>@for (session of template.sample; track session.day) {
+        <li>Day {{ session.day }} · {{ session.title }} · {{ session.summary }}</li>
+      }</ul>
+      <a [href]="'/training/plans/catalog?template=' + template.id">Choose dates for {{ template.name }}</a>
+    </details>
+  }
+</section>

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "7aa8a4ca5607bc7066f90399bf4263e60da6fac449b076b1f0328c02c059df71",
+  "candidateSha256": "02628a84b5f1f12f178a2c1bc555a2ba7357aba19961254866f3ad8121ee3c14",
   "lifecycleAction": "developer-refresh",
-  "summary": "Retain pending Sports Lib/Training, Calendar goals, dated thresholds, Running threshold pace, manual HR and HR formula preferences, with existing calibration, snapshots, grants and reviewed Apply. Current readiness/report/history tools use formula 5: above-range HRV is informational, with no score penalty or bonus; Assistant, MCP and workout guidance agree. Frozen formula-3 contracts remain unchanged. Backend release, app rescan and plugin refresh remain separate.",
+  "summary": "Retains pending Sports Lib, Training, calendar goals, thresholds, manual HR and HR formula preferences. Readiness formula 5 treats above-range HRV as informational. Frozen formula-3 contracts stay intact. Adds whole-plan catalog reads, opt-in private template reads and reviewed enrollment into a paused plan. Requires backend release and app rescan.",
   "rescanRequired": true
 }

@@ -2693,6 +2693,22 @@ describe('Firestore Security Rules', () => {
                 });
             };
 
+            it('keeps private templates, proposals and Assistant grants callable-only', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const outsider = testEnv.authenticatedContext('another-athlete').firestore();
+                for (const collection of ['planTemplates', 'planEnrollmentProposals', 'planTemplateAccess']) {
+                    const path = `users/${userId}/trainingPlanState/current/${collection}`;
+                    await testEnv.withSecurityRulesDisabled(async context => {
+                        await context.firestore().doc(path + '/test').set({ private: true });
+                    });
+                    for (const client of [owner, outsider]) {
+                        await assertFails(client.doc(path + '/test').get());
+                        await assertFails(client.collection(path).get());
+                        await assertFails(client.doc(path + '/test').set({ enabled: true }));
+                    }
+                }
+            });
+
             it('allows owners to read and list current state, plans, and workouts', async () => {
                 await seedCurrentTrainingData();
                 const userRef = testEnv.authenticatedContext(userId).firestore().collection('users').doc(userId);

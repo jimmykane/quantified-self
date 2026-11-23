@@ -174,6 +174,20 @@ describe('McpAuthorizationComponent', () => {
     expect(component.selectedScopes()).toEqual(['metrics:read']);
   });
 
+  it('starts private templates off and removes that grant with its Training parent', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'template-request',
+      scopes: ['training-plans:read', 'private-plan-templates:read', 'training-plans:write'],
+      clientName: 'Plan client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['training-plans:read','training-plans:write']);
+    component.toggleScope('private-plan-templates:read', { checked: true } as MatCheckboxChange);
+    expect(component.selectedScopes()).toContain('private-plan-templates:read');
+    component.toggleScope('training-plans:read', { checked: false } as MatCheckboxChange);
+    expect(component.selectedScopes()).toEqual([]);
+  });
+
   it('discloses Training-only consent and allows withholding it without granting activity or notes access', async () => {
     functions.call.mockResolvedValueOnce({ data: { requestId: 'training-request', scopes: ['training-plans:read', 'metrics:read'],
       clientName: 'Training client', redirectUri: 'https://client.example/callback' } });

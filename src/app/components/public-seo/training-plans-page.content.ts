@@ -31,6 +31,11 @@ export const TRAINING_PLANS_PAGE_SECTIONS = [
     copy: 'A standalone workout is first-class: create it without a plan, then attach it later if your schedule grows. Keep multiple dated plans, with one active at a time for calendar overlays, and leave the others available in Training Plans.',
     items: [
       {
+        icon: 'collections_bookmark',
+        title: 'Seven free running and cycling plans',
+        copy: 'Browse the plan library, inspect weekly training time and workouts, and fit a plan to your event date. Review overlaps before adding a paused copy to your calendar.',
+      },
+      {
         icon: 'event_available',
         title: 'Standalone when that is all you need',
         copy: 'Schedule one workout by date without creating a plan. Move the same workout into a plan later without replacing its identity.',

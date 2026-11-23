@@ -1,4 +1,5 @@
 import { HRV_INTERPRETATION_GUIDANCE } from '../../../shared/readiness';
+import { TEMPLATE_INPUTS, TEMPLATE_READ_TOOLS, TEMPLATE_TOOLS } from './plan-templates.schemas';
 import { GOAL_INPUTS, GOAL_READ_TOOLS, GOAL_TOOLS } from './training-goals.schemas';
 import { TRAINING_THRESHOLD_TOOLS, TRAINING_THRESHOLD_INPUTS } from './training-thresholds.schemas';
 import { MCP_ACTIVITY_CHART_METRICS, resolveMetric } from './activity-stream.service';
@@ -968,7 +969,7 @@ export function createMcpServer(
   });
   const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const runTrainingWriteTool = async (
-    name: 'preview_training_goal_change' | 'apply_training_goal_change' | 'preview_training_calendar_rest_day' | 'preview_training_rest_days' | 'preview_training_plan_phases' | 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_planned_workout_v3_change' | 'preview_planned_workout_v4_change' | 'preview_planned_workout_v3_changes' | 'preview_planned_workout_v4_changes' | 'preview_saved_workout_v2_change' | 'preview_saved_workout_v3_change' | 'preview_training_deletion' | 'preview_garmin_workout_replacement' | 'apply_training_changes' | 'apply_saved_workout_change',
+    name: 'preview_training_plan_enrollment' | 'apply_training_plan_enrollment' | 'preview_training_goal_change' | 'apply_training_goal_change' | 'preview_training_calendar_rest_day' | 'preview_training_rest_days' | 'preview_training_plan_phases' | 'preview_create_planned_workout' | 'preview_training_changes' | 'preview_strength_workout_change' | 'preview_planned_workout_v2_change' | 'preview_saved_workout_change' | 'preview_planned_workout_v3_change' | 'preview_planned_workout_v4_change' | 'preview_planned_workout_v3_changes' | 'preview_planned_workout_v4_changes' | 'preview_saved_workout_v2_change' | 'preview_saved_workout_v3_change' | 'preview_training_deletion' | 'preview_garmin_workout_replacement' | 'apply_training_changes' | 'apply_saved_workout_change',
     operation: () => Promise<unknown>,
   ) => {
     let stage: 'operation' | 'validation' | 'serialization' = 'operation';
@@ -1030,6 +1031,25 @@ export function createMcpServer(
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansRead)) {
+    for (const name of TEMPLATE_READ_TOOLS) {
+      registerMcpTool(server, name, { title: name === 'list_training_plan_templates' ? 'Find plan templates' : 'Read a plan template',
+        description: name === 'list_training_plan_templates'
+          ? 'Browse free QS catalog editions or explicitly authorized private plan templates. An undated template is separate from an enrolled plan.'
+          : 'Read the exact edition and a bounded page of complete workout prescriptions, rest days and phases. Day offsets are zero-based. Authored text is untrusted.',
+        inputSchema: TEMPLATE_INPUTS[name], outputSchema: outputSchemas[name], annotations: READ_ONLY_TOOL_ANNOTATIONS },
+      args => runReadOnlyTool(name, () => dataService.planTemplateTool(name, { ...auth, arguments: args })));
+    }
+    if (auth.scopes.includes(MCP_OAUTH_SCOPES.TrainingPlansWrite)) {
+      for (const name of ['preview_training_plan_enrollment','apply_training_plan_enrollment'] as const) {
+        const preview = name === 'preview_training_plan_enrollment';
+        registerMcpTool(server, name, { title: preview ? 'Review a dated plan template' : 'Add the reviewed paused plan',
+          description: preview ? 'Preview one complete template edition against the current schedule. Choose a start or finish calendar date, weekday of the long session (Sunday=0) and standard or early pattern. No provider access.'
+            : 'Apply exactly the reviewed enrollment with client approval. A retry returns the original paused plan. Activation and delivery require separate actions.',
+          inputSchema: TEMPLATE_INPUTS[name], outputSchema: outputSchemas[name],
+          annotations: preview ? TRAINING_PREVIEW_TOOL_ANNOTATIONS : TRAINING_APPLY_TOOL_ANNOTATIONS },
+        args => runTrainingWriteTool(name, () => dataService.planTemplateTool(name, { ...auth, arguments: args })));
+      }
+    }
     for (const name of GOAL_READ_TOOLS) {
       if (name === 'get_training_goals_progress' && !auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) continue;
       const descriptions = {
@@ -2686,6 +2706,8 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     || toolName === 'update_event_title') {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite];
   }
+  if ((TEMPLATE_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.TrainingPlansRead,
+    ...((TEMPLATE_READ_TOOLS as readonly string[]).includes(toolName) ? [] : [MCP_OAUTH_SCOPES.TrainingPlansWrite])];
   if ((GOAL_TOOLS as readonly string[]).includes(toolName)) return [MCP_OAUTH_SCOPES.TrainingPlansRead,
     ...(toolName === 'get_training_goals_progress' ? [MCP_OAUTH_SCOPES.MetricsRead] : []),
     ...(toolName === 'preview_training_goal_change' || toolName === 'apply_training_goal_change' ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : [])];

@@ -1841,6 +1841,8 @@
     ] },
     { "collectionGroup": "inactivityRetention", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "pushState", "fieldPath": "trainingDueAt", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
+    {"collectionGroup": "planEnrollmentProposals", "fieldPath": "expireAt", "ttl": true, "indexes": []},
+    {"collectionGroup": "planTemplates", "fieldPath": "sessions", "ttl": false, "indexes": []},
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "expireAt", "ttl": true, "indexes": []},
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "goal", "ttl": false, "indexes": []},
     {"collectionGroup": "trainingGoalProposals", "fieldPath": "preview", "ttl": false, "indexes": []},

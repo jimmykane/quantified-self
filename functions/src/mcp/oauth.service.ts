@@ -23,6 +23,7 @@ export const MCP_OAUTH_SCOPES = {
   WorkoutReflectionsWrite: 'workout-reflections:write',
   TimelineNotesRead: 'timeline-notes:read',
   TimelineNotesWrite: 'timeline-notes:write',
+  PrivatePlanTemplatesRead: 'private-plan-templates:read',
   TrainingPlansRead: 'training-plans:read',
   TrainingPlansWrite: 'training-plans:write',
   TrainingDeliveryWrite: 'training-delivery:write',
@@ -63,7 +64,7 @@ export function hasValidMcpScopeDependencies(
     selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
     && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
   ) && !(
-    (selected.has(MCP_OAUTH_SCOPES.TrainingPlansWrite)
+    (selected.has(MCP_OAUTH_SCOPES.PrivatePlanTemplatesRead) || selected.has(MCP_OAUTH_SCOPES.TrainingPlansWrite)
       || selected.has(MCP_OAUTH_SCOPES.TrainingDeliveryWrite))
     && !selected.has(MCP_OAUTH_SCOPES.TrainingPlansRead)
   );
@@ -2172,6 +2173,7 @@ export function createMcpOAuthService(
           && scope !== MCP_OAUTH_SCOPES.MeasurementsWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingThresholdsRead
           && scope !== MCP_OAUTH_SCOPES.TrainingThresholdsWrite
+          && scope !== MCP_OAUTH_SCOPES.PrivatePlanTemplatesRead
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansWrite
           && scope !== MCP_OAUTH_SCOPES.TrainingDeliveryWrite

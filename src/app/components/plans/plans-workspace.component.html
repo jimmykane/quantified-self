@@ -43,6 +43,9 @@
     <button mat-button type="button" appHapticTap (click)="openLibrary()" [disabled]="busyAction() !== null">
       <mat-icon aria-hidden="true">library_books</mat-icon><span>Workout library</span>
     </button>
+    @if (view() === 'plans') {
+      <a mat-button routerLink="/training/plans/catalog" appHapticTap><mat-icon>collections_bookmark</mat-icon>Browse plans</a>
+    }
     @if (view() === 'plans' && planOptions().length) {
     <button mat-button type="button" appHapticTap (click)="beginPlanCreation()" [disabled]="busyAction() !== null">
       <mat-icon aria-hidden="true">playlist_add</mat-icon>
@@ -159,6 +162,12 @@
                 <button appHapticTap mat-menu-item type="button" (click)="setPlanLifecycle(plan, plan.lifecycle === 'active' ? 'paused' : 'active')">
                   <mat-icon aria-hidden="true">{{ plan.lifecycle === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
                   <span>{{ plan.lifecycle === 'active' ? 'Pause plan' : 'Activate plan' }}</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="savePlanTemplate(plan)">
+                  <mat-icon>bookmark_add</mat-icon><span>Save to my templates</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="generatePlan(plan)">
+                  <mat-icon>auto_awesome</mat-icon><span>Adjust with Assistant</span>
                 </button>
                 <button appHapticTap mat-menu-item type="button" (click)="beginRename(plan)">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Rename</span>

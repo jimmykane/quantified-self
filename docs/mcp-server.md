@@ -3254,3 +3254,9 @@ No tools, fields, grants, scopes, consent, provider capability or registered sch
 values stay canonical, so no reparse, derived schema bump or persisted-data migration is required. Root and Functions
 pin the same published Sports Lib 23.11.0 artifact. This package adoption does not deploy the backend or promote the
 existing pending MCP contract.
+
+## Whole-plan templates
+
+With `training-plans:read`, use `list_training_plan_templates` with `source: catalog` and follow `nextCursor`. Use `get_training_plan_template` and follow `nextOffset` to inspect a specific edition, zero-based days, canonical prescriptions, explicit rest days and phases. Selecting `source: private` additionally requires the independent `private-plan-templates:read` grant. OAuth initially leaves that permission unchecked. Assistant has a separate switch for its current conversation.
+
+With Training changes access, `preview_training_plan_enrollment` fits the exact edition to a start or finish date. Show the dates, overlaps and paused lifecycle, then obtain approval before `apply_training_plan_enrollment`. The result includes a plan reference for existing plan reads, adjustment and activation. Activation has its own review identifying the active plan it will pause. The Assistant model can prepare the preview. Only the app’s Apply action can confirm it. Date changes, access changes and expired reviews require a fresh preview. See [Training implementation](training-workspace.md#whole-plan-templates-and-enrollment).

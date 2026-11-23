@@ -150,6 +150,7 @@ export const FUNCTIONS_MANIFEST = {
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     setTrainingBuildBenchmark: { name: 'setTrainingBuildBenchmark', region: 'europe-west2' },
     mutateTrainingSchedule: { name: 'mutateTrainingSchedule', region: 'europe-west2' },
+    trainingPlanTemplates: { name: 'trainingPlanTemplates', region: 'europe-west2' },
     mutateWorkoutLibrary: { name: 'mutateWorkoutLibrary', region: 'europe-west2' },
     placeWorkoutLibrary: { name: 'placeWorkoutLibrary', region: 'europe-west2' },
     previewTrainingProviderDelivery: { name: 'previewTrainingProviderDelivery', region: 'europe-west2' },

@@ -10773,6 +10773,22 @@ Before merging a Training change, confirm:
 - [ ] Help content and this document are current.
 - [ ] Focused tests, Functions build, frontend build, sports-lib build, and `git diff --check` pass.
 
+## Whole-plan templates and enrollment
+
+The signed-in library at `/training/plans/catalog` and the public Training Plans preview present seven free Quantified Self programs. The public page uses bundled catalog data. Each program identifies its starting fitness, sport, duration, full prescriptions, explicit rest days and phases. The single-workout library and custom Assistant generator keep their existing entry points.
+
+### Editorial publication
+
+Quantified Self maintains the versioned programs in `shared/training-plan-templates.ts`. Review every week, recovery intervals, starting assumptions, event distance, schedule choices and workout parser tests in a pull request. Increment the edition when published content changes. The same reviewed edition supplies the public preview, app, Assistant and MCP. An athlete’s enrolled copy is independent of subsequent editorial changes. Invited coach publication is a future editorial workflow.
+
+The NHS publishes a free progressive run/walk program. British Cycling shows weekly commitment and session frequency for its free beginner ride. 80/20 offers sample weeks to evaluate its training plans. TrainerRoad lets subscribers plan around an event and their weekly availability, then review the resulting calendar. These informed discovery and preview design. The shipped sessions are authored for QS. [NHS running plan](https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/couch-to-5k-running-plan/) · [British Cycling](https://cloud.britishcycling.org.uk/knowledge/article/izn20151216-Beginner-8-week-Sofa-to-50km-Training-Plan-0) · [80/20 samples](https://www.8020endurance.com/free-plans/) · [TrainerRoad Plan Builder](https://support.trainerroad.com/hc/trainerroad-support/articles/360037923191-plan-builder-overview)
+
+### Dates, ownership and consent
+
+`scheduleTemplate` works in local calendar days. Event-date enrollment anchors the last day exactly. Start-date enrollment aligns the first full catalog week with the selected long-session day. Private templates retain their original relative spacing. Arbitrary rest dates and phases stay attached to the copy. Saving a plan snapshots the current planned prescriptions, including strength details, under the owner’s `trainingPlanState/current/planTemplates`. Repeated saves of the same plan revision reuse the snapshot. The library holds up to 100 snapshots, each bounded to 700 KB of prescription data.
+
+The `trainingPlanTemplates` callable and MCP use one server enrollment implementation. Preview records the exact edition, options, schedule revision, conflict dates, access generation and a 15-minute expiry. Confirmation checks these again, creates the paused plan, workouts and ordinary plan history in a single transaction and records the result for retries. It leaves the active plan selection intact. Browser clients have no direct Firestore access to templates, proposals or grants. Private Assistant access is off by default and bound to the current Training-enabled conversation. MCP clients additionally need `private-plan-templates:read` for private reads and `training-plans:write` for enrollment. Activation, adjustment and provider delivery continue to use their existing independent reviews and entitlements. See [MCP server](mcp-server.md#whole-plan-templates).
+
 ## Generate a plan from Plans
 
 Plans offers **Generate plan** beside **New plan** and in its empty state. The compact Material dialog reuses

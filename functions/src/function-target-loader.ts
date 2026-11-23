@@ -176,6 +176,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
     () => module.require('./derived-metrics/set-training-build-benchmark') as FunctionModule,
   mutateTrainingSchedule:
     () => module.require('./training-plans/mutate-training-schedule') as FunctionModule,
+  trainingPlanTemplates: () => module.require('./training-plans/plan-template-callable') as FunctionModule,
   mutateWorkoutLibrary:
     () => module.require('./training-plans/workout-library-callables') as FunctionModule,
   placeWorkoutLibrary:

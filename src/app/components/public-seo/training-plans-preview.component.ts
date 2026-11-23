@@ -4,6 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { TRAINING_PLAN_CATALOG } from '@shared/training-plan-templates';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import { formatManualWorkoutStructure } from '../../helpers/planned-workout-editor.helper';
@@ -42,6 +43,13 @@ export class TrainingPlansPreviewComponent {
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly selectedView = signal<'calendar' | 'profile'>('calendar');
   readonly preview = buildTrainingPlansPreviewFixture();
+  readonly catalog = computed(() => TRAINING_PLAN_CATALOG.map(plan => ({
+    id: plan.id, name: plan.name, weeks: plan.days / 7, description: plan.description, author: plan.author,
+    workoutCount: plan.sessions.length, sample: plan.sessions.filter(s => s.day < 7).map(s => ({
+      day: s.day + 1, title: s.title,
+      summary: formatWorkoutPrescriptionSummaryV1(s.structure, this.unitSettings(), s.structure.sport, this.locale),
+    })),
+  })));
   readonly plan = this.preview.plan;
   readonly workouts = this.preview.workouts;
   readonly today = this.preview.today;

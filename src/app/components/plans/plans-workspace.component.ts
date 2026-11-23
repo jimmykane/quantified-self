@@ -1157,7 +1157,19 @@ export class PlansWorkspaceComponent {
     this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
   }
 
-  async generatePlan(): Promise<void> {
+  async savePlanTemplate(plan: TrainingPlanV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const current = () => !this.destroyRef.destroyed && this.currentUser()?.uid === uid && this.selectedPlanId() === plan.id;
+    this.busyAction.set('save-template');
+    try {
+      await this.plansService.saveTemplate(plan.id, plan.revision, current);
+      if (current()) this.snackBar.open('Saved to My templates.', 'Dismiss', { duration: 3500 });
+    } catch (error) { if (current()) this.showError(error); }
+    finally { if (current()) this.busyAction.set(null); }
+  }
+
+  async generatePlan(plan?: TrainingPlanV1): Promise<void> {
     const uid = this.currentUser()?.uid;
     if (!uid || !this.browsing() || this.libraryView() || this.view() !== 'plans'
       || this.scheduleState().status !== 'ready' || this.busyAction() || this.generationOpen()) return;
@@ -1165,7 +1177,13 @@ export class PlansWorkspaceComponent {
     const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid && this.browsing()
       && !this.libraryView() && this.view() === 'plans' && routeKey === trainingPlansRouteKey(uid, this.routeState());
     this.generationOpen.set(true);
-    try { await this.planGeneration.open(uid, current); }
+    try {
+      if (plan) {
+        await this.planGeneration.open(uid, current, { timelineNotesEnabled: false,
+          prompt: 'Help me adjust my existing training plan “' + plan.name + '” (' + plan.startLocalDate + ' to ' + plan.endLocalDate +
+            '). Ask what changed, for example a missed week or new available days, then show the proposed changes for review.' });
+      } else await this.planGeneration.open(uid, current);
+    }
     catch (error) { if (current()) this.showError(error); }
     finally { if (!this.destroyRef.destroyed) this.generationOpen.set(false); }
   }

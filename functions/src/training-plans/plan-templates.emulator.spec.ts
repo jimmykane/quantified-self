@@ -1,0 +1,95 @@
+import { randomUUID } from 'node:crypto';
+import { Firestore } from 'firebase-admin/firestore';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { assistantPrivateTemplateAccess, applyEnrollment, getTemplate, ownerAccess, previewEnrollment, savePrivateTemplate } from './plan-templates';
+import { decodeOpaqueValue } from '../mcp/data.service';
+import { handleTemplateTool } from '../mcp/plan-templates.service';
+import { TEMPLATE_OUTPUTS } from '../mcp/plan-templates.schemas';
+
+const fixture = vi.hoisted(() => ({ db: null as Firestore | null }));
+vi.mock('firebase-admin', async original => ({ ...await original<object>(), firestore: () => fixture.db }));
+describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment', { timeout: 30000 }, () => {
+  if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required.');
+  const db = new Firestore({ projectId: 'demo-plan-templates' });
+  fixture.db = db;
+  const users: string[] = [];
+  const options = { anchor: 'finish' as const, date: '2027-02-07', longDay: 0, pattern: 'standard' as const };
+  async function setup() {
+    const uid = randomUUID(), user = db.collection('users').doc(uid); users.push(uid);
+    await user.set({}); return { uid, user, access: ownerAccess(uid) };
+  }
+  afterAll(async () => { for (const uid of users) await db.recursiveDelete(db.collection('users').doc(uid)); await db.terminate(); });
+  it('previews dates, creates one paused copy on concurrent confirmation and privately reuses the prescription', async () => {
+    const { uid, user, access } = await setup();
+    const preview = await previewEnrollment(access, 'catalog', '10k', 1, options);
+    expect(preview.dates).toHaveLength(30);
+    expect((await user.collection('trainingPlans').get()).empty).toBe(true);
+    const [first, retry] = await Promise.all([applyEnrollment(access, preview.id), applyEnrollment(access, preview.id)]);
+    expect(retry).toEqual(first);
+    const plan = await user.collection('trainingPlans').doc(first.planId).get();
+    expect(plan.get('lifecycle')).toBe('paused');
+    expect((await user.collection('trainingPlanState').doc('current').get()).get('activePlanId')).toBeNull();
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(30);
+    expect((await plan.ref.collection('templateOrigin').doc('current').get()).data()).toMatchObject({ source: 'catalog', templateId: '10k', edition: 1 });
+    const saved = await savePrivateTemplate(uid, first.planId, plan.get('revision'));
+    const copy = await getTemplate(access, 'private', saved.id);
+    expect(copy.sessions).toEqual((await getTemplate(access, 'catalog', '10k')).sessions);
+    expect(copy.sessions[0]).not.toHaveProperty('planId');
+    expect(await savePrivateTemplate(uid, first.planId, plan.get('revision'))).toEqual(saved);
+    await expect(getTemplate(ownerAccess((await setup()).uid), 'private', saved.id)).rejects.toThrow();
+  });
+  it('binds private enrollment to the reviewed Assistant conversation and opt-in generation', async () => {
+    const { user, uid, access } = await setup();
+    const conversation = user.collection('assistantConversations').doc('active');
+    await conversation.set({ conversationId:'chat', trainingPlansEnabled:true, trainingPlanChangesEnabled:true });
+    expect(await assistantPrivateTemplateAccess(uid,'chat')).toBe(false);
+    const savedPlan = await applyEnrollment(access, (await previewEnrollment(access,'catalog','5k',1,options)).id);
+    const template = await savePrivateTemplate(uid,savedPlan.planId,1);
+    const input = (args: unknown) => ({uid,connectionId:'first-party-assistant-v1:chat',
+      scopes:['training-plans:read','training-plans:write','private-plan-templates:read'], arguments:args});
+    await expect(handleTemplateTool('list_training_plan_templates',input({source:'private'}))).rejects.toThrow(/enable/i);
+    await assistantPrivateTemplateAccess(uid,'chat',true);
+    const list = TEMPLATE_OUTPUTS.list_training_plan_templates.parse(await handleTemplateTool('list_training_plan_templates',input({source:'private'})));
+    expect(list.templates).toHaveLength(1);
+    expect(JSON.stringify(list)).not.toContain(template.id);
+    const preview = () => handleTemplateTool('preview_training_plan_enrollment', input({templateRef:list.templates[0].templateRef,...options}));
+    const old = TEMPLATE_OUTPUTS.preview_training_plan_enrollment.parse(await preview());
+    const apply = (proposalRef: string) => handleTemplateTool('apply_training_plan_enrollment',input({proposalRef}));
+    await expect(apply(old.proposalRef)).rejects.toThrow(/current/i);
+    await conversation.update({pendingTrainingProposal:{proposalRef:old.proposalRef}});
+    await assistantPrivateTemplateAccess(uid,'chat',false);
+    await assistantPrivateTemplateAccess(uid,'chat',true);
+    await expect(apply(old.proposalRef)).rejects.toThrow(/changed/i);
+    const current = TEMPLATE_OUTPUTS.preview_training_plan_enrollment.parse(await preview());
+    await conversation.update({pendingTrainingProposal:{proposalRef:current.proposalRef}});
+    const applied = TEMPLATE_OUTPUTS.apply_training_plan_enrollment.parse(await apply(current.proposalRef));
+    expect(applied).toMatchObject({status:'applied',lifecycle:'paused'});
+    const retry = TEMPLATE_OUTPUTS.apply_training_plan_enrollment.parse(await apply(current.proposalRef));
+    const resolve = (ref: string) => decodeOpaqueValue('training_read', ref, uid, input({}).connectionId, 'plan');
+    expect(retry.scheduleRevision).toBe(applied.scheduleRevision);
+    expect(resolve(retry.planRef)).toEqual(resolve(applied.planRef));
+    expect((await user.collection('trainingPlans').get()).size).toBe(2);
+  });
+  it('requires current private permission and binds schedule reviews to the grant, owner and connection', async () => {
+    const { uid, user, access } = await setup();
+    const scopes = ['training-plans:read','training-plans:write'];
+    const grant = user.collection('mcpConnections').doc('connected');
+    await grant.set({ scopes, grantId: 'one', status: 'active', createdAtMs: 1 });
+    const input = (args: unknown) => ({ uid, connectionId: 'connected', scopes, arguments: args });
+    await expect(handleTemplateTool('list_training_plan_templates', input({ source: 'private' }))).rejects.toThrow(/permission/i);
+    const listed = TEMPLATE_OUTPUTS.list_training_plan_templates.parse(await handleTemplateTool('list_training_plan_templates', input({source:'catalog'})));
+    expect(listed.templates).toHaveLength(7);
+    const templateRef = listed.templates[0].templateRef;
+    const read = TEMPLATE_OUTPUTS.get_training_plan_template.parse(await handleTemplateTool('get_training_plan_template',input({templateRef})));
+    expect(read.sessions).toHaveLength(7);
+    expect(read.nextOffset).toBe(7);
+    const reviewed = TEMPLATE_OUTPUTS.preview_training_plan_enrollment.parse(await handleTemplateTool('preview_training_plan_enrollment', input({templateRef,...options})));
+    await grant.update({ grantId: 'new' });
+    await expect(handleTemplateTool('apply_training_plan_enrollment', input({proposalRef:reviewed.proposalRef}))).rejects.toThrow(/grant changed/i);
+    const stale = await previewEnrollment(access,'catalog','first-run',1,options);
+    const other = await previewEnrollment(access,'catalog','5k',1,options);
+    await applyEnrollment(access,other.id);
+    await expect(applyEnrollment(access,stale.id)).rejects.toThrow();
+    expect((await user.collection('trainingPlans').get()).size).toBe(1);
+  });
+});
