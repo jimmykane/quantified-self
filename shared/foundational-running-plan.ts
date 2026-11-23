@@ -5,7 +5,7 @@ import type { PlanTemplate, TemplateSession } from './training-plan-templates';
 // The training content in this file is adapted from the CC BY 4.0 work credited below.
 const attribution = {
   title: 'Build-up a foundational running base',
-  creator: 'Felix Gertz',
+  originalAuthor: 'Felix Gertz',
   sourceUrl: 'https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM',
   license: 'CC BY 4.0',
   licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
@@ -37,7 +37,7 @@ const openTenMinutes = () => step('cooldown', null, 'Cool down easily for about 
 
 export const FOUNDATIONAL_RUNNING_PLAN: PlanTemplate = {
   id: 'tredict-running-base', version: 1, source: 'catalog', attribution,
-  name: attribution.title, author: attribution.creator, sport: ActivityTypes.Running, days: 28,
+  name: attribution.title, author: attribution.originalAuthor, sport: ActivityTypes.Running, days: 28,
   description: 'For runners returning after a break. Use a heart-rate monitor for the easy efforts. Four weeks progress from a 20-minute run to a 90-minute outing, with short strides and a threshold-pace session.',
   phases: [
     { id: 'week-1', name: 'Find an easy rhythm', start: 0, end: 6, description: 'Keep the first week easy as you return to running.' },

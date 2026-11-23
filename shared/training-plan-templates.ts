@@ -12,7 +12,7 @@ export interface TemplateSession {
 }
 export interface PlanAttribution {
   title: string;
-  creator: string;
+  originalAuthor: string;
   sourceUrl: string;
   license: string;
   licenseUrl: string;

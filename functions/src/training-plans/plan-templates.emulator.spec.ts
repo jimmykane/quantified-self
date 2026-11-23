@@ -47,7 +47,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('plan template enrollment'
     const licensed = list.templates.find(t => t.author === 'Felix Gertz')!;
     const detail = TEMPLATE_OUTPUTS.get_training_plan_template.parse(await handleTemplateTool('get_training_plan_template', input({ templateRef: licensed.templateRef })));
     expect(detail.template.attribution).toEqual(licensed.attribution);
-    expect(detail.template.attribution).toMatchObject({ creator: 'Felix Gertz', license: 'CC BY 4.0', changes: expect.any(String), notice: expect.any(String) });
+    expect(detail.template.attribution).toMatchObject({ originalAuthor: 'Felix Gertz', license: 'CC BY 4.0', changes: expect.any(String), notice: expect.any(String) });
     const enrolled = await applyEnrollment(access, (await previewEnrollment(access, 'catalog', 'tredict-running-base', 1, options)).id);
     const planRef = (plan: typeof enrolled) => encodeOpaqueValue('training_read', { kind: 'plan', id: plan.planId, createdAtMs: plan.createdAtMs }, uid, 'reader');
     const read = (ref: string) => handleTemplateTool('get_training_plan_attribution', input({ planRef: ref }));

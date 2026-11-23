@@ -4409,7 +4409,7 @@ describe('PlansWorkspaceComponent', () => {
     const enrolled = { ...base, id: 'enroll-licensed', name: 'Personal running plan', lifecycle: 'paused' as const };
     schedule = { ...schedule, plans: [...schedule.plans, enrolled] };
     const getCredit = vi.mocked(TestBed.inject(TrainingPlansService).getPlanAttribution);
-    getCredit.mockResolvedValue({ title: 'Original running plan', creator: 'Felix Gertz',
+    getCredit.mockResolvedValue({ title: 'Original running plan', originalAuthor: 'Felix Gertz',
       sourceUrl: 'https://plans.tredict.com/', license: 'CC BY 4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
       changes: 'Coaching cues adapted.', notice: 'Example plan.', privateCopy: true });
     const fixture = await renderPlans();

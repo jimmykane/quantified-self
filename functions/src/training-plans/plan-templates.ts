@@ -108,7 +108,7 @@ export async function savePrivateTemplate(uid: string, planId: string, revision:
     const credit = origin.get('attribution');
     const attribution = credit ? { ...planAttributionSchema.parse(credit), privateCopy: true as const } : undefined;
     const template: PlanTemplate = { ...(attribution ? { attribution } : {}), id, version: revision, source: 'private', name: plan.name,
-      description: 'Saved from your training plan.', author: attribution?.creator ?? 'You', sport: new Set(sessions.map(s => s.structure.sport)).size === 1 ? sessions[0].structure.sport : 'Multisport',
+      description: 'Saved from your training plan.', author: attribution?.originalAuthor ?? 'You', sport: new Set(sessions.map(s => s.structure.sport)).size === 1 ? sessions[0].structure.sport : 'Multisport',
       days: countTrainingPlanDays(plan.startLocalDate, plan.endLocalDate), sessions, rest: (plan.restDays ?? []).map(offset),
       phases: (plan.phases?.items ?? []).map(({ startLocalDate, endLocalDate, ...phase }) => ({ ...phase, start: offset(startLocalDate), end: offset(endLocalDate) })) };
     if (Buffer.byteLength(JSON.stringify(template)) > 700000) reject('The template exceeds the supported prescription size.');

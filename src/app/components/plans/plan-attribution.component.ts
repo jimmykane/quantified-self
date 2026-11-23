@@ -8,7 +8,7 @@ import type { PlanAttribution } from '@shared/training-plan-templates';
   template: `
     @if (credit(); as source) {
       <section aria-label="Plan attribution">
-        <p><a [href]="source.sourceUrl">{{ source.title }}</a> by {{ source.creator }} ·
+        <p><a [href]="source.sourceUrl">{{ source.title }}</a> by {{ source.originalAuthor }} ·
           <a [href]="source.licenseUrl" rel="license">{{ source.license }}</a></p>
         <p>{{ source.changes }}</p>
         @if (source.privateCopy) { <p>This copy was saved from a personal schedule and may include the athlete’s changes.</p> }

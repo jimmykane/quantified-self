@@ -90,7 +90,7 @@ async function runTemplateTool(tool: typeof TEMPLATE_TOOLS[number], input: Input
     return TEMPLATE_OUTPUTS[tool].parse({ proposalRef: encode(input,{ kind:'plan-enrollment',id:review.id },true),
       permissionMode: 'schedule', scheduleRevision: review.scheduleRevision, expiresAtMs: review.expiresAtMs, requiresConfirmation:true,
       summary: `Add “${review.name}” as paused, ${review.start} through ${review.end}. ${review.dates.length} workouts, ${review.restDays.length} rest days, ${review.conflicts.length} overlapping dates. Device sync stays off.` +
-        (review.attribution ? ` Original by ${review.attribution.creator} (${review.attribution.license}).` : ''),
+        (review.attribution ? ` Original by ${review.attribution.originalAuthor} (${review.attribution.license}).` : ''),
       changes: chunks.map((summary,index) => ({ index,kind:'enroll-plan',summary })), providerPreviews:[] });
   }
   const args = TEMPLATE_INPUTS.apply_training_plan_enrollment.parse(input.arguments), ref = proposalRef.parse(decode(input,args.proposalRef,true));
