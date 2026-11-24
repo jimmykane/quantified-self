@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  const tokenRef = { path: 'COROSAPIAccessTokens/user-1/tokens/open-id' };
+  const tokenRootRef = { path: 'COROSAPIAccessTokens/user-1' };
+  const tokenRef = { path: 'COROSAPIAccessTokens/user-1/tokens/open-id', parent: { parent: tokenRootRef } };
   const metaRef = { path: 'users/user-1/meta/corosAPI' };
   const settingsRef = { path: 'users/user-1/config/settings' };
   const rateLimitRef = { path: 'providerOperationLimits/coros-binding-state' };
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => {
   });
   return {
     tokenRef,
+    tokenRootRef,
     metaRef,
     settingsRef,
     rateLimitRef,
@@ -42,6 +44,7 @@ const mocks = vi.hoisted(() => {
     getActiveCOROSTokenSnapshot: vi.fn(),
     getUserDeletionGuardStateInTransaction: vi.fn(),
     loggerWarn: vi.fn(),
+    updateHealthSyncState: vi.fn(),
   };
 });
 
@@ -61,6 +64,13 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('../request-helper', () => ({
   get: mocks.requestGet,
+}));
+
+vi.mock('../health/writer', () => ({ updateHealthSyncState: mocks.updateHealthSyncState }));
+
+vi.mock('../service-token-store', async importOriginal => ({
+  ...await importOriginal<typeof import('../service-token-store')>(),
+  getServiceTokenCollectionRef: () => ({ doc: () => mocks.tokenRef }),
 }));
 
 vi.mock('./account', () => ({
@@ -90,17 +100,21 @@ import {
   checkCOROSBindingStateForUser,
   handleCOROSBindingStateRequest,
 } from './binding-state';
+import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 
 describe('COROS binding state', () => {
   let currentTokenData: Record<string, unknown>;
   let currentMetaData: Record<string, unknown>;
   let currentRateLimitData: Record<string, unknown>;
+  let currentRootData: Record<string, unknown> | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     currentTokenData = { accessToken: 'stored-access-token', openId: 'open-id', dateCreated: 100 };
     currentMetaData = { connectionState: 'connected', providerUserId: 'open-id' };
     currentRateLimitData = {};
+    currentRootData = {};
+    mocks.updateHealthSyncState.mockReset().mockResolvedValue(true);
     mocks.getActiveCOROSTokenSnapshot.mockResolvedValue({
       id: 'open-id',
       ref: mocks.tokenRef,
@@ -115,6 +129,9 @@ describe('COROS binding state', () => {
     mocks.transactionGet.mockImplementation(async (ref: { path?: string }) => {
       if (ref === mocks.tokenRef) {
         return { exists: true, data: () => currentTokenData };
+      }
+      if (ref === mocks.tokenRootRef) {
+        return { exists: !!currentRootData, data: () => currentRootData };
       }
       if (ref === mocks.metaRef) {
         return { exists: true, data: () => currentMetaData };
@@ -132,6 +149,47 @@ describe('COROS binding state', () => {
       get: mocks.transactionGet,
       set: mocks.transactionSet,
     }));
+  });
+
+  function recoveryTarget() {
+    return { providerUserId: 'open-id', connectionGeneration: undefined, credential: getTokenCredentialSnapshot(currentTokenData) };
+  }
+
+  it('rechecks a fresh cached bound result after a worker authorization error and settles Health state on confirmed unbind', async () => {
+    currentMetaData = { ...currentMetaData, providerBindingState: 'bound', providerBindingCheckedAt: 4_000 };
+    mocks.requestGet.mockResolvedValueOnce('{"result":"0000","data":{"bindState":0}}');
+
+    await expect(checkCOROSBindingStateForUser('user-1', 5_000, recoveryTarget())).resolves.toMatchObject({ status: 'unbound' });
+    expect(mocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+    expect(mocks.requestGet).toHaveBeenCalledOnce();
+    expect(mocks.updateHealthSyncState).toHaveBeenCalledWith('user-1', 'COROSAPI', {
+      status: 'reconnect_required', lastErrorCode: 'provider_auth_reconnect_required', retryPending: false,
+    }, 5_000, expect.objectContaining({ transaction: expect.any(Object), authoritativeLifecycleTransition: true }));
+    expect(currentMetaData).toMatchObject({ connectionState: 'reconnect_required', providerBindingState: 'unbound' });
+  });
+
+  it('keeps the existing lease and rejects a recovery check instead of returning a cached result while another check runs', async () => {
+    currentMetaData = { ...currentMetaData, providerBindingState: 'bound', providerBindingCheckedAt: 4_000,
+      providerBindingCheckLeaseExpiresAt: 6_000 };
+    await expect(checkCOROSBindingStateForUser('user-1', 5_000, recoveryTarget()))
+      .rejects.toMatchObject({ code: 'resource-exhausted' });
+    expect(mocks.requestGet).not.toHaveBeenCalled();
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it.each(['connection', 'token', 'root'] as const)('discards a late unbound response after the %s changes', async change => {
+    const target = recoveryTarget();
+    mocks.requestGet.mockImplementationOnce(async () => {
+      if (change === 'connection') currentMetaData.connectionStateGeneration = 'replacement-connection';
+      if (change === 'token') currentTokenData.dateRefreshed = 7_000;
+      if (change === 'root') currentRootData = { activeOAuthCredentialGeneration: 'replacement-root' };
+      return '{"result":"0000","data":{"bindState":0}}';
+    });
+
+    await expect(checkCOROSBindingStateForUser('user-1', 5_000, target)).resolves.toMatchObject({ status: 'stale' });
+    expect(currentMetaData.connectionState).toBe('connected');
+    expect(mocks.updateHealthSyncState).not.toHaveBeenCalled();
+    expect(mocks.transactionSet.mock.calls.some(([ref]) => ref === mocks.settingsRef)).toBe(false);
   });
 
   it('records a current bound state without changing lifecycle or routes', async () => {

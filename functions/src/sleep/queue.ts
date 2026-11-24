@@ -1,4 +1,4 @@
-import { withHistoryQueueExecution } from '../connection-history/execution';
+import { HistoryLifecycleChangedError, withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -16,7 +16,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_SYNC_STATUSES,
 } from '../../../shared/health';
-import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
+import { isReconnectRequiredServiceConnection, isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import {
     SleepSyncQueueItemInterface,
     SleepSyncQueueItemType,
@@ -1610,6 +1610,14 @@ class COROSDailyAccountValidationError extends Error {
     }
 }
 
+class COROSDailyUnboundError extends Error {}
+
+function skipCOROSUnboundPoll(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
+    return markQueueItemSkipped(queueItem, undefined, 'provider_auth_required', {
+        skippedContext: 'COROS_ACCOUNT_UNBOUND', sessionsWritten: 0, healthRecordsWritten: 0,
+    });
+}
+
 class COROSDailyProcessingError extends Error {
     readonly name = 'COROSDailyProcessingError';
 
@@ -2046,6 +2054,43 @@ function extractCOROSDailyList(payload: unknown): unknown[] {
     return dailyList;
 }
 
+async function requestCOROSDailyData(queueItem: SleepSyncQueueItemInterface, accessToken: string) {
+    const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
+    const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
+    let payload: unknown;
+    let providerStatusCode: number | undefined;
+    try {
+        payload = await requestPromise.get({
+            url: `https://open.coros.com/coros/daily/query?token=${encodeURIComponent(accessToken)}&openId=${encodeURIComponent(queueItem.providerUserId)}&startDate=${startDate}&endDate=${endDate}`,
+            json: true,
+            timeout: COROS_API_REQUEST_TIMEOUT_MS,
+            maxResponseBytes: COROS_DAILY_MAX_RESPONSE_BYTES,
+            onResponseMetadata: ({ statusCode }: requestPromise.ResponseMetadata) => {
+                if (Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599) providerStatusCode = statusCode;
+            },
+        });
+    } catch (error) {
+        // Fetch and decode errors can carry the token-bearing URL or response data.
+        if (error instanceof HistoryLifecycleChangedError) throw error;
+        throw new COROSDailyRequestError(classifyCOROSDailyRequestFailure(error, providerStatusCode), providerStatusCode);
+    }
+    const receivedAtMs = Date.now();
+    const resultCode = normalizeCOROSDailyResultCode(
+        (payload as { result?: unknown } | null)?.result,
+    );
+    const hasSuccessResult = /^0+$/.test(resultCode);
+    if (!hasSuccessResult || !isValidCOROSDailyMessage(
+        (payload as { message?: unknown } | null)?.message,
+    )) {
+        // Only short result codes belong in diagnostics, even for an unexpected response envelope.
+        const hasDiagnosticResult = /^\d{1,4}$/.test(resultCode);
+        const category = !hasSuccessResult && hasDiagnosticResult ? 'provider_result_error' : 'invalid_response';
+        const diagnosticResult = hasDiagnosticResult ? resultCode : resultCode ? 'invalid' : 'unknown';
+        throw new COROSDailyRequestError(category, providerStatusCode, diagnosticResult);
+    }
+    return { payload, receivedAtMs };
+}
+
 async function processCorosQueueItem(
     queueItem: SleepSyncQueueItemInterface,
     tokenSnapshot: TokenSnapshot,
@@ -2069,85 +2114,76 @@ async function processCorosQueueItem(
     const inclusiveRangeDays = rangeStartDate && rangeEndDate
         ? Math.floor((rangeEndDate.getTime() - rangeStartDate.getTime()) / (24 * 60 * 60 * 1000)) + 1
         : 0;
-    if (!rangeStartDate
-        || !rangeEndDate
-        || inclusiveRangeDays < 1
-        || inclusiveRangeDays > COROS_DAILY_MAX_RECORDS) {
+    if (!rangeStartDate || !rangeEndDate || inclusiveRangeDays < 1 || inclusiveRangeDays > COROS_DAILY_MAX_RECORDS) {
         throw new COROSDailyValidationError('COROS daily poll range exceeds the bounded daily range.');
     }
-    const tokenData = await getTokenData(tokenSnapshot, ServiceNames.COROSAPI);
-    const tokenCredential = getTokenCredentialSnapshot(
-        tokenData as unknown as Record<string, unknown>,
-    );
-    if (tokenCredential.credentialGeneration
-        !== initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration) {
-        throw new COROSDailyAccountValidationError();
-    }
-    // Token refresh can change the exact credential fence before the service
-    // metadata read below. Publish that narrower update first so a transient
-    // metadata-read failure remains retryable under the refreshed credential.
-    onTokenCredentialResolved?.(tokenCredential);
-    const lifecycleGuards = await captureCOROSWriteLifecycleGuards(
-        firebaseUserID,
-        queueItem.providerUserId,
-        tokenSnapshot.ref,
-        tokenCredential,
-    );
-    assertCOROSLifecycleContinuity(initialLifecycleGuards, lifecycleGuards);
-    // Publish refreshed credentials immediately. If later provider I/O or
-    // validation fails, queue error-state writes must use the refreshed fence
-    // instead of mistaking our own refresh for an account reconnect.
-    onLifecycleGuardsCaptured?.(lifecycleGuards);
-    if (await shouldSkipQueueWorkForDeletedUser(
-        firebaseUserID,
-        ServiceNames.COROSAPI,
-        queueItem.id,
-        'before_sleep_provider_sync',
-    )) {
-        throw new TokenRefreshSkippedForDeletedUserError(
-            firebaseUserID,
-            ServiceNames.COROSAPI,
-            tokenSnapshot.id,
-            'before_return',
-        );
-    }
-    await assertActiveCOROSQueueAccount(
-        firebaseUserID,
-        queueItem.providerUserId,
-        tokenCredential,
-    );
-    const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
-    const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
-    let payload: unknown;
-    let providerStatusCode: number | undefined;
+
+    const prepareRequest = async (snapshot: TokenSnapshot, tokenData: Awaited<ReturnType<typeof getTokenData>>) => {
+        const credential = getTokenCredentialSnapshot(tokenData as unknown as Record<string, unknown>);
+        if (credential.credentialGeneration !== initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration) {
+            throw new COROSDailyAccountValidationError();
+        }
+        // Retry-state writes need the refreshed credential even if a later check fails.
+        onTokenCredentialResolved?.(credential);
+        const guards = await captureCOROSWriteLifecycleGuards(firebaseUserID, queueItem.providerUserId, snapshot.ref, credential);
+        assertCOROSLifecycleContinuity(initialLifecycleGuards, guards);
+        onLifecycleGuardsCaptured?.(guards);
+        if (await shouldSkipQueueWorkForDeletedUser(
+            firebaseUserID, ServiceNames.COROSAPI, queueItem.id, 'before_sleep_provider_sync',
+        )) {
+            throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, ServiceNames.COROSAPI, snapshot.id, 'before_return');
+        }
+        await assertActiveCOROSQueueAccount(firebaseUserID, queueItem.providerUserId, credential);
+        return { credential, guards };
+    };
+
+    let prepared = await prepareRequest(tokenSnapshot, await getTokenData(tokenSnapshot, ServiceNames.COROSAPI));
+    let response: Awaited<ReturnType<typeof requestCOROSDailyData>>;
     try {
-        payload = await requestPromise.get({
-            url: `https://open.coros.com/coros/daily/query?token=${encodeURIComponent(tokenData.accessToken)}&openId=${encodeURIComponent(queueItem.providerUserId)}&startDate=${startDate}&endDate=${endDate}`,
-            json: true,
-            timeout: COROS_API_REQUEST_TIMEOUT_MS,
-            maxResponseBytes: COROS_DAILY_MAX_RESPONSE_BYTES,
-            onResponseMetadata: ({ statusCode }: requestPromise.ResponseMetadata) => {
-                if (Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599) providerStatusCode = statusCode;
-            },
-        });
+        response = await requestCOROSDailyData(queueItem, prepared.credential.accessToken);
     } catch (error) {
-        // Fetch and decode errors can carry the token-bearing URL or response data.
-        throw new COROSDailyRequestError(classifyCOROSDailyRequestFailure(error, providerStatusCode), providerStatusCode);
+        if (!(error instanceof COROSDailyRequestError)
+            || (error.providerStatusCode !== 401 && error.resultCode !== '5006')) throw error;
+
+        // Use the same limits and guarded projection as the Connections page.
+        // A cached result cannot explain a fresh authorization rejection.
+        const { checkCOROSBindingStateForUser } = await import('../coros/binding-state');
+        const generation = prepared.guards.requiredDocumentFieldValues.expectedFields.connectionStateGeneration;
+        const binding = await checkCOROSBindingStateForUser(firebaseUserID, Date.now(), {
+            providerUserId: queueItem.providerUserId,
+            connectionGeneration: typeof generation === 'string' || generation === null ? generation : undefined,
+            credential: prepared.credential,
+        }).catch(() => null);
+        if (binding?.status === 'unbound') throw new COROSDailyUnboundError();
+        if (binding?.status !== 'bound') throw error;
+
+        const currentSnapshot = await tokenSnapshot.ref.get().catch(() => null);
+        if (!currentSnapshot?.exists || !areTokenCredentialSnapshotsEqual(
+            getTokenCredentialSnapshot(currentSnapshot.data()), prepared.credential,
+        )) {
+            throw error;
+        }
+        const refreshed = await getTokenData(currentSnapshot, ServiceNames.COROSAPI, true, {
+            recoverTerminalAuthFailure: false,
+            allowSupersededSnapshotRetry: false,
+            opaqueTelemetry: true,
+            beforeRefreshRequest: async () => {
+                const guards = await captureCOROSWriteLifecycleGuards(
+                    firebaseUserID, queueItem.providerUserId, currentSnapshot.ref, prepared.credential,
+                );
+                assertCOROSLifecycleContinuity(initialLifecycleGuards, guards);
+            },
+        }).catch(refreshError => {
+            if (refreshError instanceof TokenRefreshSkippedForDeletedUserError
+                || refreshError instanceof HistoryLifecycleChangedError
+                || isTokenUseSkippedForPendingDisconnectError(refreshError)) throw refreshError;
+            throw error;
+        });
+        prepared = await prepareRequest(currentSnapshot, refreshed);
+        response = await requestCOROSDailyData(queueItem, prepared.credential.accessToken);
     }
-    const receivedAtMs = Date.now();
-    const resultCode = normalizeCOROSDailyResultCode(
-        (payload as { result?: unknown } | null)?.result,
-    );
-    const hasSuccessResult = /^0+$/.test(resultCode);
-    if (!hasSuccessResult || !isValidCOROSDailyMessage(
-        (payload as { message?: unknown } | null)?.message,
-    )) {
-        // Only short result codes belong in diagnostics, even for an unexpected response envelope.
-        const hasDiagnosticResult = /^\d{1,4}$/.test(resultCode);
-        const category = !hasSuccessResult && hasDiagnosticResult ? 'provider_result_error' : 'invalid_response';
-        const diagnosticResult = hasDiagnosticResult ? resultCode : resultCode ? 'invalid' : 'unknown';
-        throw new COROSDailyRequestError(category, providerStatusCode, diagnosticResult);
-    }
+    const { payload, receivedAtMs } = response;
+    const { credential: tokenCredential, guards: lifecycleGuards } = prepared;
     const dailyList = extractCOROSDailyList(payload);
     if (dailyList.length > COROS_DAILY_MAX_RECORDS) {
         throw new COROSDailyValidationError('COROS daily response exceeds the bounded record count.');
@@ -3263,6 +3299,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         });
     } catch (error) {
         if (error instanceof ProviderOperationStillInFlightError) throw error;
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && error instanceof HistoryLifecycleChangedError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
             if (!isSuuntoHealthQueueItem(queueItem)) return increaseRetryCountForQueueItem(queueItem, error);
@@ -3409,6 +3446,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                 resolvedFirebaseUserID,
             );
         }
+        if (error instanceof COROSDailyUnboundError) return skipCOROSUnboundPoll(queueItem);
         if (error instanceof MissingSleepProviderTokenError) {
             if (suuntoQueueOwner && await isSuuntoImportDisconnected(suuntoQueueOwner)) {
                 logger.info('[SleepSync][Suunto] Skipping work after completed disconnect.', {
@@ -3421,6 +3459,12 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 && queueItem.type === 'coros_poll' && queueItem.userID) {
                 const meta = await getServiceConnectionMeta(queueItem.userID, ServiceNames.COROSAPI);
+                if (isReconnectRequiredServiceConnection(meta) && meta?.providerUserId === queueItem.providerUserId
+                    && meta.providerBindingState === 'unbound' && meta.lastAuthFailureCode === 'coros_unbound'
+                    && (queueItem.corosConnectionStateGeneration === undefined
+                        || queueItem.corosConnectionStateGeneration === (meta.connectionStateGeneration ?? null))) {
+                    return skipCOROSUnboundPoll(queueItem);
+                }
                 // An account/credential mismatch also looks like a missing token.
                 // Only a cleared lifecycle, confirmed empty projection AND absent
                 // token root prove the queued poll outlived a completed disconnect.

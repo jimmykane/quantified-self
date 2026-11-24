@@ -25,6 +25,12 @@ import {
   USE_STAGING,
 } from './constants';
 import { parseCOROSJSON } from './json';
+import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES } from '../../../shared/health';
+import { doesServiceDisconnectOperationPermitTokenUse, getServiceTokenCollectionRef } from '../service-token-store';
+import {
+  areTokenCredentialSnapshotsEqual, doesOAuthCredentialGenerationAuthorizeToken,
+  getTokenCredentialSnapshot, type TokenCredentialSnapshot,
+} from '../token-refresh-coordinator';
 
 interface COROSBindingStateResponse {
   result?: unknown;
@@ -137,6 +143,29 @@ type COROSBindingCheckClaim =
   | { status: 'cached'; result: COROSBindingStateResult }
   | { status: 'claimed'; leaseId: string };
 
+interface COROSBindingRecoveryTarget {
+  providerUserId: string;
+  connectionGeneration: ServiceConnectionMetaFields['connectionStateGeneration'];
+  credential: TokenCredentialSnapshot;
+}
+
+async function matchesRecoveryTarget(
+  transaction: admin.firestore.Transaction,
+  tokenRef: admin.firestore.DocumentReference,
+  tokenData: Record<string, unknown> | undefined,
+  meta: ServiceConnectionMetaFields | undefined,
+  target: COROSBindingRecoveryTarget | undefined,
+): Promise<boolean> {
+  if (!target) return true;
+  if (meta?.connectionStateGeneration !== target.connectionGeneration
+    || !areTokenCredentialSnapshotsEqual(getTokenCredentialSnapshot(tokenData), target.credential)) return false;
+  const rootRef = tokenRef.parent.parent;
+  if (!rootRef) return false;
+  const root = (await transaction.get(rootRef)).data();
+  return doesOAuthCredentialGenerationAuthorizeToken(root, target.credential.credentialGeneration)
+    && doesServiceDisconnectOperationPermitTokenUse(root, undefined);
+}
+
 async function claimCOROSBindingStateCheck(params: {
   userID: string;
   openId: string;
@@ -145,6 +174,7 @@ async function claimCOROSBindingStateCheck(params: {
   tokenRef: admin.firestore.DocumentReference;
   checkedAt: number;
   leaseId: string;
+  recoveryTarget?: COROSBindingRecoveryTarget;
 }): Promise<COROSBindingCheckClaim> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
@@ -178,7 +208,8 @@ async function claimCOROSBindingStateCheck(params: {
         params.tokenDateCreated,
       )
       || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
-      || isServiceUnavailableForSyncConnection(metaData)) {
+      || isServiceUnavailableForSyncConnection(metaData)
+      || !await matchesRecoveryTarget(transaction, params.tokenRef, tokenData, metaData, params.recoveryTarget)) {
       throw new HttpsError('unauthenticated', 'Reconnect COROS before checking the connection.');
     }
 
@@ -187,7 +218,7 @@ async function claimCOROSBindingStateCheck(params: {
       params.checkedAt,
       COROS_BINDING_STATE_CACHE_MS,
     );
-    if (cachedResult) {
+    if (cachedResult && !params.recoveryTarget) {
       return { status: 'cached' as const, result: cachedResult };
     }
 
@@ -198,7 +229,7 @@ async function claimCOROSBindingStateCheck(params: {
         params.checkedAt,
         COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS,
       );
-      if (staleResult) {
+      if (staleResult && !params.recoveryTarget) {
         return { status: 'cached' as const, result: staleResult };
       }
       throw new HttpsError(
@@ -215,7 +246,7 @@ async function claimCOROSBindingStateCheck(params: {
         params.checkedAt,
         COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS,
       );
-      if (staleResult) {
+      if (staleResult && !params.recoveryTarget) {
         return { status: 'cached' as const, result: staleResult };
       }
       throw new HttpsError(
@@ -273,6 +304,7 @@ async function persistBindingStateIfCurrent(params: {
   bound: boolean;
   checkedAt: number;
   leaseId: string;
+  recoveryTarget?: COROSBindingRecoveryTarget;
 }): Promise<'updated' | 'stale' | 'user_inactive'> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
@@ -302,7 +334,8 @@ async function persistBindingStateIfCurrent(params: {
       )
       || metaData?.providerBindingCheckLeaseId !== params.leaseId
       || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
-      || isServiceUnavailableForSyncConnection(metaData)) {
+      || isServiceUnavailableForSyncConnection(metaData)
+      || !await matchesRecoveryTarget(transaction, params.tokenRef, tokenData, metaData, params.recoveryTarget)) {
       return 'stale';
     }
 
@@ -317,6 +350,25 @@ async function persistBindingStateIfCurrent(params: {
       return 'updated';
     }
 
+    if (params.recoveryTarget) {
+      // The worker may already show a retry in Health Sources. Settle it with
+      // the same transaction that records the confirmed unbind in Connections.
+      const { updateHealthSyncState } = await import('../health/writer');
+      const written = await updateHealthSyncState(params.userID, HEALTH_PROVIDERS.COROSAPI, {
+        status: HEALTH_SYNC_STATUSES.ReconnectRequired,
+        lastErrorCode: 'provider_auth_reconnect_required',
+        retryPending: false,
+      }, params.checkedAt, {
+        transaction,
+        authoritativeLifecycleTransition: true,
+        requiredDocumentFieldValues: {
+          documentRef: metaRef,
+          expectedFields: { providerUserId: params.openId, connectionState: metaData?.connectionState,
+            connectionStateGeneration: params.recoveryTarget.connectionGeneration },
+        },
+      });
+      if (!written) return 'stale';
+    }
     transaction.set(metaRef, {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
       providerBindingState: 'unbound',
@@ -416,16 +468,20 @@ async function recordCOROSBindingStateFailureCooldownAfterFailure(
 export async function checkCOROSBindingStateForUser(
   userID: string,
   checkedAt = Date.now(),
+  recoveryTarget?: COROSBindingRecoveryTarget,
 ): Promise<COROSBindingStateResult> {
-  const tokenSnapshot = await getActiveCOROSTokenSnapshot(userID);
-  const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
-  const openId = normalizeCOROSOpenId(tokenData?.openId || tokenSnapshot.id);
-  const accessToken = typeof tokenData?.accessToken === 'string' ? tokenData.accessToken.trim() : '';
+  const tokenSnapshot = recoveryTarget ? null : await getActiveCOROSTokenSnapshot(userID);
+  const tokenData = tokenSnapshot?.data() as Record<string, unknown> | undefined;
+  const openId = normalizeCOROSOpenId(recoveryTarget?.providerUserId ?? (tokenData?.openId || tokenSnapshot?.id));
+  const rawAccessToken = recoveryTarget?.credential.accessToken ?? tokenData?.accessToken;
+  const accessToken = typeof rawAccessToken === 'string' ? rawAccessToken.trim() : '';
   const rawDateCreated = Number(tokenData?.dateCreated);
   const tokenDateCreated = Number.isFinite(rawDateCreated) ? rawDateCreated : null;
-  if (!openId || openId !== tokenSnapshot.id || !accessToken) {
+  if (!openId || (tokenSnapshot && openId !== tokenSnapshot.id) || !accessToken) {
     throw new HttpsError('unauthenticated', 'Reconnect COROS before checking the connection.');
   }
+  // Background recovery must never repin an account through the general lookup.
+  const tokenRef = tokenSnapshot?.ref ?? getServiceTokenCollectionRef(userID, ServiceNames.COROSAPI).doc(openId);
 
   const leaseId = crypto.randomUUID();
   const claim = await claimCOROSBindingStateCheck({
@@ -433,9 +489,10 @@ export async function checkCOROSBindingStateForUser(
     openId,
     accessToken,
     tokenDateCreated,
-    tokenRef: tokenSnapshot.ref,
+    tokenRef,
     checkedAt,
     leaseId,
+    recoveryTarget,
   });
   if (claim.status === 'cached') return claim.result;
 
@@ -446,10 +503,11 @@ export async function checkCOROSBindingStateForUser(
       openId,
       accessToken,
       tokenDateCreated,
-      tokenRef: tokenSnapshot.ref,
+      tokenRef,
       bound,
       checkedAt,
       leaseId: claim.leaseId,
+      recoveryTarget,
     });
     if (writeResult === 'user_inactive') {
       throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');

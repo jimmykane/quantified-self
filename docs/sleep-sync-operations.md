@@ -199,6 +199,13 @@ The existing completion transaction rejects replaced, already-processed, missing
 account deletion. Stale/deletion-denied transitions emit no committed outcome. Unknown state or a present token root
 retains the missing-token warning/DLQ path, and Firestore failures remain retryable.
 
+For COROS-side unbinds, HTTP 401 or a daily API result of `5006` asks COROS to verify the current binding. When COROS
+confirms the account is unbound, Connections and Health show **Reconnect required** and the worker marks the current
+poll `processed=true`, `resultStatus=skipped`, `skippedReason=provider_auth_required`. A redelivery can settle a
+matching already-confirmed unbind without another provider request. Connection-history children can also settle
+through the existing superseded-connection guard. Only successful polls advance the coverage watermark. An
+inconclusive check does not change connection status. A bound result allows a single refresh and repeat daily read.
+
 Monitoring coverage is **covered/unchanged**: #830 already includes `COROSAPI` / `sleep_sync`, post-commit `skipped`
 outcomes, genuine failures and new dead letters. No metric, threshold, dashboard or cloud configuration changes are
 needed. Help's existing disconnect/history-retention explanation remains accurate, and there is no MCP/Training data

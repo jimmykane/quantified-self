@@ -2159,6 +2159,12 @@ owns deletion/revision/lease checks and post-commit skip telemetry; no new lifec
 See [COROS daily ingestion](coros-integration.md#daily-health-and-sleep-ingestion) and the
 [Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
 
+COROS daily-data authorization failures also use the existing binding check in the worker. HTTP 401 or result `5006`
+is a reason to verify the exact active credential, not proof of a disconnect. A fresh unbound result projects
+**Reconnect required** for Connections and Health and settles the queue item as an authorization skip. A fresh bound
+result permits one refresh and one repeat read. Inconclusive checks retain normal backoff. The extra provider calls
+are confined to rejected requests and share the existing binding-check limits.
+
 Owned Suunto workout and Sleep/Health jobs use the same confirmed-disconnect skip, requiring a cleared generated
 lifecycle, revisioned empty account projection and no remaining token children for that Firebase owner. An empty
 OAuth root may remain; a missing exact-account token while another credential exists is not a completed disconnect.

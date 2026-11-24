@@ -123,6 +123,14 @@ The diagnostic includes a fixed failure category, the HTTP status if a response 
 code when available. URLs, credentials, account IDs and response bodies are excluded. Existing Health/Sleep monitoring
 continues to count retries and terminal failures through the same worker and queue events.
 
+A daily request rejected with HTTP 401 or COROS result `5006` checks `bindState` for the exact credential and connection
+that were rejected. This bypasses the cached binding result and shares the Connections check's lease, cooldown and
+provider budget. An explicit unbound result sets **Reconnect required** and ends the Health retry state in the same
+transaction as the existing automatic-route disablement. That job settles as an authorization skip, without advancing
+the import watermark. A freshly confirmed bound account gets one guarded refresh and one repeat read. An unavailable
+check, rejected refresh or second authorization failure follows the existing retry policy. A late response cannot
+change a replacement credential, account or connection. See the [Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
+
 The shared response is deliberately split across existing domains:
 
 | Native daily field | Storage contract |
