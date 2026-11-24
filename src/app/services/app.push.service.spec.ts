@@ -515,13 +515,49 @@ describe('device notification lifecycle', () => {
       origin: registration.origin, device: registration.device, action: 'browser_detached' });
     expect(deleteDoc).toHaveBeenCalledOnce();
   });
-  it('logs the missing browser subscription on cleanup', async () => {
+  it('recovers a temporarily missing subscription on the same refresh', async () => {
+    notifications.permission = 'granted';
+    storage.setItem(localKey, JSON.stringify({ uid: owner.uid, installationId: id }));
+    manager.getSubscription.mockResolvedValue(subscription);
+    const service = setup(); await tick();
+    manager.getSubscription.mockResolvedValueOnce(null);
+    await service.refreshRegistration();
+    expect(service.state()).toBe('enabled');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(true);
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('preserves a saved registration while the browser is unavailable and recovers on a worker update', async () => {
     notifications.permission = 'granted';
     storage.setItem(localKey, JSON.stringify({ uid: owner.uid, installationId: id }));
     const service = setup(); await tick();
+    expect(service.state()).toBe('unavailable');
+    expect(service.unavailableReason()).toContain('still registered');
+    expect(service.isCurrentDevice(id, registration.origin)).toBe(true);
+    expect(service.canTest()).toBe(false);
+    expect(service.canEnable()).toBe(true);
+    manager.getSubscription.mockResolvedValue(subscription);
+    workerReady.next(subscription); await tick();
+    expect(service.state()).toBe('enabled');
+    expect(logRemoval).not.toHaveBeenCalled();
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(updateDoc).not.toHaveBeenCalled();
+    expect(manager.subscribe).not.toHaveBeenCalled();
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+  });
+  it('honors a remotely removed registration while the browser subscription is missing', async () => {
+    notifications.permission = 'granted';
+    storage.setItem(localKey, JSON.stringify({ uid: owner.uid, installationId: id }));
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false, data: () => undefined } as never);
+    const service = setup(); await tick();
     expect(service.state()).toBe('disabled');
-    expect(logRemoval).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'browser_subscription_missing', action: 'browser_detached' }));
-    expect(deleteDoc).toHaveBeenCalledOnce();
+    expect(storage.getItem(localKey)).toBeNull();
+    expect(logRemoval).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: 'registration_already_missing' }));
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(manager.subscribe).not.toHaveBeenCalled();
   });
   it('distinguishes a successful server delete request when browser revocation fails', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);

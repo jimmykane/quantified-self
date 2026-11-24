@@ -8,7 +8,7 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { AppPushService } from '../../services/app.push.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppNotificationDevicesService, type NotificationDevice } from '../../services/app.notification-devices.service';
-const push = { state: signal('disabled'), operation: signal<string | null>(null), message: signal(''), registered: signal(false),
+const push = { state: signal('disabled'), operation: signal<string | null>(null), message: signal(''), unavailableReason: signal(''), registered: signal(false),
   canEnable: signal(true), canDisable: signal(false), canTest: signal(false), enable: vi.fn(), disable: vi.fn(), sendTest: vi.fn() };
 const categoryEnabled = signal(true);
 const preferences = { status: signal('ready'), saving: signal<string | null>(null), message: signal(''), canEdit: signal(true), reloadRequired: signal(false),
@@ -23,7 +23,7 @@ const devices = { devices: signal([device]), status: signal('ready'), saving: si
 beforeEach(() => {
   vi.clearAllMocks(); categoryEnabled.set(true); preferences.status.set('ready'); preferences.saving.set(null);
   preferences.message.set(''); preferences.canEdit.set(true); preferences.reloadRequired.set(false); preferences.setEnabled.mockResolvedValue(true);
-  push.state.set('disabled'); push.operation.set(null); push.message.set(''); push.registered.set(false);
+  push.state.set('disabled'); push.operation.set(null); push.message.set(''); push.unavailableReason.set(''); push.registered.set(false);
   push.canEnable.set(true); push.canDisable.set(false); push.canTest.set(false); push.enable.mockResolvedValue(undefined);
   devices.devices.set([device]); devices.status.set('ready'); devices.saving.set(null); devices.message.set('');
   devices.canManage.set(true); devices.canReload.set(true); devices.hasMore.set(false); devices.loadingMore.set(false);
@@ -39,6 +39,12 @@ describe('notification Settings', () => {
     const buttons = [...fixture.nativeElement.querySelectorAll('.notification-actions button')] as HTMLButtonElement[];
     expect(buttons.map(b => b.textContent)).toEqual([expect.stringContaining('Enable on this device'), expect.stringContaining('Send test notification')]);
     expect(buttons[0].disabled).toBe(false); expect(buttons[1].disabled).toBe(true); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('shows the saved registration status when the browser connection is unavailable', () => {
+    push.state.set('unavailable');
+    push.unavailableReason.set('This device is still registered.');
+    const fixture = TestBed.createComponent(PushNotificationSettingsComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('This device is still registered.');
   });
   it('renders the default-on category and keeps its saved state while a change is pending or fails', async () => {
     const fixture = TestBed.createComponent(PushNotificationSettingsComponent); fixture.detectChanges();
