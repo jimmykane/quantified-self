@@ -177,12 +177,16 @@ describe('COROS binding state', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
-  it.each(['connection', 'token', 'root'] as const)('discards a late unbound response after the %s changes', async change => {
-    const target = recoveryTarget();
+  it.each([
+    ['worker', 'connection'], ['worker', 'token'], ['worker', 'root'],
+    ['callable', 'connection'], ['callable', 'token'], ['callable', 'root'], ['callable', 'disconnect fence'],
+  ] as const)('discards a late %s unbound response after the %s changes', async (caller, change) => {
+    const target = caller === 'worker' ? recoveryTarget() : undefined;
     mocks.requestGet.mockImplementationOnce(async () => {
       if (change === 'connection') currentMetaData.connectionStateGeneration = 'replacement-connection';
       if (change === 'token') currentTokenData.dateRefreshed = 7_000;
       if (change === 'root') currentRootData = { activeOAuthCredentialGeneration: 'replacement-root' };
+      if (change === 'disconnect fence') currentRootData = { disconnectOperationGeneration: 'pending-disconnect' };
       return '{"result":"0000","data":{"bindState":0}}';
     });
 

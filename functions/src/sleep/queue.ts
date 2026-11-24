@@ -1588,6 +1588,12 @@ function isCOROSDailyAuthorizationError(error: unknown): error is COROSDailyRequ
         && (error.providerStatusCode === 401 || error.resultCode === '5006');
 }
 
+function isCOROSCredentialFromSameGrant(current: TokenCredentialSnapshot, expected: TokenCredentialSnapshot): boolean {
+    return Boolean(expected.credentialGeneration || expected.dateCreated > 0)
+        && current.credentialGeneration === expected.credentialGeneration
+        && current.dateCreated === expected.dateCreated;
+}
+
 async function retryIfCOROSDailyCredentialRefreshed(
     error: unknown,
     providerUserId: string,
@@ -1600,8 +1606,7 @@ async function retryIfCOROSDailyCredentialRefreshed(
     const current = getTokenCredentialSnapshot(currentToken.data());
     const expected = guards.requiredExistingTokenCredential;
     if (currentToken.exists && doesCOROSTokenSnapshotMatchOpenId(currentToken, providerUserId.trim()) && current.accessToken
-        && (expected.credentialGeneration || expected.dateCreated > 0)
-        && current.credentialGeneration === expected.credentialGeneration && current.dateCreated === expected.dateCreated
+        && isCOROSCredentialFromSameGrant(current, expected)
         && !areTokenCredentialSnapshotsEqual(current, expected)) {
         // The next delivery revalidates the whole connection and queue revision.
         // Do not write an authorization failure against a token we never used.
@@ -2049,12 +2054,12 @@ async function assertActiveCOROSQueueAccount(
         // opaque while preserving the retryable failure class.
         throw new COROSDailyAccountValidationError();
     }
-    if (!areTokenCredentialSnapshotsEqual(
-        corosCredentialFromSnapshot(activeTokenSnapshot),
-        expectedCredential,
-    )) {
-        throw new COROSDailyAccountValidationError();
+    const activeCredential = corosCredentialFromSnapshot(activeTokenSnapshot);
+    if (areTokenCredentialSnapshotsEqual(activeCredential, expectedCredential)) return;
+    if (isCOROSCredentialFromSameGrant(activeCredential, expectedCredential)) {
+        throw new TokenRefreshSupersededError(ServiceNames.COROSAPI, 'daily-sync');
     }
+    throw new COROSDailyAccountValidationError();
 }
 
 function extractCOROSDailyList(payload: unknown): unknown[] {
@@ -3324,6 +3329,10 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
         });
     } catch (error) {
         if (error instanceof ProviderOperationStillInFlightError) throw error;
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && error instanceof TokenRefreshSupersededError) {
+            // Shared token refresh errors may include the provider account ID.
+            throw new TokenRefreshSupersededError(ServiceNames.COROSAPI, 'daily-sync');
+        }
         if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && error instanceof HistoryLifecycleChangedError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');

@@ -4271,6 +4271,23 @@ describe('sleep queue', () => {
             expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 7, dispatchedToCloudTask: null }));
         });
 
+        it('leaves the poll pending if another refresh wins before the repeat request', async () => {
+            rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+            hoisted.getTokenData.mockResolvedValueOnce(tokenData).mockImplementationOnce(async () => {
+                const concurrentToken = { ...tokenData, dateRefreshed: 300 };
+                hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: item.providerUserId, data: () => concurrentToken, ref: tokenRef });
+                return { ...tokenData, dateRefreshed: 200 };
+            });
+            hoisted.markSleepSyncError.mockResolvedValue(false);
+
+            await expect(processSleepSyncQueueItem(item)).rejects.toMatchObject({ name: 'TokenRefreshSupersededError' });
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(queueRef.update).not.toHaveBeenCalled();
+        });
+
         it.each(['sleep', 'health'] as const)('leaves the poll pending when a concurrent refresh rejects the %s state write', async state => {
             rejectDailyRequest(401);
             const refreshedToken = { ...tokenData, dateRefreshed: 200 };
@@ -4286,6 +4303,7 @@ describe('sleep queue', () => {
             await expect(processSleepSyncQueueItem(item)).rejects.toMatchObject({ name: 'TokenRefreshSupersededError' });
             expect(hoisted.getTokenData).toHaveBeenCalledOnce();
             expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(state === 'health' ? 1 : 0);
             expect(queueRef.update).not.toHaveBeenCalled();
             expect(hoisted.batchSet).not.toHaveBeenCalled();
         });

@@ -141,7 +141,7 @@ function getCachedBindingState(
 
 type COROSBindingCheckClaim =
   | { status: 'cached'; result: COROSBindingStateResult }
-  | { status: 'claimed'; leaseId: string };
+  | { status: 'claimed'; leaseId: string; connectionGeneration: ServiceConnectionMetaFields['connectionStateGeneration'] };
 
 interface COROSBindingRecoveryTarget {
   providerUserId: string;
@@ -149,7 +149,7 @@ interface COROSBindingRecoveryTarget {
   credential: TokenCredentialSnapshot;
 }
 
-async function matchesRecoveryTarget(
+async function matchesBindingCheckTarget(
   transaction: admin.firestore.Transaction,
   tokenRef: admin.firestore.DocumentReference,
   tokenData: Record<string, unknown> | undefined,
@@ -209,7 +209,7 @@ async function claimCOROSBindingStateCheck(params: {
       )
       || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
       || isServiceUnavailableForSyncConnection(metaData)
-      || !await matchesRecoveryTarget(transaction, params.tokenRef, tokenData, metaData, params.recoveryTarget)) {
+      || !await matchesBindingCheckTarget(transaction, params.tokenRef, tokenData, metaData, params.recoveryTarget)) {
       throw new HttpsError('unauthenticated', 'Reconnect COROS before checking the connection.');
     }
 
@@ -291,7 +291,7 @@ async function claimCOROSBindingStateCheck(params: {
       providerBindingCheckLeaseExpiresAt: params.checkedAt + COROS_BINDING_STATE_LEASE_MS,
       providerBindingCheckNextRetryAt: 0,
     }, { merge: true });
-    return { status: 'claimed' as const, leaseId: params.leaseId };
+    return { status: 'claimed' as const, leaseId: params.leaseId, connectionGeneration: metaData?.connectionStateGeneration };
   });
 }
 
@@ -304,7 +304,7 @@ async function persistBindingStateIfCurrent(params: {
   bound: boolean;
   checkedAt: number;
   leaseId: string;
-  recoveryTarget?: COROSBindingRecoveryTarget;
+  target: COROSBindingRecoveryTarget;
 }): Promise<'updated' | 'stale' | 'user_inactive'> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
@@ -335,7 +335,7 @@ async function persistBindingStateIfCurrent(params: {
       || metaData?.providerBindingCheckLeaseId !== params.leaseId
       || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
       || isServiceUnavailableForSyncConnection(metaData)
-      || !await matchesRecoveryTarget(transaction, params.tokenRef, tokenData, metaData, params.recoveryTarget)) {
+      || !await matchesBindingCheckTarget(transaction, params.tokenRef, tokenData, metaData, params.target)) {
       return 'stale';
     }
 
@@ -507,7 +507,11 @@ export async function checkCOROSBindingStateForUser(
       bound,
       checkedAt,
       leaseId: claim.leaseId,
-      recoveryTarget,
+      target: recoveryTarget ?? {
+        providerUserId: openId,
+        connectionGeneration: claim.connectionGeneration,
+        credential: getTokenCredentialSnapshot(tokenData),
+      },
     });
     if (writeResult === 'user_inactive') {
       throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');

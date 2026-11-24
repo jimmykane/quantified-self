@@ -129,8 +129,9 @@ provider budget. An explicit unbound result sets **Reconnect required** and ends
 transaction as the existing automatic-route disablement. That job settles as an authorization skip, without advancing
 the import watermark. A freshly confirmed bound account gets one guarded refresh and one repeat read. An unavailable
 check, rejected refresh or second authorization failure follows the existing retry policy. If a concurrent refresh of the
-same grant invalidates a guarded failure write, Cloud Tasks retries the pending poll and the worker checks the full
-lifecycle again. A late response cannot change a replacement credential, account or connection. See the
+same grant invalidates the worker's token recheck or guarded failure write, Cloud Tasks retries the pending poll and the
+worker checks the full lifecycle again. Both the worker and the Connections callable discard a binding result if the
+credential, token root or connection changed during the check. See the
 [Sleep operations runbook](sleep-sync-operations.md#queued-coros-polls-after-disconnect).
 
 The shared response is deliberately split across existing domains:

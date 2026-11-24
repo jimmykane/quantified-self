@@ -205,8 +205,8 @@ poll `processed=true`, `resultStatus=skipped`, `skippedReason=provider_auth_requ
 matching already-confirmed unbind without another provider request. Connection-history children can also settle
 through the existing superseded-connection guard. Only successful polls advance the coverage watermark. An
 inconclusive check does not change connection status. A bound result allows a single refresh and repeat daily read.
-If a same-grant refresh invalidates the rejected request's failure-state write, the worker leaves the current revision
-pending for Cloud Tasks redelivery, classified as expected contention.
+If a same-grant refresh invalidates a worker token recheck or a rejected request's failure-state write, the worker leaves
+the current revision pending for Cloud Tasks redelivery, classified as expected contention.
 
 Monitoring coverage is **covered/unchanged**: #830 already includes `COROSAPI` / `sleep_sync`, post-commit `skipped`
 outcomes, genuine failures and new dead letters. No metric, threshold, dashboard or cloud configuration changes are
