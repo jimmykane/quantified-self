@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResponseBodyTooLargeError, type ResponseMetadata } from '../request-helper';
 import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from '../queue-utils';
@@ -232,7 +233,8 @@ vi.mock('../tokens', () => {
     };
 });
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+    ...await importOriginal<typeof import('../request-helper')>(),
     get: hoisted.requestGet,
 }));
 
@@ -5206,7 +5208,10 @@ describe('sleep queue', () => {
         }));
     });
 
-    it('rejects a COROS daily response without an explicit success result', async () => {
+    it.each([
+        { providerResult: undefined, diagnosticResult: 'unknown' },
+        { providerResult: '12345678901234567890', diagnosticResult: 'invalid' },
+    ])('rejects a COROS daily response with a $diagnosticResult result code', async ({ providerResult, diagnosticResult }) => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const activeToken = {
             id: 'coros-user-1',
@@ -5215,7 +5220,7 @@ describe('sleep queue', () => {
         };
         hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(activeToken);
         hoisted.getTokenData.mockResolvedValue({ accessToken: 'coros-access-token' });
-        hoisted.requestGet.mockResolvedValue({ message: 'OK', data: { dailyList: [] } });
+        hoisted.requestGet.mockResolvedValue({ result: providerResult, message: 'OK', data: { dailyList: [] } });
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
@@ -5236,9 +5241,11 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.RetryIncremented);
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
         expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-missing-daily-result failed',
+            expect.objectContaining({ failureCategory: 'invalid_response' }));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             errors: [expect.objectContaining({
-                error: 'COROS daily data request failed with result unknown.',
+                error: `COROS daily data request failed with result ${diagnosticResult}.`,
             })],
         }));
     });
@@ -5400,6 +5407,8 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.RetryIncremented);
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-failed-daily-response failed',
+            expect.objectContaining({ failureCategory: 'provider_result_error', providerResultCode: '5006' }));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
             dispatchedToCloudTask: null,
@@ -5644,7 +5653,15 @@ describe('sleep queue', () => {
         expect(hoisted.recursiveDelete).toHaveBeenCalledWith(queueRef);
     });
 
-    it('keeps COROS transport and response details out of durable error telemetry', async () => {
+    it.each([
+        { category: 'provider_http_error', status: 503, makeError: (message: string) => new Error(message) },
+        { category: 'timeout', makeError: (message: string) => new DOMException(message, 'AbortError') },
+        { category: 'timeout', makeError: (message: string) => new TypeError(message, { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } }) },
+        { category: 'transport_error', makeError: (message: string) => new TypeError(message, { cause: { code: 'ECONNRESET' } }) },
+        { category: 'invalid_response', status: 200, makeError: (message: string) => new SyntaxError(message) },
+        { category: 'response_byte_limit', status: 200, makeError: () => new ResponseBodyTooLargeError(16, 17) },
+        { category: 'provider_request_unknown', status: 600, makeError: (message: string) => new Error(message) },
+    ])('reports COROS $category safely and keeps normal retry accounting', async ({ category, status, makeError }) => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const privateProviderUserId = 'private-coros-account-id';
         const privateAccessToken = 'private-coros-access-token';
@@ -5684,10 +5701,14 @@ describe('sleep queue', () => {
             dateRefreshed: 2_000,
             tokenCredentialGeneration: 'private-credential-generation',
         });
-        hoisted.requestGet.mockRejectedValue(Object.assign(
-            new Error(`Failed URL contains ${privateAccessToken}`),
-            { error: { message: privateResponseDetail } },
-        ));
+        const privateUrl = `https://open.coros.com/coros/daily/query?token=${privateAccessToken}`;
+        const rawError = Object.assign(makeError(`Failed to read ${privateUrl}`), {
+            error: { message: privateResponseDetail },
+        });
+        hoisted.requestGet.mockImplementationOnce(async (options: { onResponseMetadata: (meta: ResponseMetadata) => void }) => {
+            if (status !== undefined) options.onResponseMetadata({ statusCode: status, contentType: privateResponseDetail });
+            throw rawError;
+        });
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
@@ -5722,14 +5743,28 @@ describe('sleep queue', () => {
             }),
         );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            retryCount: 1,
+            dispatchedToCloudTask: null,
             errors: [expect.objectContaining({
                 error: 'COROS daily data request failed.',
             })],
         }));
-        const errorLog = hoisted.loggerError.mock.calls.flat().join(' ');
-        expect(errorLog).not.toContain(privateProviderUserId);
-        expect(errorLog).not.toContain(privateAccessToken);
-        expect(errorLog).not.toContain(privateResponseDetail);
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-private-provider-error failed', {
+            provider: 'COROSAPI',
+            errorName: 'COROSDailyRequestError',
+            errorCode: 'coros_daily_request_failed',
+            failureStage: 'daily_request',
+            failureCategory: category,
+            ...(status !== undefined && status < 600 ? { providerStatusCode: status } : {}),
+        });
+        const diagnostics = JSON.stringify([
+            hoisted.loggerError.mock.calls,
+            hoisted.markSleepSyncError.mock.calls[0]?.[2],
+            update.mock.calls.map(([write]) => write.errors),
+        ]);
+        for (const value of [privateProviderUserId, privateAccessToken, privateResponseDetail, privateUrl]) {
+            expect(diagnostics).not.toContain(value);
+        }
     });
 
     it('keeps COROS token-refresh and datastore details out of durable error telemetry', async () => {

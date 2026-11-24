@@ -118,6 +118,11 @@ Release after separate deployment approval: build Functions and deploy the sched
 
 The response is decoded only within a 4 MiB limit. A request accepts at most 30 daily rows and each row at most 1,440 `hrvList` entries. A provider-confirmed success may return an exact empty `data` object when the requested range has no daily records; the worker treats only that empty object as an empty result. A non-empty unrecognized data object, missing success result, or malformed `dailyList` still fails closed. Calendar dates and local sleep timestamps are validated strictly; COROS timezone integers are interpreted in the documented 15-minute units. Duplicate daily rows use the final row for that provider date, and duplicate HRV timestamps use the final point. Missing or invalid measurements remain unavailable rather than becoming zero.
 
+For daily request failures, filter the `processSleepSyncTask` logs on `jsonPayload.errorCode="coros_daily_request_failed"`.
+The diagnostic includes a fixed failure category, the HTTP status if a response arrived, and a bounded COROS result
+code when available. URLs, credentials, account IDs and response bodies are excluded. Existing Health/Sleep monitoring
+continues to count retries and terminal failures through the same worker and queue events.
+
 The shared response is deliberately split across existing domains:
 
 | Native daily field | Storage contract |

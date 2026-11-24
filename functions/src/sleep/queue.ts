@@ -1566,14 +1566,40 @@ class MissingSleepProviderTokenError extends Error {
     }
 }
 
+type COROSDailyRequestFailure = 'provider_http_error' | 'provider_result_error' | 'invalid_response'
+    | 'response_byte_limit' | 'timeout' | 'transport_error' | 'provider_request_unknown';
+
 class COROSDailyRequestError extends Error {
     readonly name = 'COROSDailyRequestError';
 
-    constructor(resultCode?: string) {
+    constructor(
+        readonly failureCategory: COROSDailyRequestFailure,
+        readonly providerStatusCode?: number,
+        readonly resultCode?: string,
+    ) {
         super(resultCode
             ? `COROS daily data request failed with result ${resultCode}.`
             : 'COROS daily data request failed.');
     }
+}
+
+function classifyCOROSDailyRequestFailure(error: unknown, status?: number): COROSDailyRequestFailure {
+    if (status !== undefined && (status < 200 || status >= 300)) return 'provider_http_error';
+    try {
+        if (error instanceof requestPromise.ResponseBodyTooLargeError) return 'response_byte_limit';
+        if (error instanceof SyntaxError) return 'invalid_response';
+        const { errorName, transportCode } = getHealthFailureTelemetry(error, 'provider_sync', 0);
+        // This request has no caller-provided abort signal. Abort indicates its configured deadline.
+        if (errorName === 'AbortError' || errorName === 'TimeoutError'
+            || transportCode === 'ETIMEDOUT' || transportCode === 'ESOCKETTIMEDOUT') return 'timeout';
+        if (transportCode) return 'transport_error';
+        // Node fetch can time out connecting before our own deadline fires.
+        const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+        if (code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT'
+            || code === 'UND_ERR_BODY_TIMEOUT') return 'timeout';
+        if (code === 'UND_ERR_SOCKET') return 'transport_error';
+    } catch { /* A diagnostic classification must not replace retry handling. */ }
+    return 'provider_request_unknown';
 }
 
 class COROSDailyAccountValidationError extends Error {
@@ -2093,26 +2119,34 @@ async function processCorosQueueItem(
     const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
     const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
     let payload: unknown;
+    let providerStatusCode: number | undefined;
     try {
         payload = await requestPromise.get({
             url: `https://open.coros.com/coros/daily/query?token=${encodeURIComponent(tokenData.accessToken)}&openId=${encodeURIComponent(queueItem.providerUserId)}&startDate=${startDate}&endDate=${endDate}`,
             json: true,
             timeout: COROS_API_REQUEST_TIMEOUT_MS,
             maxResponseBytes: COROS_DAILY_MAX_RESPONSE_BYTES,
+            onResponseMetadata: ({ statusCode }: requestPromise.ResponseMetadata) => {
+                if (Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599) providerStatusCode = statusCode;
+            },
         });
-    } catch {
-        // Fetch, decode, and provider errors may carry the query URL, token, or
-        // response snippets. Keep every durable/logged representation opaque.
-        throw new COROSDailyRequestError();
+    } catch (error) {
+        // Fetch and decode errors can carry the token-bearing URL or response data.
+        throw new COROSDailyRequestError(classifyCOROSDailyRequestFailure(error, providerStatusCode), providerStatusCode);
     }
     const receivedAtMs = Date.now();
     const resultCode = normalizeCOROSDailyResultCode(
         (payload as { result?: unknown } | null)?.result,
     );
-    if (!/^0+$/.test(resultCode) || !isValidCOROSDailyMessage(
+    const hasSuccessResult = /^0+$/.test(resultCode);
+    if (!hasSuccessResult || !isValidCOROSDailyMessage(
         (payload as { message?: unknown } | null)?.message,
     )) {
-        throw new COROSDailyRequestError(resultCode || 'unknown');
+        // Only short result codes belong in diagnostics, even for an unexpected response envelope.
+        const hasDiagnosticResult = /^\d{1,4}$/.test(resultCode);
+        const category = !hasSuccessResult && hasDiagnosticResult ? 'provider_result_error' : 'invalid_response';
+        const diagnosticResult = hasDiagnosticResult ? resultCode : resultCode ? 'invalid' : 'unknown';
+        throw new COROSDailyRequestError(category, providerStatusCode, diagnosticResult);
     }
     const dailyList = extractCOROSDailyList(payload);
     if (dailyList.length > COROS_DAILY_MAX_RECORDS) {
@@ -3678,6 +3712,16 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                     Date.now() - processingStartedAtMs) }
             : isSuuntoHealthQueueItem(queueItem)
             ? getSuuntoHealthFailureTelemetry(error, healthFailureStage, Date.now() - processingStartedAtMs)
+            : telemetryError instanceof COROSDailyRequestError
+            ? {
+                provider: HEALTH_PROVIDERS.COROSAPI,
+                errorName: telemetryError.name,
+                errorCode: 'coros_daily_request_failed',
+                failureStage: 'daily_request',
+                failureCategory: telemetryError.failureCategory,
+                ...(telemetryError.providerStatusCode === undefined ? {} : { providerStatusCode: telemetryError.providerStatusCode }),
+                ...(telemetryError.failureCategory === 'provider_result_error' ? { providerResultCode: telemetryError.resultCode } : {}),
+            }
             : null;
         logger.error(
             `[SleepSync] Queue item ${queueItem.id} failed`,
