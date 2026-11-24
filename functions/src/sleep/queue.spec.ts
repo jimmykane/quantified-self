@@ -230,6 +230,9 @@ vi.mock('../tokens', () => {
     return {
         getTokenData: hoisted.getTokenData,
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSupersededError: class extends Error {
+            readonly name = 'TokenRefreshSupersededError';
+        },
         TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
     };
 });
@@ -291,7 +294,8 @@ vi.mock('./queue-revision', async (importOriginal) => ({
     releaseSleepQueueRevision: hoisted.releaseSleepQueueRevision,
 }));
 
-vi.mock('../coros/account', () => ({
+vi.mock('../coros/account', async importOriginal => ({
+    ...(await importOriginal<typeof import('../coros/account')>()),
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
 }));
 
@@ -4172,7 +4176,7 @@ describe('sleep queue', () => {
     });
 
     describe('COROS daily authorization recovery', () => {
-        const tokenData = { openId: 'coros-user-1', accessToken: 'first-token' };
+        const tokenData = { openId: 'coros-user-1', accessToken: 'first-token', dateCreated: 100 };
         const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } }, get: vi.fn() };
         let item: SleepSyncQueueItemInterface;
@@ -4267,12 +4271,41 @@ describe('sleep queue', () => {
             expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 7, dispatchedToCloudTask: null }));
         });
 
-        it('does not refresh a replaced credential even when the preceding binding result was bound', async () => {
+        it.each(['sleep', 'health'] as const)('leaves the poll pending when a concurrent refresh rejects the %s state write', async state => {
+            rejectDailyRequest(401);
+            const refreshedToken = { ...tokenData, dateRefreshed: 200 };
+            tokenRef.get.mockResolvedValue({ exists: true, id: item.providerUserId, data: () => refreshedToken, ref: tokenRef });
+            if (state === 'sleep') {
+                hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'stale', bound: null });
+                hoisted.markSleepSyncError.mockResolvedValueOnce(false);
+            } else {
+                hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+                hoisted.updateHealthSyncState.mockResolvedValueOnce(false);
+            }
+
+            await expect(processSleepSyncQueueItem(item)).rejects.toMatchObject({ name: 'TokenRefreshSupersededError' });
+            expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            { tokenCredentialGeneration: 'new-grant' },
+            { dateCreated: 200 },
+            { openId: 'another-account' },
+        ])('settles obsolete work without borrowing a replacement credential (%j)', async replacement => {
             rejectDailyRequest(401);
             hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
-            tokenRef.get.mockResolvedValueOnce({ exists: true, data: () => ({ ...tokenData, dateRefreshed: 200 }), ref: tokenRef });
+            tokenRef.get.mockResolvedValue({
+                exists: true, id: item.providerUserId, data: () => ({ ...tokenData, ...replacement }), ref: tokenRef,
+            });
+            hoisted.markSleepSyncError.mockResolvedValueOnce(false);
 
-            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.RetryIncremented);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, skippedReason: 'user_or_provider_lifecycle_changed',
+            }));
             expect(hoisted.getTokenData).toHaveBeenCalledOnce();
             expect(hoisted.requestGet).toHaveBeenCalledOnce();
         });

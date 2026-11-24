@@ -223,9 +223,10 @@ describe('COROS binding state', () => {
       operation: 'binding_state',
       count: 1,
     }), { merge: true });
+    expect(mocks.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
-  it('atomically marks an unbound account for reconnect and disables every COROS sync route', async () => {
+  it('atomically marks Connections and Health for reconnect and disables every COROS sync route', async () => {
     mocks.requestGet.mockResolvedValue(JSON.stringify({
       result: '0000',
       data: { bindState: 0 },
@@ -237,6 +238,16 @@ describe('COROS binding state', () => {
       checkedAt: 5678,
     });
 
+    expect(mocks.updateHealthSyncState).toHaveBeenCalledExactlyOnceWith('user-1', 'COROSAPI', {
+      status: 'reconnect_required', lastErrorCode: 'provider_auth_reconnect_required', retryPending: false,
+    }, 5678, expect.objectContaining({
+      transaction: expect.objectContaining({ set: mocks.transactionSet }),
+      authoritativeLifecycleTransition: true,
+      requiredDocumentFieldValues: {
+        documentRef: mocks.metaRef,
+        expectedFields: { providerUserId: 'open-id', connectionState: 'connected', connectionStateGeneration: undefined },
+      },
+    }));
     expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.metaRef, expect.objectContaining({
       connectionState: 'reconnect_required',
       providerBindingState: 'unbound',
@@ -261,6 +272,15 @@ describe('COROS binding state', () => {
         },
       },
     }, { merge: true });
+  });
+
+  it('keeps the connection and routes unchanged if the Health lifecycle write is rejected', async () => {
+    mocks.requestGet.mockResolvedValueOnce('{"result":"0000","data":{"bindState":0}}');
+    mocks.updateHealthSyncState.mockResolvedValueOnce(false);
+
+    await expect(checkCOROSBindingStateForUser('user-1', 5678)).resolves.toMatchObject({ status: 'stale' });
+    expect(currentMetaData.connectionState).toBe('connected');
+    expect(mocks.transactionSet.mock.calls.some(([ref]) => ref === mocks.settingsRef)).toBe(false);
   });
 
   it('records a stale-result cooldown before allowing another global budget debit', async () => {

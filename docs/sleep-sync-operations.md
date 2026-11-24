@@ -205,12 +205,15 @@ poll `processed=true`, `resultStatus=skipped`, `skippedReason=provider_auth_requ
 matching already-confirmed unbind without another provider request. Connection-history children can also settle
 through the existing superseded-connection guard. Only successful polls advance the coverage watermark. An
 inconclusive check does not change connection status. A bound result allows a single refresh and repeat daily read.
+If a same-grant refresh invalidates the rejected request's failure-state write, the worker leaves the current revision
+pending for Cloud Tasks redelivery, classified as expected contention.
 
 Monitoring coverage is **covered/unchanged**: #830 already includes `COROSAPI` / `sleep_sync`, post-commit `skipped`
 outcomes, genuine failures and new dead letters. No metric, threshold, dashboard or cloud configuration changes are
 needed. Help's existing disconnect/history-retention explanation remains accurate, and there is no MCP/Training data
-contract change. Only `processSleepSyncTask` needs deployment after separate approval. Do not replay or remove old
-failed jobs for an intentionally disconnected account; reconnect creates new eligible work rather than reopening skips.
+contract change. Deploy `processSleepSyncTask` and `getCOROSAPIBindingState` after separate approval so either entry point
+can project a confirmed unbind to Connections and Health in the same transaction. Do not replay or remove old failed
+jobs for an intentionally disconnected account; reconnect creates new eligible work rather than reopening skips.
 
 ## Queued Suunto work after disconnect
 

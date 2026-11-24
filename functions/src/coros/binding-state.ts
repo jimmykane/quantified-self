@@ -350,25 +350,25 @@ async function persistBindingStateIfCurrent(params: {
       return 'updated';
     }
 
-    if (params.recoveryTarget) {
-      // The worker may already show a retry in Health Sources. Settle it with
-      // the same transaction that records the confirmed unbind in Connections.
-      const { updateHealthSyncState } = await import('../health/writer');
-      const written = await updateHealthSyncState(params.userID, HEALTH_PROVIDERS.COROSAPI, {
-        status: HEALTH_SYNC_STATUSES.ReconnectRequired,
-        lastErrorCode: 'provider_auth_reconnect_required',
-        retryPending: false,
-      }, params.checkedAt, {
-        transaction,
-        authoritativeLifecycleTransition: true,
-        requiredDocumentFieldValues: {
-          documentRef: metaRef,
-          expectedFields: { providerUserId: params.openId, connectionState: metaData?.connectionState,
-            connectionStateGeneration: params.recoveryTarget.connectionGeneration },
+    // Either entry point can win the binding check while Health shows a retry.
+    const { updateHealthSyncState } = await import('../health/writer');
+    const written = await updateHealthSyncState(params.userID, HEALTH_PROVIDERS.COROSAPI, {
+      status: HEALTH_SYNC_STATUSES.ReconnectRequired,
+      lastErrorCode: 'provider_auth_reconnect_required',
+      retryPending: false,
+    }, params.checkedAt, {
+      transaction,
+      authoritativeLifecycleTransition: true,
+      requiredDocumentFieldValues: {
+        documentRef: metaRef,
+        expectedFields: {
+          providerUserId: metaData.providerUserId,
+          connectionState: metaData.connectionState,
+          connectionStateGeneration: metaData.connectionStateGeneration,
         },
-      });
-      if (!written) return 'stale';
-    }
+      },
+    });
+    if (!written) return 'stale';
     transaction.set(metaRef, {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
       providerBindingState: 'unbound',

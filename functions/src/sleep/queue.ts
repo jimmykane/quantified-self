@@ -44,7 +44,7 @@ import {
     updateHealthSyncState,
     type HealthSyncStateWriterDependencies,
 } from '../health/writer';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError, TokenRefreshSupersededError } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
@@ -87,7 +87,7 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
-import { getActiveCOROSTokenSnapshot } from '../coros/account';
+import { doesCOROSTokenSnapshotMatchOpenId, getActiveCOROSTokenSnapshot } from '../coros/account';
 import {
     COROS_API_REQUEST_TIMEOUT_MS,
     COROS_DAILY_MAX_RECORDS,
@@ -1583,6 +1583,32 @@ class COROSDailyRequestError extends Error {
     }
 }
 
+function isCOROSDailyAuthorizationError(error: unknown): error is COROSDailyRequestError {
+    return error instanceof COROSDailyRequestError
+        && (error.providerStatusCode === 401 || error.resultCode === '5006');
+}
+
+async function retryIfCOROSDailyCredentialRefreshed(
+    error: unknown,
+    providerUserId: string,
+    guards: COROSWriteLifecycleGuards,
+): Promise<void> {
+    if (!isCOROSDailyAuthorizationError(error)) return;
+    const currentToken = await guards.requiredExistingDocumentRef.get().catch(() => {
+        throw new COROSDailyAccountValidationError();
+    });
+    const current = getTokenCredentialSnapshot(currentToken.data());
+    const expected = guards.requiredExistingTokenCredential;
+    if (currentToken.exists && doesCOROSTokenSnapshotMatchOpenId(currentToken, providerUserId.trim()) && current.accessToken
+        && (expected.credentialGeneration || expected.dateCreated > 0)
+        && current.credentialGeneration === expected.credentialGeneration && current.dateCreated === expected.dateCreated
+        && !areTokenCredentialSnapshotsEqual(current, expected)) {
+        // The next delivery revalidates the whole connection and queue revision.
+        // Do not write an authorization failure against a token we never used.
+        throw new TokenRefreshSupersededError(ServiceNames.COROSAPI, 'daily-sync');
+    }
+}
+
 function classifyCOROSDailyRequestFailure(error: unknown, status?: number): COROSDailyRequestFailure {
     if (status !== undefined && (status < 200 || status >= 300)) return 'provider_http_error';
     try {
@@ -2142,8 +2168,7 @@ async function processCorosQueueItem(
     try {
         response = await requestCOROSDailyData(queueItem, prepared.credential.accessToken);
     } catch (error) {
-        if (!(error instanceof COROSDailyRequestError)
-            || (error.providerStatusCode !== 401 && error.resultCode !== '5006')) throw error;
+        if (!isCOROSDailyAuthorizationError(error)) throw error;
 
         // Use the same limits and guarded projection as the Connections page.
         // A cached result cannot explain a fresh authorization rejection.
@@ -2158,9 +2183,9 @@ async function processCorosQueueItem(
         if (binding?.status !== 'bound') throw error;
 
         const currentSnapshot = await tokenSnapshot.ref.get().catch(() => null);
-        if (!currentSnapshot?.exists || !areTokenCredentialSnapshotsEqual(
-            getTokenCredentialSnapshot(currentSnapshot.data()), prepared.credential,
-        )) {
+        if (!currentSnapshot?.exists
+            || !doesCOROSTokenSnapshotMatchOpenId(currentSnapshot, queueItem.providerUserId.trim())
+            || !areTokenCredentialSnapshotsEqual(getTokenCredentialSnapshot(currentSnapshot.data()), prepared.credential)) {
             throw error;
         }
         const refreshed = await getTokenData(currentSnapshot, ServiceNames.COROSAPI, true, {
@@ -3630,6 +3655,9 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
             if ((queueItem.provider === SLEEP_PROVIDERS.COROSAPI && corosLifecycleGuards
                 || queueItem.provider === SLEEP_PROVIDERS.SuuntoApp && suuntoSleepLifecycleGuards)
                 && sleepErrorStateWritten === false) {
+                if (corosLifecycleGuards) {
+                    await retryIfCOROSDailyCredentialRefreshed(error, queueItem.providerUserId, corosLifecycleGuards);
+                }
                 return markQueueItemSkipped(
                     queueItem,
                     undefined,
@@ -3658,6 +3686,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                 // The claim already authenticated the owner; legacy rows may lack a durable UID.
                 const pendingGuards = (guards: typeof failedHealthLifecycleGuards) =>
                     healthStateGuardsForCurrentQueueRevision(queueItem, guards, false);
+                let healthStateWritten: boolean | undefined;
                 try {
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
@@ -3692,7 +3721,6 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                                 requiredExistingTokenCredential: currentCredential,
                             });
                     };
-                    let healthStateWritten: boolean;
                     if (isSuuntoHealthQueueItem(queueItem)
                         && suuntoHealthLifecycleGuards
                         && suuntoAuthorityBaseline) {
@@ -3721,18 +3749,6 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                             pendingGuards(failedHealthLifecycleGuards),
                         );
                     }
-                    if (!healthStateWritten) {
-                        return markQueueItemSkipped(
-                            queueItem,
-                            undefined,
-                            'user_or_provider_lifecycle_changed',
-                            {
-                                skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
-                                sessionsWritten: 0,
-                                sessionsSkipped: 0,
-                            },
-                        );
-                    }
                 } catch (stateError) {
                     // Queue retry accounting is the durable recovery path. A
                     // sync-state outage must not bypass that transition.
@@ -3746,6 +3762,21 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                                 ? 'garmin_health_state_write_failed'
                                 : 'coros_health_state_write_failed',
                     });
+                }
+                if (healthStateWritten === false) {
+                    if (corosLifecycleGuards) {
+                        await retryIfCOROSDailyCredentialRefreshed(error, queueItem.providerUserId, corosLifecycleGuards);
+                    }
+                    return markQueueItemSkipped(
+                        queueItem,
+                        undefined,
+                        'user_or_provider_lifecycle_changed',
+                        {
+                            skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                            sessionsWritten: 0,
+                            sessionsSkipped: 0,
+                        },
+                    );
                 }
             }
         }
