@@ -160,6 +160,40 @@ describe('PricingComponent', () => {
             `${window.location.origin}/subscriptions?setup=sync`, expect.any(Function), expect.any(Function));
     });
 
+    it('returns a canceled analysis checkout to the full plan picker', async () => {
+        routeParams.next(convertToParamMap({ setup: 'analyze' }));
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        await component.subscribe('price_pro');
+        expect(checkout).toHaveBeenCalledWith('price_pro', undefined,
+            `${window.location.origin}/subscriptions?setup=analyze`, expect.any(Function), expect.any(Function));
+    });
+
+    it.each([null, 'free'] as const)('offers all plans and a free Dashboard link after Analyze setup (role %s)', async role => {
+        routeParams.next(convertToParamMap({ setup: 'analyze' }));
+        vi.spyOn(TestBed.inject(AppUserService), 'getSubscriptionRole').mockResolvedValue(role);
+        vi.spyOn(TestBed.inject(AppPaymentService), 'getProducts').mockReturnValue(of(['basic', 'pro'].map(role => ({
+            id: role, active: true, name: role, metadata: { role }, role, prices: [],
+        } as unknown as StripeProduct))));
+        await component.ngOnInit();
+        fixture.detectChanges();
+        expect(Array.from(fixture.nativeElement.querySelectorAll('.plan-title'), (el: Element) => el.textContent.trim()))
+            .toEqual(['Pro', 'Basic', 'Starter']);
+        const starter = fixture.nativeElement.querySelector('.free-card a.continue-free-button');
+        expect(starter.textContent.trim()).toBe('Continue with Starter');
+        expect(starter.getAttribute('href')).toBe('/dashboard');
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        const setFreeTier = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier');
+        starter.click();
+        expect(navigate.mock.calls[0][0].toString()).toBe('/dashboard');
+        expect(checkout).not.toHaveBeenCalled();
+        expect(setFreeTier).not.toHaveBeenCalled();
+        routeParams.next(convertToParamMap({}));
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.free-card a.continue-free-button')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.free-card .current-plan-button').disabled).toBe(true);
+    });
+
     it('offers only Pro for sync while keeping a free Dashboard exit', async () => {
         routeParams.next(convertToParamMap({ setup: 'sync' }));
         const payment = TestBed.inject(AppPaymentService);
@@ -467,22 +501,12 @@ describe('PricingComponent', () => {
         expect(component.currentRole).toBe('free');
     });
 
-    it('should derive activity limit labels from the shared limits map', () => {
-        expect(component.getActivityLimitLabel('free')).toBe(`Up to ${USAGE_LIMITS.free} activities`);
-        expect(component.getActivityLimitLabel('basic')).toBe(`Up to ${USAGE_LIMITS.basic} activities`);
-        expect(component.getActivityLimitLabel('pro')).toBe('Unlimited activities');
-    });
-
-    it('should derive route limit labels from the shared route limits map', () => {
-        expect(component.getRouteLimitLabel('free')).toBe(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
-        expect(component.getRouteLimitLabel('basic')).toBe(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
-        expect(component.getRouteLimitLabel('pro')).toBe('Unlimited saved routes');
-    });
-
-    it('should derive Assistant limit labels by plan role', () => {
-        expect(component.getAssistantLimitLabel('free')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.free} requests per calendar month`);
-        expect(component.getAssistantLimitLabel('basic')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.basic} requests per billing period`);
-        expect(component.getAssistantLimitLabel('pro')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.pro} requests per billing period`);
+    it.each(['free', 'basic', 'pro'] as const)('shows the shared activity, route and Assistant limits for %s', role => {
+        const labels = component.planFeatures.get(role)!.map(feature => feature.label);
+        expect(labels).toContain(role === 'pro' ? 'Unlimited activities' : `Up to ${USAGE_LIMITS[role]} activities`);
+        expect(labels).toContain(role === 'pro' ? 'Unlimited saved routes' : `Up to ${ROUTE_USAGE_LIMITS[role]} saved routes`);
+        const period = role === 'free' ? 'calendar month' : 'billing period';
+        expect(labels).toContain(`Assistant up to ${ASSISTANT_REQUEST_LIMITS[role]} requests per ${period}`);
     });
 
     it('should include manual training planning in every membership tier', async () => {

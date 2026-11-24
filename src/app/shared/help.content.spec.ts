@@ -130,11 +130,11 @@ describe('help.content', () => {
     expect(content).toContain('optional and start unchecked');
     expect(content).toContain('does not start a payment, upload, or provider connection');
     expect(content).toContain('provider connections require Pro');
-    expect(content).toContain('**Analyze my training** opens **Dashboard**');
+    expect(content).toContain('**Choose a plan**');
     expect(content).toContain('**Set up activity sync** expanded');
     expect(content).toContain('does not connect a service or enable delivery');
     expect(content).toContain('Your starting point is kept when you reload or return from checkout');
-    expect(content).toContain('without a plan-selection screen');
+    expect(content).toContain('**Continue with Starter**');
     expect(content).toContain('Connections shows the relevant Pro offer');
     expect(content).toContain('takes Starter and Basic members to Pro plan selection');
     expect(content).toContain('If you already have Pro access');
@@ -2258,6 +2258,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Distance values in dashboards, event charts, activity chips, and CSV exports');
     expect(gettingStartedSection?.content).toContain('Dashboard **Action prompts**');
     expect(gettingStartedSection?.content).toContain('**Your units and preferences**');
+    expect(gettingStartedSection?.content).toContain('The card stays off membership and training plan pages');
     expect(gettingStartedSection?.content).toContain('**Keep defaults**');
     expect(gettingStartedSection?.content).toContain('same optional review');
     expect(gettingStartedSection?.content).not.toContain('Keep current units');

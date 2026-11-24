@@ -95,10 +95,13 @@ export class OnboardingComponent implements OnInit, OnChanges {
         { initialValue: this.route.snapshot.queryParamMap },
     );
     private readonly returnTarget = computed(() => onboardingReturnTarget(this.completionQueryParams()));
+    private readonly needsAnalysisPlan = computed(() =>
+        !this.hasReturnDestination() && this.startChoice() === 'analyze' && !this.hasPaidMembership());
 
     private readonly completionTarget = computed(() => {
         const target = this.returnTarget();
         if (this.hasReturnDestination()) return target;
+        if (this.needsAnalysisPlan()) return { ...target, path: '/subscriptions', label: 'plans' };
         if (this.startChoice() === 'compare') return { ...target, path: '/tools/compare', label: 'Compare' };
         if (this.startChoice() === 'sync') return { ...target, path: '/services', label: 'Connections', syncSetup: true };
         return this.startChoice() === 'connect'
@@ -117,6 +120,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
 
     readonly needsSyncPlan = computed(() => this.completionTarget().syncSetup && !this.hasProMembership());
     readonly continueLabel = computed(() => this.needsSyncPlan() ? 'Choose a Pro plan'
+        : this.needsAnalysisPlan() ? 'Choose a plan'
         : this.isCompareFlow() ? (this.hasPaidMembership() ? 'Open Compare' : 'Continue free')
             : 'Continue to ' + this.completionTarget().label);
 
@@ -484,6 +488,7 @@ export class OnboardingComponent implements OnInit, OnChanges {
             } else if (target.priceId || target.path === '/subscriptions') {
                 destination = 'membership';
                 if (target.priceId) queryParams = { priceId: target.priceId };
+                else if (this.needsAnalysisPlan()) queryParams = { setup: 'analyze' };
             } else if (target.path === '/mcp/authorize') {
                 destination = 'assistant';
                 queryParams = { request_id: target.requestId };

@@ -216,6 +216,9 @@
 
           <!-- Current Plan Indicator -->
           @if (!shouldShowOnboardingFreeContinue(product) && isCurrentPlan(product)) {
+          @if (!isOnboarding && setupMode() === 'analyze' && product.metadata['role'] === 'free') {
+          <a mat-stroked-button class="continue-free-button" routerLink="/dashboard">Continue with Starter</a>
+          } @else {
           <button
             mat-stroked-button
             type="button"
@@ -225,6 +228,7 @@
             <mat-icon>check_circle</mat-icon>
             Current Plan
           </button>
+          }
           }
 
 
@@ -281,38 +285,11 @@
         </div>
         </div>
         <div class="features-list">
-          @if (product.metadata['role'] === 'free') {
+          @if (planFeatures.get(product.metadata['role']); as features) {
           <ul>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> MCP data access</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> Manual training plans and standalone workouts</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> Manual uploads</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> Core analysis tools</li>
-            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getAssistantLimitLabel(product.metadata['role']) }}</li>
-          </ul>
-          } @else if (product.metadata['role'] === 'basic') {
-          <ul>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> MCP data access</li>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> Manual training plans and standalone workouts</li>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> Manual uploads</li>
-            <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getAssistantLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-primary">favorite</mat-icon> Supports independent, privacy-first development</li>
-          </ul>
-          } @else if (product.metadata['role'] === 'pro') {
-          <ul>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> MCP data access</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Manual training plans and standalone workouts</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Automatic activity imports from your watch</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Provider planned-workout delivery</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ dailyWorkoutBenefit }}</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
-            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAssistantLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon class="qs-color-warn">favorite</mat-icon> Helps fund faster feature releases</li>
+            @for (feature of features; track feature.label) {
+            <li><mat-icon [class]="feature.iconClass">{{ feature.icon }}</mat-icon> {{ feature.label }}</li>
+            }
           </ul>
           }
         </div>

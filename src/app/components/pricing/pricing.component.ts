@@ -2,7 +2,7 @@ import { SyncCompatibilityComponent } from '../shared/sync-compatibility/sync-co
 import { toSignal } from '@angular/core/rxjs-interop';
 import { safeOnboardingResumeUrl } from '../../helpers/onboarding-navigation.helper';
 import { AppWindowService } from '../../services/app.window.service';
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
 import { DAILY_WORKOUT_PRO_BENEFIT } from '../public-seo/workout-generation.content';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
@@ -11,8 +11,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatBadgeModule } from '@angular/material/badge';
-import { MatListModule } from '@angular/material/list';
 import { AppPaymentService, CheckoutStartError, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -31,7 +29,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { buildPlanFeatures, type PlanFeature } from './plan-features';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection } from '../../helpers/membership-selection.helper';
 
@@ -61,15 +59,18 @@ interface SubscriptionSummary {
         MatProgressSpinnerModule,
         MatProgressBarModule,
         MatIconModule,
-        MatChipsModule,
-        MatBadgeModule,
-        MatListModule
+        MatChipsModule
     ],
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit, OnDestroy {
     readonly dailyWorkoutBenefit = DAILY_WORKOUT_PRO_BENEFIT;
+    readonly planFeatures = new Map<string, PlanFeature[]>([
+        ['free', buildPlanFeatures('free')],
+        ['basic', buildPlanFeatures('basic')],
+        ['pro', buildPlanFeatures('pro', DAILY_WORKOUT_PRO_BENEFIT)],
+    ]);
     @Input() isOnboarding = false;
     @Input() onboardingUser: User | null = null;
     @Input() onboardingBusy = false;
@@ -105,10 +106,14 @@ export class PricingComponent implements OnInit, OnDestroy {
     private router = inject(Router);
     private readonly route = inject(ActivatedRoute, { optional: true });
 
-    readonly syncSetup = toSignal(
-        (this.route?.queryParamMap ?? of(this.route?.snapshot?.queryParamMap)).pipe(map(params => params?.get('setup') === 'sync')),
-        { initialValue: false },
+    readonly setupMode = toSignal(
+        (this.route?.queryParamMap ?? of(this.route?.snapshot?.queryParamMap)).pipe(map(params => {
+            const setup = params?.get('setup');
+            return setup === 'analyze' || setup === 'sync' ? setup : null;
+        })),
+        { initialValue: null },
     );
+    readonly syncSetup = computed(() => this.setupMode() === 'sync');
 
     constructor(
         private paymentService: AppPaymentService,
@@ -485,48 +490,6 @@ export class PricingComponent implements OnInit, OnDestroy {
             || (!!this.currentRole && product.metadata?.['role'] === this.currentRole);
     }
 
-    getActivityLimitLabel(role: string | null | undefined): string {
-        const resolvedRole = role ?? 'free';
-
-        try {
-            const limit = getUsageLimitForRole(resolvedRole);
-            return limit === null ? 'Unlimited activities' : `Up to ${limit} activities`;
-        } catch (error) {
-            this.logger.error(`Unsupported pricing role '${resolvedRole}' in pricing UI`, error);
-            return 'Activity limits unavailable';
-        }
-    }
-
-    getRouteLimitLabel(role: string | null | undefined): string {
-        const resolvedRole = role ?? 'free';
-
-        try {
-            const limit = getRouteUsageLimitForRole(resolvedRole);
-            return limit === null ? 'Unlimited saved routes' : `Up to ${limit} saved routes`;
-        } catch (error) {
-            this.logger.error(`Unsupported pricing role '${resolvedRole}' in route pricing UI`, error);
-            return 'Route limits unavailable';
-        }
-    }
-
-    getAssistantLimitLabel(role: string | null | undefined): string {
-        const resolvedRole = role ?? 'free';
-
-        try {
-            const limit = getAssistantRequestLimitForRole(resolvedRole);
-            if (limit <= 0) {
-                return 'Assistant not included';
-            }
-            if (resolvedRole === 'free') {
-                return `Assistant up to ${limit} requests per calendar month`;
-            }
-            return `Assistant up to ${limit} requests per billing period`;
-        } catch (error) {
-            this.logger.error(`Unsupported pricing role '${resolvedRole}' in Assistant pricing UI`, error);
-            return 'Assistant limits unavailable';
-        }
-    }
-
     async subscribe(price: any) {
         if (this.isLoading || this.onboardingBusy) {
             return;
@@ -573,7 +536,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 ? `${this.windowService.currentDomain}/payment/success?onboarding=${encodeURIComponent(resume)}`
                 : this.syncSetup() ? `${this.windowService.currentDomain}/payment/success?setup=sync` : undefined;
             const cancelUrl = resume ? `${this.windowService.currentDomain}${resume}`
-                : this.syncSetup() ? `${this.windowService.currentDomain}/subscriptions?setup=sync` : undefined;
+                : this.setupMode() ? `${this.windowService.currentDomain}/subscriptions?setup=${this.setupMode()}` : undefined;
             await this.paymentService.appendCheckoutSession(price, successUrl, cancelUrl, () => !this.destroyed, () => {
                 if (!this.destroyed) this.checkoutProgress.set('Updating your checkout…');
             });

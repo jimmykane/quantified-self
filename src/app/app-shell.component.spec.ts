@@ -745,11 +745,12 @@ describe('AppShellComponent', () => {
             uid: 'u1', onboardingCompleted: true, acceptedTos: true, acceptedPrivacyPolicy: true,
             acceptedDataPolicy: true, settings: { appSettings: { unitSetupCompleted: false } }
         };
-        for (const route of ['/services', '/subscriptions', '/tools/compare', '/training']) {
+        for (const route of ['/services', '/tools/compare', '/training']) {
             syncRoute(route);
             expect(component.showPreferencesSetup()).toBe(true);
         }
-        for (const route of ['/dashboard', '/settings', '/onboarding', '/', '/user/other/event/activity']) {
+        for (const route of ['/subscriptions', '/subscriptions?setup=analyze', '/subscriptions?setup=sync', '/training/plans',
+            '/dashboard', '/settings', '/onboarding', '/', '/user/other/event/activity']) {
             syncRoute(route);
             expect(component.showPreferencesSetup()).toBe(false);
         }
