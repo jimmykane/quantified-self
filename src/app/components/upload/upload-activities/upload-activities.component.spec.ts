@@ -128,8 +128,9 @@ describe('UploadActivitiesComponent', () => {
     } as any;
   }
 
-  function mockFileReaderError(): void {
+  function mockFileReaderError(error: DOMException | null = null): void {
     const mockFileReader = {
+      error,
       result: null as any,
       onload: null as any,
       onerror: null as any,
@@ -577,19 +578,45 @@ describe('UploadActivitiesComponent', () => {
     expect(authServiceMock.signOut).not.toHaveBeenCalled();
   });
 
-  it('should show snackbar when file reader fails before upload starts', async () => {
+  it.each(['NotFoundError', 'SecurityError', 'NotReadableError', 'AbortError', 'EncodingError', null, 'private-user-file.fit'])(
+    'reports only an allowlisted native file-read error name and explains how to retry (%s)', async nativeName => {
+      component.user = { uid: 'u1' } as any;
+      mockFileReaderError(nativeName ? new DOMException('private/path/private-user-file.fit', nativeName) : null);
+
+      const expectedName = nativeName && nativeName !== 'private-user-file.fit' ? nativeName : 'UnknownError';
+      const error = await component.processAndUploadFile(makeUploadFile('private-user-file.fit', 'fit')).catch(error => error);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe(`Could not read file (${expectedName}).`);
+      expect(error.cause).toBeUndefined();
+      expect(error.stack).not.toContain('private-user-file.fit');
+      expect(loggerMock.error).toHaveBeenCalledExactlyOnceWith(error);
+      expect(isUploadErrorUserActionHandled(error)).toBe(true);
+
+      expect(fitUploadServiceMock.uploadActivityFile).not.toHaveBeenCalled();
+      expect(snackBarMock.open).toHaveBeenCalledWith(
+        'Your browser could not read this file. Save a copy on this device, then select it again. The upload has not started.',
+        'OK',
+        { duration: 10000 },
+      );
+  });
+
+  it('reports a failed local read once and keeps the recovery guidance after the batch finishes', async () => {
     component.user = { uid: 'u1' } as any;
-    mockFileReaderError();
-
-    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
-      .rejects
-      .toThrow('Could not read file.');
-
+    mockFileReaderError(new DOMException('private/path/private-user-file.fit', 'NotReadableError'));
+    await component.getFiles({
+      stopPropagation: vi.fn(), preventDefault: vi.fn(),
+      target: { files: [new File(['fit'], 'private-user-file.fit')], value: 'selected' },
+    });
+    expect(loggerMock.error).toHaveBeenCalledOnce();
+    const [error] = loggerMock.error.mock.calls[0];
+    expect(error.message).toBe('Could not read file (NotReadableError).');
+    expect(error.cause).toBeUndefined();
     expect(fitUploadServiceMock.uploadActivityFile).not.toHaveBeenCalled();
-    expect(snackBarMock.open).toHaveBeenCalledWith(
-      'Could not upload run.fit, reason: Could not read file.',
-      'OK',
-      { duration: 4000 },
+    expect(processingServiceMock.failJob).toHaveBeenCalledExactlyOnceWith('job-id', error.message);
+    expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
+    expect(snackBarMock.open).toHaveBeenCalledExactlyOnceWith(
+      'Your browser could not read this file. Save a copy on this device, then select it again. The upload has not started.',
+      'OK', { duration: 10000 },
     );
   });
 

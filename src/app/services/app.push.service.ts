@@ -188,24 +188,25 @@ export class AppPushService {
         this.state.set('unavailable'); return;
       }
       if (Notification.permission !== 'granted') { this.state.set('disabled'); return; }
-      if (!subscription && local?.uid === owner.uid) {
-        await this.detach('browser_subscription_missing'); return;
-      }
-      if (!subscription || !local || local.uid !== owner.uid) {
+      if (!local || local.uid !== owner.uid) {
         // A browser permission is not account consent. Orphan subscriptions must not cross accounts.
         if (subscription && !await this.revokeBrowser('account_changed', local, subscription)) return;
         if (this.current(owner, epoch)) { this.registered.set(false); this.state.set('disabled'); }
         return;
       }
-      const key = subscription.options.applicationServerKey;
-      const actualKey = key ? this.encodeKey(key) : '';
-      if (actualKey !== this.config.webPushPublicKey()) {
-        await this.detach('signing_key_changed'); return;
-      }
       const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`);
       const snapshot = await getDocFromServer(ref);
       if (!this.current(owner, epoch)) return;
-      if (!this.sameInstallation(local)) { void this.refresh(); return; }
+      if (!subscription) {
+        // The worker may have finished restoring its subscription during the server lookup.
+        subscription = await manager.getSubscription();
+        if (!this.current(owner, epoch)) return;
+      }
+      if (!this.sameInstallation(local) || Notification.permission !== 'granted' || !this.siteAvailable()) {
+        void this.refresh(); return;
+      }
+      this.subscription = subscription;
+      this.registered.set(!!subscription);
       const saved = snapshot.data();
       if (!snapshot.exists()) {
         if (await this.revokeBrowser('registration_already_missing', local, subscription) && this.current(owner, epoch)) {
@@ -216,7 +217,15 @@ export class AppPushService {
       if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()) {
         await this.detach('invalid_registration'); return;
       }
-      if (saved.vapidPublicKey !== actualKey) { await this.detach('signing_key_changed'); return; }
+      const key = subscription?.options.applicationServerKey;
+      if (saved.vapidPublicKey !== this.config.webPushPublicKey()
+        || (subscription && (!key || this.encodeKey(key) !== saved.vapidPublicKey))) {
+        await this.detach('signing_key_changed'); return;
+      }
+      if (!subscription) {
+        this.unavailableReason.set('This device is still registered. We’ll check its notification connection again when you return.');
+        this.state.set('unavailable'); return;
+      }
       const current = subscription.toJSON();
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
         await this.persist(owner, local.installationId, subscription, epoch, true);

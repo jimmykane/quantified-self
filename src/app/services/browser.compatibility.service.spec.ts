@@ -69,6 +69,29 @@ describe('BrowserCompatibilityService', () => {
         }
     });
 
+    it('requires a callable intersection observer with all viewport lifecycle methods', () => {
+        class CompleteObserver { observe() {} unobserve() {} disconnect() {} }
+        try {
+            vi.stubGlobal('IntersectionObserver', CompleteObserver);
+            expect(BrowserCompatibilityService.checkIntersectionObserverSupport()).toBe(true);
+            expect(dialog.open).not.toHaveBeenCalled();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it.each([undefined, {}, () => undefined, class {}, class { disconnect() {} },
+        class { observe() {} disconnect() {} }, class { observe() {} unobserve() {} },
+    ])('rejects an unavailable or incomplete intersection observer (%#)', observer => {
+        try {
+            vi.stubGlobal('IntersectionObserver', observer);
+            expect(BrowserCompatibilityService.checkIntersectionObserverSupport()).toBe(false);
+            expect(dialog.open).not.toHaveBeenCalled();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it.each([false, true])('detects a complete fullscreen API and respects its policy flag (prefixed: %s)', legacy => {
         const documentRef = document.implementation.createHTMLDocument('Fullscreen support');
         const element = documentRef.createElement('section');

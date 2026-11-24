@@ -32,8 +32,9 @@ export function needsPreferencesSetup(user: AppUserInterface | null | undefined)
 
 /** Only normal account workspaces; exclude public/shared pages, consent, settings and checkout returns. */
 export function isPreferencesSetupWorkspace(url: string): boolean {
-  const path = url.split(/[?#;]/)[0].replace(/\/$/, '');
-  return /^\/(dashboard|services|subscriptions|activities|calendar|training|health|routes|mytracks)(\/|$)/.test(path)
+  const path = url.split(/[?#]/)[0].replace(/;[^/]*/g, '').replace(/\/$/, '');
+  if (/^\/training\/plans(\/|$)/.test(path)) return false;
+  return /^\/(dashboard|services|activities|calendar|training|health|routes|mytracks)(\/|$)/.test(path)
     || path === '/tools/compare' || path === '/tools/compare/saved';
 }
 

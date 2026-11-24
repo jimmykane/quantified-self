@@ -27,7 +27,10 @@ export class PushNotificationSettingsComponent {
   readonly preferences = inject(AppNotificationPreferencesService);
   readonly devices = inject(AppNotificationDevicesService);
   private readonly haptics = inject(AppHapticsService);
-  readonly status = computed(() => STATUS[this.push.state()]);
+  readonly status = computed(() => {
+    const state = this.push.state();
+    return state === 'unavailable' ? this.push.unavailableReason() || STATUS.unavailable : STATUS[state];
+  });
   async setCategory(category: NotificationCategoryId, enabled: boolean, toggle?: MatSlideToggle): Promise<void> {
     // Material toggles before emitting change; retain the saved value until the write is acknowledged.
     if (toggle) toggle.checked = this.preferences.isEnabled(category);

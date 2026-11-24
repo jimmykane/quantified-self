@@ -6,8 +6,9 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterLink } from '@angular/router';
-import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { buildPlanFeatures, type PlanFeature } from '../pricing/plan-features';
 import { Observable, catchError, defer, map, of, shareReplay, timeout } from 'rxjs';
+import type { StripeRole } from '../../models/stripe-role.model';
 import type { StripePrice, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
 import { PublicPricingCatalogService } from '../../services/public-pricing-catalog.service';
@@ -17,15 +18,7 @@ import { membershipReturnUrl } from '../../helpers/membership-selection.helper';
 
 type BillingPeriod = 'month' | 'year';
 
-type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
-
-interface PublicPlanFeatureViewModel {
-    icon: string;
-    iconClass: string;
-    label: string;
-    highlight?: boolean;
-}
 
 interface PublicPlanPriceViewModel {
     id: string;
@@ -41,12 +34,12 @@ interface PublicPlanPriceViewModel {
 
 interface PublicPlanViewModel {
     id: string;
-    role: PublicPlanRole;
+    role: StripeRole;
     title: string;
     subtitle: string;
-    features: PublicPlanFeatureViewModel[];
+    features: PlanFeature[];
     prices: PublicPlanPriceViewModel[];
-    highlights: PublicPlanFeatureViewModel[];
+    highlights: PlanFeature[];
     billingChoices: Record<BillingPeriod, { prices: PublicPlanPriceViewModel[]; notice: string | null }>;
 }
 
@@ -63,7 +56,7 @@ interface RecurringCadence {
 
 const PUBLIC_PRODUCTS_TIMEOUT_MS = 10_000;
 
-const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string }> = {
+const PUBLIC_PLAN_COPY: Record<StripeRole, { title: string; subtitle: string }> = {
     free: {
         title: 'Starter',
         subtitle: 'Core tools, free forever.',
@@ -231,8 +224,8 @@ function buildPaidPlan(product: StripeProduct): PublicPlanViewModel | null {
     };
 }
 
-function buildPlanDetails(role: PublicPlanRole, prices: PublicPlanPriceViewModel[]): Pick<PublicPlanViewModel, 'features' | 'highlights' | 'prices' | 'billingChoices'> {
-    const features = buildFeatures(role);
+function buildPlanDetails(role: StripeRole, prices: PublicPlanPriceViewModel[]): Pick<PublicPlanViewModel, 'features' | 'highlights' | 'prices' | 'billingChoices'> {
+    const features = buildPlanFeatures(role);
     const choice = (period: BillingPeriod) => {
         const otherPeriod = period === 'month' ? 'year' : 'month';
         const hasSelectedPeriod = prices.some(price => price.intervalLabel === period);
@@ -299,84 +292,8 @@ function normalizePaidRole(role: string | null | undefined): 'basic' | 'pro' | n
     return normalizedRole === 'basic' || normalizedRole === 'pro' ? normalizedRole : null;
 }
 
-function getRoleOrder(role: PublicPlanRole): number {
+function getRoleOrder(role: StripeRole): number {
     return role === 'pro' ? 0 : role === 'basic' ? 1 : 2;
-}
-
-function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
-    const standardIcon = role === 'pro' ? 'check_circle' : 'check';
-    const standardIconClass = role === 'free' ? 'free-feature-icon' : role === 'basic' ? 'qs-color-accent' : 'qs-color-primary';
-    const baseFeatures: PublicPlanFeatureViewModel[] = [
-        {
-            icon: standardIcon,
-            iconClass: standardIconClass,
-            label: getActivityLimitLabel(role),
-            highlight: true,
-        },
-        {
-            icon: standardIcon,
-            iconClass: standardIconClass,
-            label: getRouteLimitLabel(role),
-            highlight: role === 'basic',
-        },
-        {
-            icon: standardIcon,
-            iconClass: standardIconClass,
-            label: 'MCP data access',
-        },
-        {
-            icon: standardIcon,
-            iconClass: standardIconClass,
-            label: 'Manual training plans and standalone workouts',
-        },
-    ];
-
-    if (role === 'free') {
-        return [
-            ...baseFeatures,
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads', highlight: true },
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Core analysis tools', highlight: true },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: false },
-        ];
-    }
-
-    if (role === 'basic') {
-        return [
-            ...baseFeatures,
-            { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads', highlight: false },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: true },
-            { icon: 'favorite', iconClass: 'qs-color-primary', label: 'Supports independent, privacy-first development' },
-        ];
-    }
-
-    return [
-        ...baseFeatures,
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Automatic activity imports from your watch', highlight: true },
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Provider planned-workout delivery', highlight: true },
-        { icon: standardIcon, iconClass: standardIconClass, label: 'Cross-device sync', highlight: true },
-        { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role), highlight: false },
-        { icon: 'favorite', iconClass: 'qs-color-warn', label: 'Helps fund faster feature releases' },
-    ];
-}
-
-function getActivityLimitLabel(role: PublicPlanRole): string {
-    const limit = getUsageLimitForRole(role);
-    return limit === null ? 'Unlimited activities' : `Up to ${limit} activities`;
-}
-
-function getRouteLimitLabel(role: PublicPlanRole): string {
-    const limit = getRouteUsageLimitForRole(role);
-    return limit === null ? 'Unlimited saved routes' : `Up to ${limit} saved routes`;
-}
-
-function getAssistantLimitLabel(role: PublicPlanRole): string {
-    const limit = getAssistantRequestLimitForRole(role);
-    if (limit <= 0) {
-        return 'Assistant not included';
-    }
-
-    const period = role === 'free' ? 'calendar month' : 'billing period';
-    return `Assistant up to ${limit} requests per ${period}`;
 }
 
 function getRecurringCadence(price: StripePrice): RecurringCadence | null {

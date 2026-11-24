@@ -123,10 +123,12 @@ export class ChartViewportQueue {
     this.nearby.delete(job);
     if (job.observed) {
       const observer = this.observers.get(job.root);
-      if (![...this.pending].some(other => other.observed && other.element === job.element)) observer?.unobserve(job.element);
+      if (![...this.pending].some(other => other.observed && other.element === job.element)) {
+        try { observer?.unobserve(job.element); } catch { /* An incomplete browser API must not strand ready/cancel promises. */ }
+      }
       if (![...this.pending].some(other => other.observed && other.root === job.root)) {
-        observer?.disconnect();
         this.observers.delete(job.root);
+        try { observer?.disconnect(); } catch { /* Release the job even if native cleanup fails. */ }
       }
     }
     job.resolve(render);

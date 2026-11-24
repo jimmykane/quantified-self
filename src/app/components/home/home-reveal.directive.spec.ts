@@ -14,12 +14,14 @@ describe('HomeRevealDirective', () => {
   let callback: IntersectionObserverCallback;
   let observer: IntersectionObserver;
   const observe = vi.fn();
+  const unobserve = vi.fn();
   const disconnect = vi.fn();
   const createObserver = vi.fn((listener: IntersectionObserverCallback) => {
     callback = listener;
-    observer = { observe, disconnect } as unknown as IntersectionObserver;
+    observer = { observe, unobserve, disconnect } as unknown as IntersectionObserver;
     return observer;
   });
+  Object.assign(createObserver.prototype, { observe, unobserve, disconnect });
 
   beforeEach(async () => {
     fixture = undefined;
@@ -74,6 +76,15 @@ describe('HomeRevealDirective', () => {
     expect(createObserver).not.toHaveBeenCalled();
     expect(element.hidden).toBe(false);
     expect(element.textContent).toBe('Shared chart content');
+  });
+
+  it('keeps content available when an observer constructor exposes no observe method', async () => {
+    vi.stubGlobal('IntersectionObserver', class { disconnect() {} });
+    const element = await render();
+    expect(createObserver).not.toHaveBeenCalled();
+    expect(element.hidden).toBe(false);
+    expect(element.textContent).toBe('Shared chart content');
+    expect(element.classList.contains('home-reveal-visible')).toBe(false);
   });
 
   it('does not observe or conceal prerendered content', async () => {

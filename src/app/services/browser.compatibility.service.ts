@@ -41,7 +41,10 @@ export class BrowserCompatibilityService {
 
     /** Also used by framework-independent chart lifecycle helpers. */
     public static checkIntersectionObserverSupport(): boolean {
-        return typeof IntersectionObserver !== 'undefined';
+        return typeof IntersectionObserver === 'function'
+            && ['observe', 'unobserve', 'disconnect'].every(
+                method => typeof IntersectionObserver.prototype?.[method] === 'function',
+            );
     }
 
     private dialog = inject(MatDialog);

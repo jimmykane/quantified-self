@@ -20,6 +20,7 @@ import { markUploadErrorUserActionHandled, UploadError } from '../../../services
 
 const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 const ACCOUNT_DELETION_UPLOAD_ERROR_CODE = 'user_deleted_or_deleting';
+const FILE_READ_ERROR_NAMES = new Set(['NotFoundError', 'SecurityError', 'NotReadableError', 'AbortError', 'EncodingError']);
 
 @Component({
   selector: 'app-upload-activities',
@@ -209,9 +210,18 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
       };
 
       fileReader.onerror = () => {
-        const error = new Error('Could not read file.');
-        this.snackBar.open(`Could not upload ${file.name}, reason: ${error.message}`, 'OK', { duration: 4000 });
-        reject(error);
+        // Native messages and selected file details can contain private paths.
+        const nativeName = fileReader.error?.name;
+        const reason = FILE_READ_ERROR_NAMES.has(nativeName) ? nativeName : 'UnknownError';
+        const error = new Error(`Could not read file (${reason}).`);
+        this.logger.error(error);
+        this.snackBar.open(
+          'Your browser could not read this file. Save a copy on this device, then select it again. The upload has not started.',
+          'OK',
+          { duration: 10000 },
+        );
+        // Keep the recovery guidance visible instead of replacing it with the batch summary.
+        reject(markUploadErrorUserActionHandled(error));
       };
 
       fileReader.readAsArrayBuffer(file.file);

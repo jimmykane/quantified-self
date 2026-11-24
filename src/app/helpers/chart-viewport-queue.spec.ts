@@ -8,10 +8,12 @@ describe('chart viewport queue', () => {
   beforeEach(() => {
     frames = [];
     observer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
-    vi.stubGlobal('IntersectionObserver', vi.fn(function (handler: IntersectionObserverCallback) {
+    const createObserver = vi.fn(function (handler: IntersectionObserverCallback) {
       callback = handler;
       return observer;
-    }));
+    });
+    Object.assign(createObserver.prototype, observer);
+    vi.stubGlobal('IntersectionObserver', createObserver);
     vi.stubGlobal('requestAnimationFrame', vi.fn(handler => { frames.push(handler); return frames.length; }));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
@@ -72,8 +74,48 @@ describe('chart viewport queue', () => {
     const queue = new ChartViewportQueue();
     vi.stubGlobal('IntersectionObserver', undefined);
     await expect(queue.wait(attachedChart()).ready).resolves.toBe(true);
-    vi.stubGlobal('IntersectionObserver', vi.fn(function () { throw new Error('unsupported'); }));
+    const createObserver = vi.fn(function () { throw new Error('unsupported'); });
+    Object.assign(createObserver.prototype, observer);
+    vi.stubGlobal('IntersectionObserver', createObserver);
     await expect(queue.wait(attachedChart()).ready).resolves.toBe(true);
+    expect(createObserver).toHaveBeenCalledOnce();
+  });
+
+  it('renders without constructing an incomplete observer', async () => {
+    const createObserver = vi.fn(function () { return {}; });
+    vi.stubGlobal('IntersectionObserver', createObserver);
+    await expect(new ChartViewportQueue().wait(attachedChart()).ready).resolves.toBe(true);
+    expect(createObserver).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'throwing'])('settles observe-failure fallback even with %s cleanup methods', async cleanup => {
+    observer.observe.mockImplementation(() => { throw new Error('observe failed'); });
+    if (cleanup === 'missing') {
+      Object.defineProperties(observer, { unobserve: { value: undefined }, disconnect: { value: undefined } });
+    } else {
+      observer.unobserve.mockImplementation(() => { throw new Error('unobserve failed'); });
+      observer.disconnect.mockImplementation(() => { throw new Error('disconnect failed'); });
+    }
+    const queue = new ChartViewportQueue();
+    const first = queue.wait(attachedChart());
+    await expect(first.ready).resolves.toBe(true);
+    expect(() => first.cancel()).not.toThrow();
+    await expect(queue.wait(attachedChart()).ready).resolves.toBe(true);
+    expect(IntersectionObserver).toHaveBeenCalledTimes(2);
+  });
+
+  it('settles cancellation and removes the observer even when both cleanup methods throw', async () => {
+    observer.unobserve.mockImplementation(() => { throw new Error('unobserve failed'); });
+    observer.disconnect.mockImplementation(() => { throw new Error('disconnect failed'); });
+    const queue = new ChartViewportQueue();
+    const wait = queue.wait(attachedChart());
+    expect(() => wait.cancel()).not.toThrow();
+    await expect(wait.ready).resolves.toBe(false);
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+    const retry = queue.wait(attachedChart());
+    expect(IntersectionObserver).toHaveBeenCalledTimes(2);
+    retry.cancel();
+    await expect(retry.ready).resolves.toBe(false);
   });
 
   it('spreads rendering across frames after a shared cold library load completes', async () => {
