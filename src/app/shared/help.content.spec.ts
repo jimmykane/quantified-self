@@ -193,7 +193,9 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
     for (const phrase of ['one file at a time', 'more than five minutes', 'batch continues with the remaining files',
       'Processing may still finish on the server', 'Check your activities before uploading that file again',
-      'timed-out files are not automatically resent']) expect(copy).toContain(phrase);
+      'timed-out files are not automatically resent',
+      'If your browser cannot read a selected file, its upload has not started',
+      'Save a copy on your device, then select it again']) expect(copy).toContain(phrase);
   });
 
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {

@@ -220,13 +220,15 @@ describe('HomeComponent', () => {
 
   it('suspends offscreen and hidden-page motion without overriding the visitor pause choice', async () => {
     const observers: { callback: IntersectionObserverCallback; targets: Element[]; disconnect: ReturnType<typeof vi.fn> }[] = [];
-    vi.stubGlobal('IntersectionObserver', class {
+    class ViewportObserver {
       readonly targets: Element[] = [];
       readonly disconnect = vi.fn();
       readonly unobserve = vi.fn();
       constructor(readonly callback: IntersectionObserverCallback) { observers.push(this); }
       observe(target: Element): void { this.targets.push(target); }
-    });
+    }
+    Object.assign(ViewportObserver.prototype, { disconnect: vi.fn(), unobserve: vi.fn() });
+    vi.stubGlobal('IntersectionObserver', ViewportObserver);
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const removeListener = vi.spyOn(document, 'removeEventListener');
     try {

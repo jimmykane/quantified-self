@@ -6,11 +6,13 @@ import { splitServiceWorkerJavaScript } from './prepare-service-worker-javascrip
 const output = (entryPoint, imports = []) => ({ entryPoint, imports });
 const link = (path, kind = 'import-statement') => ({ path, kind });
 const outputs = {
-  'main.js': output('src/main.ts', [link('shared.js'), link('help.js', 'dynamic-import')]),
+  'main.js': output('src/main.ts', [link('shared.js'), link('help.js', 'dynamic-import'), link('settings.js', 'dynamic-import')]),
   'polyfills.js': output('angular:polyfills'),
   'app.js': output('src/app/app.module.ts', [link('shared.js')]),
   'home.js': output('src/app/components/home/home.component.ts'),
   'login.js': output('src/app/modules/login.module.ts'),
+  'settings.js': output('src/app/utils/app.user.utilities.ts', [link('settings-defaults.js'), link('help.js', 'dynamic-import')]),
+  'settings-defaults.js': output(undefined, [link('shared.js')]),
   'locale.js': output('node_modules/@angular/common/locales/el.js', [link('intl.js')]),
   'day.js': output('node_modules/dayjs/locale/el.js'),
   'shared.js': output(undefined, [link('secondary.js')]),
@@ -52,6 +54,19 @@ test('rejects incomplete build metadata before writing a release manifest', () =
   assert.throws(() => splitServiceWorkerJavaScript(manifest, outputs, '<script src="assets/forgotten.js"></script>'), /Local shell script/);
   assert.throws(() => splitServiceWorkerJavaScript(manifest, { ...outputs, 'shared.js': undefined }, html), /Missing/);
   assert.throws(() => splitServiceWorkerJavaScript(manifest, { ...outputs, 'app.js': output('unknown') }, html), /Missing offline bootstrap/);
+  assert.throws(() => splitServiceWorkerJavaScript(manifest, { ...outputs, 'settings.js': output('unknown') }, html), /Missing offline bootstrap entry: src\/app\/utils\/app.user.utilities.ts/);
+});
+
+test('caches authenticated settings and their static dependencies while keeping optional imports lazy', () => {
+  const { assetGroups } = splitServiceWorkerJavaScript(manifest, outputs, html);
+  const shell = assetGroups.find(group => group.name === 'app');
+  const features = assetGroups.find(group => group.name === 'feature-js');
+  assert.equal(shell.installMode, 'prefetch');
+  for (const url of ['/settings.js', '/settings-defaults.js', '/shared.js']) {
+    assert.ok(shell.urls.includes(url));
+    assert.ok(!features.urls.includes(url));
+  }
+  assert.ok(features.urls.includes('/help.js'));
 });
 
 test('both Hosting builds prepare JavaScript groups before verifying the release', () => {

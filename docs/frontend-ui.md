@@ -181,7 +181,7 @@ Use the npm build entry points for deployable artifacts. Build/tool regression t
 
 Production and beta use the Angular build metadata in `dist/stats.json` to partition the hashed JavaScript in
 `dist/browser/ngsw.json`. The `app` group prefetches the CSR HTML entry scripts (including the first-paint theme script),
-module preloads, the Angular bootstrap module, the home and sign-in entries, supported locales and their static
+module preloads, the Angular bootstrap module, the home, sign-in and account-settings entries, supported locales and their static
 imports. The `feature-js` group
 fetches feature modules and workers on demand. Both groups use Angular's release-specific content hashes.
 The release commands run `tools/prepare-service-worker-javascript.mjs` before verifying the manifest. The base
@@ -301,7 +301,9 @@ Account access checks use `AppUserAccess`, which has only type imports and stays
 inherits that policy for existing private callers, while retaining the original settings defaults and migrations.
 Public shell/guards must import the access helper rather than the settings class. Profile merging and claim merging
 load the settings utilities through `loadUserSettingsUtilities` only when an authenticated profile needs normalization;
-an anonymous visit does not request that module. Normalize before publishing a ready profile. Keep `switchMap` around
+an anonymous visit does not execute that module. Release service workers pre-cache it and its static dependencies
+with the app version because authenticated startup requires them; optional dynamic imports remain on demand.
+This changes caching, not the initial JavaScript execution graph. Normalize before publishing a ready profile. Keep `switchMap` around
 asynchronous snapshot merges, the account-identity check after server verification/normalization, existing generation
 guards, complete-profile requirements and read deadlines. A failed download propagates into the existing blocked
 profile recovery flow. A module import failure uses `account/settings-load-failed` and the existing explicit

@@ -9,6 +9,7 @@ const bootstrapEntries = [
   'src/app/app.module.ts',
   'src/app/components/home/home.component.ts',
   'src/app/modules/login.module.ts',
+  'src/app/utils/app.user.utilities.ts',
 ];
 
 export function splitServiceWorkerJavaScript(manifest, outputs, shellHtml) {
