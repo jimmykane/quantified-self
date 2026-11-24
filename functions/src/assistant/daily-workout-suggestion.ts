@@ -1,4 +1,4 @@
-import { dayWorkoutPowerReferenceUsed } from './day-workout-power';
+import { dayWorkoutPowerReferenceUsed } from './day-workout-target-context';
 import { z } from 'zod';
 import type { DailyWorkoutFailureReason, DailyWorkoutSuggestionResult } from '../../../shared/daily-workout-suggestion';
 import { HttpsError } from 'firebase-functions/v2/https';

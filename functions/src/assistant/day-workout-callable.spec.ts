@@ -80,6 +80,24 @@ describe('generateDayWorkout callable', () => {
       expect(provider).toHaveBeenCalledOnce();
     } finally { generate.mockReset(); }
   });
+  it('corrects an effort-only workout when Heart rate is selected and a reference is available', async () => {
+    const reference = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+      reference: { kind: 'threshold-heart-rate', bpm: 170 } } as const;
+    const step = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 } };
+    const reply = (targets: unknown[]) => JSON.stringify({ kind: 'workout', title: 'Easy run', rationale: 'Keep it easy.',
+      structure: { version: 1, sport: request.controls.sport, nodes: [{ ...step, targets }] } });
+    const { provider, generate } = mockSdkOutputs(reply([]), reply([reference]));
+    const deps = dependencies(); deps.generate = generateDayWorkoutSuggestion;
+    const evidence = await deps.context('owner', request, new Date());
+    vi.mocked(deps.context).mockResolvedValue({ ...evidence, references: [reference] });
+    try {
+      const result = await runGenerateDayWorkout({ ...request, controls: { ...request.controls, target: 'heart-rate' } }, auth, deps);
+      expect(result.draft?.structure.nodes).toEqual([{ ...step, targets: [reference] }]);
+      expect(JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction).toContain('Include a heart-rate target');
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.reserve).toHaveBeenCalledOnce();
+    } finally { generate.mockReset(); }
+  });
   it.each(['override', 'shared', 'imported'] as const)('returns the original %s snapshot and replays it without rereading changed settings', async origin => {
     const deps = dependencies();
     const powerReference = origin === 'imported' ? { kind: 'imported-ftp' as const, sport: request.controls.sport, family: 'running' as const,

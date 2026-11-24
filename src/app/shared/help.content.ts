@@ -374,6 +374,8 @@ A temporary AI outage can retry once within the same daily request. Recovery and
 
 ## Generate a workout for a day
 
+**Generate by heart rate:** Open **More options → Targets → Heart rate** in workout generation or daily preferences. To get a BPM range, save your threshold or maximum HR under **Settings → Training load defaults** for the selected sport family. QS uses threshold HR first, then maximum HR, then a compatible reference from a nearby scheduled workout. When none is available, **Context** explains how to set it up and the suggestion can still include effort guidance. New targets use the saved reference at generation time.
+
 **Generate using Garmin zones:** In workout generation or daily preferences, explicitly choose **Garmin power zones** for Running or Cycling. The review keeps single-zone instructions without inferred watts or a manual QS source. Review and Add still save in QS; sending requires your separate service choice. Auto and Power use shared FTP or an explicit source override as described below.
 
 In **More options**, **Garmin power averaging** applies your selected 3/10/30-second window to any generated power targets, including Garmin zones. Default preserves the existing behavior. The same option is available in daily preferences. Targetless steps and rest advice remain unchanged; this choice never enables provider sending.

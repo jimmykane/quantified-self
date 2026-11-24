@@ -823,6 +823,18 @@ target and the exact athlete-reference snapshots already in context are offered,
 Auto may use the available reference kinds; effort-only or missing references require `targets: []`. The decoder
 retains only that zero-length array bound (`maxItems: 0`); other size/value bounds remain enforced after generation.
 The shared MCP editing schema still supports its existing absolute targets and is not narrowed by this private path.
+
+When **Targets → Heart rate** is explicit, Calendar generation, daily suggestions and regeneration resolve the chosen
+sport family's dated Training load defaults as of the request. Threshold HR takes priority over maximum HR. A save
+that races generation uses the previous immutable revision. The existing matching-sport relative reference from a
+nearby scheduled workout remains the fallback. If neither source is usable, Context points to Training load defaults
+and the generator can offer effort guidance. A workout with an available HR reference must include at least one matching
+relative HR target and cannot include power. The existing correction attempt and model budget apply. Warmup, recovery
+and cooldown may remain targetless, and rest remains an allowed result. This setting does not read sleep, activity peaks
+or device zones to infer a reference. Only explicit HR requests add a policy read, with a single revision lookup if needed.
+The recipe carries the existing frozen HR reference, so existing saved drafts and plans retain their targets. MCP impact:
+no schema, scope or authorization change. Existing plan read/preview tools already represent these targets, and the
+independent threshold tools retain their grants. Release `generateDayWorkout` for behavior and the frontend for Help.
 Fixed scalar choices and athlete-reference values use single-value `enum` constraints in the model schema;
 Gemini's documented `responseJsonSchema` subset does not include Zod's emitted `const` keyword.
 MCP impact review: no wire impact; public recipe schemas, reads, proposal/confirmation contracts and consent are

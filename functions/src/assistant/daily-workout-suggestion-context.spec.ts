@@ -3,7 +3,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { collectDailyWorkoutSuggestionContext } from './daily-workout-suggestion-context';
 import { DayWorkoutTrainingNotReadyError, readDayWorkoutTrainingContext } from './day-workout-context';
-import { withWorkoutPowerContext } from './day-workout-power';
+import { withWorkoutTargetContext } from './day-workout-target-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 
@@ -12,7 +12,7 @@ vi.mock('./daily-workout-suggestion-routine', async original => {
   const actual = await original<typeof import('./daily-workout-suggestion-routine')>();
   return { ...actual, selectDailyWorkoutSuggestionSport: vi.fn(actual.selectDailyWorkoutSuggestionSport) };
 });
-vi.mock('./day-workout-power', () => ({ withWorkoutPowerContext: vi.fn(async (_uid, _controls, _now, context) => context) }));
+vi.mock('./day-workout-target-context', () => ({ withWorkoutTargetContext: vi.fn(async (_uid, _controls, _now, context) => context) }));
 vi.mock('./day-workout-context', async original => ({
   ...await original<typeof import('./day-workout-context')>(), readDayWorkoutTrainingContext: vi.fn(),
 }));
@@ -65,7 +65,7 @@ describe('daily Training preparation before weekday sport selection', () => {
     expect(calls).toEqual(['prepare_training_metrics']);
     expect(selectDailyWorkoutSuggestionSport).not.toHaveBeenCalled();
     expect(readDayWorkoutTrainingContext).not.toHaveBeenCalled();
-    expect(withWorkoutPowerContext).not.toHaveBeenCalled();
+    expect(withWorkoutTargetContext).not.toHaveBeenCalled();
     expect(session.close).toHaveBeenCalledOnce();
   });
   it('prepares once on the same session, then uses the chosen sport throughout context', async () => {
@@ -76,7 +76,7 @@ describe('daily Training preparation before weekday sport selection', () => {
     expect(selectDailyWorkoutSuggestionSport).toHaveBeenCalledWith(preferences, now, session);
     expect(result.controls).toEqual(selected); expect(result.evidence.trainingMetricsReady).toBe(true);
     expect(readDayWorkoutTrainingContext).toHaveBeenCalledWith('owner', selected, now);
-    expect(withWorkoutPowerContext).toHaveBeenCalledWith('owner', selected, now, expect.any(Object));
+    expect(withWorkoutTargetContext).toHaveBeenCalledWith('owner', selected, now, expect.any(Object));
     expect(createAssistantMcpSession).toHaveBeenCalledExactlyOnceWith('owner', 'https://quantified-self.io', undefined,
       'coordinate_free', preferences.controls.timelineContext, preferences.controls.trainingContext);
     expect(session.close).toHaveBeenCalledOnce();
@@ -116,19 +116,19 @@ describe('daily Training preparation before weekday sport selection', () => {
     expect(calls.slice(0, 2)).toEqual(['query_activities', 'prepare_training_metrics']);
     expect(calls.filter(name => name === 'prepare_training_metrics')).toHaveLength(1);
     expect(result.evidence.trainingMetricsReady).toBe(false);
-    expect(withWorkoutPowerContext).toHaveBeenCalledOnce(); expect(session.close).toHaveBeenCalledOnce();
+    expect(withWorkoutTargetContext).toHaveBeenCalledOnce(); expect(session.close).toHaveBeenCalledOnce();
   });
   it('keeps the shared session open for recovery context after a failed routine read', async () => {
     routineFails = true;
     const result = await collectDailyWorkoutSuggestionContext('owner', preferences, now, false);
     expect(result.controls).toEqual(preferences.controls);
     expect(result.evidence.trainingMetricsReady).toBe(true);
-    expect(withWorkoutPowerContext).toHaveBeenCalledOnce(); expect(session.close).toHaveBeenCalledOnce();
+    expect(withWorkoutTargetContext).toHaveBeenCalledOnce(); expect(session.close).toHaveBeenCalledOnce();
   });
   it('closes the shared session if later context collection fails', async () => {
     vi.mocked(readDayWorkoutTrainingContext).mockRejectedValueOnce(Error('Schedule changed'));
     await expect(collectDailyWorkoutSuggestionContext('owner', preferences, now, false)).rejects.toThrow('Schedule changed');
-    expect(session.close).toHaveBeenCalledOnce(); expect(withWorkoutPowerContext).not.toHaveBeenCalled();
+    expect(session.close).toHaveBeenCalledOnce(); expect(withWorkoutTargetContext).not.toHaveBeenCalled();
   });
   it('still defers if a prepared snapshot fails later, without repeating preparation', async () => {
     snapshotFails = true;

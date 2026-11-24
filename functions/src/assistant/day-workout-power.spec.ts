@@ -3,7 +3,7 @@ import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { parseWorkoutPowerSettingsV1, parseWorkoutPowerProfileV1, sharedWorkoutFtpReference, importedWorkoutFtpReference, WORKOUT_IMPORTED_FTP_MAX_AGE_MS, parseWorkoutPowerReferenceV1 } from '../../../shared/workout-power-settings';
-import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-power';
+import { dayWorkoutPowerReferenceUsed, withWorkoutPowerContext } from './day-workout-target-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import type { DayWorkoutContext } from './day-workout-context';
 const profile = { sport: ActivityTypes.Running, provider: 'suunto' as const, source: 'Watch running power',
