@@ -290,20 +290,26 @@ The sender clears pending work and claims before transport, then rechecks consen
 and each captured device generation. Claims are deliberately not replayed after ambiguous transport failure or a
 crash. Pending alerts expire after ten minutes; device fan-out is capped at ten across production and beta. Both sites
 receive alerts on their own origins. Expired registrations are removed only if their generation still matches.
-The generic payload contains no scores, sleep times or other health metrics. It opens `/health?metric=sleep` using
-the same declarative and service-worker `openWindow` destinations as other alerts.
+The generic payload contains no scores, sleep times or other health metrics. It opens Dashboard Today at
+`/dashboard?focus=readiness` through both declarative and service-worker delivery. This visit reveals and focuses
+Readiness using the existing Today calculation, even if the account hides Today or Readiness. It leaves the saved
+layout intact and suppresses automatic workout preparation. On devices that display Web Push buttons, **View readiness**
+opens the same view and **View sleep** opens `/health?metric=sleep`. Each action carries a same-origin declarative
+destination and an Angular `openWindow` operation for service-worker delivery. Release the Dashboard destination
+before deploying the updated payload in `processSleepSyncTask` and `sendActivitySyncNotifications`.
 
 Rollout after merge:
 
 1. Keep the new sleep switch false/missing. Deploy Firestore Rules before serving the frontend category.
-2. Deploy `receiveGarminAPIHealthData`, `receiveSuunto247Data`, `scheduleSuuntoSleepSync`, `scheduleCOROSSleepSync`,
-   `processSleepSyncTask`, and `sendActivitySyncNotifications`. Build and deploy frontend releases through the usual
-   beta/production workflow. No index changes or migration are needed.
+2. Release the frontend through the usual beta/production workflow, then deploy `receiveGarminAPIHealthData`,
+   `receiveSuunto247Data`, `scheduleSuuntoSleepSync`, `scheduleCOROSSleepSync`, `processSleepSyncTask`,
+   and `sendActivitySyncNotifications`. The existing notification index and state support this rollout.
 3. Apply the updated Web Push monitoring bundle using the existing alert channel. `[SleepSyncPush]` adds fixed
    admission/send/sweep outcomes; shared worker backlog, heartbeat and runtime coverage remain in place.
 4. Enable `web_push_sleep_sync_enabled` for the shared backend after verification. Test with a genuinely new main sleep
    on an already connected test account; histories, replayed queues and the existing self-test do not exercise admission.
-   Verify each registered origin's click destination and category/device cancellation.
+   Verify the default tap on each registered origin, both button destinations on a supporting device, and
+   category/device cancellation.
 
 Disable the sleep switch to stop future sends. Category off/on, expired pending work, suppressed histories and old
 receipts never become catch-up notifications. Costs scale with eligible new saves and devices rather than all users
