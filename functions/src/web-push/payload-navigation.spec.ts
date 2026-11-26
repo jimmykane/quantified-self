@@ -16,7 +16,6 @@ const activity: ActivityPushEntry = {
 const cases = [
   { name: 'connection attention', path: `/services?serviceName=${encodeURIComponent(ServiceNames.GarminAPI)}`, build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI]) },
   { name: 'grouped connection attention', path: '/services', build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI, ServiceNames.SuuntoApp]) },
-  { name: 'sleep ready', path: '/dashboard?focus=readiness', build: sleepNotificationPayload },
   { name: 'self-test', path: '/settings?section=notifications', build: buildPushTestPayload },
   { name: 'Suunto history completion', path: `/services?serviceName=${encodeURIComponent(ServiceNames.SuuntoApp)}&tool=history`,
     build: (origin: string) => buildHistoryNotificationPayload(origin, ServiceNames.SuuntoApp, 'finished') },
@@ -43,6 +42,24 @@ describe.each(WEB_PUSH_ORIGINS)('notification navigation on %s', origin => {
     expect(activityNotificationPayload(origin, 'owner', entries).notification)
       .toMatchObject({ tag: 'qs-activity-sync', renotify: true });
   });
+  it('keeps the Sleep synced body tap on Readiness and routes both action buttons', () => {
+    const payload = sleepNotificationPayload(origin);
+    const readinessPath = '/dashboard?focus=readiness';
+    const sleepPath = '/health?metric=sleep';
+
+    expect(payload.web_push).toBe(8030);
+    expect(payload.notification.navigate).toBe(origin + readinessPath);
+    expect(payload.notification.actions).toEqual([
+      { action: 'view-readiness', title: 'View readiness', navigate: origin + readinessPath },
+      { action: 'view-sleep', title: 'View sleep', navigate: origin + sleepPath },
+    ]);
+    expect(payload.notification.data.onActionClick).toEqual({
+      default: { operation: 'openWindow', url: readinessPath },
+      'view-readiness': { operation: 'openWindow', url: readinessPath },
+      'view-sleep': { operation: 'openWindow', url: sleepPath },
+    });
+  });
+
   it.each(cases)('delegates $name to browser app/window routing with its exact destination', ({ build, path }) => {
     const payload = build(origin);
     // openWindow lets the browser select an installed app instead of navigating the last-focused tab.

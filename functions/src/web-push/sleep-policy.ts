@@ -38,10 +38,28 @@ export function sleepPushCandidate(session: SleepSession, now: number): SleepPus
 
 export function sleepNotificationPayload(origin: string) {
   if (!isAutomaticPushOrigin(origin)) throw new Error('Invalid sleep notification origin.');
-  const path = '/dashboard?focus=readiness';
-  return { web_push: 8030, notification: { title: 'Quantified Self',
-    body: 'Your sleep is in. Open Today to see your readiness.',
-    tag: 'qs-sleep-sync', renotify: true, icon: `${origin}/assets/favicons/android-chrome-192x192.png`, navigate: origin + path,
-    data: { onActionClick: { default: { operation: 'openWindow', url: path } } },
-  } };
+  const readinessPath = '/dashboard?focus=readiness';
+  const sleepPath = '/health?metric=sleep';
+  return {
+    web_push: 8030,
+    notification: {
+      title: 'Quantified Self',
+      body: 'Your sleep is in. Open Today to see your readiness.',
+      tag: 'qs-sleep-sync',
+      renotify: true,
+      icon: `${origin}/assets/favicons/android-chrome-192x192.png`,
+      navigate: origin + readinessPath,
+      actions: [
+        { action: 'view-readiness', title: 'View readiness', navigate: origin + readinessPath },
+        { action: 'view-sleep', title: 'View sleep', navigate: origin + sleepPath },
+      ],
+      data: {
+        onActionClick: {
+          default: { operation: 'openWindow', url: readinessPath },
+          'view-readiness': { operation: 'openWindow', url: readinessPath },
+          'view-sleep': { operation: 'openWindow', url: sleepPath },
+        },
+      },
+    },
+  };
 }

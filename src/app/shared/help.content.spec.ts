@@ -149,6 +149,7 @@ describe('help.content', () => {
     expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
     expect(copy).toContain('Your browser and OS control banners, sound and vibration');
     for (const phrase of ['Sleep synced', 'one per sleep date', 'at least 20 hours', 'Tap an alert to see Readiness in Dashboard Today',
+      'On devices that show notification buttons, **View readiness** opens Today and **View sleep** opens Sleep in Health',
       'Alerts contain no sleep scores, times or other health metrics']) expect(copy).toContain(phrase);
     for (const phrase of ['Connection issues', 'Each unresolved connection problem is notified once',
       'shared with Training alerts about that same problem', 'deliberate disconnects']) expect(copy).toContain(phrase);
