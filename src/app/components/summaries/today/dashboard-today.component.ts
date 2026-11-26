@@ -1,11 +1,14 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   input,
   output,
+  viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AppUserService } from '../../../services/app.user.service';
@@ -55,6 +58,8 @@ export class DashboardTodayComponent {
   readonly account = input<AppUserInterface | null>(null);
   readonly owner = input(false);
   readonly expanded = input(true);
+  readonly focusReadiness = input(false);
+  private readonly readinessTarget = viewChild<ElementRef<HTMLElement>>('readinessTarget');
   readonly settings = input.required<AppDashboardTodaySettings>();
   readonly readiness = input.required<DashboardTodayReadinessViewModel>();
   readonly trainingState =
@@ -98,6 +103,12 @@ export class DashboardTodayComponent {
   }
 
   constructor() {
+    afterRenderEffect(() => {
+      if (!this.focusReadiness()) return;
+      const target = this.readinessTarget()?.nativeElement;
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView?.({ block: 'center' });
+    });
     effect(() =>
       this.data.connect(
         this.owner() ? this.account() : null,

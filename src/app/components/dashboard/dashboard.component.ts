@@ -150,7 +150,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private eventService: AppEventService,
     private userService: AppUserService,
-    private route: ActivatedRoute,
+    protected route: ActivatedRoute,
     private snackBar: MatSnackBar) {
     this.refreshEventTableDates();
     afterNextRender(() => {

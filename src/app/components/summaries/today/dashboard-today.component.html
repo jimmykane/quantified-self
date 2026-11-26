@@ -84,7 +84,11 @@
         }
         @if (settings().readiness) {
           <div
+            #readinessTarget
             class="dashboard-current-state-primary dashboard-readiness-primary"
+            role="group"
+            aria-label="Readiness"
+            [attr.tabindex]="focusReadiness() ? -1 : null"
             [attr.aria-busy]="dashboardTodayReadiness.loading"
             [attr.data-cue-tone]="dashboardTodayReadiness.scoreTone"
           >

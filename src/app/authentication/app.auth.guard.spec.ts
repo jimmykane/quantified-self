@@ -83,23 +83,26 @@ describe('authGuard', () => {
         });
     });
 
-    it('preserves the MCP authorization request query when login is required', async () => {
+    it.each([
+        { path: '/mcp/authorize?request_id=request-1', segments: ['mcp', 'authorize'] },
+        { path: '/dashboard?focus=readiness', segments: ['dashboard'] },
+    ])('preserves $path when login is required', async ({ path, segments }) => {
         vi.mocked(router.getCurrentNavigation).mockReturnValue({
             extractedUrl: {
-                toString: () => '/mcp/authorize?request_id=request-1',
+                toString: () => path,
             },
         } as any);
 
         const guardResult = TestBed.runInInjectionContext(() => authGuard(
             {} as any,
-            [{ path: 'mcp' }, { path: 'authorize' }] as any
+            segments.map(path => ({ path })) as any
         )) as Observable<unknown>;
         const result = await firstValueFrom(guardResult);
 
         expect(result).not.toBe(true);
-        expect(authServiceStub.redirectUrl).toBe('/mcp/authorize?request_id=request-1');
+        expect(authServiceStub.redirectUrl).toBe(path);
         expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
-            queryParams: { returnUrl: '/mcp/authorize?request_id=request-1' },
+            queryParams: { returnUrl: path },
         });
     });
 
