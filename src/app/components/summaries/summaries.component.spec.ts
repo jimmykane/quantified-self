@@ -531,8 +531,37 @@ describe('SummariesComponent', () => {
 
     fixture.componentRef.setInput('focusReadiness', false);
     fixture.detectChanges();
+    expect(component.todayDetailsExpanded()).toBe(false);
+    if (showTodaySummary) expect(root.querySelector('#dashboard-today-details')?.hasAttribute('hidden')).toBe(true);
     expect(root.querySelector('[aria-label="Readiness"]')).toBeNull();
     expect(!!root.querySelector('app-daily-workout-suggestion')).toBe(showTodaySummary);
+  });
+
+  it.each([false, true])('offers the saved Today visibility action during a Readiness visit (%s)', async showTodaySummary => {
+    const dashboardSettings = { tiles: [], showTodaySummary };
+    const owner = { uid: 'owner-user', settings: { dashboardSettings } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.componentRef.setInput('focusReadiness', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[aria-label="Dashboard options"]')!.click();
+    fixture.detectChanges();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    const visibilityAction = showTodaySummary ? 'Hide Today summary by default' : 'Show Today summary by default';
+    const item = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find(button => button.querySelector('span')?.textContent?.trim() === visibilityAction);
+    expect(item).toBeDefined();
+    const bulk = vi.spyOn(component.library, 'bulk');
+    item!.click();
+    await bulk.mock.results[0].value;
+    fixture.detectChanges();
+
+    expectDashboardSettingsWrite(owner, { tiles: [], showTodaySummary: !showTodaySummary });
+    expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
+    expect(root.querySelector('[aria-label="Readiness"]')).not.toBeNull();
+    expect(root.querySelector('app-daily-workout-suggestion')).toBeNull();
   });
 
   it('does not reveal Readiness on another profile from a notification link', () => {

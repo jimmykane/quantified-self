@@ -435,6 +435,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dailyWorkoutSuggestionTrainingKey: string | null = null;
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
+  private readonly focusedTodayDetailsExpanded = signal(true);
+
+  protected get currentTodayDetailsExpanded() {
+    return this.todayReadinessFocused ? this.focusedTodayDetailsExpanded : this.todayDetailsExpanded;
+  }
+
+  protected get savedTodaySummaryVisible(): boolean {
+    return (this.user as AppUserInterface | undefined)?.settings?.dashboardSettings?.showTodaySummary !== false;
+  }
+
   private todayDetailsOwnerUID: string | null = null;
   public isOwnerDashboard = false;
   public calendarSelectedDateKey: string | null = null;
@@ -711,6 +721,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (ownerUID !== this.todayDetailsOwnerUID) {
       this.todayDetailsOwnerUID = ownerUID;
       this.todayDetailsExpanded.set(true);
+      this.focusedTodayDetailsExpanded.set(true);
     }
     this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
@@ -2449,7 +2460,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const hiddenSections = this.isOwnerDashboard ? normalizeDashboardHiddenSections(appUser?.settings?.dashboardSettings?.hiddenSections) : [];
     if (!equal(hiddenSections, this.hiddenSectionLanes)) this.hiddenSectionLanes = hiddenSections;
     const focusReadiness = this.focusReadiness && this.isOwnerDashboard && this.showActions === true;
-    if (focusReadiness && !this.todayReadinessFocused) this.todayDetailsExpanded.set(true);
+    if (focusReadiness && !this.todayReadinessFocused) this.focusedTodayDetailsExpanded.set(true);
     this.todayReadinessFocused = focusReadiness;
     const today = normalizeDashboardTodaySettings(appUser?.settings?.dashboardSettings?.today);
     if (focusReadiness) {
@@ -2457,7 +2468,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       today.suggestion = false;
     }
     if (!equal(today, this.todaySettings)) this.todaySettings = today;
-    const showTodaySummary = focusReadiness || appUser?.settings?.dashboardSettings?.showTodaySummary !== false;
+    const showTodaySummary = focusReadiness || this.savedTodaySummaryVisible;
     if (this.showTodaySummary === showTodaySummary) {
       return;
     }
