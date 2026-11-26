@@ -70,7 +70,7 @@
   }
   @if (showTodaySummary) {
   <app-dashboard-today [account]="$any(user)" [owner]="isOwnerDashboard" [expanded]="todayDetailsExpanded()"
-    [settings]="todaySettings" [readiness]="dashboardTodayReadiness" [trainingState]="dashboardTodayTrainingState"
+    [focusReadiness]="todayReadinessFocused" [settings]="todaySettings" [readiness]="dashboardTodayReadiness" [trainingState]="dashboardTodayTrainingState"
     [localDate]="todayRestDate" [timelineNotes]="timelineNotes()" [sleepRevision]="dailyWorkoutSuggestionSleepRevision"
     [sleepKey]="dailyWorkoutSuggestionSleepKey" [trainingKey]="dailyWorkoutSuggestionTrainingKey" (customize)="customizeToday()" />
   }

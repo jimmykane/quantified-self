@@ -16,7 +16,7 @@ const activity: ActivityPushEntry = {
 const cases = [
   { name: 'connection attention', path: `/services?serviceName=${encodeURIComponent(ServiceNames.GarminAPI)}`, build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI]) },
   { name: 'grouped connection attention', path: '/services', build: (origin: string) => connectionNotificationPayload(origin, [ServiceNames.GarminAPI, ServiceNames.SuuntoApp]) },
-  { name: 'sleep ready', path: '/health?metric=sleep', build: sleepNotificationPayload },
+  { name: 'sleep ready', path: '/dashboard?focus=readiness', build: sleepNotificationPayload },
   { name: 'self-test', path: '/settings?section=notifications', build: buildPushTestPayload },
   { name: 'Suunto history completion', path: `/services?serviceName=${encodeURIComponent(ServiceNames.SuuntoApp)}&tool=history`,
     build: (origin: string) => buildHistoryNotificationPayload(origin, ServiceNames.SuuntoApp, 'finished') },

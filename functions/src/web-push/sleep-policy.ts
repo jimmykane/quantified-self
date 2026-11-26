@@ -38,9 +38,9 @@ export function sleepPushCandidate(session: SleepSession, now: number): SleepPus
 
 export function sleepNotificationPayload(origin: string) {
   if (!isAutomaticPushOrigin(origin)) throw new Error('Invalid sleep notification origin.');
-  const path = '/health?metric=sleep';
+  const path = '/dashboard?focus=readiness';
   return { web_push: 8030, notification: { title: 'Quantified Self',
-    body: 'Your latest sleep is available. Open Quantified Self to view it.',
+    body: 'Your sleep is in. Open Today to see your readiness.',
     tag: 'qs-sleep-sync', renotify: true, icon: `${origin}/assets/favicons/android-chrome-192x192.png`, navigate: origin + path,
     data: { onActionClick: { default: { operation: 'openWindow', url: path } } },
   } };

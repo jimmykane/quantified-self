@@ -499,6 +499,53 @@ describe('SummariesComponent', () => {
     expect(mockDialog.open).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])('focuses Readiness for this visit with saved Today visibility %s', showTodaySummary => {
+    const today = { version: 1, readiness: false, trainingState: false, suggestion: true, metrics: [] };
+    const dashboardSettings = { tiles: [], showTodaySummary, today };
+    const owner = { uid: 'owner-user', settings: {
+      dashboardSettings, appSettings: { dailyWorkoutSuggestion: { enabled: true } },
+    } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+    component.todayDetailsExpanded.set(false);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[aria-label="Readiness"]')).toBeNull();
+    expect(!!root.querySelector('app-daily-workout-suggestion')).toBe(showTodaySummary);
+
+    fixture.componentRef.setInput('focusReadiness', true);
+    fixture.ngZone!.run(() => TestBed.tick());
+    const readiness = root.querySelector<HTMLElement>('[aria-label="Readiness"]');
+    expect(readiness?.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(readiness);
+    expect(root.querySelector('#dashboard-today-details')?.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector('app-daily-workout-suggestion')).toBeNull();
+    expect(mockDashboardDerivedMetricsService.watch.mock.lastCall?.[1].metricKinds)
+      .not.toContain('training_summary');
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('owner-user', expect.any(Number), expect.any(Number));
+    expect(owner.settings.dashboardSettings).toBe(dashboardSettings);
+    expect(dashboardSettings).toEqual({ tiles: [], showTodaySummary, today: { ...today, readiness: false, suggestion: true } });
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('focusReadiness', false);
+    fixture.detectChanges();
+    expect(root.querySelector('[aria-label="Readiness"]')).toBeNull();
+    expect(!!root.querySelector('app-daily-workout-suggestion')).toBe(showTodaySummary);
+  });
+
+  it('does not reveal Readiness on another profile from a notification link', () => {
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [], showTodaySummary: false } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', { uid: 'different-user' });
+    fixture.componentRef.setInput('focusReadiness', true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-dashboard-today')).toBeNull();
+    expect(mockSleepService.watchForDashboard).not.toHaveBeenCalled();
+  });
+
   it('reopens the selected Today-sheet day after returning from its full-day page', () => {
     const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const,
       calendarReturn: { view: 'month' as const, anchor: '2026-08-01' } };

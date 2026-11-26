@@ -76,8 +76,8 @@ describe('sleep-ready notifications', () => {
     await h.admit(); await Promise.all([h.send(), h.send(), h.send()]);
     expect(h.deps.send).toHaveBeenCalledTimes(2);
     for (const [registration, body] of vi.mocked(h.deps.send).mock.calls) {
-      expect(JSON.parse(body)).toMatchObject({ web_push: 8030, notification: { navigate: registration.origin + '/health?metric=sleep',
-        tag: 'qs-sleep-sync', renotify: true, body: 'Your latest sleep is available. Open Quantified Self to view it.' } });
+      expect(JSON.parse(body)).toMatchObject({ web_push: 8030, notification: { navigate: registration.origin + '/dashboard?focus=readiness',
+        tag: 'qs-sleep-sync', renotify: true, body: 'Your sleep is in. Open Today to see your readiness.' } });
       expect(body).not.toMatch(/private-canary|account|Garmin|score|duration|2026/);
     }
     expect(h.state().pending).toBeUndefined(); expect(h.state().dueAt).toBeUndefined();
