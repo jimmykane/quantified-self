@@ -5,6 +5,7 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { DataFeeling, DataRPE } from '@sports-alliance/sports-lib';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutReadinessSourcesEnabled, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { buildTrainingLoadPoints, TRAINING_LOAD_DAY_MS } from '../../../shared/training-load';
 import { parseWorkoutStructureV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
 import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays, normalizeTrainingLocalDate, validateTrainingPlanDateRange } from '../../../shared/training-plans';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
@@ -20,6 +21,23 @@ export const DAY_WORKOUT_CONTEXT_MAX_CHARACTERS = 160_000;
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {};
 const records = (value: unknown): RecordValue[] => Array.isArray(value) ? value.map(record) : [];
+
+function previousTrainingDayLoad(dailyLoads: RecordValue[], now: Date): RecordValue | null {
+  const endDayMs = (Math.floor(now.getTime() / TRAINING_LOAD_DAY_MS) - 1) * TRAINING_LOAD_DAY_MS;
+  const completedLoads = dailyLoads.flatMap(({ dayMs, load }) =>
+    typeof dayMs === 'number' && dayMs <= endDayMs && typeof load === 'number' ? [{ dayMs, load }] : []);
+  const points = buildTrainingLoadPoints(completedLoads, endDayMs);
+  const day = points[points.length - 1];
+  if (!day || day.load <= 0) return null;
+
+  return {
+    dateUtc: new Date(day.dayMs).toISOString().slice(0, 10),
+    tss: Number(day.load.toFixed(2)),
+    formBefore: day.formPriorDay === null ? null : Number(day.formPriorDay.toFixed(2)),
+    formAtEnd: Number(day.formSameDay.toFixed(2)),
+  };
+}
+
 function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   const aggregation = record(value.aggregation);
   return { ...value, aggregation: { ...aggregation, buckets: records(aggregation.buckets).map(bucket => {
@@ -259,6 +277,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   const readiness = record(report.readiness);
   const drivers = record(readiness.drivers);
   const load = record(drivers.load);
+  const dailyLoads = records(record(record(daily.trainingSnapshots.form).payload).dailyLoads);
   const hasNumber = (value: unknown): boolean => typeof value === 'number' && Number.isFinite(value);
   const describe = (available: boolean, label: string, missing: string, enabled = true) => {
     if (!enabled) { missingContext.push(`${label}: turned off.`); return; }
@@ -268,7 +287,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     'Current freshness (Form)', 'Current freshness (Form) is unavailable.', controls.freshnessContext !== false);
   describe(load.status === 'available' && hasNumber(load.rampRate),
     'Current training load ramp rate', 'Current training load ramp rate is unavailable.', controls.freshnessContext !== false);
-  describe(records(record(record(daily.trainingSnapshots.form).payload).dailyLoads).length > 0,
+  describe(dailyLoads.length > 0,
     'Training load history', 'Training load history is unavailable.', controls.freshnessContext !== false);
   describe(record(report.trainingSummary).status === 'available',
     'Training summary: recent 28 days and usual volume', 'The current 28-day Training summary is unavailable.', controls.activityContext !== false);
@@ -330,6 +349,10 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   } else missingContext.push('No usable existing Feeling/RPE feedback was found.');
   const selectedDaily: RecordValue = { ...daily };
   delete selectedDaily.weekdayConsistency;
+  if (!adviceOnly && controls.freshnessContext !== false) {
+    const recentLoad = previousTrainingDayLoad(dailyLoads, now);
+    if (recentLoad) selectedDaily.recentLoad = recentLoad;
+  }
   if (controls.activityContext === false) delete selectedDaily.activitiesToday;
   if (!adviceOnly && controls.activityContext !== false && controls.routineContext !== false) {
     const routine = await readDayWorkoutRoutine(controls, now,

@@ -403,6 +403,9 @@ describe('generateDayWorkout callable', () => {
     expect(DAY_WORKOUT_SYSTEM).toContain('never assume higher is always better');
     expect(DAY_WORKOUT_SYSTEM).toContain('Above-range HRV is informational');
     expect(DAY_WORKOUT_SYSTEM).toContain('Do not reduce workout intensity or recommend rest solely because HRV is higher');
+    expect(DAY_WORKOUT_SYSTEM).toContain('The seven-day ramp is the change in chronic training load (CTL) over a week');
+    expect(DAY_WORKOUT_SYSTEM).toContain('A negative ramp alone is not evidence of recent fatigue and must never justify a recovery workout or rest');
+    expect(DAY_WORKOUT_SYSTEM).toContain('If evidence.daily.recentLoad is present');
     expect(DAY_WORKOUT_SYSTEM).toContain('time budget, not a requirement to fill it');
     expect(DAY_WORKOUT_SYSTEM).toContain('conditional on rechecking recovery');
     expect(DAY_WORKOUT_SYSTEM).toContain('do not claim an unavailable signal');

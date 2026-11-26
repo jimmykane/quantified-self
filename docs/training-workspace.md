@@ -6350,6 +6350,12 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Pro daily workout suggestion
 
+With **Freshness & training load** selected, daily and manual workout generation summarize recorded TSS and the Form
+change for the last completed UTC Training day. The generator calculates this from the Form snapshot it already reads.
+If that day has no recorded TSS, the summary is omitted. The rationale uses recent load alongside current recovery to
+explain intensity and treats seven-day CTL ramp as a trend. Negative ramp alone cannot justify an easier session or rest.
+The summary is private to workout generation. MCP tools, schemas, grants and workout approval use their existing contracts.
+
 The ready Today row previews the saved suggestion's rationale in at most two visual lines instead of repeating Pro
 membership copy. Review (or View guidance on event days) shows the complete explanation. Workout, rest and event-day
 suggestions reuse their existing saved rationale; regenerated suggestions retain their label. This presentation adds
