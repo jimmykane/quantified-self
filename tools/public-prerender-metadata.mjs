@@ -1,4 +1,10 @@
 /** Exact build-output expectations, checked against route content by the Node helper tests. */
+export const GARMIN_CHATGPT_PRERENDER_METADATA = {
+  title: 'How to analyze your Garmin data with ChatGPT',
+  h1: 'How to analyze your Garmin data with ChatGPT',
+  description: 'Compare Garmin rides in ChatGPT with Quantified Self. See a real cycling analysis, connect your data, and copy the question to try it with your own rides.',
+};
+
 export const PRICING_PRERENDER_METADATA = {
   title: 'Plans & Pricing',
   description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',

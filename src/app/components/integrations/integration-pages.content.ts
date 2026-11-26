@@ -225,6 +225,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     closingCopy: 'Start with Garmin, add route sending or Suunto and COROS workflows when needed, and keep sync, history, and analysis in one training dashboard.',
     relatedGuideActions: [
       { label: 'Garmin to Wahoo Activity Sync', routerLink: '/guides/sync-garmin-to-wahoo' },
+      { label: 'Analyze Garmin rides with ChatGPT', routerLink: '/guides/garmin-data-chatgpt' },
     ],
   },
   suunto: {

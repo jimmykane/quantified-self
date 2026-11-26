@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -42,7 +43,8 @@ describe('McpConnectionsComponent', () => {
     call: vi.fn(),
   };
   const snackBar = { open: vi.fn() };
-  const haptics = { selection: vi.fn() };
+  const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const guideAnalytics = { logMcpGuideAction: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -56,6 +58,7 @@ describe('McpConnectionsComponent', () => {
     await TestBed.configureTestingModule({
       imports: [McpConnectionsComponent, NoopAnimationsModule],
       providers: [
+        { provide: AppAnalyticsService, useValue: guideAnalytics },
         { provide: AppFunctionsService, useValue: functions },
         { provide: AppWindowService, useValue: { currentDomain: 'https://quantified-self.io' } },
         { provide: Clipboard, useValue: clipboard },
@@ -64,6 +67,25 @@ describe('McpConnectionsComponent', () => {
         { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
+  });
+
+  it('copies each visible question and offers manual copying on clipboard failure', () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('app-mcp-starter-prompts .prompt')) as HTMLElement[];
+    expect(rows).toHaveLength(3);
+    expect(guideAnalytics.logMcpGuideAction).not.toHaveBeenCalled();
+    rows.forEach((row, i) => {
+      row.querySelector('button')!.click();
+      expect(clipboard.copy).toHaveBeenLastCalledWith(row.querySelector('p')!.textContent.trim());
+      expect(guideAnalytics.logMcpGuideAction).toHaveBeenLastCalledWith('mcp_question_copied', ['training', 'race', 'laps'][i]);
+    });
+    expect(haptics.success).toHaveBeenCalledTimes(3);
+    clipboard.copy.mockReturnValueOnce(false);
+    rows[0].querySelector('button')!.click();
+    expect(guideAnalytics.logMcpGuideAction).toHaveBeenCalledTimes(3);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(snackBar.open).toHaveBeenLastCalledWith(expect.stringContaining('manually'), undefined, expect.anything());
   });
 
   it('lists every shared permission and distinguishes data access from optional changes', async () => {

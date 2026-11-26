@@ -385,7 +385,7 @@ describe('Firebase Hosting configuration', () => {
     // Benchmark Help covers grouped Min, Avg, and Max ranges and per-device readings (2026-11-19).
     // Activity Help locates the Tracks menu beside Layers above the map (2026-11-19).
     // Activity Help explains automatic display of the sole recorded intensity metric (2026-11-22).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-26');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -527,7 +527,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-26');
     // Approved corrections preserve manual Health permissions and link existing account tools.
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/tools`)).toBe('2026-11-20');
@@ -543,9 +543,9 @@ describe('Firebase Hosting configuration', () => {
     // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-11-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
@@ -553,7 +553,8 @@ describe('Firebase Hosting configuration', () => {
     // The overview links directly to the GPX and FIT comparison tool.
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/garmin-data-chatgpt`)).toBe('2026-11-26');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
@@ -621,7 +622,7 @@ describe('Firebase Hosting configuration', () => {
     // Sync help adds pre-checkout compatibility and whole-batch delivery outcomes (2026-11-14).
     // Shared preferences help replaces the Dashboard-only unit setup prompt (2026-11-15).
     // Final inactivity reminder retains the original deletion deadline (2026-11-18).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-11-13');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-11-13');
     // Inactive Free account notice and retention policy (2026-11-13).

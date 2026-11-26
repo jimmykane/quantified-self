@@ -278,6 +278,7 @@ describe('public-seo-pages.content', () => {
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
       wahooGarminTrainingData: 'guides/wahoo-garmin-training-data',
+      garminChatgpt: 'guides/garmin-data-chatgpt',
       importActivitiesToSuunto: 'guides/import-activities-to-suunto',
       importActivitiesToWahoo: 'guides/import-activities-to-wahoo',
       syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',
@@ -649,6 +650,8 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/integrations');
     expect(featureHubLinks).toContain('/guides');
 
+    expect(guideHubLinks).toContain('/guides/garmin-data-chatgpt');
+    expect(PUBLIC_SEO_PAGES.mcpServer.actions.map(action => action.routerLink)).toContain('/guides/garmin-data-chatgpt');
     expect(guideHubLinks).toContain('/guides/sync-garmin-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-coros-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-wahoo-to-suunto');

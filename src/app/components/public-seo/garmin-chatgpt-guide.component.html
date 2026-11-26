@@ -1,0 +1,86 @@
+<main>
+  <article>
+    <header>
+      <a class="back-link" routerLink="/guides" appHapticTap><mat-icon>arrow_back</mat-icon>Guides</a>
+      <h1>{{ page.h1 }}</h1>
+      <p class="intro">{{ page.intro }}</p>
+    </header>
+
+    <section class="case-study">
+      <div>
+        <h2>{{ page.sections[0].title }}</h2>
+        <p>{{ page.sections[0].copy }}</p>
+      </div>
+      <figure>
+        <table class="mobile-comparison">
+          <caption>Garmin cycling per four weeks</caption>
+          <thead><tr><th scope="col">Measure</th><th scope="col">Earlier</th><th scope="col">Recent</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Ride recordings</th><td>18</td><td>22</td></tr>
+            <tr><th scope="row">Total hours</th><td>33.8</td><td>29.1</td></tr>
+            <tr><th scope="row">Minutes per ride</th><td>112.5</td><td>79.4</td></tr>
+          </tbody>
+        </table>
+        <a class="chart-link" href="/assets/images/garmin-chatgpt/garmin-recordings.webp" aria-label="Open the Garmin cycling chart at full size">
+          <img width="1800" height="790" fetchpriority="high" src="/assets/images/garmin-chatgpt/garmin-recordings.webp"
+            alt="Garmin recordings per four weeks. Earlier versus recent: 18 versus 22 rides, 33.8 versus 29.1 hours, and 112.5 versus 79.4 minutes per ride.">
+          <span>View the full chart</span>
+        </a>
+        <figcaption>Garmin Edge MTB recordings. The earlier 84 days are scaled to 28 days.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chat-example">
+      <div>
+        <h2>{{ page.sections[1].title }}</h2>
+        <p>{{ page.sections[1].copy }}</p>
+      </div>
+      <figure>
+        <a href="/assets/images/garmin-chatgpt/chatgpt-answer.webp" aria-label="Open the original ChatGPT answer at full size">
+          <img width="800" height="530" loading="lazy" src="/assets/images/garmin-chatgpt/chatgpt-answer.webp"
+            alt="Original ChatGPT answer for all devices: 29.1 hours in the current period and 34.2 hours per four weeks in the earlier period.">
+        </a>
+        <figcaption>The original ChatGPT answer includes Garmin and Suunto recordings.</figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="guide-setup">
+      <h2 id="guide-setup">Connect your data to ChatGPT</h2>
+      <ol class="steps">
+        @for (step of page.howToSteps; track step; let i = $index) {
+          <li>
+            <h3>{{ ['Bring your rides into QS', 'Add Quantified Self in ChatGPT', 'Choose the data ChatGPT can read'][i] }}</h3>
+            <p>{{ step }}</p>
+            @if (i === 0) {
+              <a class="setup-shot" href="/assets/images/garmin-chatgpt/garmin-connected.webp" aria-label="Open the Garmin connection screenshot at full size">
+                <img width="770" height="326" loading="lazy" src="/assets/images/garmin-chatgpt/garmin-connected.webp" alt="Garmin Connect marked Connected in Quantified Self.">
+              </a>
+            } @else if (i === 1) {
+              <p class="endpoint"><code>https://quantified-self.io/mcp</code></p>
+              <a class="setup-shot" href="/assets/images/garmin-chatgpt/chatgpt-setup.webp" aria-label="Open the ChatGPT setup screenshot at full size">
+                <img width="600" height="716" loading="lazy" src="/assets/images/garmin-chatgpt/chatgpt-setup.webp" alt="ChatGPT custom app form with the Quantified Self server URL and OAuth selected.">
+              </a>
+              <p><a href="https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt">Check custom app availability in ChatGPT</a></p>
+            }
+          </li>
+        }
+      </ol>
+    </section>
+
+    <section class="try-it">
+      <h2>{{ page.closingTitle }}</h2>
+      <p>{{ page.closingCopy }}</p>
+      <app-mcp-starter-prompts [guide]="true" />
+      <a mat-flat-button appHapticTap [routerLink]="page.actions[0].routerLink" [queryParams]="page.actions[0].queryParams"
+        (click)="analytics.logMcpGuideAction('mcp_guide_setup_clicked')">{{ page.actions[0].label }}<mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </section>
+
+    <section class="questions">
+      <h2>Common questions</h2>
+      @for (item of page.faqItems; track item.question) {
+        <h3>{{ item.question }}</h3>
+        <p>{{ item.answer }}</p>
+      }
+    </section>
+  </article>
+</main>

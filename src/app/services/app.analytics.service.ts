@@ -217,6 +217,11 @@ export class AppAnalyticsService {
         }
     }
 
+    logMcpGuideAction(event: 'mcp_guide_setup_clicked' | 'mcp_question_copied', question?: 'cycling' | 'training' | 'race' | 'laps'): boolean {
+        if (!this.consentingOwner || this.consentingOwner !== this.authService.currentUser?.uid) return false;
+        return this.logEvent(event, question ? { question_id: question } : undefined);
+    }
+
     logOwnedResultView(owner: string, event: 'recorded_workout_opened' | 'comparison_result_opened'): boolean {
         return !!owner && owner === this.consentingOwner && owner === this.authService.currentUser?.uid
             && this.logEvent(event);

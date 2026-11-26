@@ -18,6 +18,14 @@ This does not change Authentication, Firestore, Performance, provider connection
 Keep the production hostname and stream filters in analytical reports even after deployment: older mixed-property
 data remains, and client-side code cannot prevent another integration from sending to the same property.
 
+## Garmin and ChatGPT guide
+
+Search Console can report search clicks to `/guides/garmin-data-chatgpt`. The consented frontend event
+`mcp_guide_setup_clicked` records use of the guide’s setup link. A successful clipboard action records
+`mcp_question_copied` with a fixed `question_id`: `cycling` on the guide, or `training`, `race` and `laps` in
+Connections. These events require a signed-in user with saved tracking consent. They measure clicks and copies.
+Neither verifies authorization or execution in the external chat. Prompt text and workout values are excluded.
+
 ## Internal context and marketing campaigns
 
 `AppAnalyticsService.logEvent` maps the legacy application-event parameter `source` to `interaction_source`

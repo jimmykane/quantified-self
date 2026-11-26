@@ -1,0 +1,44 @@
+:host { display: block; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface); }
+article { max-width: 68rem; margin: auto; padding: clamp(1rem, 4vw, 3rem); }
+header { max-width: 61rem; margin-bottom: 2rem; }
+.back-link { display: inline-flex; gap: .4rem; align-items: center; font: var(--mat-sys-label-large); }
+.back-link mat-icon { font-size: 1.15rem; height: 1.15rem; width: 1.15rem; }
+a { color: var(--mat-sys-primary); }
+a:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 3px; }
+h1 { margin: 1.1rem 0; font-size: clamp(2.4rem, 5vw, 4.5rem); line-height: 1.04; text-wrap: balance; }
+h2 { margin: 0 0 .65rem; font-size: clamp(1.55rem, 3vw, 2.25rem); line-height: 1.12; text-wrap: balance; }
+h3 { margin: 0; font: var(--mat-sys-title-medium); }
+p, figcaption { color: var(--mat-sys-on-surface-variant); line-height: 1.58; }
+.intro { max-width: 49rem; font-size: 1.2rem; }
+section { padding-block: clamp(1.5rem, 4vw, 3rem); border-top: 1px solid var(--mat-sys-outline-variant); }
+.case-study, .chat-example { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr); align-items: start; gap: 2rem; }
+figure { margin: 0; }
+figure a, .setup-shot { display: block; }
+img { display: block; width: 100%; height: auto; border-radius: .5rem; }
+figcaption { font: var(--mat-sys-body-small); margin-top: .65rem; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; padding-left: 1.4rem; margin: 1.75rem 0 0; }
+.steps li::marker { color: var(--mat-sys-primary); font-weight: 700; }
+.steps p { margin: .5rem 0 1rem; }
+.setup-shot { max-width: 25rem; }
+.endpoint { overflow-wrap: anywhere; }
+.try-it { background: var(--mat-sys-surface-container-low); border: 0; border-radius: 1rem; padding: clamp(1rem, 4vw, 2.5rem); }
+.try-it > p { margin-bottom: 0; }
+.try-it > a { margin-top: .75rem; }
+.questions { border: 0; max-width: 48rem; }
+.questions h3 { margin-top: 1.2rem; }
+.questions p { margin: .3rem 0; }
+@media (max-width: 760px) {
+  .case-study, .chat-example, .steps { grid-template-columns: 1fr; gap: .75rem; }
+  .steps li + li { margin-top: .75rem; }
+}
+
+.mobile-comparison, .chart-link span { display: none; }
+@media (max-width: 600px) {
+  .mobile-comparison { display: table; width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  caption, th:first-child { text-align: start; }
+  caption { font: var(--mat-sys-title-medium); margin-bottom: .5rem; }
+  td, th { padding: .5rem .25rem; text-align: end; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+  tbody th { font-weight: 500; }
+  .chart-link img { display: none; }
+  .chart-link span { display: inline-block; padding-block: .65rem; }
+}

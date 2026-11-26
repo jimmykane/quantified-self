@@ -257,6 +257,13 @@ deferred example’s snippet exclusion. The production output check verifies bot
 The release build measured 15.27 MB of total scripts with the public catalog. Develop already exceeded its 15.26 MB
 limit by 5.52 kB before this addition. Production and beta use a 15.28 MB total-script cap.
 
+## Garmin and ChatGPT guide
+
+The public guide uses a route-specific component and four static editorial images. At phone widths an accessible
+table presents the Garmin-only chart values. The MCP setup screen shares the first-question control with the article.
+The measured production scripts with this addition exceeded the previous 15.28 MB ceiling by 6.46 kB before the
+mobile table. Production and beta use a 15.29 MB total-script cap. The initial bundle retains its 1474 kB ceiling.
+
 ## Navigation startup rendering
 
 Keep the Material sidenav container mounted so the existing navigation service can open it. Its contents use
