@@ -88,6 +88,33 @@ describe('McpConnectionsComponent', () => {
     expect(snackBar.open).toHaveBeenLastCalledWith(expect.stringContaining('manually'), undefined, expect.anything());
   });
 
+  it('expands the additional questions and copies the selected text and topic', () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('button[aria-controls="more-mcp-questions"]')!;
+    const panel = root.querySelector<HTMLElement>('#more-mcp-questions')!;
+    expect(panel.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const rows = Array.from(panel.querySelectorAll<HTMLElement>('.prompt'));
+    expect(rows).toHaveLength(10);
+    for (const row of rows) {
+      row.querySelector('button')!.click();
+      expect(clipboard.copy).toHaveBeenLastCalledWith(row.querySelector('p')!.textContent.trim());
+    }
+    expect(guideAnalytics.logMcpGuideAction.mock.calls.map(call => call[1])).toEqual([
+      'cycling', 'ride', 'build', 'sleep', 'history', 'chart', 'tags', 'notes', 'measurements', 'workout',
+    ]);
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('lists every shared permission and distinguishes data access from optional changes', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();

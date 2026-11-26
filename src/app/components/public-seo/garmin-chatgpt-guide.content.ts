@@ -5,7 +5,7 @@ export const GARMIN_CHATGPT_GUIDE: PublicSeoPage = {
   key: 'garminChatgpt', path: PUBLIC_GUIDE_PATHS.garminChatgpt, eyebrow: 'Cycling analysis',
   title: 'How to analyze your Garmin data with ChatGPT',
   h1: 'How to analyze your Garmin data with ChatGPT',
-  description: 'Compare Garmin rides in ChatGPT with Quantified Self. See a real cycling analysis, connect your data, and copy the question to try it with your own rides.',
+  description: 'Analyze Garmin rides in ChatGPT with Quantified Self. See a real race debrief, compare training blocks, and copy questions to try with your own records.',
   intro: 'One cyclist logged 22 Garmin rides in four weeks, up from an average of 18. Yet their riding time fell from 33.8 to 29.1 hours. They rode more often, on shorter rides.',
   chips: ['Garmin', 'ChatGPT', 'Cycling'],
   socialImage: 'https://quantified-self.io/assets/images/garmin-chatgpt/garmin-recordings.webp',

@@ -2,7 +2,7 @@
 export const GARMIN_CHATGPT_PRERENDER_METADATA = {
   title: 'How to analyze your Garmin data with ChatGPT',
   h1: 'How to analyze your Garmin data with ChatGPT',
-  description: 'Compare Garmin rides in ChatGPT with Quantified Self. See a real cycling analysis, connect your data, and copy the question to try it with your own rides.',
+  description: 'Analyze Garmin rides in ChatGPT with Quantified Self. See a real race debrief, compare training blocks, and copy questions to try with your own records.',
 };
 
 export const PRICING_PRERENDER_METADATA = {

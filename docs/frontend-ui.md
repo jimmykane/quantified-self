@@ -259,10 +259,12 @@ limit by 5.52 kB before this addition. Production and beta use a 15.28 MB total-
 
 ## Garmin and ChatGPT guide
 
-The public guide uses a route-specific component and four static editorial images. At phone widths an accessible
-table presents the Garmin-only chart values. The MCP setup screen shares the first-question control with the article.
-The measured production scripts with this addition exceeded the previous 15.28 MB ceiling by 6.46 kB before the
-mobile table. Production and beta use a 15.29 MB total-script cap. The initial bundle retains its 1474 kB ceiling.
+The guide keeps its example narratives in the lazy article route. Ten static images illustrate the cycling
+comparison, setup, ride, race, training block, swim chart and workout workflow. An accessible table shows
+the Garmin-only comparison on phones. The article and Connections share the question catalog and copy control.
+Connections shows three questions initially and reveals the remaining ten on request. The expanded guide
+exceeded the 15.29 MB total-script cap by 11.49 kB in production. Both release configurations use a 15.31 MB
+cap and retain the 1474 kB initial limit.
 
 ## Navigation startup rendering
 

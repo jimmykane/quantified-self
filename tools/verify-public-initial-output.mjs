@@ -427,10 +427,22 @@ function assertPrerenderedDocuments() {
         || documentRef.querySelector('h1')?.textContent.trim() !== expected.h1
         || documentRef.querySelector('link[rel="canonical"]')?.href !== 'https://quantified-self.io' + route
         || !documentRef.querySelector('article a[href="/services?serviceName=mcp"]')
-        || !documentRef.querySelector('app-mcp-starter-prompts p')?.textContent.includes('four weeks')) {
+        || !documentRef.querySelector('.try-it app-mcp-starter-prompts p')?.textContent.includes('four weeks')) {
         throw new Error('The prerendered Garmin and ChatGPT guide is missing its metadata, question or setup link.');
       }
-      for (const file of ['garmin-recordings', 'chatgpt-answer', 'garmin-connected', 'chatgpt-setup']) {
+      const examples = documentRef.querySelector('section[aria-labelledby="examples"]');
+      for (const id of ['ride-and-race', 'training-and-sleep', 'activity-history', 'workout-planning', 'more-questions']) {
+        if (!examples?.querySelector('h3#' + id) || !examples.querySelector('nav a[href="' + route + '#' + id + '"]')) {
+          throw new Error('Missing example topic or link in prerendered guide: ' + id);
+        }
+      }
+      if (examples.querySelectorAll('app-mcp-starter-prompts button').length !== 11
+        || !examples.textContent.includes('Illustrative sleep example')
+        || !examples.textContent.includes('Receipt on the watch was never confirmed')) {
+        throw new Error('Missing reader questions or evidence labels in the prerendered guide.');
+      }
+      for (const file of ['garmin-recordings', 'chatgpt-answer', 'garmin-connected', 'chatgpt-setup',
+        'garmin-ride', 'race-metrics', 'training-build', 'swim-temperature', 'workout-draft', 'garmin-delivery']) {
         const asset = '/assets/images/garmin-chatgpt/' + file + '.webp';
         if (!documentRef.querySelector('article img[src="' + asset + '"]')?.alt || !fs.existsSync(path.join(outputDirectory, asset))) {
           throw new Error('Missing illustrated guide asset or alternative text: ' + asset);

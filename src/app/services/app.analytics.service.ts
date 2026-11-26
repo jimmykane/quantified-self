@@ -1,3 +1,4 @@
+import type { McpStarterQuestionId } from '../components/mcp-connections/mcp-starter-questions';
 import { Injectable, inject } from '@angular/core';
 import { Analytics } from 'app/firebase/analytics';
 import { analyticsEventParameters } from '../helpers/analytics-runtime.helper';
@@ -217,7 +218,7 @@ export class AppAnalyticsService {
         }
     }
 
-    logMcpGuideAction(event: 'mcp_guide_setup_clicked' | 'mcp_question_copied', question?: 'cycling' | 'training' | 'race' | 'laps'): boolean {
+    logMcpGuideAction(event: 'mcp_guide_setup_clicked' | 'mcp_question_copied', question?: McpStarterQuestionId): boolean {
         if (!this.consentingOwner || this.consentingOwner !== this.authService.currentUser?.uid) return false;
         return this.logEvent(event, question ? { question_id: question } : undefined);
     }

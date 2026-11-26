@@ -4,6 +4,10 @@
       <a class="back-link" routerLink="/guides" appHapticTap><mat-icon>arrow_back</mat-icon>Guides</a>
       <h1>{{ page.h1 }}</h1>
       <p class="intro">{{ page.intro }}</p>
+      <nav class="article-links" aria-label="In this guide">
+        <a appHapticTap [href]="'/' + page.path + '#examples'">Explore the examples</a>
+        <a appHapticTap [href]="'/' + page.path + '#guide-setup'">Set up ChatGPT</a>
+      </nav>
     </header>
 
     <section class="case-study">
@@ -44,8 +48,66 @@
       </figure>
     </section>
 
+    <section class="example-library" aria-labelledby="examples">
+      <h2 tabindex="-1" id="examples">What can you ask about your training?</h2>
+      <p class="library-intro">See how a rider debriefed a race, compared training blocks, and requested a workout on Garmin. Copy a question to try it with your own records.</p>
+      <nav class="article-links" aria-label="Example topics">
+        @for (group of groups; track group.id) {
+          <a appHapticTap [href]="'/' + page.path + '#' + group.id">{{ group.label }}</a>
+        }
+        <a appHapticTap [href]="'/' + page.path + '#more-questions'">More questions</a>
+      </nav>
+      @for (group of groups; track group.id) {
+        <div class="example-group">
+          <h3 tabindex="-1" [id]="group.id">{{ group.title }}</h3>
+          <div class="examples-grid">
+            @for (example of group.examples; track example.question) {
+              <div class="example" [class.wide-example]="group.examples.length === 1">
+                <div class="finding">
+                  <p class="source">{{ example.source }}</p>
+                  <h4>{{ example.title }}</h4>
+                  <p class="result">{{ example.result }}</p>
+                  <p>{{ example.detail }}</p>
+                </div>
+                @if (example.images; as images) {
+                  <div class="evidence">
+                    @for (image of images; track image.file) {
+                      <figure>
+                        <a appHapticTap [href]="'/assets/images/garmin-chatgpt/' + image.file + '.webp'"
+                          [attr.aria-label]="'Open full-size screenshot. ' + image.alt">
+                          <img [src]="'/assets/images/garmin-chatgpt/' + image.file + '.webp'" [alt]="image.alt"
+                            [width]="image.width" [height]="image.height" loading="lazy">
+                        </a>
+                        <figcaption>{{ image.caption }}</figcaption>
+                      </figure>
+                    }
+                  </div>
+                }
+                <div class="reader-question">
+                  <p class="prompt-label">Ask with your data</p>
+                  <app-mcp-starter-prompts class="example-question" [question]="example.question" />
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+      <div class="example-group">
+        <h3 tabindex="-1" id="more-questions">Four more questions to try</h3>
+        <p>Use these with the records you have in QS. Timeline notes and body measurements each need their own read permission.</p>
+        <div class="examples-grid follow-ups">
+          @for (item of followUps; track item.question) {
+            <div>
+              <h4>{{ item.title }}</h4>
+              <app-mcp-starter-prompts class="example-question" [question]="item.question" />
+            </div>
+          }
+        </div>
+      </div>
+    </section>
+
     <section aria-labelledby="guide-setup">
-      <h2 id="guide-setup">Connect your data to ChatGPT</h2>
+      <h2 tabindex="-1" id="guide-setup">Connect your data to ChatGPT</h2>
       <ol class="steps">
         @for (step of page.howToSteps; track step; let i = $index) {
           <li>
@@ -70,7 +132,7 @@
     <section class="try-it">
       <h2>{{ page.closingTitle }}</h2>
       <p>{{ page.closingCopy }}</p>
-      <app-mcp-starter-prompts [guide]="true" />
+      <app-mcp-starter-prompts question="cycling" />
       <a mat-flat-button appHapticTap [routerLink]="page.actions[0].routerLink" [queryParams]="page.actions[0].queryParams"
         (click)="analytics.logMcpGuideAction('mcp_guide_setup_clicked')">{{ page.actions[0].label }}<mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </section>

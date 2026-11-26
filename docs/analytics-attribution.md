@@ -22,8 +22,8 @@ data remains, and client-side code cannot prevent another integration from sendi
 
 Search Console can report search clicks to `/guides/garmin-data-chatgpt`. The consented frontend event
 `mcp_guide_setup_clicked` records use of the guide’s setup link. A successful clipboard action records
-`mcp_question_copied` with a fixed `question_id`: `cycling` on the guide, or `training`, `race` and `laps` in
-Connections. These events require a signed-in user with saved tracking consent. They measure clicks and copies.
+`mcp_question_copied` with a fixed `question_id` from the shared starter-question catalog on the guide and in Connections.
+Topics cover rides, races, laps, training blocks, sleep, charts, activity history, tags, notes, measurements and workouts. These events require a signed-in user with saved tracking consent. They measure clicks and copies.
 Neither verifies authorization or execution in the external chat. Prompt text and workout values are excluded.
 
 ## Internal context and marketing campaigns
