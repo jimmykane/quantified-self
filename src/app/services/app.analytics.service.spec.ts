@@ -76,6 +76,18 @@ describe('AppAnalyticsService', () => {
         (environment as any).forceAnalyticsCollection = false;
     });
 
+    it('records guide interactions only for the current consenting user', () => {
+        mockAuthService.currentUser = { uid: 'owner' };
+        expect(service.logMcpGuideAction('mcp_guide_setup_clicked')).toBe(false);
+        userSubject.next({ uid: 'owner', acceptedTrackingPolicy: true } as User);
+        expect(service.logMcpGuideAction('mcp_guide_setup_clicked')).toBe(true);
+        expect(service.logMcpGuideAction('mcp_question_copied', 'cycling')).toBe(true);
+        expect(logEvent).toHaveBeenLastCalledWith({}, 'mcp_question_copied', { question_id: 'cycling' });
+        mockAuthService.currentUser = { uid: 'other' };
+        expect(service.logMcpGuideAction('mcp_question_copied', 'race')).toBe(false);
+        expect(logEvent).toHaveBeenCalledTimes(2);
+    });
+
     it('requires saved consent and a matching live identity for owned result views', () => {
         mockAuthService.currentUser = { uid: 'owner' };
         userSubject.next({ uid: 'owner', acceptedTrackingPolicy: true } as User);

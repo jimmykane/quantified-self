@@ -1,0 +1,69 @@
+:host { display: block; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface); }
+article { max-width: 68rem; margin: auto; padding: clamp(1rem, 4vw, 3rem); }
+header { max-width: 61rem; margin-bottom: 2rem; }
+.back-link { display: inline-flex; gap: .4rem; align-items: center; font: var(--mat-sys-label-large); }
+.back-link mat-icon { font-size: 1.15rem; height: 1.15rem; width: 1.15rem; }
+a { color: var(--mat-sys-primary); }
+a:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 3px; }
+h1 { margin: 1.1rem 0; font-size: clamp(2.4rem, 5vw, 4.5rem); line-height: 1.04; text-wrap: balance; }
+h2 { margin: 0 0 .65rem; font-size: clamp(1.55rem, 3vw, 2.25rem); line-height: 1.12; text-wrap: balance; }
+h3 { margin: 0; font: var(--mat-sys-title-medium); }
+p, figcaption { color: var(--mat-sys-on-surface-variant); line-height: 1.58; }
+.intro { max-width: 49rem; font-size: 1.2rem; }
+section { padding-block: clamp(1.5rem, 4vw, 3rem); border-top: 1px solid var(--mat-sys-outline-variant); }
+.case-study, .chat-example { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr); align-items: start; gap: 2rem; }
+figure { margin: 0; }
+figure a, .setup-shot { display: block; }
+img { display: block; width: 100%; height: auto; border-radius: .5rem; }
+figcaption { font: var(--mat-sys-body-small); margin-top: .65rem; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; padding-left: 1.4rem; margin: 1.75rem 0 0; }
+.steps li::marker { color: var(--mat-sys-primary); font-weight: 700; }
+.steps p { margin: .5rem 0 1rem; }
+.setup-shot { max-width: 25rem; }
+.endpoint { overflow-wrap: anywhere; }
+.try-it { background: var(--mat-sys-surface-container-low); border: 0; border-radius: 1rem; padding: clamp(1rem, 4vw, 2.5rem); }
+.try-it > p { margin-bottom: 0; }
+.try-it > a { margin-top: .75rem; }
+.questions { border: 0; max-width: 48rem; }
+.questions h3 { margin-top: 1.2rem; }
+.questions p { margin: .3rem 0; }
+@media (max-width: 760px) {
+  .case-study, .chat-example, .steps { grid-template-columns: 1fr; gap: .75rem; }
+  .steps li + li { margin-top: .75rem; }
+}
+
+.mobile-comparison, .chart-link span { display: none; }
+@media (max-width: 600px) {
+  .mobile-comparison { display: table; width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  caption, th:first-child { text-align: start; }
+  caption { font: var(--mat-sys-title-medium); margin-bottom: .5rem; }
+  td, th { padding: .5rem .25rem; text-align: end; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+  tbody th { font-weight: 500; }
+  .chart-link img { display: none; }
+  .chart-link span { display: inline-block; padding-block: .65rem; }
+}
+
+.article-links { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; }
+.article-links a { display: inline-flex; align-items: center; min-height: 2.75rem; font: var(--mat-sys-label-large); text-underline-offset: .25em; }
+[id] { scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 1rem); }
+.library-intro { max-width: 62ch; }
+.example-group { margin-top: clamp(2rem, 5vw, 4rem); }
+.example-group h3 { margin-bottom: 1rem; font: var(--mat-sys-headline-small); }
+.examples-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem; }
+.example, .follow-ups > div { padding-top: 1rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+.example h4, .follow-ups h4 { margin: .35rem 0 .8rem; font: var(--mat-sys-title-large); text-wrap: balance; }
+.source, .prompt-label { margin: 0; font: var(--mat-sys-label-medium); color: var(--mat-sys-on-surface-variant); }
+.result { margin: .9rem 0 .4rem; color: var(--mat-sys-primary); font: var(--mat-sys-headline-small); }
+.finding > p:last-child { margin: .4rem 0 1rem; }
+.evidence { display: grid; gap: 1rem; }
+.evidence img { width: auto; max-width: 100%; max-height: 20rem; }
+.reader-question { margin-top: 1.25rem; padding-inline-start: 1rem; border-inline-start: 2px solid var(--mat-sys-primary); }
+.prompt-label { margin-bottom: .4rem; }
+.wide-example { grid-column: 1 / -1; }
+.wide-example .finding, .wide-example .reader-question { max-width: 46rem; }
+.wide-example .evidence { grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) {
+  .examples-grid, .wide-example .evidence { grid-template-columns: 1fr; }
+  .example-group h3 { margin-bottom: .6rem; }
+  .examples-grid { gap: 1.75rem; }
+}

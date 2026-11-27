@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -42,7 +43,8 @@ describe('McpConnectionsComponent', () => {
     call: vi.fn(),
   };
   const snackBar = { open: vi.fn() };
-  const haptics = { selection: vi.fn() };
+  const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const guideAnalytics = { logMcpGuideAction: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -56,6 +58,7 @@ describe('McpConnectionsComponent', () => {
     await TestBed.configureTestingModule({
       imports: [McpConnectionsComponent, NoopAnimationsModule],
       providers: [
+        { provide: AppAnalyticsService, useValue: guideAnalytics },
         { provide: AppFunctionsService, useValue: functions },
         { provide: AppWindowService, useValue: { currentDomain: 'https://quantified-self.io' } },
         { provide: Clipboard, useValue: clipboard },
@@ -64,6 +67,52 @@ describe('McpConnectionsComponent', () => {
         { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
+  });
+
+  it('copies each visible question and offers manual copying on clipboard failure', () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('app-mcp-starter-prompts .prompt')) as HTMLElement[];
+    expect(rows).toHaveLength(3);
+    expect(guideAnalytics.logMcpGuideAction).not.toHaveBeenCalled();
+    rows.forEach((row, i) => {
+      row.querySelector('button')!.click();
+      expect(clipboard.copy).toHaveBeenLastCalledWith(row.querySelector('p')!.textContent.trim());
+      expect(guideAnalytics.logMcpGuideAction).toHaveBeenLastCalledWith('mcp_question_copied', ['training', 'race', 'laps'][i]);
+    });
+    expect(haptics.success).toHaveBeenCalledTimes(3);
+    clipboard.copy.mockReturnValueOnce(false);
+    rows[0].querySelector('button')!.click();
+    expect(guideAnalytics.logMcpGuideAction).toHaveBeenCalledTimes(3);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(snackBar.open).toHaveBeenLastCalledWith(expect.stringContaining('manually'), undefined, expect.anything());
+  });
+
+  it('expands the additional questions and copies the selected text and topic', () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('button[aria-controls="more-mcp-questions"]')!;
+    const panel = root.querySelector<HTMLElement>('#more-mcp-questions')!;
+    expect(panel.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const rows = Array.from(panel.querySelectorAll<HTMLElement>('.prompt'));
+    expect(rows).toHaveLength(10);
+    for (const row of rows) {
+      row.querySelector('button')!.click();
+      expect(clipboard.copy).toHaveBeenLastCalledWith(row.querySelector('p')!.textContent.trim());
+    }
+    expect(guideAnalytics.logMcpGuideAction.mock.calls.map(call => call[1])).toEqual([
+      'cycling', 'ride', 'build', 'sleep', 'history', 'chart', 'tags', 'notes', 'measurements', 'workout',
+    ]);
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('lists every shared permission and distinguishes data access from optional changes', async () => {

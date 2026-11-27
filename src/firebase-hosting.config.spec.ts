@@ -534,18 +534,18 @@ describe('Firebase Hosting configuration', () => {
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     // The hero preview now names the charts: Training load and recovery (2026-11-10).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-11-12');
     // Pricing now explicitly names plans and pricing in its title and heading.
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-16');
     // Published 10.23.0 was created and updated on Nov 11; see docs/public-pricing-prerender.md.
     expect(sitemapLastmodForUrl(`${siteOrigin}/releases`)).toBe('2026-11-11');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-11-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-04');
@@ -553,7 +553,8 @@ describe('Firebase Hosting configuration', () => {
     // The overview links directly to the GPX and FIT comparison tool.
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-11-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/garmin-data-chatgpt`)).toBe('2026-11-26');
     // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
@@ -574,7 +575,7 @@ describe('Firebase Hosting configuration', () => {
     // flow and individual fragments must never become separate sitemap entries.
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/training-plans#`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/training/plans/catalog`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-11-20');
@@ -744,7 +745,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.28mb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '15.31mb',
     });
   });
 

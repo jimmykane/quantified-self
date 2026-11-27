@@ -555,6 +555,15 @@ const topLevelRoutes: Routes = [
     },
   },
   {
+    path: PUBLIC_GUIDE_PATHS.garminChatgpt,
+    loadComponent: () => import('./components/public-seo/garmin-chatgpt-guide.component').then(m => m.GarminChatgptGuideComponent),
+    resolve: publicSeoRouteData('garminChatgpt'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
     path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('importActivitiesToSuunto'),

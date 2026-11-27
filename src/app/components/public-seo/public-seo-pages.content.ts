@@ -7,6 +7,7 @@ import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { STRAVA_IMPORT_GUIDE_PAGES } from './strava-import-guides.content';
 import { WAHOO_GARMIN_GUIDE_CONTENT } from './wahoo-garmin-guide.content';
+import { GARMIN_CHATGPT_GUIDE } from './garmin-chatgpt-guide.content';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { PUBLIC_CATALOG_FRAGMENT, PUBLIC_TRAINING_PLANS, publicPlanFragment } from './public-training-catalog.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
@@ -691,6 +692,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
+      routeAction('See a Garmin cycling analysis in ChatGPT', '/' + PUBLIC_GUIDE_PATHS.garminChatgpt),
       routeAction('Read Access Policy', '/policies', 'stroked', undefined, 'mcp-clients'),
     ],
     sections: [
@@ -1156,6 +1158,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
       routeAction('Wahoo to Suunto', '/guides/sync-wahoo-to-suunto'),
       routeAction('Wahoo + Garmin Analysis', '/guides/wahoo-garmin-training-data'),
+      routeAction('Analyze Garmin rides with ChatGPT', '/' + PUBLIC_GUIDE_PATHS.garminChatgpt),
       routeAction('Suunto Routes to Garmin', '/guides/sync-suunto-routes-to-garmin-courses'),
       routeAction('Centralize Data', '/guides/centralize-garmin-suunto-coros-workout-data'),
       routeAction('Strava to Suunto', '/guides/strava-to-suunto'),
@@ -1260,6 +1263,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     ],
   },
   wahooGarminTrainingData: WAHOO_GARMIN_GUIDE_CONTENT,
+  garminChatgpt: GARMIN_CHATGPT_GUIDE,
   syncGarminToSuunto: {
     key: 'syncGarminToSuunto',
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
@@ -2199,6 +2203,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),
   syncWahooToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncWahooToSuunto),
   wahooGarminTrainingData: buildRouteData(PUBLIC_SEO_PAGES.wahooGarminTrainingData),
+  garminChatgpt: buildRouteData(PUBLIC_SEO_PAGES.garminChatgpt),
   importActivitiesToSuunto: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToSuunto),
   importActivitiesToWahoo: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToWahoo),
   syncSuuntoRoutesToGarmin: buildRouteData(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin),

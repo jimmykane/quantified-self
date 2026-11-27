@@ -3,25 +3,36 @@
     <li>
       @if (full()) {
         <h3 [id]="planFragment(plan.id)" tabindex="-1">{{ plan.name }}</h3>
-      } @else {
-        <a (click)="rememberLink($event)" class="plan-name" [routerLink]="pageUrl" [fragment]="planFragment(plan.id)">{{ plan.name }}</a>
-      }
-      <p class="plan-meta">
-        {{ plan.sport }} · {{ plan.weeks }} weeks
-        @if (plan.attribution; as credit) { · By {{ credit.originalAuthor }} }
-      </p>
-      @if (full()) {
+        <p class="plan-meta">{{ plan.sport }} · {{ plan.weeks }} weeks
+          @if (plan.attribution; as credit) { · By {{ credit.originalAuthor }} }
+        </p>
         <p>{{ plan.description }}</p>
-        <a mat-button (click)="rememberLink($event)" routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
-          [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
+        <div class="plan-actions">
+          <a mat-button (click)="rememberLink($event)" routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
+            [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
+          <ng-container [ngTemplateOutlet]="weekPreview()" [ngTemplateOutletContext]="{ $implicit: plan }" />
+        </div>
+        @if (plan.attribution; as credit) {
+          <app-plan-attribution class="catalog-credit" [credit]="credit" />
+        }
+      } @else {
+        <mat-card appearance="outlined">
+          <a class="featured-plan" (click)="rememberLink($event)" [routerLink]="pageUrl" [fragment]="planFragment(plan.id)"
+            [attr.aria-label]="plan.name">
+            <span class="plan-meta">
+              <mat-icon aria-hidden="true">{{ plan.sport === 'Cycling' ? 'directions_bike' : 'directions_run' }}</mat-icon>
+              {{ plan.sport }} · {{ plan.weeks }} weeks
+              <mat-icon class="plan-arrow" aria-hidden="true">arrow_forward</mat-icon>
+            </span>
+            <span class="plan-name">{{ plan.name }}</span>
+            <span>{{ plan.description }}</span>
+            @if (plan.attribution; as credit) { <span class="plan-author">By {{ credit.originalAuthor }}</span> }
+          </a>
+        </mat-card>
       }
     </li>
   }
 </ul>
-@if (full()) {
-  @for (credit of credits; track credit.sourceUrl) {
-    <app-plan-attribution class="catalog-credit" [credit]="credit" />
-  }
-} @else {
+@if (!full()) {
   <a mat-button (click)="rememberLink($event)" [routerLink]="pageUrl" [fragment]="catalogFragment">Browse all {{ plans.length }} free training plans</a>
 }

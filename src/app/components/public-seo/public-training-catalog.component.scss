@@ -8,9 +8,35 @@
   margin: 1rem 0;
 }
 .plan-list.featured { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
-li { min-width: 0; padding-block-start: 0.75rem; border-top: 1px solid var(--mat-sys-outline-variant); }
-h3, .plan-name { margin: 0; font: var(--mat-sys-title-medium); }
+li { min-width: 0; }
+.plan-list:not(.featured) > li { padding-block-start: 0.75rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+h3 { margin: 0; font: var(--mat-sys-title-medium); }
 h3[id] { scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 1rem); }
-.plan-name { display: inline-flex; align-items: center; min-height: 44px; color: var(--mat-sys-on-surface); }
 p { margin: 0.5rem 0; font: var(--mat-sys-body-medium); }
 .plan-meta { color: var(--mat-sys-on-surface-variant); }
+
+.featured {
+  gap: 1rem;
+  mat-card { height: 100%; background-color: var(--mat-sys-surface-container-low); }
+}
+.featured-plan {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 1.25rem;
+  border-radius: inherit;
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: none;
+  font: var(--mat-sys-body-medium);
+
+  &:is(:hover, :focus-visible) .plan-name { text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+  .plan-meta { display: flex; align-items: center; gap: 0.5rem; width: 100%; font: var(--mat-sys-label-large); }
+  mat-icon { color: var(--mat-sys-primary); }
+  .plan-arrow { margin-inline-start: auto; }
+  .plan-name { font: var(--mat-sys-title-large); color: var(--mat-sys-on-surface); }
+  .plan-author { margin-block-start: auto; font: var(--mat-sys-label-medium); }
+}
+.plan-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }

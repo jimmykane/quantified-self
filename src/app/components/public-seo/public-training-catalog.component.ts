@@ -1,7 +1,9 @@
-import { isPlatformBrowser } from '@angular/common';
+import { NgTemplateOutlet, isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ChangeDetectionStrategy, Component, ElementRef, PLATFORM_ID, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, PLATFORM_ID, TemplateRef, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
 import { Router, RouterLink, Scroll } from '@angular/router';
 import { PlanAttributionComponent } from '../plans/plan-attribution.component';
 import {
@@ -12,18 +14,18 @@ import {
 @Component({
   selector: 'app-public-training-catalog',
   standalone: true,
-  imports: [MatButtonModule, PlanAttributionComponent, RouterLink],
+  imports: [MatButtonModule, MatCardModule, MatIconModule, PlanAttributionComponent, RouterLink, NgTemplateOutlet],
   templateUrl: './public-training-catalog.component.html',
   styleUrl: './public-training-catalog.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PublicTrainingCatalogComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  readonly weekPreview = input<TemplateRef<{ $implicit: typeof PUBLIC_TRAINING_PLANS[number] }> | null>(null);
   readonly full = input(false);
   readonly returnLinkRestored = output<void>();
   readonly plans = PUBLIC_TRAINING_PLANS;
   readonly featured = FEATURED_TRAINING_PLANS;
-  readonly credits = PUBLIC_TRAINING_PLANS.flatMap(plan => plan.attribution ? [plan.attribution] : []);
   readonly pageUrl = PUBLIC_TRAINING_PLANS_URL;
   readonly catalogFragment = PUBLIC_CATALOG_FRAGMENT;
   readonly planFragment = publicPlanFragment;
