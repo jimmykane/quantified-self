@@ -598,7 +598,7 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
     });
 
-    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app', '/dashboard?focus=readiness'])('passes the safe returnUrl %s when sending an email link', async returnUrl => {
         activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         await component.sendEmailLink('test@example.com');
@@ -928,7 +928,7 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });
 
-    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app'])('returns to the safe local URL %s after login', async returnUrl => {
+    it.each(['/tools/compare', '/services?serviceName=COROS%20API', '/services?serviceName=Suunto%20app', '/dashboard?focus=readiness'])('returns to the safe local URL %s after login', async returnUrl => {
         activatedRouteSnapshot.queryParamMap = convertToParamMap({ returnUrl });
 
         component.ngOnInit();

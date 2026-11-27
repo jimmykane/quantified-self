@@ -22,7 +22,7 @@
         </div>
       </div>
       <p role="status" aria-live="polite">{{ status() }}</p>
-      <p class="notification-description">On enables this device and every category. Off silences this device. Categories apply across your account.</p>
+      <p class="notification-description">On enables this device and standard categories. Manage Morning check-in in Notification settings. Off silences this device.</p>
       <div class="notification-offer-actions">
         @if (canRetry()) {
           <button mat-button type="button" [disabled]="busy()" (click)="retry()">Retry</button>

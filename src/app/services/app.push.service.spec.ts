@@ -22,6 +22,7 @@ vi.mock('../helpers/push-removal-log.helper', () => ({ logBrowserPushRemoval: lo
 const id = '00000000-0000-4000-8000-000000000001';
 const key = 'B' + 'A'.repeat(86);
 const categoryEnabled = signal(true);
+const preferences = { isEnabled: () => categoryEnabled(), initializeMorningCheckIn: vi.fn().mockResolvedValue(undefined) };
 const localKey = 'qs.web-push.installation.v1';
 const invitation = { recordDeviceChoice: vi.fn() };
 const registration = { schemaVersion: 1, origin: 'https://quantified-self.io', vapidPublicKey: key, generation: id,
@@ -45,7 +46,7 @@ function setup(platform = 'browser', conventional = false) {
   TestBed.configureTestingModule({ providers: [
     AppPushService, AuthSessionCleanupService,
     { provide: AppNotificationInvitationService, useValue: invitation },
-    { provide: AppNotificationPreferencesService, useValue: { isEnabled: () => categoryEnabled() } },
+    { provide: AppNotificationPreferencesService, useValue: preferences },
     { provide: Auth, useValue: auth }, { provide: Firestore, useValue: {} },
     { provide: AppRemoteConfigService, useValue: config }, { provide: AppFunctionsService, useValue: functions },
     { provide: AppWindowService, useValue: { windowRef: windows } }, { provide: APP_STORAGE, useValue: storage },
@@ -199,12 +200,24 @@ describe('device notification lifecycle', () => {
     const service = setup(); await tick(); expect(service.canInvite()).toBe(true);
     notifications.permission = 'granted'; await service.refreshRegistration();
     expect(service.canEnable()).toBe(true); expect(service.canInvite()).toBe(false);
+    expect(preferences.initializeMorningCheckIn).not.toHaveBeenCalled();
     manager.getSubscription.mockResolvedValue(subscription);
     await service.enable(); await tick();
+    expect(preferences.initializeMorningCheckIn).toHaveBeenCalledWith('owner');
     expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'enabled');
     await service.disable(); await tick();
     expect(logRemoval).toHaveBeenCalledWith(expect.objectContaining({ reason: 'disabled_on_device' }));
     expect(invitation.recordDeviceChoice).toHaveBeenCalledWith('owner', 'disabled');
+  });
+  it('initializes Morning check-in when an existing device registration is verified', async () => {
+    notifications.permission = 'granted';
+    manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    expect(service.state()).toBe('enabled');
+    expect(preferences.initializeMorningCheckIn).toHaveBeenCalledWith('owner');
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
   });
   it('remembers a dismissed browser permission prompt without silently asking again', async () => {
     const service = setup(); await tick(); notifications.requestPermission.mockResolvedValue('default');

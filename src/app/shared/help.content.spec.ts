@@ -148,12 +148,15 @@ describe('help.content', () => {
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
     expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
     expect(copy).toContain('Your browser and OS control banners, sound and vibration');
-    for (const phrase of ['Sleep synced', 'one per sleep date', 'at least 20 hours', 'Tap an alert to open Sleep in Health',
+    for (const phrase of ['Morning check-in** is on by default', 'first device you use with notifications enabled saves its time zone',
+      'keeps your saved **Morning check-in** choice', '**Good morning** alert', 'between 05:00 and noon', 'one per local date',
+      'at least 20 hours', 'Tap the alert to see Readiness in Dashboard Today',
+      '**View readiness** opens Today and **View sleep** opens Sleep in Health',
       'Alerts contain no sleep scores, times or other health metrics']) expect(copy).toContain(phrase);
     for (const phrase of ['Connection issues', 'Each unresolved connection problem is notified once',
       'shared with Training alerts about that same problem', 'deliberate disconnects']) expect(copy).toContain(phrase);
     for (const phrase of ['Settings → Notifications', 'Home Screen', 'one per minute and ten per day',
-      'Activity delivery', 'Training send results', 'off independently of Training sync attention alerts', 'Background sync and automatic retries do not create success alerts', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'New categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
+      'Activity delivery', 'Training send results', 'off independently of Training sync attention alerts', 'Background sync and automatic retries do not create success alerts', 'Training sync', 'Workout sync history', 'at most two alerts per rolling 24 hours', 'Notify me when this send finishes', 'Successful forwarding and temporary retries are silent', 'New activities synced', 'last 48 hours', 'grouped for two minutes', 'four per rolling 24 hours', 'skipped, not saved for later', 'Both production and beta receive notifications', 'Notification devices', 'This browser', 'Refresh list', 'without changing its browser permission', 'Notification categories', 'Standard categories are on by default', 'does not revive earlier alerts', 'Notify me when this import finishes', 'starts unchecked', 'at most two import alerts per rolling 24 hours', 'Garmin has no completion-alert option', 'Delivery is best-effort', 'Already delivered notifications cannot be recalled']) {
       expect(copy).toContain(phrase);
     }
   });

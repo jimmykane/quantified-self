@@ -6,6 +6,7 @@ import { AppNotificationPreferencesService } from '../../services/app.notificati
 import { AppRemoteConfigService } from '../../services/app.remote-config.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import type { DashboardActionPromptViewModel } from '../../helpers/dashboard-action-prompt.helper';
+import { MORNING_CHECK_IN_CATEGORY } from '@shared/notification-categories';
 import type { MatSlideToggleChange } from '@angular/material/slide-toggle';
 
 @Component({
@@ -30,7 +31,7 @@ export class NotificationOfferComponent {
   readonly busy = computed(() => !!this.push.operation() || this.invitation.saving() || !!this.preferences.saving() || !!this.workingFor());
   readonly checking = computed(() => this.push.state() === 'loading' || this.preferences.status() === 'loading');
   readonly allOn = computed(() => this.push.state() === 'enabled' && this.preferences.status() === 'ready'
-    && this.preferences.categories().every(category => category.enabled));
+    && this.preferences.categories().every(category => category.id === MORNING_CHECK_IN_CATEGORY || category.enabled));
   readonly notificationsOn = computed(() => this.push.state() === 'enabled'
     && this.preferences.categories().some(category => category.enabled));
   readonly canTurnOn = computed(() => this.preferences.canEdit() && this.preferences.status() === 'ready'
@@ -53,11 +54,11 @@ export class NotificationOfferComponent {
   readonly status = computed(() => {
     if (this.push.operation() === 'enable') return 'Turning notifications on…';
     if (this.push.operation() === 'disable') return 'Turning notifications off…';
-    if (this.preferences.saving() === 'all') return 'Turning on all notification categories…';
+    if (this.preferences.saving() === 'all') return 'Turning on standard notification categories…';
     switch (this.push.state()) {
       case 'enabled': return this.preferences.status() === 'error' ? 'Enabled on this device. Could not load your notification categories.'
         : this.preferences.status() !== 'ready' ? 'Enabled on this device. Checking categories…'
-        : this.allOn() ? 'All notification categories are on for this device.'
+        : this.allOn() ? 'Standard notification categories are on for this device.'
         : this.preferences.categories().some(category => category.enabled) ? 'Notifications are on. Some categories are off.' : 'Your notification categories are off.';
       case 'disabled': return 'Notifications are off on this device.';
       case 'denied': return 'Notifications are blocked by your browser.';
@@ -103,13 +104,13 @@ export class NotificationOfferComponent {
         // Start permission synchronously in the toggle gesture, before category writes.
         if (this.push.state() !== 'enabled') await this.push.enable(uid);
         if (!this.current(uid)) return;
-        if (!await this.preferences.enableAll(uid)) throw new Error('Account or preferences changed.');
+        if (!await this.preferences.enableStandardCategories(uid)) throw new Error('Account or preferences changed.');
       } else await this.push.disable(uid);
       if (this.current(uid)) { this.failedOnFor.set(null); this.haptics.success(); }
     } catch {
       if (this.current(uid)) {
         this.failedOnFor.set(enabled ? uid : null);
-        this.error.set(enabled ? 'Could not turn on all notifications. Please try again.' : 'Could not turn off this device. Please try again.');
+        this.error.set(enabled ? 'Could not turn on notifications. Please try again.' : 'Could not turn off this device. Please try again.');
         this.haptics.error();
       }
     } finally { if (!this.destroy.destroyed && this.workingFor() === uid) this.workingFor.set(null); }

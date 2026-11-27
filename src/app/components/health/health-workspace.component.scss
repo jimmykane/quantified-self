@@ -4,6 +4,8 @@
 
 .health-workspace {
   display: grid;
+  // Let the readings table scroll inside its panel without widening the workspace.
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.875rem;
 }
 

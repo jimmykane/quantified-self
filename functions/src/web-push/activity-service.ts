@@ -13,7 +13,7 @@ export type ActivityPushOutcome = 'accepted' | 'expired' | 'failed' | 'cancelled
 export interface ActivityPushDependencies {
   db: Firestore; now(): number;
   configuration(): Promise<{ enabled: boolean; publicKey: string }>;
-  send(registration: PushRegistration, payload: string): Promise<unknown>;
+  send(registration: PushRegistration, payload: string, ttlSeconds?: number): Promise<unknown>;
   outcome(value: ActivityPushOutcome): void;
 }
 interface Target { id: string; generation: string; }

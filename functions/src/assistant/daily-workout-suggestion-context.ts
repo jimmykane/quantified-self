@@ -1,6 +1,6 @@
 import type { DailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 import { collectDayWorkoutContext, dayWorkoutTrainingMetricKinds, DayWorkoutTrainingNotReadyError, readDayWorkoutTrainingContext } from './day-workout-context';
-import { withWorkoutPowerContext } from './day-workout-power';
+import { withWorkoutTargetContext } from './day-workout-target-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 
@@ -26,6 +26,6 @@ export async function collectDailyWorkoutSuggestionContext(uid: string, preferen
     const context = await collectDayWorkoutContext(controls, now, preparedSession,
       () => readDayWorkoutTrainingContext(uid, controls, now),
       { allowEventAdvice: true, deferUntilTrainingReady: !useAvailable });
-    return { controls, evidence: await withWorkoutPowerContext(uid, controls, now, context) };
+    return { controls, evidence: await withWorkoutTargetContext(uid, controls, now, context) };
   } finally { await session.close(); }
 }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResponseBodyTooLargeError, type ResponseMetadata } from '../request-helper';
 import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from '../queue-utils';
@@ -6,8 +7,8 @@ import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
 import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
-import { notifyNewSleepAfterPersistence } from '../web-push/sleep-admission';
-vi.mock('../web-push/sleep-admission', () => ({ notifyNewSleepAfterPersistence: vi.fn().mockResolvedValue(undefined) }));
+import { notifyMorningCheckInAfterPersistence } from '../web-push/morning-check-in-admission';
+vi.mock('../web-push/morning-check-in-admission', () => ({ notifyMorningCheckInAfterPersistence: vi.fn().mockResolvedValue(undefined) }));
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -46,6 +47,7 @@ const hoisted = vi.hoisted(() => ({
     runTransaction: vi.fn(),
     recursiveDelete: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
+    checkCOROSBindingStateForUser: vi.fn(),
     getServiceConnectionMeta: vi.fn(),
     loggerWarn: vi.fn(),
     loggerError: vi.fn(),
@@ -228,11 +230,15 @@ vi.mock('../tokens', () => {
     return {
         getTokenData: hoisted.getTokenData,
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshSupersededError: class extends Error {
+            readonly name = 'TokenRefreshSupersededError';
+        },
         TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
     };
 });
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+    ...await importOriginal<typeof import('../request-helper')>(),
     get: hoisted.requestGet,
 }));
 
@@ -288,9 +294,12 @@ vi.mock('./queue-revision', async (importOriginal) => ({
     releaseSleepQueueRevision: hoisted.releaseSleepQueueRevision,
 }));
 
-vi.mock('../coros/account', () => ({
+vi.mock('../coros/account', async importOriginal => ({
+    ...(await importOriginal<typeof import('../coros/account')>()),
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
 }));
+
+vi.mock('../coros/binding-state', () => ({ checkCOROSBindingStateForUser: hoisted.checkCOROSBindingStateForUser }));
 
 vi.mock('../service-connection-meta', () => ({
     getServiceConnectionMeta: (...args: unknown[]) => hoisted.getServiceConnectionMeta(...args),
@@ -382,6 +391,7 @@ describe('sleep queue', () => {
             permissions: ['HEALTH_EXPORT'],
         });
         hoisted.requestGet.mockResolvedValue({ sleeps: [] });
+        hoisted.checkCOROSBindingStateForUser.mockReset().mockResolvedValue({ status: 'stale', bound: null });
         hoisted.markSleepSyncError.mockResolvedValue(true);
         hoisted.updateSleepSyncState.mockResolvedValue(true);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
@@ -516,7 +526,7 @@ describe('sleep queue', () => {
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
         const input = {
             type: 'suunto_webhook' as const,
-            sleepNotificationOrigin: 'live' as const,
+            morningCheckInOrigin: 'live' as const,
             provider: 'SuuntoApp' as const,
             userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
@@ -537,7 +547,7 @@ describe('sleep queue', () => {
             provider: 'SuuntoApp',
             providerUserId: 'suunto-user-1',
             suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
-            sleepNotificationOrigin: 'live',
+            morningCheckInOrigin: 'live',
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
         expect(hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards)
@@ -551,18 +561,18 @@ describe('sleep queue', () => {
 
     it('does not label an explicit sleep history job as live notification work', async () => {
         await addSleepSyncQueueItem({ type: 'suunto_webhook', provider: 'SuuntoApp', userID: 'test-user-uid',
-            sleepNotificationOrigin: 'live',
+            morningCheckInOrigin: 'live',
             providerUserId: 'suunto-user-1', payload: { samples: [{ SleepId: 123 }] },
             connectionHistoryRunId: 'history-run', dedupeKey: 'history-sleep' });
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({ connectionHistoryRunId: 'history-run' }), { merge: false });
-        expect(hoisted.docSet.mock.calls.at(-1)?.[0].sleepNotificationOrigin).toBeUndefined();
+        expect(hoisted.docSet.mock.calls.at(-1)?.[0].morningCheckInOrigin).toBeUndefined();
     });
 
     it('leaves unmarked administrative or legacy sleep jobs silent even when their type matches live polling', async () => {
         await addSleepSyncQueueItem({ type: 'suunto_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
             providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000, dedupeKey: 'admin-recovery' });
         expect(hoisted.docSet).toHaveBeenCalled();
-        expect(hoisted.docSet.mock.calls.at(-1)?.[0].sleepNotificationOrigin).toBeUndefined();
+        expect(hoisted.docSet.mock.calls.at(-1)?.[0].morningCheckInOrigin).toBeUndefined();
     });
 
     it.each([false, true])('preserves an existing admin polling job transactionally (processed=%s)', async processed => {
@@ -1801,7 +1811,7 @@ describe('sleep queue', () => {
             });
 
             expect(result).toBe(QueueResult.Processed);
-            expect(notifyNewSleepAfterPersistence).toHaveBeenCalledWith('test-user-uid',
+            expect(notifyMorningCheckInAfterPersistence).toHaveBeenCalledWith('test-user-uid',
                 expect.objectContaining({ id: 'garmin-sleep-ping' }), createdSessions);
             expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({
                 url: callbackURL,
@@ -4165,6 +4175,174 @@ describe('sleep queue', () => {
         });
     });
 
+    describe('COROS daily authorization recovery', () => {
+        const tokenData = { openId: 'coros-user-1', accessToken: 'first-token', dateCreated: 100 };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        const tokenRef = { parent: { parent: { id: 'test-user-uid' } }, get: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+
+        beforeEach(() => {
+            hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+            hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-user-1', data: () => tokenData, ref: tokenRef });
+            tokenRef.get.mockReset().mockResolvedValue({ exists: true, id: 'coros-user-1', data: () => tokenData, ref: tokenRef });
+            hoisted.getTokenData.mockResolvedValue(tokenData);
+            item = {
+                id: 'coros-authority-recovery', dateCreated: 1_700_000_000_000, queueRevision: 'current-revision',
+                dispatchedToCloudTask: 1_700_000_000_500, processed: false, provider: 'COROSAPI', userID: 'test-user-uid',
+                providerUserId: 'coros-user-1', retryCount: 6, type: 'coros_poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => item }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        function rejectDailyRequest(status: number) {
+            hoisted.requestGet.mockImplementationOnce(async ({ onResponseMetadata }) => {
+                onResponseMetadata({ statusCode: status, contentType: null });
+                throw new Error('private provider error');
+            });
+        }
+
+        it('commits a skip without a refresh or dead letter after a confirmed unbind on HTTP 401', async () => {
+            rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'unbound', bound: false });
+
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(hoisted.checkCOROSBindingStateForUser).toHaveBeenCalledExactlyOnceWith('test-user-uid', expect.any(Number), {
+                providerUserId: 'coros-user-1', connectionGeneration: 'coros-generation-1',
+                credential: expect.objectContaining({ accessToken: 'first-token' }),
+            });
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'provider_auth_required', skippedContext: 'COROS_ACCOUNT_UNBOUND',
+            }));
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith('[HealthSleep]', expect.objectContaining({ event: 'committed', outcome: 'skipped' }));
+            expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+        });
+
+        it('settles a later delivery when the matching connection already recorded the unbind', async () => {
+            hoisted.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(new Error('Reconnect'), { code: 'unauthenticated' }));
+            hoisted.getServiceConnectionMeta.mockResolvedValueOnce({
+                providerUserId: 'coros-user-1', connectionState: 'reconnect_required', connectionStateGeneration: 'coros-generation-1',
+                providerBindingState: 'unbound', lastAuthFailureCode: 'coros_unbound',
+            });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({ processed: true, skippedReason: 'provider_auth_required' }));
+            expect(hoisted.checkCOROSBindingStateForUser).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+        });
+
+        it.each([true, false])('refreshes once when still bound after result 5006, then settles the one retry (success: %s)', async shouldSucceed => {
+            const updatedToken = { ...tokenData, accessToken: 'refreshed-token', dateRefreshed: 200 };
+            hoisted.requestGet.mockResolvedValueOnce({ result: '5006' });
+            if (shouldSucceed) hoisted.requestGet.mockResolvedValueOnce({ result: '0000', message: 'OK', data: {} });
+            else rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+            hoisted.getTokenData.mockResolvedValueOnce(tokenData).mockImplementationOnce(async (_snapshot, _service, _force, options) => {
+                await options.beforeRefreshRequest();
+                hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-user-1', data: () => updatedToken, ref: tokenRef });
+                return updatedToken;
+            });
+
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(shouldSucceed ? QueueResult.Processed : QueueResult.RetryIncremented);
+            expect(hoisted.checkCOROSBindingStateForUser).toHaveBeenCalledOnce();
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), ServiceNames.COROSAPI, true, expect.objectContaining({
+                opaqueTelemetry: true, recoverTerminalAuthFailure: false, allowSupersededSnapshotRetry: false,
+            }));
+            expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
+            expect(hoisted.requestGet.mock.calls.map(([options]) => new URL(options.url).searchParams.get('token')))
+                .toEqual(['first-token', 'refreshed-token']);
+            const result = shouldSucceed ? { processed: true, resultStatus: 'success' } : { retryCount: 7, dispatchedToCloudTask: null };
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining(result));
+        });
+
+        it.each([401, 403, 500])('keeps backoff on HTTP %i when there is no confirmed binding decision', async status => {
+            rejectDailyRequest(status);
+            hoisted.checkCOROSBindingStateForUser.mockRejectedValueOnce(new Error('temporary binding failure'));
+
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.RetryIncremented);
+            expect(hoisted.checkCOROSBindingStateForUser).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+            expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 7, dispatchedToCloudTask: null }));
+        });
+
+        it('leaves the poll pending if another refresh wins before the repeat request', async () => {
+            rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+            hoisted.getTokenData.mockResolvedValueOnce(tokenData).mockImplementationOnce(async () => {
+                const concurrentToken = { ...tokenData, dateRefreshed: 300 };
+                hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: item.providerUserId, data: () => concurrentToken, ref: tokenRef });
+                return { ...tokenData, dateRefreshed: 200 };
+            });
+            hoisted.markSleepSyncError.mockResolvedValue(false);
+
+            await expect(processSleepSyncQueueItem(item)).rejects.toMatchObject({ name: 'TokenRefreshSupersededError' });
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(queueRef.update).not.toHaveBeenCalled();
+        });
+
+        it.each(['sleep', 'health'] as const)('leaves the poll pending when a concurrent refresh rejects the %s state write', async state => {
+            rejectDailyRequest(401);
+            const refreshedToken = { ...tokenData, dateRefreshed: 200 };
+            tokenRef.get.mockResolvedValue({ exists: true, id: item.providerUserId, data: () => refreshedToken, ref: tokenRef });
+            if (state === 'sleep') {
+                hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'stale', bound: null });
+                hoisted.markSleepSyncError.mockResolvedValueOnce(false);
+            } else {
+                hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+                hoisted.updateHealthSyncState.mockResolvedValueOnce(false);
+            }
+
+            await expect(processSleepSyncQueueItem(item)).rejects.toMatchObject({ name: 'TokenRefreshSupersededError' });
+            expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(state === 'health' ? 1 : 0);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            { tokenCredentialGeneration: 'new-grant' },
+            { dateCreated: 200 },
+            { openId: 'another-account' },
+        ])('settles obsolete work without borrowing a replacement credential (%j)', async replacement => {
+            rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+            tokenRef.get.mockResolvedValue({
+                exists: true, id: item.providerUserId, data: () => ({ ...tokenData, ...replacement }), ref: tokenRef,
+            });
+            hoisted.markSleepSyncError.mockResolvedValueOnce(false);
+
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, skippedReason: 'user_or_provider_lifecycle_changed',
+            }));
+            expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+        });
+
+        it('preserves backoff if a bound account rejects the forced refresh', async () => {
+            rejectDailyRequest(401);
+            hoisted.checkCOROSBindingStateForUser.mockResolvedValueOnce({ status: 'bound', bound: true });
+            hoisted.getTokenData.mockResolvedValueOnce(tokenData).mockRejectedValueOnce(new TerminalServiceAuthError(
+                ServiceNames.COROSAPI, 'test-user-uid', 'coros-user-1', 401, '5006', null, new Error('private provider detail'),
+            ));
+
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.RetryIncremented);
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.requestGet).toHaveBeenCalledOnce();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private provider detail');
+        });
+    });
+
     describe('COROS polls after completed disconnect', () => {
         const disconnectedMeta = {
             connectionStateGeneration: 'cleared-generation',
@@ -5206,7 +5384,10 @@ describe('sleep queue', () => {
         }));
     });
 
-    it('rejects a COROS daily response without an explicit success result', async () => {
+    it.each([
+        { providerResult: undefined, diagnosticResult: 'unknown' },
+        { providerResult: '12345678901234567890', diagnosticResult: 'invalid' },
+    ])('rejects a COROS daily response with a $diagnosticResult result code', async ({ providerResult, diagnosticResult }) => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const activeToken = {
             id: 'coros-user-1',
@@ -5215,7 +5396,7 @@ describe('sleep queue', () => {
         };
         hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(activeToken);
         hoisted.getTokenData.mockResolvedValue({ accessToken: 'coros-access-token' });
-        hoisted.requestGet.mockResolvedValue({ message: 'OK', data: { dailyList: [] } });
+        hoisted.requestGet.mockResolvedValue({ result: providerResult, message: 'OK', data: { dailyList: [] } });
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
@@ -5236,9 +5417,11 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.RetryIncremented);
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
         expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-missing-daily-result failed',
+            expect.objectContaining({ failureCategory: 'invalid_response' }));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             errors: [expect.objectContaining({
-                error: 'COROS daily data request failed with result unknown.',
+                error: `COROS daily data request failed with result ${diagnosticResult}.`,
             })],
         }));
     });
@@ -5400,6 +5583,8 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.RetryIncremented);
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-failed-daily-response failed',
+            expect.objectContaining({ failureCategory: 'provider_result_error', providerResultCode: '5006' }));
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
             dispatchedToCloudTask: null,
@@ -5644,7 +5829,15 @@ describe('sleep queue', () => {
         expect(hoisted.recursiveDelete).toHaveBeenCalledWith(queueRef);
     });
 
-    it('keeps COROS transport and response details out of durable error telemetry', async () => {
+    it.each([
+        { category: 'provider_http_error', status: 503, makeError: (message: string) => new Error(message) },
+        { category: 'timeout', makeError: (message: string) => new DOMException(message, 'AbortError') },
+        { category: 'timeout', makeError: (message: string) => new TypeError(message, { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } }) },
+        { category: 'transport_error', makeError: (message: string) => new TypeError(message, { cause: { code: 'ECONNRESET' } }) },
+        { category: 'invalid_response', status: 200, makeError: (message: string) => new SyntaxError(message) },
+        { category: 'response_byte_limit', status: 200, makeError: () => new ResponseBodyTooLargeError(16, 17) },
+        { category: 'provider_request_unknown', status: 600, makeError: (message: string) => new Error(message) },
+    ])('reports COROS $category safely and keeps normal retry accounting', async ({ category, status, makeError }) => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const privateProviderUserId = 'private-coros-account-id';
         const privateAccessToken = 'private-coros-access-token';
@@ -5684,10 +5877,14 @@ describe('sleep queue', () => {
             dateRefreshed: 2_000,
             tokenCredentialGeneration: 'private-credential-generation',
         });
-        hoisted.requestGet.mockRejectedValue(Object.assign(
-            new Error(`Failed URL contains ${privateAccessToken}`),
-            { error: { message: privateResponseDetail } },
-        ));
+        const privateUrl = `https://open.coros.com/coros/daily/query?token=${privateAccessToken}`;
+        const rawError = Object.assign(makeError(`Failed to read ${privateUrl}`), {
+            error: { message: privateResponseDetail },
+        });
+        hoisted.requestGet.mockImplementationOnce(async (options: { onResponseMetadata: (meta: ResponseMetadata) => void }) => {
+            if (status !== undefined) options.onResponseMetadata({ statusCode: status, contentType: privateResponseDetail });
+            throw rawError;
+        });
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({
@@ -5722,14 +5919,28 @@ describe('sleep queue', () => {
             }),
         );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            retryCount: 1,
+            dispatchedToCloudTask: null,
             errors: [expect.objectContaining({
                 error: 'COROS daily data request failed.',
             })],
         }));
-        const errorLog = hoisted.loggerError.mock.calls.flat().join(' ');
-        expect(errorLog).not.toContain(privateProviderUserId);
-        expect(errorLog).not.toContain(privateAccessToken);
-        expect(errorLog).not.toContain(privateResponseDetail);
+        expect(hoisted.loggerError).toHaveBeenCalledWith('[SleepSync] Queue item coros-private-provider-error failed', {
+            provider: 'COROSAPI',
+            errorName: 'COROSDailyRequestError',
+            errorCode: 'coros_daily_request_failed',
+            failureStage: 'daily_request',
+            failureCategory: category,
+            ...(status !== undefined && status < 600 ? { providerStatusCode: status } : {}),
+        });
+        const diagnostics = JSON.stringify([
+            hoisted.loggerError.mock.calls,
+            hoisted.markSleepSyncError.mock.calls[0]?.[2],
+            update.mock.calls.map(([write]) => write.errors),
+        ]);
+        for (const value of [privateProviderUserId, privateAccessToken, privateResponseDetail, privateUrl]) {
+            expect(diagnostics).not.toContain(value);
+        }
     });
 
     it('keeps COROS token-refresh and datastore details out of durable error telemetry', async () => {

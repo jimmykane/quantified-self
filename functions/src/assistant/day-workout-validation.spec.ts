@@ -72,6 +72,13 @@ describe('day workout contract and prescription validation', () => {
     expect(validateDayWorkoutSuggestion({ kind: 'rest', rationale: 'Consider rest today.' }, controls).draft).toBeNull();
     expect(() => validateDayWorkoutSuggestion({ kind: 'rest', rationale: 'Rest.', title: 'Rest workout' }, controls)).toThrow();
   });
+  it('allows effort guidance without a heart-rate reference and preserves rest when one is available', () => {
+    const options = { ...controls, target: 'heart-rate' as const };
+    const reference = { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 70,
+      reference: { kind: 'max-heart-rate', bpm: 190 } } as const;
+    expect(validateDayWorkoutSuggestion(endurance(), options).draft).not.toBeNull();
+    expect(validateDayWorkoutSuggestion({ kind: 'rest', rationale: 'Rest today.' }, options, [], [reference]).draft).toBeNull();
+  });
   it('retains repetitions and unknown canonical duration; strips invented loads without permission', () => {
     const result = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Strength', rationale: 'General strength.',
       strength: strength(), estimatedMinutes: { minimum: 25, maximum: 35 } },

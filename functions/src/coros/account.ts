@@ -53,7 +53,7 @@ export function selectActiveCOROSTokenSnapshot<T extends COROSTokenSnapshot>(sna
   })[0] || null;
 }
 
-function snapshotMatchesOpenId(snapshot: COROSTokenSnapshot, openId: string): boolean {
+export function doesCOROSTokenSnapshotMatchOpenId(snapshot: COROSTokenSnapshot, openId: string): boolean {
   const tokenOpenIdValue = (snapshot.data() as Record<string, unknown> | undefined)?.openId;
   const hasTokenOpenId = tokenOpenIdValue !== undefined && tokenOpenIdValue !== null && tokenOpenIdValue !== '';
   const tokenOpenId = hasTokenOpenId ? normalizeCOROSOpenId(tokenOpenIdValue) : null;
@@ -104,7 +104,7 @@ export async function assertActiveCOROSAccountInTransaction(
     || pinnedOpenId !== expectedOpenId
     || !tokenSnapshot.exists
     || !tokenMatchesRootCredentialGeneration(tokenRootSnapshot, tokenSnapshot)
-    || !snapshotMatchesOpenId(tokenSnapshot, expectedOpenId)) {
+    || !doesCOROSTokenSnapshotMatchOpenId(tokenSnapshot, expectedOpenId)) {
     throw new HttpsError('unauthenticated', 'The selected COROS account changed before data could be saved.');
   }
 }
@@ -154,7 +154,7 @@ export async function getActiveCOROSTokenSnapshot(
   if (pinnedOpenId) {
     const pinnedSnapshot = await tokenCollection.doc(pinnedOpenId).get();
     if (!pinnedSnapshot.exists
-      || !snapshotMatchesOpenId(pinnedSnapshot, pinnedOpenId)
+      || !doesCOROSTokenSnapshotMatchOpenId(pinnedSnapshot, pinnedOpenId)
       || !tokenMatchesRootCredentialGeneration(tokenRootSnapshot, pinnedSnapshot)) {
       throw new HttpsError('unauthenticated', 'Reconnect COROS before sending data.');
     }
@@ -171,7 +171,7 @@ export async function getActiveCOROSTokenSnapshot(
   const selectedOpenId = normalizeCOROSOpenId(
     tokenOpenId === undefined || tokenOpenId === null || tokenOpenId === '' ? selectedSnapshot.id : tokenOpenId,
   );
-  if (!selectedOpenId || !snapshotMatchesOpenId(selectedSnapshot, selectedOpenId)) {
+  if (!selectedOpenId || !doesCOROSTokenSnapshotMatchOpenId(selectedSnapshot, selectedOpenId)) {
     throw new HttpsError('unauthenticated', 'Reconnect COROS before sending data.');
   }
   const expectedSnapshot = assertExpectedAccount(selectedSnapshot);

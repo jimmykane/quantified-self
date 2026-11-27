@@ -343,6 +343,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   @Input() user: User;
   @Input() eventUser: User;
   @Input() showActions: boolean;
+  @Input() focusReadiness = false;
 
   public rowHeight;
   public numberOfCols: number;
@@ -408,6 +409,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private libraryRefresh = Promise.resolve();
   private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
+  public todayReadinessFocused = false;
   public todaySettings = normalizeDashboardTodaySettings(undefined);
   private readonly todayEditor = inject(DashboardTodayEditorService);
   private readonly destroyRef = inject(DestroyRef);
@@ -433,6 +435,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dailyWorkoutSuggestionTrainingKey: string | null = null;
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
+  private readonly focusedTodayDetailsExpanded = signal(true);
+
+  protected get currentTodayDetailsExpanded() {
+    return this.todayReadinessFocused ? this.focusedTodayDetailsExpanded : this.todayDetailsExpanded;
+  }
+
+  protected get savedTodaySummaryVisible(): boolean {
+    return (this.user as AppUserInterface | undefined)?.settings?.dashboardSettings?.showTodaySummary !== false;
+  }
+
   private todayDetailsOwnerUID: string | null = null;
   public isOwnerDashboard = false;
   public calendarSelectedDateKey: string | null = null;
@@ -607,6 +619,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || simpleChanges.eventUser?.isFirstChange?.() === true;
       if (
         !isFirstInputChange
+        && !simpleChanges.focusReadiness
         && equal(previousDependencySnapshot, currentDependencySnapshot)
         && equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)
       ) {
@@ -615,6 +628,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return;
       }
       return this.unsubscribeAndCreateCharts();
+    }
+    if (simpleChanges.focusReadiness) {
+      this.syncDerivedMetricsSubscription();
+      this.syncReadinessSleepSubscription();
+      this.refreshDashboardTodaySignals();
+      this.refreshDerivedMetricsBannerState();
     }
   }
 
@@ -702,6 +721,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (ownerUID !== this.todayDetailsOwnerUID) {
       this.todayDetailsOwnerUID = ownerUID;
       this.todayDetailsExpanded.set(true);
+      this.focusedTodayDetailsExpanded.set(true);
     }
     this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
@@ -1120,7 +1140,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (this.showTodaySummary && needed.load) metricKinds.push(DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate);
     if (this.showTodaySummary && needed.recovery) metricKinds.push(DERIVED_METRIC_KINDS.RecoveryNow);
     const daily = (this.user as AppUserInterface)?.settings?.appSettings?.dailyWorkoutSuggestion;
-    if (includeDailySuggestion && this.showTodaySummary && this.isOwnerDashboard && daily?.enabled
+    if (includeDailySuggestion && !this.todayReadinessFocused && this.showTodaySummary && this.isOwnerDashboard && daily?.enabled
       && this.userService.isProSignal()) {
       metricKinds.push(DERIVED_METRIC_KINDS.TrainingSummary);
       if (daily.controls?.freshnessContext !== false) {
@@ -2439,9 +2459,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const appUser = this.user as AppUserInterface | null | undefined;
     const hiddenSections = this.isOwnerDashboard ? normalizeDashboardHiddenSections(appUser?.settings?.dashboardSettings?.hiddenSections) : [];
     if (!equal(hiddenSections, this.hiddenSectionLanes)) this.hiddenSectionLanes = hiddenSections;
+    const focusReadiness = this.focusReadiness && this.isOwnerDashboard && this.showActions === true;
+    if (focusReadiness && !this.todayReadinessFocused) this.focusedTodayDetailsExpanded.set(true);
+    this.todayReadinessFocused = focusReadiness;
     const today = normalizeDashboardTodaySettings(appUser?.settings?.dashboardSettings?.today);
+    if (focusReadiness) {
+      today.readiness = true;
+      today.suggestion = false;
+    }
     if (!equal(today, this.todaySettings)) this.todaySettings = today;
-    const showTodaySummary = appUser?.settings?.dashboardSettings?.showTodaySummary !== false;
+    const showTodaySummary = focusReadiness || this.savedTodaySummaryVisible;
     if (this.showTodaySummary === showTodaySummary) {
       return;
     }

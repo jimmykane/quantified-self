@@ -6,7 +6,7 @@ import { AppEventSummary } from '@shared/event-summary';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApplicationRef, NO_ERRORS_SCHEMA } from '@angular/core';
@@ -286,6 +286,20 @@ describe('DashboardComponent', () => {
         expect(eventTable).toBeTruthy();
         expect(summaries.compareDocumentPosition(eventTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(template).not.toContain('@defer');
+    });
+
+    it('passes the Readiness focus to Today only while the notification destination is active', () => {
+        const queryParamMap = new BehaviorSubject(convertToParamMap({ focus: 'readiness' }));
+        mockActivatedRoute.queryParamMap = queryParamMap;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+
+        fixture.detectChanges();
+        const summaries = fixture.nativeElement.querySelector('app-summaries');
+        expect(summaries.focusReadiness).toBe(true);
+
+        queryParamMap.next(convertToParamMap({}));
+        fixture.detectChanges();
+        expect(summaries.focusReadiness).toBe(false);
     });
 
     it('should use resolved events on init', async () => {

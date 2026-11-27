@@ -88,6 +88,11 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
       }
     }
   }
+  if (!strength && controls.target === 'heart-rate' && references.some(target => target.kind === 'heart-rate' && target.mode === 'relative')
+    && !structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+      .some(step => step.targets.some(target => target.kind === 'heart-rate')))) {
+    throw new DayWorkoutSuggestionValidationError('Include a heart-rate target using the supplied reference on at least one workout step.');
+  }
   if (!strength && controls.target === 'garmin-power-zone' && !hasGarminPowerZoneTargetV1(structure)) {
     throw new DayWorkoutSuggestionValidationError('Include a Garmin power zone target in the requested workout.');
   }
