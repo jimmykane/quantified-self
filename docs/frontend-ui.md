@@ -257,6 +257,15 @@ deferred example’s snippet exclusion. The production output check verifies bot
 The release build measured 15.27 MB of total scripts with the public catalog. Develop already exceeded its 15.26 MB
 limit by 5.52 kB before this addition. Production and beta use a 15.28 MB total-script cap.
 
+## Garmin and ChatGPT guide
+
+The guide keeps its example narratives in the lazy article route. Ten static images illustrate the cycling
+comparison, setup, ride, race, training block, swim chart and workout workflow. An accessible table shows
+the Garmin-only comparison on phones. The article and Connections share the question catalog and copy control.
+Connections shows three questions initially and reveals the remaining ten on request. The expanded guide
+exceeded the 15.29 MB total-script cap by 11.49 kB in production. Both release configurations use a 15.31 MB
+cap and retain the 1474 kB initial limit.
+
 ## Navigation startup rendering
 
 Keep the Material sidenav container mounted so the existing navigation service can open it. Its contents use

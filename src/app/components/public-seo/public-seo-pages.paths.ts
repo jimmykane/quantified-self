@@ -20,6 +20,7 @@ export type PublicSeoPageKey =
   | 'syncCorosToSuunto'
   | 'syncWahooToSuunto'
   | 'wahooGarminTrainingData'
+  | 'garminChatgpt'
   | 'importActivitiesToSuunto'
   | 'importActivitiesToWahoo'
   | 'syncSuuntoRoutesToGarmin'
@@ -50,6 +51,7 @@ export const PUBLIC_GUIDE_PATHS = {
   syncCorosToSuunto: 'guides/sync-coros-to-suunto',
   syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
   wahooGarminTrainingData: 'guides/wahoo-garmin-training-data',
+  garminChatgpt: 'guides/garmin-data-chatgpt',
   importActivitiesToSuunto: 'guides/import-activities-to-suunto',
   importActivitiesToWahoo: 'guides/import-activities-to-wahoo',
   syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',

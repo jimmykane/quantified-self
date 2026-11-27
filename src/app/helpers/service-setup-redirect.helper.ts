@@ -10,6 +10,7 @@ const GUIDE_SETUP_SERVICE_NAMES: readonly string[] = [
 
 /** Preserve only curated setup destinations through required onboarding. */
 export function serviceSetupFromReturnUrl(value: unknown): { returnUrl: string; serviceName: string | null; setup?: 'sync' } | null {
+  if (value === '/services?serviceName=mcp') return { returnUrl: value, serviceName: 'mcp' };
   if (value === '/services') return { returnUrl: value, serviceName: null };
   if (typeof value !== 'string' || !value.startsWith('/services?') || value.includes('#')) return null;
 

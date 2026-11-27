@@ -15,6 +15,8 @@ import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 
+import { McpStarterPromptsComponent } from './mcp-starter-prompts.component';
+
 const MCP_SCOPE_ENTRIES = Object.entries(MCP_SCOPE_CONTENT) as Array<[
   McpScope,
   typeof MCP_SCOPE_CONTENT[McpScope],
@@ -50,6 +52,7 @@ interface McpConnection {
     MatIconModule,
     MatProgressSpinnerModule,
     CompactRowComponent,
+    McpStarterPromptsComponent,
   ],
   templateUrl: './mcp-connections.component.html',
   styleUrls: ['./mcp-connections.component.scss'],

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { marked } from 'marked';
-import { ACTIVITY_MAP_PRERENDER_METADATA, PRICING_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
+import { GARMIN_CHATGPT_PRERENDER_METADATA, ACTIVITY_MAP_PRERENDER_METADATA, PRICING_PRERENDER_METADATA, RELEASES_PRERENDER_METADATA, TOOLS_COMPARE_PRERENDER_METADATA, TRAINING_PLANS_PRERENDER_METADATA } from './public-prerender-metadata.mjs';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
@@ -31,6 +31,7 @@ const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/features\/workout-data-comparison-page\.component\.ts$/,
   /^src\/app\/components\/features\/supported-activities-page\.component\.ts$/,
   /^src\/app\/components\/public-seo\/public-seo-page\.component\.ts$/,
+  /^src\/app\/components\/public-seo\/garmin-chatgpt-guide\.component\.ts$/,
   /^src\/app\/components\/tools\/tools-hub-page\.component\.ts$/,
   /^src\/app\/components\/tools\/tools-compare-page\.component\.ts$/,
 ];
@@ -416,6 +417,35 @@ function assertPrerenderedDocuments() {
       for (const fragment of ['plan-first-run', 'plan-first-ride', 'plan-tredict-running-base', 'free-training-plans']) {
         if (!showcase?.querySelector(`a[href="${TRAINING_PLANS_ROUTE}#${fragment}"]`) || showcase.closest('[data-nosnippet]')) {
           throw new Error(`Prerendered ${route} is missing its public catalog link to #${fragment}.`);
+        }
+      }
+    }
+    if (route === '/guides/garmin-data-chatgpt') {
+      const expected = GARMIN_CHATGPT_PRERENDER_METADATA;
+      if (documentRef.title !== expected.title + ' - Quantified Self'
+        || documentRef.querySelector('meta[name="description"]')?.content !== expected.description
+        || documentRef.querySelector('h1')?.textContent.trim() !== expected.h1
+        || documentRef.querySelector('link[rel="canonical"]')?.href !== 'https://quantified-self.io' + route
+        || !documentRef.querySelector('article a[href="/services?serviceName=mcp"]')
+        || !documentRef.querySelector('.try-it app-mcp-starter-prompts p')?.textContent.includes('four weeks')) {
+        throw new Error('The prerendered Garmin and ChatGPT guide is missing its metadata, question or setup link.');
+      }
+      const examples = documentRef.querySelector('section[aria-labelledby="examples"]');
+      for (const id of ['ride-and-race', 'training-and-sleep', 'activity-history', 'workout-planning', 'more-questions']) {
+        if (!examples?.querySelector('h3#' + id) || !examples.querySelector('nav a[href="' + route + '#' + id + '"]')) {
+          throw new Error('Missing example topic or link in prerendered guide: ' + id);
+        }
+      }
+      if (examples.querySelectorAll('app-mcp-starter-prompts button').length !== 11
+        || !examples.textContent.includes('Illustrative sleep example')
+        || !examples.textContent.includes('Receipt on the watch was never confirmed')) {
+        throw new Error('Missing reader questions or evidence labels in the prerendered guide.');
+      }
+      for (const file of ['garmin-recordings', 'chatgpt-answer', 'garmin-connected', 'chatgpt-setup',
+        'garmin-ride', 'race-metrics', 'training-build', 'swim-temperature', 'workout-draft', 'garmin-delivery']) {
+        const asset = '/assets/images/garmin-chatgpt/' + file + '.webp';
+        if (!documentRef.querySelector('article img[src="' + asset + '"]')?.alt || !fs.existsSync(path.join(outputDirectory, asset))) {
+          throw new Error('Missing illustrated guide asset or alternative text: ' + asset);
         }
       }
     }

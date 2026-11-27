@@ -18,6 +18,7 @@ describe('service setup redirects', () => {
 
   it.each([
     { service: 'Wahoo%20API', serviceName: WAHOO_SETUP_QUERY_PARAMS.serviceName },
+    { service: 'mcp', serviceName: 'mcp' },
     { service: 'Wahoo+API', serviceName: WAHOO_SETUP_QUERY_PARAMS.serviceName },
     { service: 'COROS%20API', serviceName: 'COROS API' },
     { service: 'COROS+API', serviceName: 'COROS API' },
@@ -30,6 +31,7 @@ describe('service setup redirects', () => {
   });
 
   it.each([
+    '/services?setup=sync&serviceName=mcp', '/services?serviceName=mcp&connect=true',
     '/services?setup=sync&connect=true', '/services?setup=sync&setup=sync', '/services?setup=other',
     '/services?setup=sync&serviceName=unknown', '/services?setup=sync&serviceName=',
     '/services?setup=sync&serviceName=Garmin%20API&serviceName=Garmin%20API',

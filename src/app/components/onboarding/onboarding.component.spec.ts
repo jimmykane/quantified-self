@@ -1218,6 +1218,8 @@ describe('OnboardingComponent', () => {
     );
 
     it.each([
+        { serviceName: 'mcp', onboardingCompleted: false },
+        { serviceName: 'mcp', onboardingCompleted: true },
         { serviceName: 'Wahoo API', onboardingCompleted: false },
         { serviceName: 'Wahoo API', onboardingCompleted: true },
         { serviceName: 'COROS API', onboardingCompleted: false },

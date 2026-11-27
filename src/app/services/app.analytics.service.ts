@@ -1,3 +1,4 @@
+import type { McpStarterQuestionId } from '../components/mcp-connections/mcp-starter-questions';
 import { Injectable, inject } from '@angular/core';
 import { Analytics } from 'app/firebase/analytics';
 import { analyticsEventParameters } from '../helpers/analytics-runtime.helper';
@@ -215,6 +216,11 @@ export class AppAnalyticsService {
             this.logger.warn('Analytics logEvent error:', error);
             return false;
         }
+    }
+
+    logMcpGuideAction(event: 'mcp_guide_setup_clicked' | 'mcp_question_copied', question?: McpStarterQuestionId): boolean {
+        if (!this.consentingOwner || this.consentingOwner !== this.authService.currentUser?.uid) return false;
+        return this.logEvent(event, question ? { question_id: question } : undefined);
     }
 
     logOwnedResultView(owner: string, event: 'recorded_workout_opened' | 'comparison_result_opened'): boolean {
