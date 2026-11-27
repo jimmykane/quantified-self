@@ -148,7 +148,8 @@ describe('help.content', () => {
       'Your browser decides whether the link opens in that app or a browser tab']) expect(copy).toContain(phrase);
     expect(copy).toContain('Each new grouped activity alert can notify you again even if the previous one is still visible');
     expect(copy).toContain('Your browser and OS control banners, sound and vibration');
-    for (const phrase of ['Morning check-in** starts off', '**Good morning** alert', 'between 05:00 and noon', 'one per local date',
+    for (const phrase of ['Morning check-in** is on by default', 'first device you use with notifications enabled saves its time zone',
+      'keeps your saved **Morning check-in** choice', '**Good morning** alert', 'between 05:00 and noon', 'one per local date',
       'at least 20 hours', 'Tap the alert to see Readiness in Dashboard Today',
       '**View readiness** opens Today and **View sleep** opens Sleep in Health',
       'Alerts contain no sleep scores, times or other health metrics']) expect(copy).toContain(phrase);

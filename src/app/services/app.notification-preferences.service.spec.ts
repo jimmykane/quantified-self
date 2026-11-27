@@ -12,6 +12,8 @@ vi.mock('app/firebase/firestore', async original => ({ ...await original<typeof 
   doc: vi.fn((_db, path) => ({ path })), onSnapshot: vi.fn(), runTransaction: vi.fn(), serverTimestamp: () => 'server-time' }));
 const tick = async () => { for (let n = 0; n < 15; n++) await Promise.resolve(); };
 const preference = (enabled: boolean, revision: number) => ({ schemaVersion: 1, enabled, revision });
+const morningIndex = NOTIFICATION_CATEGORIES.findIndex(category => category.id === MORNING_CHECK_IN_CATEGORY);
+const morningRef = { path: 'users/owner/notificationPreferences/morning_check_in' };
 let owner: { uid: string; getIdTokenResult: ReturnType<typeof vi.fn> };
 let auth: { currentUser: typeof owner | null };
 let owners: BehaviorSubject<typeof owner | null>;
@@ -118,6 +120,7 @@ describe('account notification categories', () => {
   });
   it('enables standard categories atomically using fresh revisions and leaves Morning check-in off', async () => {
     const service = setup(); await tick(); emit(undefined);
+    emit(preference(false, 1), undefined, morningIndex);
     tx.get.mockImplementation(async ref => ({ data: () => preference(false, ref.path.endsWith('activity_sync') ? 8 : 2) }));
     tx.set.mockImplementation(() => expect(tx.get).toHaveBeenCalledTimes(NOTIFICATION_CATEGORIES.length - 1));
     expect(await service.enableStandardCategories()).toBe(true);
@@ -189,25 +192,61 @@ describe('account notification categories', () => {
     emit(undefined, { fromCache: true, hasPendingWrites: false }); expect(service.status()).toBe('loading');
     emit(undefined, { fromCache: false, hasPendingWrites: true }); expect(service.status()).toBe('loading');
     emit(undefined); expect(service.isEnabled('history_import')).toBe(true); expect(service.canEdit()).toBe(true);
+    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(true);
     expect(runTransaction).not.toHaveBeenCalled();
     emit(preference(false, 1)); expect(service.isEnabled('history_import')).toBe(false);
   });
-  it('saves the current device time zone only on explicit Morning check-in opt-in', async () => {
+  it('saves the first verified notification device’s time zone once for the default-on category', async () => {
     const service = setup(); await tick(); emit(undefined);
-    const refPath = 'users/owner/notificationPreferences/morning_check_in';
-    const ref = { path: refPath };
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(false);
-    expect(await service.setEnabled(MORNING_CHECK_IN_CATEGORY, true)).toBe(true);
-    expect(tx.set).toHaveBeenLastCalledWith(ref,
+    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(true);
+    expect(runTransaction).not.toHaveBeenCalled();
+    await Promise.all([service.initializeMorningCheckIn('owner'), service.initializeMorningCheckIn('owner')]);
+    await service.initializeMorningCheckIn('owner');
+    expect(runTransaction).toHaveBeenCalledOnce();
+    expect(tx.set).toHaveBeenCalledExactlyOnceWith(morningRef,
       { ...preference(true, 1), timeZone, updatedAt: 'server-time' });
     expect(service.categories().find(category => category.id === MORNING_CHECK_IN_CATEGORY)?.timeZone).toBe(timeZone);
-    saved = { ...preference(true, 1), timeZone };
-    tx.get.mockImplementation(async ref => ({ data: () => ref.path === refPath ? saved : undefined }));
-    expect(await service.enableStandardCategories()).toBe(true);
-    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(true);
+    expect(service.message()).toBe('');
+  });
+  it('carries forward an explicit opt-out from the retired Sleep synced alert', async () => {
+    const service = setup(); await tick(); emit(undefined);
+    tx.get.mockImplementation(async ref => ({ data: () => ref.path.endsWith('/sleep_sync') ? preference(false, 4) : undefined }));
+    await service.initializeMorningCheckIn('owner');
+    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(false);
+    expect(tx.set).toHaveBeenCalledExactlyOnceWith(morningRef, { ...preference(false, 1), updatedAt: 'server-time' });
+  });
+  it.each([preference(false, 1), { ...preference(true, 1), timeZone: 'Pacific/Auckland' }])(
+    'preserves a saved Morning check-in choice from another device %j', async existing => {
+      const service = setup(); await tick(); emit(undefined);
+      saved = existing;
+      await service.initializeMorningCheckIn('owner');
+      expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(existing.enabled);
+      expect(service.categories().find(category => category.id === MORNING_CHECK_IN_CATEGORY)?.timeZone)
+        .toBe('timeZone' in existing ? existing.timeZone : undefined);
+      expect(tx.set).not.toHaveBeenCalled();
+    });
+  it('lets the user turn Morning check-in off before any device has initialized it and back on with this time zone', async () => {
+    const service = setup(); await tick(); emit(undefined);
     expect(await service.setEnabled(MORNING_CHECK_IN_CATEGORY, false)).toBe(true);
-    expect(tx.set).toHaveBeenLastCalledWith(ref, { ...preference(false, 2), updatedAt: 'server-time' });
+    expect(tx.set).toHaveBeenLastCalledWith(morningRef, { ...preference(false, 1), updatedAt: 'server-time' });
+    await service.initializeMorningCheckIn('owner');
+    expect(tx.set).toHaveBeenCalledOnce();
+    saved = preference(false, 1);
+    expect(await service.setEnabled(MORNING_CHECK_IN_CATEGORY, true)).toBe(true);
+    expect(tx.set).toHaveBeenLastCalledWith(morningRef,
+      { ...preference(true, 2), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, updatedAt: 'server-time' });
+  });
+  it('does not seed a preference if the device and current account diverge while reading', async () => {
+    const service = setup(); await tick(); emit(undefined);
+    tx.get.mockImplementation(async () => {
+      auth.currentUser = null; owners.next(null); return { data: () => undefined };
+    });
+    await service.initializeMorningCheckIn('another-owner');
+    expect(runTransaction).not.toHaveBeenCalled();
+    await service.initializeMorningCheckIn('owner');
+    expect(tx.set).not.toHaveBeenCalled();
+    expect(service.status()).toBe('signed-out');
   });
   it('writes only explicit changes and increments the server revision across off/on toggles', async () => {
     const service = setup(); await tick(); emit(undefined);

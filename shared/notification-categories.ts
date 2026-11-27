@@ -12,7 +12,7 @@ export const NOTIFICATION_CATEGORIES = [{
   description: 'Results of sends you ask about, and grouped automatic sending failures that need attention.',
 }, {
   id: MORNING_CHECK_IN_CATEGORY, label: 'Morning check-in',
-  description: 'Get a Good morning alert when today’s main sleep syncs from 05:00 until noon. Turning it on saves this device’s time zone.',
+  description: 'Get a Good morning alert when today’s main sleep syncs from 05:00 until noon in your saved time zone.',
 }, {
   id: 'training_sync', label: 'Training sync',
   description: 'Grouped alerts when upcoming workout sync needs attention or a service needs reconnecting.',
@@ -40,10 +40,10 @@ export function isMorningCheckInTimeZone(value: unknown): value is string {
   catch { return false; }
 }
 
-/** A missing Morning check-in preference is off. Malformed data always fails closed. */
+/** Categories default on. Morning check-in still needs a saved time zone before it can send. */
 export function readNotificationCategoryPreference(value: unknown, category?: NotificationCategoryId): NotificationCategoryPreference | null {
   const morningCheckIn = category === MORNING_CHECK_IN_CATEGORY;
-  if (value === undefined) return { enabled: !morningCheckIn, revision: 0 };
+  if (value === undefined) return { enabled: true, revision: 0 };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   if (row.schemaVersion !== 1 || typeof row.enabled !== 'boolean' || !Number.isSafeInteger(row.revision)

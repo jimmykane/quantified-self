@@ -58,7 +58,7 @@ describe('notification Settings', () => {
     expect(fixture.nativeElement.textContent).toContain('New activities synced');
     expect(fixture.nativeElement.textContent).toContain('Activity delivery');
     expect(fixture.nativeElement.textContent).toContain('History imports are excluded');
-    expect(fixture.nativeElement.textContent).toContain('Morning check-in starts off');
+    expect(fixture.nativeElement.textContent).toContain('Morning check-in is on by default');
     let reject!: (error: Error) => void;
     preferences.setEnabled.mockImplementationOnce(() => new Promise((_done, fail) => { reject = fail; }));
     toggle.checked = false;

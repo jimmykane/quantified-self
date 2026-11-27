@@ -174,12 +174,12 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `morning_check_in` (Morning check-in), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). Standard categories default on, including for existing accounts. **Morning check-in is opt-in** and the tray’s bulk enable action leaves that choice to Settings. Category preferences are account-wide across devices and sites;
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `morning_check_in` (Morning check-in), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). Categories default on, including for existing accounts. The tray’s bulk enable action preserves the saved Morning check-in choice. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
 History import also requires consent for the specific import. Self-tests bypass categories.
 
 An owner-scoped private leaf at `users/{uid}/notificationPreferences/{category}` stores `schemaVersion: 1`,
-`enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means revision zero, with Morning check-in off and standard categories on. Read failures and malformed records cannot establish a default. Rules allow known-category
+`enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means enabled at revision zero. Morning check-in also requires a saved time zone to send. Read failures and malformed records cannot establish a default. Rules allow known-category
 owner get/create/update, prohibit impersonated writes, listing, descendants and deletion/reset, and fence missing or
 deleting accounts. Changes use client transactions rather than a new callable. Each actual toggle increments the
 revision; listener hydration, unchanged selections and retries after another device already saved the value do not.
@@ -254,12 +254,15 @@ to public connection-state meanings, provider credentials/consent, account delet
 
 ## Morning check-in
 
-The **Good morning** notification is an opt-in account category, `morning_check_in`. Its enabled revision stores
-the browser’s named IANA time zone in the private preference leaf. Turning it off removes the zone, and turning
-it on again uses that device’s current time zone. Firestore Rules require a bounded time zone identifier on an
-enabled revision and the application validates it against the runtime’s IANA time zone database. Browser permission
-and device registration are still required. Older clients can continue to read or write the retired `sleep_sync`
-preference. Morning check-in takes consent only from its own explicit preference.
+The **Good morning** notification is a default-on account category, `morning_check_in`. The first successfully
+verified Web Push registration on the updated frontend saves the browser’s named IANA time zone at revision one
+if the preference is missing. Existing registrations initialize the preference when their users next open the
+updated app on a registered device. The transaction preserves any saved Morning check-in setting. If there is no
+setting yet, it carries forward an explicit opt-out from Sleep synced. Turning the category off removes the zone.
+Turning it on again saves that device’s current time zone.
+Browser permission and a verified registration are required. Firestore Rules require a bounded time zone identifier
+on an enabled revision and the application validates it against the runtime’s IANA time zone database. Older clients
+can still manage the retired `sleep_sync` preference.
 
 The sender requires unconditional Remote Config defaults `web_push_enabled=true` and
 `web_push_morning_check_in_enabled=true`. A missing, conditional or false switch keeps it disabled.
@@ -271,12 +274,12 @@ are skipped. There is no later catch-up delivery. Notification failures leave su
 outcome intact.
 
 Admission checks queue ownership and revision, canonical sleep metadata, provider connection and generation, account
-deletion guards, the opted-in preference, and the device registrations. It suppresses sleeps covered by a connection
+deletion guards, the enabled preference and its saved time zone, and the device registrations. It suppresses sleeps covered by a connection
 history or direct provider backfill cutoff, including delayed Garmin callbacks. Initial connection and reconnection
 fences still apply. The account receipt at `users/{uid}/pushState/sleepReady` retains its storage key for compatibility
 with the prior sender. Its date now records the local check-in date. It limits delivery to one alert per date,
 with at least 20 hours between admissions and overlapping sleeps suppressed across providers. The shared minute
-worker can clear legacy pending records, which lack Morning check-in consent.
+worker can clear legacy pending records, which lack the Morning check-in time zone.
 
 The sender claims before transport and checks the preference revision, time zone, morning window, provider authority
 and device generation again before sending. A claim expires after ten minutes or at local noon, whichever is
@@ -298,9 +301,11 @@ Rollout after separate approval:
 3. Apply and read back the existing Web Push monitoring bundle. Coverage is **updated in source** for
    `[MorningCheckInPush]` admission and transport outcomes, using the existing metric, policy and dashboard.
    The shared worker retains backlog and heartbeat coverage. Provider ingestion telemetry and retry policies are unchanged.
-4. Enable `web_push_morning_check_in_enabled` for the shared backend after verification. On an already connected
-   opted-in account, verify a new main sleep during the saved local morning, the default tap, both buttons where
-   available, and account-wide opt-out. Verify that late sync, old consent and general bulk enable remain silent.
+4. Enable `web_push_morning_check_in_enabled` for the shared backend after verification. Open the updated app on
+   an already connected account’s registered device and verify that Morning check-in defaults on and saves its time
+   zone. Verify a new main sleep during the saved local morning, the default tap, and both buttons where available.
+   Verify that late sync and queued legacy batches stay silent, and that turning the tray back on preserves an
+   explicit Morning check-in opt-out.
 
 The feature creates no new scheduler, queue, external credential or backfill job. The existing notification state
 retention and user-root cleanup cover its receipts and preferences. Monitoring activation, sender deployment and the

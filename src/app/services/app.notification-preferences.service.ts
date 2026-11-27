@@ -26,12 +26,13 @@ export class AppNotificationPreferencesService {
   readonly reloadRequired = signal(false);
   readonly canEdit = computed(() => this.status() === 'ready' && !this.saving());
   readonly categories = computed(() => NOTIFICATION_CATEGORIES.map(category => ({
-    ...category, enabled: this.preferences()[category.id]?.enabled ?? (category.id !== MORNING_CHECK_IN_CATEGORY),
+    ...category, enabled: this.preferences()[category.id]?.enabled ?? true,
     timeZone: this.preferences()[category.id]?.timeZone,
   })));
   private owner: FirebaseUserType | null = null;
   private epoch = 0;
   private listeners: (() => void)[] = [];
+  private initializingMorningCheckInEpoch?: number;
 
   constructor() {
     this.destroy.onDestroy(() => { this.epoch++; this.stopListening(); });
@@ -114,7 +115,38 @@ export class AppNotificationPreferencesService {
       ? current : { ...current, [category]: preference });
   }
 
-  /** The tray enables standard categories atomically and leaves Morning check-in to its own switch. */
+  /** Initializes the missing preference from a verified notification device. */
+  async initializeMorningCheckIn(expectedUid: string): Promise<void> {
+    const owner = this.owner, epoch = this.epoch;
+    if (!owner || owner.uid !== expectedUid || !this.current(owner, epoch) || this.reloadRequired()
+      || this.status() === 'impersonating' || this.initializingMorningCheckInEpoch === epoch
+      || (this.preferences()[MORNING_CHECK_IN_CATEGORY]?.revision ?? 0) > 0) return;
+    this.initializingMorningCheckInEpoch = epoch;
+    try {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!isMorningCheckInTimeZone(timeZone)) return;
+      const preference = await runTransaction(this.firestore, async tx => {
+        if (!this.current(owner, epoch)) return null;
+        const ref = doc(this.firestore, notificationPreferencePath(owner.uid, MORNING_CHECK_IN_CATEGORY));
+        const current = readNotificationCategoryPreference((await tx.get(ref)).data(), MORNING_CHECK_IN_CATEGORY);
+        if (!this.current(owner, epoch) || !current || current.revision > 0) return current;
+        // Preserve an explicit opt-out from the retired alert when first initializing its replacement.
+        const legacyRef = doc(this.firestore, `users/${owner.uid}/notificationPreferences/sleep_sync`);
+        const legacy = readNotificationCategoryPreference((await tx.get(legacyRef)).data());
+        if (!this.current(owner, epoch) || !legacy) return null;
+        const next = { enabled: legacy.enabled, revision: 1, ...(legacy.enabled ? { timeZone } : {}) };
+        tx.set(ref, { schemaVersion: 1, ...next, updatedAt: serverTimestamp() });
+        return next;
+      });
+      if (preference && this.current(owner, epoch)) this.acceptPreference(MORNING_CHECK_IN_CATEGORY, preference);
+    } catch (error) {
+      if (this.current(owner, epoch)) this.requireAppReload(error);
+    } finally {
+      if (this.initializingMorningCheckInEpoch === epoch) this.initializingMorningCheckInEpoch = undefined;
+    }
+  }
+
+  /** The tray enables standard categories atomically and preserves the Morning check-in preference. */
   async enableStandardCategories(expectedUid = this.owner?.uid): Promise<boolean> {
     const owner = this.owner, epoch = this.epoch;
     if (!owner || owner.uid !== expectedUid || !this.current(owner, epoch) || !this.canEdit()) return false;

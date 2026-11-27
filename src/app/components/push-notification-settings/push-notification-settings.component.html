@@ -51,7 +51,7 @@
 </section>
 <section class="notification-categories" aria-labelledby="notification-categories-title">
   <h3 id="notification-categories-title">Notification categories</h3>
-  <p class="mat-body-small">These preferences apply across your account. Morning check-in starts off. Each device needs notification permission.</p>
+  <p class="mat-body-small">These preferences apply across your account. Morning check-in is on by default. Each device needs notification permission.</p>
   @for (category of preferences.categories(); track category.id) {
     <div>
       <mat-slide-toggle [checked]="category.enabled" [disabled]="!preferences.canEdit()"

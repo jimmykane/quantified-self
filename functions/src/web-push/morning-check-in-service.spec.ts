@@ -91,7 +91,7 @@ describe('Morning check-in notifications', () => {
     h.advance(MORNING_CHECK_IN.cooldownMs); await h.admit(suunto); await h.send(); expect(h.deps.send).toHaveBeenCalledOnce();
   });
   it.each([undefined, { schemaVersion: 1, enabled: true, revision: 1 },
-    { schemaVersion: 1, enabled: true, revision: 1, timeZone: 'Mars/Olympus' }])('requires valid explicit opt-in even with legacy consent: %j', async value => {
+    { schemaVersion: 1, enabled: true, revision: 1, timeZone: 'Mars/Olympus' }])('requires a saved, valid time zone even when the category defaults on: %j', async value => {
     const h = harness();
     h.rows.set('users/owner/notificationPreferences/sleep_sync', { schemaVersion: 1, enabled: true, revision: 4 });
     h.rows.set(preferencePath, value);
