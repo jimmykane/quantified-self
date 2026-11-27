@@ -34,8 +34,12 @@ export function notificationPreferencePath(uid: string, category: NotificationCa
   return `users/${uid}/notificationPreferences/${category}`;
 }
 
-export function isMorningCheckInTimeZone(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > 80 || !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(value)) return false;
+function isMorningCheckInTimeZoneIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 80 && /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(value);
+}
+
+export function isSupportedMorningCheckInTimeZone(value: unknown): value is string {
+  if (!isMorningCheckInTimeZoneIdentifier(value)) return false;
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; }
   catch { return false; }
 }
@@ -51,7 +55,8 @@ export function readNotificationCategoryPreference(value: unknown, category?: No
     || Object.keys(row).some(key => !['schemaVersion', 'enabled', 'revision', 'updatedAt', 'timeZone'].includes(key))) return null;
   const preference = { enabled: row.enabled, revision: row.revision as number };
   if (morningCheckIn && row.enabled) {
-    return isMorningCheckInTimeZone(row.timeZone) ? { ...preference, timeZone: row.timeZone } : null;
+    // Devices can have different time zone databases. A saved choice must still be editable.
+    return isMorningCheckInTimeZoneIdentifier(row.timeZone) ? { ...preference, timeZone: row.timeZone } : null;
   }
   return 'timeZone' in row ? null : preference;
 }

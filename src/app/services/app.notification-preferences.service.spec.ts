@@ -237,6 +237,16 @@ describe('account notification categories', () => {
     expect(tx.set).toHaveBeenLastCalledWith(morningRef,
       { ...preference(true, 2), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, updatedAt: 'server-time' });
   });
+  it('lets the user turn Morning check-in off from a device without the saved time zone', async () => {
+    const service = setup(); await tick(); emit(undefined);
+    saved = { ...preference(true, 1), timeZone: 'Mars/Olympus' };
+    emit(saved, undefined, morningIndex);
+
+    expect(service.status()).toBe('ready');
+    expect(await service.setEnabled(MORNING_CHECK_IN_CATEGORY, false)).toBe(true);
+    expect(service.isEnabled(MORNING_CHECK_IN_CATEGORY)).toBe(false);
+    expect(tx.set).toHaveBeenCalledExactlyOnceWith(morningRef, { ...preference(false, 2), updatedAt: 'server-time' });
+  });
   it('does not seed a preference if the device and current account diverge while reading', async () => {
     const service = setup(); await tick(); emit(undefined);
     tx.get.mockImplementation(async () => {

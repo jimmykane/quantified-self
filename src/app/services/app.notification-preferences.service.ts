@@ -3,7 +3,7 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, doc, onSnapshot, runTransaction, serverTimestamp } from 'app/firebase/firestore';
-import { MORNING_CHECK_IN_CATEGORY, NOTIFICATION_CATEGORIES, isMorningCheckInTimeZone, isNotificationCategory,
+import { MORNING_CHECK_IN_CATEGORY, NOTIFICATION_CATEGORIES, isNotificationCategory, isSupportedMorningCheckInTimeZone,
   notificationPreferencePath, readNotificationCategoryPreference,
   type NotificationCategoryId, type NotificationCategoryPreference } from '@shared/notification-categories';
 import { AppWindowService } from './app.window.service';
@@ -124,7 +124,7 @@ export class AppNotificationPreferencesService {
     this.initializingMorningCheckInEpoch = epoch;
     try {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (!isMorningCheckInTimeZone(timeZone)) return;
+      if (!isSupportedMorningCheckInTimeZone(timeZone)) return;
       const preference = await runTransaction(this.firestore, async tx => {
         if (!this.current(owner, epoch)) return null;
         const ref = doc(this.firestore, notificationPreferencePath(owner.uid, MORNING_CHECK_IN_CATEGORY));
@@ -188,7 +188,7 @@ export class AppNotificationPreferencesService {
     try {
       const timeZone = enabled && category === MORNING_CHECK_IN_CATEGORY
         ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
-      if (enabled && category === MORNING_CHECK_IN_CATEGORY && !isMorningCheckInTimeZone(timeZone)) {
+      if (enabled && category === MORNING_CHECK_IN_CATEGORY && !isSupportedMorningCheckInTimeZone(timeZone)) {
         this.message.set('Could not determine this device’s time zone for Morning check-in.');
         return false;
       }

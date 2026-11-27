@@ -33,13 +33,19 @@ export function morningCheckInCandidate(session: SleepSession, now: number): Mor
     startMs: session.startTimeMs, endMs: session.endTimeMs, createdAtMs: session.createdAtMs };
 }
 
-/** Use the opted-in account zone for both the completed sleep and the dispatch window. */
+/** Use the saved account zone for both the completed sleep and the dispatch window. */
 export function morningCheckInWindow(endMs: number, nowMs: number, timeZone: string): { localDate: string; ttlSeconds: number } | null {
   if (!Number.isFinite(new Date(nowMs).getTime()) || !Number.isFinite(new Date(endMs).getTime()) || endMs > nowMs) return null;
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  });
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    });
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
   const parts = (ms: number) => Object.fromEntries(formatter.formatToParts(ms).map(({ type, value }) => [type, value]));
   const localDate = ({ year, month, day }: ReturnType<typeof parts>) => `${year}-${month}-${day}`;
   const now = parts(nowMs);

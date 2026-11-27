@@ -16,7 +16,7 @@ function harness(initialNow = now) {
     schemaVersion: 1, generation, origin, vapidPublicKey: publicKey, endpoint: 'https://web.push.apple.com/private-canary',
     keys: { p256dh: publicKey, auth: 'A'.repeat(22) },
   }]]);
-  const hooks = { afterCommit: (_count: number) => {} };
+  const hooks: { beforeRead?: (path: string) => void; afterCommit: (count: number) => void } = { afterCommit: () => {} };
   const snapshot = (path: string) => ({ id: path.split('/').at(-1), exists: rows.has(path), data: () => structuredClone(rows.get(path)) });
   const db = { doc: (path: string) => ({ path }), collection: (path: string) => ({
     doc: (id: string) => ({ path: `${path}/${id}` }),
@@ -28,6 +28,7 @@ function harness(initialNow = now) {
         get: async (ref: any) => {
           if (writes.length) throw new Error('Read after write');
           reads.push(ref.path ?? ref.query);
+          hooks.beforeRead?.(ref.path ?? ref.query);
           if (ref.query) return { docs: [...rows.keys()].filter(path => path.startsWith(ref.query + '/') && ref.values.includes(rows.get(path).origin))
             .slice(0, ref.limit).map(snapshot) };
           return snapshot(ref.path);
@@ -118,6 +119,20 @@ describe('Morning check-in notifications', () => {
     await late.send();
     expect(late.deps.send).not.toHaveBeenCalled();
     expect(late.state().pending).toBeUndefined();
+  });
+  it('keeps the next morning eligible when a sleep import’s admission reads cross noon', async () => {
+    const h = harness(Date.UTC(2026, 10, 16, 11, 59, 55));
+    h.hooks.beforeRead = path => {
+      if (path === `sleepSyncQueue/${h.queue.id}`) h.advance(5000);
+    };
+
+    expect(await h.admit()).toBeUndefined();
+    expect(h.state()).toBeUndefined();
+    h.hooks.beforeRead = undefined;
+    h.advance(17 * 3600000);
+    expect(await h.admit(h.seed())).toBeTruthy();
+    await h.send();
+    expect(h.deps.send).toHaveBeenCalledOnce();
   });
   it('drains a legacy scheduled batch without turning it into a Morning check-in', async () => {
     const h = harness(); await h.admit();

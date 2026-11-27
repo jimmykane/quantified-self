@@ -261,8 +261,9 @@ updated app on a registered device. The transaction preserves any saved Morning 
 setting yet, it carries forward an explicit opt-out from Sleep synced. Turning the category off removes the zone.
 Turning it on again saves that device’s current time zone.
 Browser permission and a verified registration are required. Firestore Rules require a bounded time zone identifier
-on an enabled revision and the application validates it against the runtime’s IANA time zone database. Older clients
-can still manage the retired `sleep_sync` preference.
+on an enabled revision. The browser validates the zone it captures, and the sender skips zones its runtime cannot
+resolve. The saved preference remains editable on browsers with different time zone databases. Older clients can
+still manage the retired `sleep_sync` preference.
 
 The sender requires unconditional Remote Config defaults `web_push_enabled=true` and
 `web_push_morning_check_in_enabled=true`. A missing, conditional or false switch keeps it disabled.
@@ -278,8 +279,9 @@ deletion guards, the enabled preference and its saved time zone, and the device 
 history or direct provider backfill cutoff, including delayed Garmin callbacks. Initial connection and reconnection
 fences still apply. The account receipt at `users/{uid}/pushState/sleepReady` retains its storage key for compatibility
 with the prior sender. Its date now records the local check-in date. It limits delivery to one alert per date,
-with at least 20 hours between admissions and overlapping sleeps suppressed across providers. The shared minute
-worker can clear legacy pending records, which lack the Morning check-in time zone.
+with at least 20 hours between admissions and overlapping sleeps suppressed across providers. Admission rechecks
+the morning window after reading Firestore so a read that crosses noon leaves the next morning eligible. The
+shared minute worker can clear legacy pending records, which lack the Morning check-in time zone.
 
 The sender claims before transport and checks the preference revision, time zone, morning window, provider authority
 and device generation again before sending. A claim expires after ten minutes or at local noon, whichever is

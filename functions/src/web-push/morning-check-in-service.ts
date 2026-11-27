@@ -65,10 +65,11 @@ export async function admitMorningCheckIn(uid: string, candidate: MorningCheckIn
   if (![uid, candidate.sessionId, queue.id].every(documentId) || queue.morningCheckInOrigin !== 'live' || !liveSleepQueue(queue)) return;
   const config = await deps.configuration();
   if (!config.enabled) return;
-  const { db } = deps; const now = deps.now(); const ref = db.doc(statePath(uid));
-  if (!Number.isFinite(queue.dateCreated) || queue.dateCreated > now || queue.dateCreated < now - MORNING_CHECK_IN.recentMs
-    || !Number.isFinite(candidate.createdAtMs) || candidate.createdAtMs > now || candidate.createdAtMs < now - MORNING_CHECK_IN.expiryMs) return;
+  const { db } = deps; const ref = db.doc(statePath(uid));
   return db.runTransaction(async tx => {
+    const now = deps.now();
+    if (!Number.isFinite(queue.dateCreated) || queue.dateCreated > now || queue.dateCreated < now - MORNING_CHECK_IN.recentMs
+      || !Number.isFinite(candidate.createdAtMs) || candidate.createdAtMs > now || candidate.createdAtMs < now - MORNING_CHECK_IN.expiryMs) return;
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, now);
     if (guard.shouldSkip) return;
     const [snapshot, preferenceSnapshot] = await Promise.all([
@@ -94,9 +95,14 @@ export async function admitMorningCheckIn(uid: string, candidate: MorningCheckIn
     const targets = registrations.docs.filter(doc => isPushId(doc.id) && isPushRegistration(doc.data())
       && doc.data().vapidPublicKey === config.publicKey).map(doc => ({ id: doc.id, generation: doc.data().generation as string }));
     if (!targets.length) return;
+    // Slow reads can cross noon. Check before using up the account's daily slot and cooldown.
+    const admittedAt = deps.now();
+    if (admittedAt - queue.dateCreated > MORNING_CHECK_IN.recentMs
+      || admittedAt - candidate.createdAtMs > MORNING_CHECK_IN.expiryMs
+      || !morningCheckInWindow(candidate.endMs, admittedAt, preference.timeZone)) return;
     const pending: Batch = { id: randomUUID(), candidate, connectionGeneration: generation,
-      categoryRevision: preference.revision, timeZone: preference.timeZone, localDate: window.localDate, dueAt: now, targets };
-    tx.set(ref, { sleepDate: window.localDate, endMs: candidate.endMs, admittedAt: now, pending, expireAt: notificationExpiry(now) });
+      categoryRevision: preference.revision, timeZone: preference.timeZone, localDate: window.localDate, dueAt: admittedAt, targets };
+    tx.set(ref, { sleepDate: window.localDate, endMs: candidate.endMs, admittedAt, pending, expireAt: notificationExpiry(admittedAt) });
     return pending.id;
   });
 }
