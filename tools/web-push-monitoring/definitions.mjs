@@ -118,17 +118,17 @@ export function buildWebPushMonitoring(project, channel) {
   const sleepName = 'qs_sleep_sync_push_outcomes_v1';
   const sleepBase = `resource.type="cloud_run_revision" resource.labels.project_id="${project}" resource.labels.location="europe-west2"`;
   const sleepFilter = `metric.type="logging.googleapis.com/user/${sleepName}" ${sleepBase}`;
-  bundle.metrics.push({ name: sleepName, description: `[${OWNER}] Sleep notification admission and send outcomes. Acceptance is not device display.`,
-    filter: `${sleepBase} jsonPayload.message:"[SleepSyncPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
+  bundle.metrics.push({ name: sleepName, description: `[${OWNER}] Morning check-in admission and send outcomes. Acceptance is not device display.`,
+    filter: `${sleepBase} jsonPayload.message:"[MorningCheckInPush]" jsonPayload.telemetryVersion=1 jsonPayload.phase=("admission" OR "send" OR "sweep") jsonPayload.outcome=("accepted" OR "expired" OR "failed" OR "cancelled")`,
     metricDescriptor: { metricKind: 'DELTA', valueType: 'INT64', unit: '1', labels: ['outcome', 'phase'].map(key => ({ key, valueType: 'STRING', description: `Fixed ${key} category` })) },
     labelExtractors: { outcome: 'EXTRACT(jsonPayload.outcome)', phase: 'EXTRACT(jsonPayload.phase)' } });
-  bundle.policies.push({ displayName: 'QS Web Push: Sleep sender failures', userLabels: { managed_by: OWNER, policy_id: 'sleep-sender' },
+  bundle.policies.push({ displayName: 'QS Web Push: Morning check-in sender failures', userLabels: { managed_by: OWNER, policy_id: 'sleep-sender' },
     enabled: true, severity: 'WARNING', combiner: 'OR', notificationChannels: channel ? [channel] : [],
-    conditions: [failureCondition('Repeated sleep notification admission or send failures', `${sleepFilter} metric.labels.outcome="failed"`)],
+    conditions: [failureCondition('Repeated Morning check-in admission or send failures', `${sleepFilter} metric.labels.outcome="failed"`)],
     alertStrategy: { autoClose: '7200s', notificationPrompts: ['OPENED', 'CLOSED'] },
-    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Sleep sender failures',
-      content: `Sleep sends directly from processSleepSyncTask after persistence. Notification errors never retry the successful import; the shared worker only drains pre-migration pending sleeps. Check web_push_sleep_sync_enabled, web_push_enabled and key pairing. Naps, history, initial backfills, duplicate nights, cooldown, cancellation and expired subscriptions are expected. Sleep ingestion retains its existing Health/Sleep monitoring. Claims are never replayed after ambiguous sends. Never clear receipts or expose sleep data, identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
-  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 52, width: 12, height: 4, widget: { title: 'Sleep notification outcomes — attempts, not display',
+    documentation: { mimeType: 'text/markdown', subject: '[QS Web Push] Morning check-in sender failures',
+      content: `Morning check-in sends directly from processSleepSyncTask after persistence. Notification errors never retry the successful import. The shared worker clears retired pending alerts without sending them. Check web_push_morning_check_in_enabled, web_push_enabled and key pairing. Opt-outs, arrivals outside the local morning, naps, history, initial backfills, duplicate nights, cooldown, cancellation and expired subscriptions are expected. Sleep ingestion retains its existing Health/Sleep monitoring. Claims are never replayed after ambiguous sends. Never clear receipts or expose sleep data, identifiers, endpoints or raw errors. [Runbook](${runbook})` } });
+  bundle.dashboard.mosaicLayout.tiles.push({ yPos: 52, width: 12, height: 4, widget: { title: 'Morning check-in outcomes',
     xyChart: { dataSets: [{ plotType: 'LINE', timeSeriesQuery: { timeSeriesFilter: { filter: sleepFilter,
       aggregation: { ...aggregate, groupByFields: ['metric.label.outcome', 'metric.label.phase'] } }, unitOverride: '1' } }],
       yAxis: { label: 'Count', scale: 'LINEAR' } } } });

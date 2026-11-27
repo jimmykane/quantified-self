@@ -73,7 +73,7 @@
 
       @if (user) {
       <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
-        [eventUser]="targetUser || user">
+        [eventUser]="targetUser || user" [focusReadiness]="(route.queryParamMap | async)?.get('focus') === 'readiness'">
       </app-summaries>
       }
 

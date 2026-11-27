@@ -233,13 +233,18 @@ export class AppPushService {
         // Optional labels must not block a valid subscription. Update-only cannot recreate a removed document.
         void updateDoc(ref, { device: pushDeviceInfo(window.navigator), updatedAt: serverTimestamp() }).catch(() => undefined);
       }
-      if (this.current(owner, epoch)) this.state.set('enabled');
+      if (this.current(owner, epoch)) this.markEnabled(owner);
     } catch { if (this.epoch === epoch) {
       this.unavailableReason.set(this.retryableEnable()
         ? 'Could not check this device. Turn On to retry.' : 'Could not check notification availability. Retry to check again.');
       this.state.set('unavailable');
     } }
   }
+  private markEnabled(owner: FirebaseUserType): void {
+    this.state.set('enabled');
+    if (isAutomaticPushOrigin(this.origin())) void this.preferences.initializeMorningCheckIn(owner.uid);
+  }
+
   private encodeKey(key: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(key))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
@@ -327,7 +332,7 @@ export class AppPushService {
         if (!this.siteAvailable() || this.config.webPushPublicKey() !== key) throw new Error('Site configuration changed.');
         await this.persist(owner, id, subscription, epoch);
       } catch (error) { await subscription.unsubscribe(); throw error; }
-      this.registered.set(true); this.state.set('enabled'); this.message.set('Notifications enabled on this device.');
+      this.registered.set(true); this.markEnabled(owner); this.message.set('Notifications enabled on this device.');
       this.invitation.recordDeviceChoice(owner.uid, 'enabled');
     } catch { this.message.set('Notifications could not be enabled. Check permission and try again.'); throw new Error('Notification enable failed.'); }
     finally { this.operation.set(null); void this.refresh(); }

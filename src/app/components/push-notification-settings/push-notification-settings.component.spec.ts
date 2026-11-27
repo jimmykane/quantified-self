@@ -53,12 +53,12 @@ describe('notification Settings', () => {
     expect(fixture.debugElement.queryAll(By.css('mat-slide-toggle'))).toHaveLength(NOTIFICATION_CATEGORIES.length);
     expect(fixture.nativeElement.textContent).toContain('Training sync');
     expect(fixture.nativeElement.textContent).toContain('Training send results');
-    expect(fixture.nativeElement.textContent).toContain('Sleep synced');
+    expect(fixture.nativeElement.textContent).toContain('Morning check-in');
     expect(fixture.nativeElement.textContent).toContain('Connection issues');
     expect(fixture.nativeElement.textContent).toContain('New activities synced');
     expect(fixture.nativeElement.textContent).toContain('Activity delivery');
     expect(fixture.nativeElement.textContent).toContain('History imports are excluded');
-    expect(fixture.nativeElement.textContent).toContain('New categories are on by default');
+    expect(fixture.nativeElement.textContent).toContain('Morning check-in is on by default');
     let reject!: (error: Error) => void;
     preferences.setEnabled.mockImplementationOnce(() => new Promise((_done, fail) => { reject = fail; }));
     toggle.checked = false;

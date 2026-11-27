@@ -2,7 +2,7 @@
 
 ## Current sending, queue and retention model
 
-Completed manual activity-send results, Sleep saves, History import completion and self-tests send directly from their
+Completed manual activity-send results, Morning check-in, History import completion and self-tests send directly from their
 existing handler after the underlying work commits. Explicit Training send results send from the existing status
 observer as soon as all captured workouts have terminal outcomes. Training still needs temporary outcome tracking
 across workouts; it creates no new scheduled notification job. Background Training success remains silent.
@@ -11,7 +11,7 @@ Only alerts requiring grouping use deferred work: new activities, automatic acti
 attention and connection issues. These share **one `pushState.dueAt` queue and one minute worker**,
 `sendActivitySyncNotifications`. Each category retains its own preference, batching window, source checks and rate
 limits. The worker queries at most 25 due records, caches configuration only for categories with work, and shares
-one backlog/heartbeat policy. Old ready Sleep/Training records can drain through the same worker during migration.
+one backlog/heartbeat policy. The shared worker clears retired Sleep synced batches and drains older Training results.
 The two former delivery/Training scheduled Functions are removed from source. Route notifications remain reverted.
 
 The existing handlers use a shared Web Push transport and claim before network I/O. Direct manual results retain
@@ -57,7 +57,7 @@ retrying that run or an older one stays silent. [Firestore TTL documentation](ht
 
 ## Product boundary
 
-Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Sleep synced sends directly for newly saved recent main sleeps. Connection issues groups new reconnect-required episodes in the shared minute worker. Billing, marketing and reminder categories are not implemented. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
+Settings → Notifications supports explicit device opt-in, disable, and a self-test for every signed-in account. A separately gated, explicit per-import option can notify the initiating device when a manually started Suunto, COROS or Wahoo activity-history import ends. A separate New activities synced category groups recent live-provider imports. Activity delivery covers opted-in manual send results and grouped automatic-send failures. Training sync groups actionable upcoming-workout failures and connection problems. Training send results reports explicit sends, initial Enable sync and manual retries. Morning check-in sends after a newly saved main sleep during the opted-in account’s local morning. Connection issues groups new reconnect-required episodes in the shared minute worker. Billing and marketing alerts are outside this notification system. Settings lists account-owned device registrations with individual disable controls. There is no notification inbox; automatic alerts use bounded private pending batches. Browser permission alone is not account consent. Managed impersonation sessions cannot register devices or send tests.
 
 Production and beta share Firebase and one VAPID key pair. Registrations retain their exact origin; permission must be granted on each site/device. Self-tests target only the current installation and click through to that site's `/settings?section=notifications`. Automatic senders call `isAutomaticPushOrigin`, which admits both production and beta, excluding localhost and arbitrary origins. Both sites share category preferences, batching and account-wide rate limits. Each subscription gets a destination on its registered site. Enabling both sites in one browser can produce one notification from each site. Do not add a preferred-site setting or infer shared device identity across origins.
 
@@ -174,14 +174,12 @@ outcome metrics and existing alert channel; no new worker, schedule, retry, dead
 ## Notification categories
 
 Settings → Notifications exposes the shared category registry in `shared/notification-categories.ts`. The
-categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `sleep_sync` (Sleep synced), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). **New categories default on**, including for existing accounts,
-without a migration or an initialization write. Category preferences are account-wide across devices and sites;
+categories are `history_import` (History imports), `activity_sync` (New activities synced), `activity_delivery` (Activity delivery), `morning_check_in` (Morning check-in), `training_sync` (Training sync), `training_send` (Training send results), and `connection_attention` (Connection issues). Categories default on, including for existing accounts. The tray’s bulk enable action preserves the saved Morning check-in choice. Category preferences are account-wide across devices and sites;
 origin-specific device registration, browser permission, operational switches and each sender's consent still apply.
-An enabled category still requires an enabled production or beta device and operational sender switches. It never checks a history-import checkbox. Self-tests bypass categories.
+History import also requires consent for the specific import. Self-tests bypass categories.
 
 An owner-scoped private leaf at `users/{uid}/notificationPreferences/{category}` stores `schemaVersion: 1`,
-`enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means
-on/revision zero; read failures and malformed records do not mean a missing preference. Rules allow known-category
+`enabled`, a monotonically increasing integer `revision`, and server `updatedAt`. A missing document means enabled at revision zero. Morning check-in also requires a saved time zone to send. Read failures and malformed records cannot establish a default. Rules allow known-category
 owner get/create/update, prohibit impersonated writes, listing, descendants and deletion/reset, and fence missing or
 deleting accounts. Changes use client transactions rather than a new callable. Each actual toggle increments the
 revision; listener hydration, unchanged selections and retries after another device already saved the value do not.
@@ -205,8 +203,7 @@ persistence clearing, automatic reload, permission prompt or category write is p
 notification lifecycle failure and provides recovery; it does not repair the browser/SDK's IndexedDB implementation.
 
 To add a category, extend the shared registry and Rules allowlist together, then implement and test that sender's
-consent, revision checks, deduplication, account-wide budget and generic payload. New categories inherit the on
-default, not another sender's per-event consent. Do not expose placeholder switches for unimplemented senders.
+consent, revision checks, deduplication, account-wide budget and generic payload. Choose the category default explicitly and document how bulk enable treats it.
 
 ## Connection issues
 
@@ -255,59 +252,66 @@ to produce a test. The explicit self-test does not exercise connection episode a
 The new episode fields are server-owned metadata, and shared receipts are denied to all clients. There is no change
 to public connection-state meanings, provider credentials/consent, account deletion ownership or MCP surfaces.
 
-## Sleep synced
+## Morning check-in
 
-`sleep_sync` defaults on as an account preference. Sending additionally requires the unconditional Remote Config
-defaults `web_push_enabled=true` and `web_push_sleep_sync_enabled=true`. A missing, conditional or false sleep switch
-disables this sender. Keep `web_push_sleep_sync_enabled=false` while preparing rollout; this feature does not change
-the existing sender switches.
+The **Good morning** notification is a default-on account category, `morning_check_in`. The first successfully
+verified Web Push registration on the updated frontend saves the browser’s named IANA time zone at revision one
+if the preference is missing. Existing registrations initialize the preference when their users next open the
+updated app on a registered device. The transaction preserves any saved Morning check-in setting. If there is no
+setting yet, it carries forward an explicit opt-out from Sleep synced. Turning the category off removes the zone.
+Turning it on again saves that device’s current time zone.
+Browser permission and a verified registration are required. Firestore Rules require a bounded time zone identifier
+on an enabled revision. The browser validates the zone it captures, and the sender skips zones its runtime cannot
+resolve. The saved preference remains editable on browsers with different time zone databases. Older clients can
+still manage the retired `sleep_sync` preference.
 
-Routine Suunto/COROS polling and authenticated Garmin/Suunto sleep webhook producers explicitly mark new queue rows
-with `sleepNotificationOrigin: 'live'`. Queue admission strips that marker for history/backfill work. Administrative
-recovery jobs, legacy rows and manual/history producers do not acquire it just because they share a polling type.
-The canonical Sleep writer reports only newly created, usable main sessions that ended within the last 24 hours.
-Updates, corrections, duplicate saves, naps and old sleeps do not qualify. The queue invokes best-effort notification
-admission after persistence; notification failure never changes successful provider ingestion or its retry outcome.
+The sender requires unconditional Remote Config defaults `web_push_enabled=true` and
+`web_push_morning_check_in_enabled=true`. A missing, conditional or false switch keeps it disabled.
+The existing live Sleep import is the trigger. It marks newly enqueued routine Suunto and COROS polls and
+authenticated Garmin and Suunto webhook work with `morningCheckInOrigin: 'live'`. Queue admission excludes
+history and backfill work. A newly saved, usable main sleep must end on the current local date, and dispatch
+must occur from **05:00 until noon** in the saved zone. Early or late arrivals, naps, updates and older nights
+are skipped. There is no later catch-up delivery. Notification failures leave successful ingestion and its retry
+outcome intact.
 
-Admission rechecks queue ownership/revision, the canonical session's metadata, the current connected provider account
-and lifecycle generation, deletion guards, category preference and registered devices. Sleeps starting before a new
-connection/reconnection and active connection-history imports are suppressed. Existing legacy connections without
-an activity-notification connection-time marker retain eligibility; newly connected accounts receive that marker
-through the shared connection lifecycle. No backfill or replay is run when a user enables notifications.
-The existing provider Sleep state's `lastBackfillEndMs` also suppresses sessions starting inside a requested backfill
-range. This is essential for direct Garmin backfills whose results arrive through ordinary live webhooks; the cutoff
-is claimed before requesting provider data and is rechecked before each device send.
+Admission checks queue ownership and revision, canonical sleep metadata, provider connection and generation, account
+deletion guards, the enabled preference and its saved time zone, and the device registrations. It suppresses sleeps covered by a connection
+history or direct provider backfill cutoff, including delayed Garmin callbacks. Initial connection and reconnection
+fences still apply. The account receipt at `users/{uid}/pushState/sleepReady` retains its storage key for compatibility
+with the prior sender. Its date now records the local check-in date. It limits delivery to one alert per date,
+with at least 20 hours between admissions and overlapping sleeps suppressed across providers. Admission rechecks
+the morning window after reading Firestore so a read that crosses noon leaves the next morning eligible. The
+shared minute worker can clear legacy pending records, which lack the Morning check-in time zone.
 
-One bounded leaf, `users/{uid}/pushState/sleepReady`, stores the latest admitted sleep date/end time, admission time,
-and at most one pending alert. Dates/end times advance monotonically across providers, with at least 20 hours between
-admissions. This prevents duplicate nights across Garmin/Suunto/COROS, midnight boundaries and recreated documents.
-Overlapping sleep intervals are suppressed even if a delayed provider report uses a different calendar date and
-arrives after the cooldown. Disabled categories and existing receipts stop admission before device/session reads.
-Cancelled and failed alerts retain the receipt. The Sleep import handler sends the alert it admitted after persistence.
-The shared worker drains any alerts already scheduled by the previous version. Both use the existing VAPID key.
+The sender claims before transport and checks the preference revision, time zone, morning window, provider authority
+and device generation again before sending. A claim expires after ten minutes or at local noon, whichever is
+earlier. The push service’s TTL is capped by that deadline. Delivery targets up to ten registered devices across
+beta and production on their registered origins. In-flight or already accepted alerts can still appear after a
+preference change. No scores, sleep times or other metrics appear in the payload.
 
-The sender clears pending work and claims before transport, then rechecks consent, account/session/connection state
-and each captured device generation. Claims are deliberately not replayed after ambiguous transport failure or a
-crash. Pending alerts expire after ten minutes; device fan-out is capped at ten across production and beta. Both sites
-receive alerts on their own origins. Expired registrations are removed only if their generation still matches.
-The generic payload contains no scores, sleep times or other health metrics. It opens `/health?metric=sleep` using
-the same declarative and service-worker `openWindow` destinations as other alerts.
+The alert opens `/dashboard?focus=readiness` and focuses the existing Today Readiness view without automatic
+workout preparation. Devices that show Web Push buttons offer **View readiness** and **View sleep**. The latter
+opens `/health?metric=sleep`. Both delivery formats retain their same-origin destinations.
 
-Rollout after merge:
+Rollout after separate approval:
 
-1. Keep the new sleep switch false/missing. Deploy Firestore Rules before serving the frontend category.
-2. Deploy `receiveGarminAPIHealthData`, `receiveSuunto247Data`, `scheduleSuuntoSleepSync`, `scheduleCOROSSleepSync`,
-   `processSleepSyncTask`, and `sendActivitySyncNotifications`. Build and deploy frontend releases through the usual
-   beta/production workflow. No index changes or migration are needed.
-3. Apply the updated Web Push monitoring bundle using the existing alert channel. `[SleepSyncPush]` adds fixed
-   admission/send/sweep outcomes; shared worker backlog, heartbeat and runtime coverage remain in place.
-4. Enable `web_push_sleep_sync_enabled` for the shared backend after verification. Test with a genuinely new main sleep
-   on an already connected test account; histories, replayed queues and the existing self-test do not exercise admission.
-   Verify each registered origin's click destination and category/device cancellation.
+1. Verify that `web_push_sleep_sync_enabled` and `web_push_morning_check_in_enabled` are false or absent. Deploy the
+   updated Firestore Rules before the frontend offers the new toggle.
+2. Release the frontend through the normal beta and production workflow. Deploy `receiveGarminAPIHealthData`,
+   `receiveSuunto247Data`, `scheduleSuuntoSleepSync`, `scheduleCOROSSleepSync`, `processSleepSyncTask` and
+   `sendActivitySyncNotifications`. Verify that the producer and worker revisions agree before enabling the sender.
+3. Apply and read back the existing Web Push monitoring bundle. Coverage is **updated in source** for
+   `[MorningCheckInPush]` admission and transport outcomes, using the existing metric, policy and dashboard.
+   The shared worker retains backlog and heartbeat coverage. Provider ingestion telemetry and retry policies are unchanged.
+4. Enable `web_push_morning_check_in_enabled` for the shared backend after verification. Open the updated app on
+   an already connected account’s registered device and verify that Morning check-in defaults on and saves its time
+   zone. Verify a new main sleep during the saved local morning, the default tap, and both buttons where available.
+   Verify that late sync and queued legacy batches stay silent, and that turning the tray back on preserves an
+   explicit Morning check-in opt-out.
 
-Disable the sleep switch to stop future sends. Category off/on, expired pending work, suppressed histories and old
-receipts never become catch-up notifications. Costs scale with eligible new saves and devices rather than all users
-or all historical sessions; admission adds bounded metadata/preference/registration reads and one small pending write.
+The feature creates no new scheduler, queue, external credential or backfill job. The existing notification state
+retention and user-root cleanup cover its receipts and preferences. Monitoring activation, sender deployment and the
+Remote Config switch are separate rollout steps.
 
 ## Training sync attention
 
@@ -359,7 +363,7 @@ After separate approval, deploy the category Rules, existing admission callables
 npm run firebase -- deploy --only firestore:rules,functions:addSuuntoAppHistoryToQueue,functions:addCOROSAPIHistoryToQueue,functions:addWahooAPIHistoryToQueue,functions:sendHistoryImportNotification --project quantified-self-io
 ```
 
-The history-only subset requires the Rules deployment above. It needs no key rotation, ingestion-worker deployment, schedule or queue change. Releasing the full PR also requires the live-activity deployment below. The shared key is bound only to handlers that send notifications. Direct manual/Sleep/Training send handlers now receive it through their existing Function secret bindings. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
+The history-only subset requires the Rules deployment above. It needs no key rotation, ingestion-worker deployment, schedule or queue change. Releasing the full PR also requires the live-activity deployment below. The shared key is bound only to handlers that send notifications. Direct manual, Morning check-in, and Training send handlers now receive it through their existing Function secret bindings. Apply/read back the extended monitoring bundle with the existing alert channel before enabling the new switch. A production test window and test sends need separate authorization; there is no client-targeted or beta bypass. Rollout and monitoring activation/readback are tracked in [#1011](https://github.com/jimmykane/quantified-self/issues/1011).
 
 Rollback of new admissions/sends is the new switch set to false; existing imports continue normally. Already claimed/accepted sends may finish. Never clear receipts or replay completed runs. The trigger uses 256 MiB, 30 seconds, max two instances, concurrency 20 and zero minimum instances in `europe-west2`; no idle warm instance or new scheduler is provisioned. Once deployed it is invoked on history-document writes even while disabled, then filters unrelated checkpoints in memory. Consented completion handling adds bounded configuration/Firestore reads, transactional claim/bookkeeping writes and one push request at most. This has incremental invocation/read/write costs; it is not a free or guaranteed-delivery service.
 

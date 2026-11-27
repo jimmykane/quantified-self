@@ -116,6 +116,36 @@ describe('Calendar generation context boundaries', () => {
       ? { structuredContent: report } : original(name, input));
     return source;
   }
+  function withFormLoads(entries: Array<[date: string, tss: number]>) {
+    const source = withReport(recoveryReport);
+    const original = source.callTool.getMockImplementation()!;
+    const dailyLoads = entries.map(([date, load]) => ({ dayMs: Date.parse(`${date}T00:00:00Z`), load }));
+    source.callTool.mockImplementation(async (name, input) => name === 'prepare_training_metrics'
+      ? { structuredContent: { status: 'ready', readyMetricKinds: ['form'] } }
+      : name === 'get_training_metric' && input?.metricKind === 'form'
+        ? { structuredContent: { payload: { dailyLoads } } } : original(name, input));
+    return source;
+  }
+  it('supplies the completed day’s recorded load and Form alongside a negative current ramp', async () => {
+    // The local date has advanced, but October 28 is still in progress in the UTC load series.
+    const observedAt = new Date('2026-10-28T22:00:00Z');
+    const source = withFormLoads([['2026-10-26', 120], ['2026-10-27', 180], ['2026-10-28', 100]]);
+    const result = await collectDayWorkoutContext(controls, observedAt, source, vi.fn());
+
+    expect(result.evidence.daily).toMatchObject({
+      localDate: '2026-10-29',
+      recentLoad: { dateUtc: '2026-10-27', tss: 180, formBefore: -14.29, formAtEnd: -33.33 },
+      dailyReport: { readiness: { drivers: { load: { form: 0, rampRate: -2 } } } },
+    });
+    expect(source.callTool.mock.calls.filter(([name]) => name === 'get_training_metric'))
+      .toEqual([['get_training_metric', { metricKind: 'form' }]]);
+  });
+  it('omits the recent-load summary when the previous UTC day has no recorded load', async () => {
+    const source = withFormLoads([['2026-10-26', 180], ['2026-10-28', 100]]);
+    const result = await collectDayWorkoutContext(controls, now, source, vi.fn());
+    expect(result.evidence.daily).not.toHaveProperty('recentLoad');
+    expect(result.usedContext).toContain('Training load history');
+  });
   const reportWithVitals = () => ({ ...recoveryReport, sleep: { ...recoveryReport.sleep, latestSession: {
     durationSeconds: 28800, vitals: { averageHrvMs: 8787.01, overnightHrvMs: 8787.02,
       averageHeartRateBpm: 8989.01, minimumHeartRateBpm: 8989.02 },
@@ -125,7 +155,7 @@ describe('Calendar generation context boundaries', () => {
       const original = source.callTool.getMockImplementation()!;
       source.callTool.mockImplementation(async (name, input) => name === 'prepare_training_metrics'
         ? { structuredContent: { status: 'ready', readyMetricKinds: ['form', 'ramp_rate', 'training_summary'] } }
-        : name === 'get_training_metric' ? { structuredContent: { payload: { dailyLoads: [{ load: 5757.01 }] } } }
+        : name === 'get_training_metric' ? { structuredContent: { payload: { dailyLoads: [{ dayMs: Date.parse('2026-10-27T00:00:00Z'), load: 5757.01 }] } } }
           : original(name, input));
       const result = await collectDayWorkoutContext({ ...controls, [key]: false }, now, source, vi.fn());
       const daily = result.evidence.daily as { dailyReport: {
@@ -144,6 +174,7 @@ describe('Calendar generation context boundaries', () => {
       }
       if (key === 'freshnessContext') {
         expect(daily.trainingSnapshots.form).toBeNull(); expect(daily.trainingSnapshots.rampRate).toBeNull();
+        expect(daily).not.toHaveProperty('recentLoad');
         expect(source.callTool).toHaveBeenCalledWith('prepare_training_metrics', { metricKinds: ['training_summary'] });
         expect(source.callTool).not.toHaveBeenCalledWith('get_training_metric', { metricKind: 'form' });
         expect(source.callTool).not.toHaveBeenCalledWith('get_training_metric', { metricKind: 'ramp_rate' });

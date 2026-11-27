@@ -189,8 +189,8 @@ export type SleepSyncQueueItemType =
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
-  /** Positive live provenance for sleep alerts; never set on history/backfill work. */
-  sleepNotificationOrigin?: 'live';
+  /** Positive live provenance for Morning check-in; never set on history/backfill work. */
+  morningCheckInOrigin?: 'live';
   /** Server-only cursor on the existing queue row, after a fully written Suunto window. */
   suuntoHealthProgress?: import('../suunto/health-progress').SuuntoHealthProgress;
   type: SleepSyncQueueItemType;

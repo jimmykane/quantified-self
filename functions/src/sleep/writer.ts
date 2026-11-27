@@ -1,5 +1,5 @@
 import { assertHistoryWrite } from '../connection-history/context';
-import { sleepPushCandidate } from '../web-push/sleep-policy';
+import { morningCheckInCandidate } from '../web-push/morning-check-in-policy';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -506,7 +506,7 @@ export async function upsertSleepSessions(
         }
         if (result.written) {
             written += 1;
-            if (result.created && sleepPushCandidate(result.session, nowMs)) createdSessions.push(result.session);
+            if (result.created && morningCheckInCandidate(result.session, nowMs)) createdSessions.push(result.session);
         } else {
             skipped += 1;
         }

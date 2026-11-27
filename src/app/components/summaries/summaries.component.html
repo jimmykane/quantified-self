@@ -33,7 +33,10 @@
       <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
       <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
         <button mat-menu-item (click)="customizeToday()"><mat-icon>tune</mat-icon><span>Customize Today</span></button>
-        <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'today')">
+          <mat-icon>{{ savedTodaySummaryVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
+          <span>{{ savedTodaySummaryVisible ? 'Hide Today summary' : 'Show Today summary' }}{{ todayReadinessFocused ? ' by default' : '' }}</span>
+        </button>
         <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to starter dashboard</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'all')"><mat-icon>library_add</mat-icon><span>Add all presets</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'clear')"><mat-icon>delete_sweep</mat-icon><span>Remove all</span></button>
@@ -48,7 +51,7 @@
     [attr.role]="derivedMetricsBanner ? (derivedMetricsBanner.type === 'warning' ? 'alert' : 'status') : null" aria-atomic="true">
     @if (showTodaySummary && isOwnerDashboard && todayGreeting && !derivedMetricsBanner) {
       <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" [greeting]="todayGreeting"
-        [detailsExpanded]="todayDetailsExpanded()" (detailsToggle)="todayDetailsExpanded.set(!todayDetailsExpanded())" />
+        [detailsExpanded]="currentTodayDetailsExpanded()" (detailsToggle)="currentTodayDetailsExpanded.set(!currentTodayDetailsExpanded())" />
     } @else {
       <span class="dashboard-summary-message">
         @if (derivedMetricsBanner) {
@@ -69,8 +72,8 @@
   </div>
   }
   @if (showTodaySummary) {
-  <app-dashboard-today [account]="$any(user)" [owner]="isOwnerDashboard" [expanded]="todayDetailsExpanded()"
-    [settings]="todaySettings" [readiness]="dashboardTodayReadiness" [trainingState]="dashboardTodayTrainingState"
+  <app-dashboard-today [account]="$any(user)" [owner]="isOwnerDashboard" [expanded]="currentTodayDetailsExpanded()"
+    [focusReadiness]="todayReadinessFocused" [settings]="todaySettings" [readiness]="dashboardTodayReadiness" [trainingState]="dashboardTodayTrainingState"
     [localDate]="todayRestDate" [timelineNotes]="timelineNotes()" [sleepRevision]="dailyWorkoutSuggestionSleepRevision"
     [sleepKey]="dailyWorkoutSuggestionSleepKey" [trainingKey]="dailyWorkoutSuggestionTrainingKey" (customize)="customizeToday()" />
   }

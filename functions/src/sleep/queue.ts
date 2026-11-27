@@ -3,8 +3,8 @@ import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { liveSleepQueue } from '../web-push/sleep-policy';
-import { notifyNewSleepAfterPersistence } from '../web-push/sleep-admission';
+import { liveSleepQueue } from '../web-push/morning-check-in-policy';
+import { notifyMorningCheckInAfterPersistence } from '../web-push/morning-check-in-admission';
 import {
     SleepMapperResult,
     SleepProvider,
@@ -207,8 +207,8 @@ interface COROSWriteLifecycleGuards {
 }
 
 interface AddSleepSyncQueueItemInput {
-    /** Only routine polling and authenticated webhook producers opt into live sleep alerts. */
-    sleepNotificationOrigin?: 'live';
+    /** Only routine polling and authenticated webhook producers can trigger Morning check-in. */
+    morningCheckInOrigin?: 'live';
     connectionHistoryRunId?: string;
     type: SleepSyncQueueItemType;
     provider: SleepProvider;
@@ -548,7 +548,7 @@ function parseGarminPingBatchCallbackURLs(
 function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSyncQueueItemInterface> {
     const payload: Partial<SleepSyncQueueItemInterface> = {
         type: input.type,
-        sleepNotificationOrigin: input.sleepNotificationOrigin === 'live' && liveSleepQueue(input) ? 'live' : undefined,
+        morningCheckInOrigin: input.morningCheckInOrigin === 'live' && liveSleepQueue(input) ? 'live' : undefined,
         connectionHistoryRunId: input.connectionHistoryRunId,
         provider: input.provider,
         providerUserId: input.providerUserId,
@@ -3000,7 +3000,7 @@ async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItem
                 healthRecordsStale: 0,
             });
         }
-        await notifyNewSleepAfterPersistence(firebaseUserID, queueItem, result.createdSessions);
+        await notifyMorningCheckInAfterPersistence(firebaseUserID, queueItem, result.createdSessions);
         let healthRecordsWritten = garminHealthContinuation?.recordsWritten ?? queueItem.suuntoHealthProgress?.recordsWritten ?? 0;
         let healthRecordsUnchanged = garminHealthContinuation?.recordsUnchanged ?? queueItem.suuntoHealthProgress?.recordsUnchanged ?? 0;
         let healthRecordsStale = garminHealthContinuation?.recordsStale ?? queueItem.suuntoHealthProgress?.recordsStale ?? 0;

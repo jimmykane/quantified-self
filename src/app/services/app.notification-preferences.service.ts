@@ -3,7 +3,8 @@ import { DestroyRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, doc, onSnapshot, runTransaction, serverTimestamp } from 'app/firebase/firestore';
-import { NOTIFICATION_CATEGORIES, isNotificationCategory, notificationPreferencePath, readNotificationCategoryPreference,
+import { MORNING_CHECK_IN_CATEGORY, NOTIFICATION_CATEGORIES, isNotificationCategory, isSupportedMorningCheckInTimeZone,
+  notificationPreferencePath, readNotificationCategoryPreference,
   type NotificationCategoryId, type NotificationCategoryPreference } from '@shared/notification-categories';
 import { AppWindowService } from './app.window.service';
 
@@ -26,10 +27,12 @@ export class AppNotificationPreferencesService {
   readonly canEdit = computed(() => this.status() === 'ready' && !this.saving());
   readonly categories = computed(() => NOTIFICATION_CATEGORIES.map(category => ({
     ...category, enabled: this.preferences()[category.id]?.enabled ?? true,
+    timeZone: this.preferences()[category.id]?.timeZone,
   })));
   private owner: FirebaseUserType | null = null;
   private epoch = 0;
   private listeners: (() => void)[] = [];
+  private initializingMorningCheckInEpoch?: number;
 
   constructor() {
     this.destroy.onDestroy(() => { this.epoch++; this.stopListening(); });
@@ -94,7 +97,7 @@ export class AppNotificationPreferencesService {
           { includeMetadataChanges: true }, snapshot => {
             // A cache miss is not proof that the account has no preference.
             if (!this.current(owner, epoch) || this.reloadRequired() || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
-            const preference = readNotificationCategoryPreference(snapshot.data());
+            const preference = readNotificationCategoryPreference(snapshot.data(), category.id);
             if (!preference) { fail(category.id); return; }
             this.acceptPreference(category.id, preference);
             confirmed.add(category.id);
@@ -112,15 +115,47 @@ export class AppNotificationPreferencesService {
       ? current : { ...current, [category]: preference });
   }
 
-  /** Explicit master On action: read and enable all categories atomically. */
-  async enableAll(expectedUid = this.owner?.uid): Promise<boolean> {
+  /** Initializes the missing preference from a verified notification device. */
+  async initializeMorningCheckIn(expectedUid: string): Promise<void> {
+    const owner = this.owner, epoch = this.epoch;
+    if (!owner || owner.uid !== expectedUid || !this.current(owner, epoch) || this.reloadRequired()
+      || this.status() === 'impersonating' || this.initializingMorningCheckInEpoch === epoch
+      || (this.preferences()[MORNING_CHECK_IN_CATEGORY]?.revision ?? 0) > 0) return;
+    this.initializingMorningCheckInEpoch = epoch;
+    try {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!isSupportedMorningCheckInTimeZone(timeZone)) return;
+      const preference = await runTransaction(this.firestore, async tx => {
+        if (!this.current(owner, epoch)) return null;
+        const ref = doc(this.firestore, notificationPreferencePath(owner.uid, MORNING_CHECK_IN_CATEGORY));
+        const current = readNotificationCategoryPreference((await tx.get(ref)).data(), MORNING_CHECK_IN_CATEGORY);
+        if (!this.current(owner, epoch) || !current || current.revision > 0) return current;
+        // Preserve an explicit opt-out from the retired alert when first initializing its replacement.
+        const legacyRef = doc(this.firestore, `users/${owner.uid}/notificationPreferences/sleep_sync`);
+        const legacy = readNotificationCategoryPreference((await tx.get(legacyRef)).data());
+        if (!this.current(owner, epoch) || !legacy) return null;
+        const next = { enabled: legacy.enabled, revision: 1, ...(legacy.enabled ? { timeZone } : {}) };
+        tx.set(ref, { schemaVersion: 1, ...next, updatedAt: serverTimestamp() });
+        return next;
+      });
+      if (preference && this.current(owner, epoch)) this.acceptPreference(MORNING_CHECK_IN_CATEGORY, preference);
+    } catch (error) {
+      if (this.current(owner, epoch)) this.requireAppReload(error);
+    } finally {
+      if (this.initializingMorningCheckInEpoch === epoch) this.initializingMorningCheckInEpoch = undefined;
+    }
+  }
+
+  /** The tray enables standard categories atomically and preserves the Morning check-in preference. */
+  async enableStandardCategories(expectedUid = this.owner?.uid): Promise<boolean> {
     const owner = this.owner, epoch = this.epoch;
     if (!owner || owner.uid !== expectedUid || !this.current(owner, epoch) || !this.canEdit()) return false;
     this.saving.set('all'); this.message.set('');
     try {
       const preferences = await runTransaction(this.firestore, async tx => {
         if (!this.current(owner, epoch)) throw new Error('Account changed.');
-        const records = await Promise.all(NOTIFICATION_CATEGORIES.map(async category => {
+        const standardCategories = NOTIFICATION_CATEGORIES.filter(category => category.id !== MORNING_CHECK_IN_CATEGORY);
+        const records = await Promise.all(standardCategories.map(async category => {
           const ref = doc(this.firestore, notificationPreferencePath(owner.uid, category.id));
           const current = readNotificationCategoryPreference((await tx.get(ref)).data());
           if (!current) throw new Error('Invalid notification preference.');
@@ -136,12 +171,12 @@ export class AppNotificationPreferencesService {
       });
       if (!this.current(owner, epoch)) return false;
       for (const record of preferences) this.acceptPreference(record.id, record.next);
-      if (!this.reloadRequired()) this.message.set('All notification categories are on.');
+      if (!this.reloadRequired()) this.message.set('Standard notification categories are on.');
       return true;
     } catch (error) {
       if (!this.current(owner, epoch)) return false;
-      if (!this.requireAppReload(error) && !this.reloadRequired()) this.message.set('Could not turn on all notification categories. Please try again.');
-      throw new Error('Could not turn on all notification categories.');
+      if (!this.requireAppReload(error) && !this.reloadRequired()) this.message.set('Could not turn on standard notification categories. Please try again.');
+      throw new Error('Could not turn on standard notification categories.');
     } finally { if (this.current(owner, epoch)) this.saving.set(null); }
   }
 
@@ -151,14 +186,20 @@ export class AppNotificationPreferencesService {
       || !this.canEdit() || this.preferences()[category]?.enabled === enabled) return false;
     this.saving.set(category); this.message.set('');
     try {
+      const timeZone = enabled && category === MORNING_CHECK_IN_CATEGORY
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
+      if (enabled && category === MORNING_CHECK_IN_CATEGORY && !isSupportedMorningCheckInTimeZone(timeZone)) {
+        this.message.set('Could not determine this device’s time zone for Morning check-in.');
+        return false;
+      }
       const preference = await runTransaction(this.firestore, async tx => {
         if (!this.current(owner, epoch)) throw new Error('Account changed.');
         const ref = doc(this.firestore, notificationPreferencePath(owner.uid, category));
-        const current = readNotificationCategoryPreference((await tx.get(ref)).data());
+        const current = readNotificationCategoryPreference((await tx.get(ref)).data(), category);
         if (!this.current(owner, epoch)) throw new Error('Account changed.');
         if (!current) throw new Error('Invalid notification preference.');
         if (current.enabled === enabled) return current;
-        const next = { enabled, revision: current.revision + 1 };
+        const next = { enabled, revision: current.revision + 1, ...(timeZone ? { timeZone } : {}) };
         if (!Number.isSafeInteger(next.revision)) throw new Error('Invalid notification revision.');
         tx.set(ref, { schemaVersion: 1, ...next, updatedAt: serverTimestamp() });
         return next;
