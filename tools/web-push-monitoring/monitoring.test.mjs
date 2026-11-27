@@ -13,7 +13,7 @@ test('outcome filters accept real Firebase info messages and wrapped error messa
     ['qs_activity_sync_push_outcomes_v1', '[ActivitySyncPush]'],
     ['qs_activity_delivery_push_outcomes_v1', '[ActivityDeliveryPush]'],
     ['qs_training_sync_push_outcomes_v1', '[TrainingSyncPush]'],
-    ['qs_sleep_sync_push_outcomes_v1', '[SleepSyncPush]'],
+    ['qs_sleep_sync_push_outcomes_v1', '[MorningCheckInPush]'],
     ['qs_connection_attention_push_outcomes_v1', '[ConnectionAttentionPush]'],
     ['qs_training_send_push_outcomes_v1', '[TrainingSendPush]'],
   ];
@@ -158,10 +158,10 @@ test('delivery and Training share one worker health policy while retaining their
   assert.doesNotMatch(JSON.stringify(bundle.metrics), /qs_activity_delivery_push_sweeps|qs_training_sync_push_sweeps/);
 });
 
-test('sleep monitoring reuses the current channel and the shared worker health coverage', () => {
+test('Morning check-in monitoring reuses the current channel and the shared worker health coverage', () => {
   const bundle = buildWebPushMonitoring(project, channel);
   const metric = bundle.metrics.find(metric => metric.name === 'qs_sleep_sync_push_outcomes_v1');
-  assert.match(metric.filter, /\[SleepSyncPush\]/); assert.deepEqual(metric.metricDescriptor.labels.map(label => label.key), ['outcome', 'phase']);
+  assert.match(metric.filter, /\[MorningCheckInPush\]/); assert.deepEqual(metric.metricDescriptor.labels.map(label => label.key), ['outcome', 'phase']);
   const policy = bundle.policies.find(policy => policy.userLabels.policy_id === 'sleep-sender');
   assert.deepEqual(policy.notificationChannels, [channel]); assert.equal(policy.conditions.length, 1);
   assert.match(policy.conditions[0].conditionThreshold.filter, /outcome="failed"/);

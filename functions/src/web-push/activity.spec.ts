@@ -4,12 +4,13 @@ import webpush from 'web-push';
 import { SECRET_PARAMS } from '../secrets';
 import { sendActivitySyncNotifications } from './activity';
 import { sendActivityNotification } from './activity-service';
-import { sendSleepNotification } from './sleep-service';
+import { sendMorningCheckIn } from './morning-check-in-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
 import { sendDeliveryNotification } from './delivery-service';
 import { sendTrainingNotification } from './training-service';
 import { automaticPushConfiguration } from './history-consent';
+import { pushDependencies } from './runtime';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), warn: vi.fn(), limit: vi.fn(), select: vi.fn() }));
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => ({ collectionGroup: () => ({ where: () => ({ orderBy: () => ({
   limit: (limit: number) => { mocks.limit(limit); return { select: (...fields: string[]) => { mocks.select(fields); return { get: mocks.get }; } }; },
@@ -19,13 +20,13 @@ vi.mock('./history-consent', () => ({ automaticPushConfiguration: vi.fn() }));
 vi.mock('./delivery-service', () => ({ sendDeliveryNotification: vi.fn() }));
 vi.mock('./training-service', () => ({ sendTrainingNotification: vi.fn() }));
 vi.mock('./activity-service', () => ({ sendActivityNotification: vi.fn() }));
-vi.mock('./sleep-service', () => ({ sendSleepNotification: vi.fn() }));
+vi.mock('./morning-check-in-service', () => ({ sendMorningCheckIn: vi.fn() }));
 vi.mock('./connection-service', () => ({ sendConnectionNotification: vi.fn() }));
 vi.mock('./training-send-service', () => ({ sendTrainingSendResult: vi.fn() }));
 vi.mock('web-push', async original => ({ default: { ...(await original<{ default: typeof webpush }>()).default, sendNotification: vi.fn().mockResolvedValue({}) } }));
 beforeEach(() => {
   vi.clearAllMocks(); vi.mocked(sendDeliveryNotification).mockResolvedValue(); vi.mocked(sendTrainingNotification).mockResolvedValue(); vi.mocked(sendActivityNotification).mockResolvedValue();
-  vi.mocked(sendSleepNotification).mockResolvedValue();
+  vi.mocked(sendMorningCheckIn).mockResolvedValue();
   vi.mocked(sendConnectionNotification).mockResolvedValue();
   vi.mocked(sendTrainingSendResult).mockResolvedValue();
   mocks.get.mockResolvedValue({ empty: true, docs: [] }); vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: false, publicKey: '' });
@@ -44,7 +45,7 @@ describe('one shared notification worker', () => {
     ['activitySync', sendActivityNotification, 'web_push_activity_sync_enabled', 'qs-activity-sync'],
     ['activityDelivery', sendDeliveryNotification, 'web_push_activity_delivery_enabled', 'qs-activity-delivery'],
     ['trainingSync', sendTrainingNotification, 'web_push_training_sync_enabled', 'qs-training-sync'],
-    ['sleepReady', sendSleepNotification, 'web_push_sleep_sync_enabled', 'qs-sleep-sync'],
+    ['sleepReady', sendMorningCheckIn, 'web_push_morning_check_in_enabled', 'qs-morning-check-in'],
     ['connectionAttention', sendConnectionNotification, 'web_push_connection_attention_enabled', 'qs-connection-attention'],
     ['trainingSend_plan_p_garmin', sendTrainingSendResult, 'web_push_training_sync_enabled', undefined],
   ] as const)('dispatches %s with only its own configuration and caches it across accounts', async (name, sender, flag, topic) => {
@@ -79,6 +80,16 @@ describe('one shared notification worker', () => {
     mocks.get.mockResolvedValueOnce({ docs: [{ ref: { path: 'users/owner/pushState/activitySync' } }] });
     vi.mocked(sendActivityNotification).mockImplementation(async (_uid, deps) => { expect((await deps.configuration()).enabled).toBe(false); });
     await run(); expect(secret).not.toHaveBeenCalled(); expect(webpush.sendNotification).not.toHaveBeenCalled();
+  });
+  it('passes the shortened Morning check-in expiry to Web Push and Windows', async () => {
+    const pair = webpush.generateVAPIDKeys();
+    vi.spyOn(SECRET_PARAMS.WEB_PUSH_VAPID_KEYPAIR, 'value').mockReturnValue(JSON.stringify(pair));
+    vi.mocked(automaticPushConfiguration).mockResolvedValue({ enabled: true, publicKey: pair.publicKey });
+    const registration = { endpoint: 'https://example.notify.windows.com/synthetic' } as never;
+    await pushDependencies('morningCheckIn').send(registration, 'payload', 5);
+    expect(webpush.sendNotification).toHaveBeenCalledWith(registration, 'payload', expect.objectContaining({
+      TTL: 5, topic: 'qs-morning-check-in', headers: { 'X-WNS-Type': 'wns/raw', 'X-WNS-TTL': '5' },
+    }));
   });
   it('continues other categories after a failure and preserves its safe error code', async () => {
     mocks.get.mockResolvedValueOnce({ docs: ['activitySync', 'activityDelivery', 'trainingSync'].map(name => ({ ref: { path: `users/owner/pushState/${name}` } })) });

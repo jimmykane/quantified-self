@@ -4,7 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ACTIVITY_PUSH } from './activity-policy';
 import { sendActivityNotification } from './activity-service';
-import { sendSleepNotification } from './sleep-service';
+import { sendMorningCheckIn } from './morning-check-in-service';
 import { sendConnectionNotification } from './connection-service';
 import { sendTrainingSendResult } from './training-send-service';
 import { sendDeliveryNotification } from './delivery-service';
@@ -40,8 +40,8 @@ export const sendActivitySyncNotifications = onSchedule({
         if (name === 'activityDelivery') return sendDeliveryNotification(uid, deps('delivery'));
         if (name === 'trainingSync') return sendTrainingNotification(uid, deps('training'));
         if (name === 'connectionAttention') return sendConnectionNotification(uid, deps('connection'));
-        // Drain older ready records during rollout. New Sleep/Training results send in their existing handlers.
-        if (name === 'sleepReady') return sendSleepNotification(uid, deps('sleep'));
+        // Drain older ready records. Legacy Sleep synced batches lack Morning check-in consent and expire without sending.
+        if (name === 'sleepReady') return sendMorningCheckIn(uid, deps('morningCheckIn'));
         if (/^trainingSend_[a-zA-Z0-9_-]+$/.test(name)) return sendTrainingSendResult(uid, name, deps('trainingSend'));
         throw new Error('Unknown notification queue entry.');
       }));

@@ -329,6 +329,32 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Morning check-in preferences', () => {
+        const uid = 'morning-owner';
+        const path = `users/${uid}/notificationPreferences/morning_check_in`;
+        const enabled = { schemaVersion: 1, enabled: true, revision: 1, timeZone: 'Europe/Helsinki' };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc(`users/${uid}`).set({}); });
+        });
+        it('requires an owner, an explicit toggle and a time zone for the enabled revision', async () => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            const ref = owner.doc(path);
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).set({ ...enabled, updatedAt: serverTimestamp() }));
+            await assertFails(testEnv.authenticatedContext(uid, { impersonatedBy: 'admin' }).firestore().doc(path).set({ ...enabled, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.set({ ...enabled, updatedAt: serverTimestamp() }));
+            await assertFails(ref.set({ ...enabled, revision: 2, timeZone: 'UTC', updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.set({ schemaVersion: 1, enabled: false, revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(ref.set({ ...enabled, revision: 3, timeZone: 'America/New_York', updatedAt: serverTimestamp() }));
+        });
+        it.each([{}, { timeZone: '' }, { timeZone: '+03:00' }, { timeZone: 'A'.repeat(81) },
+            { timeZone: 'UTC', enabled: false }])('rejects incompatible time zone data %j', async patch => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const value = { schemaVersion: 1, enabled: true, revision: 1, updatedAt: serverTimestamp(), ...patch };
+            await assertFails(testEnv.authenticatedContext(uid).firestore().doc(path).set(value));
+        });
+    });
+
     describe('Standalone calendar rest days', () => {
         const path = 'users/rest-owner/trainingRestDays/2026-10-31';
         const value = { schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 };

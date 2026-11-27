@@ -7,8 +7,8 @@ import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
 import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
-import { notifyNewSleepAfterPersistence } from '../web-push/sleep-admission';
-vi.mock('../web-push/sleep-admission', () => ({ notifyNewSleepAfterPersistence: vi.fn().mockResolvedValue(undefined) }));
+import { notifyMorningCheckInAfterPersistence } from '../web-push/morning-check-in-admission';
+vi.mock('../web-push/morning-check-in-admission', () => ({ notifyMorningCheckInAfterPersistence: vi.fn().mockResolvedValue(undefined) }));
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -526,7 +526,7 @@ describe('sleep queue', () => {
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
         const input = {
             type: 'suunto_webhook' as const,
-            sleepNotificationOrigin: 'live' as const,
+            morningCheckInOrigin: 'live' as const,
             provider: 'SuuntoApp' as const,
             userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
@@ -547,7 +547,7 @@ describe('sleep queue', () => {
             provider: 'SuuntoApp',
             providerUserId: 'suunto-user-1',
             suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
-            sleepNotificationOrigin: 'live',
+            morningCheckInOrigin: 'live',
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
         expect(hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards)
@@ -561,18 +561,18 @@ describe('sleep queue', () => {
 
     it('does not label an explicit sleep history job as live notification work', async () => {
         await addSleepSyncQueueItem({ type: 'suunto_webhook', provider: 'SuuntoApp', userID: 'test-user-uid',
-            sleepNotificationOrigin: 'live',
+            morningCheckInOrigin: 'live',
             providerUserId: 'suunto-user-1', payload: { samples: [{ SleepId: 123 }] },
             connectionHistoryRunId: 'history-run', dedupeKey: 'history-sleep' });
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({ connectionHistoryRunId: 'history-run' }), { merge: false });
-        expect(hoisted.docSet.mock.calls.at(-1)?.[0].sleepNotificationOrigin).toBeUndefined();
+        expect(hoisted.docSet.mock.calls.at(-1)?.[0].morningCheckInOrigin).toBeUndefined();
     });
 
     it('leaves unmarked administrative or legacy sleep jobs silent even when their type matches live polling', async () => {
         await addSleepSyncQueueItem({ type: 'suunto_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
             providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000, dedupeKey: 'admin-recovery' });
         expect(hoisted.docSet).toHaveBeenCalled();
-        expect(hoisted.docSet.mock.calls.at(-1)?.[0].sleepNotificationOrigin).toBeUndefined();
+        expect(hoisted.docSet.mock.calls.at(-1)?.[0].morningCheckInOrigin).toBeUndefined();
     });
 
     it.each([false, true])('preserves an existing admin polling job transactionally (processed=%s)', async processed => {
@@ -1811,7 +1811,7 @@ describe('sleep queue', () => {
             });
 
             expect(result).toBe(QueueResult.Processed);
-            expect(notifyNewSleepAfterPersistence).toHaveBeenCalledWith('test-user-uid',
+            expect(notifyMorningCheckInAfterPersistence).toHaveBeenCalledWith('test-user-uid',
                 expect.objectContaining({ id: 'garmin-sleep-ping' }), createdSessions);
             expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({
                 url: callbackURL,

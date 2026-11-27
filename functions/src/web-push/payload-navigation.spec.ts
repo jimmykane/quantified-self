@@ -6,7 +6,7 @@ import { buildHistoryNotificationPayload } from '../../../shared/history-import-
 import { deliveryNotificationPayload } from '../../../shared/activity-delivery-notifications';
 import { trainingSyncNotificationPayload } from '../../../shared/training-sync-notifications';
 import { activityNotificationPayload, type ActivityPushEntry } from './activity-policy';
-import { sleepNotificationPayload } from './sleep-policy';
+import { morningCheckInPayload } from './morning-check-in-policy';
 import { connectionNotificationPayload } from './connection-policy';
 
 const activity: ActivityPushEntry = {
@@ -42,8 +42,8 @@ describe.each(WEB_PUSH_ORIGINS)('notification navigation on %s', origin => {
     expect(activityNotificationPayload(origin, 'owner', entries).notification)
       .toMatchObject({ tag: 'qs-activity-sync', renotify: true });
   });
-  it('keeps the Sleep synced body tap on Readiness and routes both action buttons', () => {
-    const payload = sleepNotificationPayload(origin);
+  it('keeps the Morning check-in body tap on Readiness and routes both action buttons', () => {
+    const payload = morningCheckInPayload(origin);
     const readinessPath = '/dashboard?focus=readiness';
     const sleepPath = '/health?metric=sleep';
 
