@@ -40,8 +40,3 @@ p { margin: 0.5rem 0; font: var(--mat-sys-body-medium); }
   .plan-author { margin-block-start: auto; font: var(--mat-sys-label-medium); }
 }
 .plan-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.sample-week:not([hidden]) {
-  margin-block-start: 0.75rem;
-  padding-inline-start: 1rem;
-  border-inline-start: 2px solid var(--mat-sys-outline-variant);
-}

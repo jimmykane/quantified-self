@@ -10,19 +10,7 @@
         <div class="plan-actions">
           <a mat-button (click)="rememberLink($event)" routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
             [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
-          <button mat-button type="button" (click)="toggleWeek(plan.id)" [attr.aria-expanded]="expandedPlan() === plan.id"
-            [attr.aria-controls]="'week-' + plan.id" [attr.aria-label]="'Week 1 workouts for ' + plan.name">
-            Week 1 workouts <mat-icon iconPositionEnd aria-hidden="true">{{ expandedPlan() === plan.id ? 'expand_less' : 'expand_more' }}</mat-icon>
-          </button>
-        </div>
-        <div class="sample-week" [id]="'week-' + plan.id" [hidden]="expandedPlan() !== plan.id" data-nosnippet>
-          @defer (when expandedPlan() === plan.id) {
-            <app-public-plan-week [planId]="plan.id" />
-          } @loading {
-            <p role="status">Loading workouts…</p>
-          } @error {
-            <app-deferred-load-error area="training-plans" />
-          }
+          <ng-container [ngTemplateOutlet]="weekPreview()" [ngTemplateOutletContext]="{ $implicit: plan }" />
         </div>
         @if (plan.attribution; as credit) {
           <app-plan-attribution class="catalog-credit" [credit]="credit" />

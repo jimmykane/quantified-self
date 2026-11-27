@@ -206,3 +206,10 @@ h3 {
     font-size: 2.45rem;
   }
 }
+
+.sample-week:not([hidden]) {
+  flex-basis: 100%;
+  margin-block-start: 0.75rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--mat-sys-outline-variant);
+}
