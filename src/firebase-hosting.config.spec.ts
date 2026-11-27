@@ -534,9 +534,9 @@ describe('Firebase Hosting configuration', () => {
     // Homepage uses fictional build/recovery blocks and arriving data pulses that travel around the card border.
     // The same-day homepage update adds the connected Connect / Understand / Improve journey and repairs release flow animation.
     // The hero preview now names the charts: Training load and recovery (2026-11-10).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-12');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-11-12');
     // Pricing now explicitly names plans and pricing in its title and heading.
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-11-16');
@@ -574,7 +574,7 @@ describe('Firebase Hosting configuration', () => {
     // flow and individual fragments must never become separate sitemap entries.
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/training-plans#`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/training/plans/catalog`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-11-20');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-11-20');

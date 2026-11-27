@@ -3,25 +3,48 @@
     <li>
       @if (full()) {
         <h3 [id]="planFragment(plan.id)" tabindex="-1">{{ plan.name }}</h3>
-      } @else {
-        <a (click)="rememberLink($event)" class="plan-name" [routerLink]="pageUrl" [fragment]="planFragment(plan.id)">{{ plan.name }}</a>
-      }
-      <p class="plan-meta">
-        {{ plan.sport }} · {{ plan.weeks }} weeks
-        @if (plan.attribution; as credit) { · By {{ credit.originalAuthor }} }
-      </p>
-      @if (full()) {
+        <p class="plan-meta">{{ plan.sport }} · {{ plan.weeks }} weeks
+          @if (plan.attribution; as credit) { · By {{ credit.originalAuthor }} }
+        </p>
         <p>{{ plan.description }}</p>
-        <a mat-button (click)="rememberLink($event)" routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
-          [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
+        <div class="plan-actions">
+          <a mat-button (click)="rememberLink($event)" routerLink="/training/plans/catalog" [queryParams]="{ template: plan.id }"
+            [attr.aria-label]="'Choose dates for ' + plan.name">Choose dates</a>
+          <button mat-button type="button" (click)="toggleWeek(plan.id)" [attr.aria-expanded]="expandedPlan() === plan.id"
+            [attr.aria-controls]="'week-' + plan.id" [attr.aria-label]="'Week 1 workouts for ' + plan.name">
+            Week 1 workouts <mat-icon iconPositionEnd aria-hidden="true">{{ expandedPlan() === plan.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+          </button>
+        </div>
+        <div class="sample-week" [id]="'week-' + plan.id" [hidden]="expandedPlan() !== plan.id" data-nosnippet>
+          @defer (when expandedPlan() === plan.id) {
+            <app-public-plan-week [planId]="plan.id" />
+          } @loading {
+            <p role="status">Loading workouts…</p>
+          } @error {
+            <app-deferred-load-error area="training-plans" />
+          }
+        </div>
+        @if (plan.attribution; as credit) {
+          <app-plan-attribution class="catalog-credit" [credit]="credit" />
+        }
+      } @else {
+        <mat-card appearance="outlined">
+          <a class="featured-plan" (click)="rememberLink($event)" [routerLink]="pageUrl" [fragment]="planFragment(plan.id)"
+            [attr.aria-label]="plan.name">
+            <span class="plan-meta">
+              <mat-icon aria-hidden="true">{{ plan.sport === 'Cycling' ? 'directions_bike' : 'directions_run' }}</mat-icon>
+              {{ plan.sport }} · {{ plan.weeks }} weeks
+              <mat-icon class="plan-arrow" aria-hidden="true">arrow_forward</mat-icon>
+            </span>
+            <span class="plan-name">{{ plan.name }}</span>
+            <span>{{ plan.description }}</span>
+            @if (plan.attribution; as credit) { <span class="plan-author">By {{ credit.originalAuthor }}</span> }
+          </a>
+        </mat-card>
       }
     </li>
   }
 </ul>
-@if (full()) {
-  @for (credit of credits; track credit.sourceUrl) {
-    <app-plan-attribution class="catalog-credit" [credit]="credit" />
-  }
-} @else {
+@if (!full()) {
   <a mat-button (click)="rememberLink($event)" [routerLink]="pageUrl" [fragment]="catalogFragment">Browse all {{ plans.length }} free training plans</a>
 }

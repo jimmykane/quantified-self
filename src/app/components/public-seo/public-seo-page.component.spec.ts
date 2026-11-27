@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { DeferBlockState, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Subject } from 'rxjs';
 import { ActivatedRoute, NavigationEnd, Router, Scroll } from '@angular/router';
@@ -286,6 +286,45 @@ describe('PublicSeoPageComponent', () => {
     expect(hrefs).toContain('/features/training-plans');
 
     calendarFixture.destroy();
+  });
+
+  it('shows the first week on its own catalog entry and keeps the license and enrollment link available', async () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.trainingPlans;
+    const fixture = TestBed.createComponent(PublicSeoPageComponent);
+    fixture.detectChanges();
+    const catalog = fixture.nativeElement.querySelector('app-public-training-catalog') as HTMLElement;
+    const licensedEntry = catalog.querySelector('#plan-tredict-running-base')!.closest('li')!;
+    const credit = licensedEntry.querySelector<HTMLElement>('[aria-label="Plan attribution"]')!;
+    expect(credit.textContent).toContain('Felix Gertz');
+    expect(credit.textContent).toContain('Device target bands');
+    expect(credit.textContent).toContain('example plan');
+    expect(credit.querySelector('a')?.href).toBe('https://plans.tredict.com/en/plan/Buildup_a_foundational_running_base/zoySQCnLM');
+    expect(credit.querySelector<HTMLAnchorElement>('[rel="license"]')?.href).toBe('https://creativecommons.org/licenses/by/4.0/');
+
+    const [first, second] = Array.from(catalog.querySelectorAll<HTMLButtonElement>('button[aria-controls]'));
+    const region = catalog.querySelector<HTMLElement>('#' + first.getAttribute('aria-controls'))!;
+    expect(region.hidden).toBe(true);
+    expect(selection).not.toHaveBeenCalled();
+    first.click();
+    fixture.detectChanges();
+    const [firstWeek, secondWeek] = await fixture.getDeferBlocks();
+    await firstWeek.render(DeferBlockState.Complete);
+    expect(first.getAttribute('aria-expanded')).toBe('true');
+    expect(region.hidden).toBe(false);
+    expect(region.textContent).toContain('27 workouts');
+    expect(region.textContent).toContain('Day 2 · Easy run and walk');
+    expect(region.querySelectorAll('li')).toHaveLength(3);
+    second.click();
+    fixture.detectChanges();
+    await secondWeek.render(DeferBlockState.Error);
+    expect(region.hidden).toBe(true);
+    const secondEntry = second.closest('li')!;
+    expect(secondEntry.querySelector('[role="status"]')?.textContent).toContain("Preview couldn't load");
+    expect(secondEntry.querySelector('a[href$="template=first-ride"]')).toBeTruthy();
+    second.click();
+    fixture.detectChanges();
+    expect(second.getAttribute('aria-expanded')).toBe('false');
+    expect(selection).toHaveBeenCalledTimes(3);
   });
 
   it('restores catalog links inside the shell and preserves real viewport history positions', () => {

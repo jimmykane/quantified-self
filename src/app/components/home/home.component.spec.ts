@@ -68,6 +68,9 @@ describe('HomeComponent', () => {
       '/features/training-plans#plan-first-run', '/features/training-plans#plan-first-ride',
       '/features/training-plans#plan-tredict-running-base', '/features/training-plans#free-training-plans',
     ]);
+    expect(catalog.querySelectorAll('mat-card a')).toHaveLength(3);
+    expect(links[0].textContent).toContain('Running · 9 weeks');
+    expect(links[0].textContent).toContain('For walkers comfortable with a 30-minute walk.');
     expect(catalog.textContent).toContain('Felix Gertz');
     expect(selection).not.toHaveBeenCalled();
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
